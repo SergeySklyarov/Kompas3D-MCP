@@ -6,6 +6,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Drawings;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.References;
 
@@ -33,11 +34,6 @@ public sealed partial class Api5Session
         ["iso_zxy"] = 9,
         ["dimetric"] = 10,
     };
-
-    /// <summary>Half a tenth of a millimetre: a block touching the frame is not "outside the sheet".
-    /// The kernel returns gabarits and frames as doubles, so an exact comparison would refuse a block
-    /// that sits exactly on the frame because of floating-point noise.</summary>
-    private const double PlacementToleranceMm = 0.05;
 
     /// <summary>Create standard associative views of a saved model file.</summary>
     /// <remarks>DOC: <c>iviews_addstandartviews.html</c> —
@@ -751,15 +747,14 @@ public sealed partial class Api5Session
             {
                 // INVARIANT: a view dimension's anchor points are in VIEW mm and the kernel scales them,
                 // but Radius is taken AS IS in SHEET mm (MEASURED — see
-                // docs/decisions/drawings.md#drawing-dimensions-scale). The model radius is therefore
-                // scaled here, and the displayed number — which the kernel derives from that sheet
-                // radius — is written explicitly whenever the scale would make it wrong.
+                // docs/decisions/drawings.md#drawing-dimensions-scale). The arithmetic lives in
+                // ViewDimensionScale, so it is exercised without КОМПАС.
                 var isRadial = kind == "radial";
                 var scale = ReadViewScale(view);
                 var modelRadius = command.ValueMm ?? DeriveRadius(command);
-                var sheetRadius = modelRadius * scale;
-                var nominal = isRadial ? modelRadius : modelRadius * 2d;
-                var writeNominal = Math.Abs(scale - 1d) > 1e-9;
+                var sheetRadius = ViewDimensionScale.SheetRadius(modelRadius, scale);
+                var nominal = ViewDimensionScale.Nominal(modelRadius, isRadial);
+                var writeNominal = ViewDimensionScale.NominalMustBeWritten(scale);
 
                 double centreX = p1[0];
                 double centreY = p1[1];
@@ -840,7 +835,7 @@ public sealed partial class Api5Session
                 RefuseDimensionMismatch(kind, document, centreX, centreY, sheetRadius, nominal, writeNominal,
                     readXc, readYc, readRadius, readNumber);
                 kindWire = kind;
-                var value = readRadius is { } read ? read / scale : readRadius;
+                var value = readRadius is { } read ? ViewDimensionScale.ModelRadius(read, scale) : readRadius;
                 valueMm = value;
                 var label = isRadial ? "radial" : "diametral";
                 var row = new DimensionRowDto
@@ -2186,21 +2181,8 @@ public sealed partial class Api5Session
                 "свободное место листа не прочитано");
         }
 
-        var blockX = (Math.Min(gabarits[0], gabarits[2]), Math.Max(gabarits[0], gabarits[2]));
-        var blockY = (Math.Min(gabarits[1], gabarits[3]), Math.Max(gabarits[1], gabarits[3]));
-        var frameX = (Math.Min(frames[0], frames[2]), Math.Max(frames[0], frames[2]));
-        var frameY = (Math.Min(frames[1], frames[3]), Math.Max(frames[1], frames[3]));
-
-        var within = blockX.Item1 >= frameX.Item1 - PlacementToleranceMm
-            && blockX.Item2 <= frameX.Item2 + PlacementToleranceMm
-            && blockY.Item1 >= frameY.Item1 - PlacementToleranceMm
-            && blockY.Item2 <= frameY.Item2 + PlacementToleranceMm;
-
-        var observed = string.Format(
-            CultureInfo.InvariantCulture,
-            "блок x[{0:F1}..{1:F1}] y[{2:F1}..{3:F1}], лист x[{4:F1}..{5:F1}] y[{6:F1}..{7:F1}]",
-            blockX.Item1, blockX.Item2, blockY.Item1, blockY.Item2,
-            frameX.Item1, frameX.Item2, frameY.Item1, frameY.Item2);
+        var within = DemandBlockPlacement.WithinSheet(gabarits, frames);
+        var observed = DemandBlockPlacement.Describe(gabarits, frames);
 
         return new DemandPlacement(autoPlacement, within, observed, null, gabarits, frames);
     }
@@ -2215,14 +2197,9 @@ public sealed partial class Api5Session
     private void TryMoveDemandInsideSheet(
         ITechnicalDemand demand, IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
     {
-        var width = Math.Abs(gabarits[2] - gabarits[0]);
-        var height = Math.Abs(gabarits[3] - gabarits[1]);
-        var left = Math.Min(frames[0], frames[2]);
-        var top = Math.Max(frames[1], frames[3]);
-
         try
         {
-            demand.BlocksGabarits = new double[] { left, top - height, left + width, top };
+            demand.BlocksGabarits = DemandBlockPlacement.MoveToTopLeft(gabarits, frames);
             demand.Update();
         }
         catch (COMException)
@@ -2349,17 +2326,8 @@ public sealed partial class Api5Session
             caption = null;
         }
 
-        return (ParseNumber(caption), caption, overridden);
+        return (ViewDimensionScale.ParseNumber(caption), caption, overridden);
     }
-
-    /// <summary>A dimension number parsed from its caption text, which the kernel writes with the
-    /// locale's decimal comma; null when the text is absent or is not a plain number.</summary>
-    private static double? ParseNumber(string? text) =>
-        text is not null
-        && double.TryParse(text.Replace(',', '.').Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
-            out var value)
-            ? value
-            : null;
 
     /// <summary>The view scale a dimension's radius must be multiplied by, or 1 if the view reports none.</summary>
     /// <remarks>MEASURED: the kernel scales a dimension's anchor points by the view scale but takes
@@ -2407,7 +2375,7 @@ public sealed partial class Api5Session
             }
 
             var caption = SafeString(() => line.Str);
-            return ParseNumber(caption);
+            return ViewDimensionScale.ParseNumber(caption);
         }
         catch (COMException)
         {
@@ -2424,26 +2392,8 @@ public sealed partial class Api5Session
         double nominal, bool nominalWritten, double? readXc, double? readYc, double? readRadius,
         double? readNumber)
     {
-        var mismatches = new List<string>();
-        if (readXc is null || !Near(readXc.Value, centreX))
-        {
-            mismatches.Add($"Xc: задано {Api5Number(centreX)}, прочитано {Api5Number(readXc)}");
-        }
-
-        if (readYc is null || !Near(readYc.Value, centreY))
-        {
-            mismatches.Add($"Yc: задано {Api5Number(centreY)}, прочитано {Api5Number(readYc)}");
-        }
-
-        if (readRadius is null || !Near(readRadius.Value, sheetRadius))
-        {
-            mismatches.Add($"радиус: задано {Api5Number(sheetRadius)}, прочитано {Api5Number(readRadius)}");
-        }
-
-        if (nominalWritten && (readNumber is null || !Near(readNumber.Value, nominal)))
-        {
-            mismatches.Add($"число размера: задано {Api5Number(nominal)}, показано {Api5Number(readNumber)}");
-        }
+        var mismatches = ViewDimensionScale.Mismatches(
+            centreX, centreY, sheetRadius, nominal, nominalWritten, readXc, readYc, readRadius, readNumber);
 
         if (mismatches.Count == 0)
         {
@@ -2470,7 +2420,7 @@ public sealed partial class Api5Session
     private static void RefusePointMismatch(
         DocumentEntry document, IReadOnlyList<double> p1, IReadOnlyList<double> p2, DimensionRowDto row)
     {
-        if (NearPair(row.Point1, p1) && NearPair(row.Point2, p2))
+        if (ViewDimensionScale.NearPair(row.Point1, p1) && ViewDimensionScale.NearPair(row.Point2, p2))
         {
             return;
         }
@@ -2491,11 +2441,6 @@ public sealed partial class Api5Session
                 ["point2_read"] = row.Point2,
             });
     }
-
-    private static bool Near(double a, double b) => Math.Abs(a - b) <= Math.Max(1e-6, Math.Abs(b) * 1e-6);
-
-    private static bool NearPair(IReadOnlyList<double>? read, IReadOnlyList<double> want) =>
-        read is { Count: >= 2 } && Near(read[0], want[0]) && Near(read[1], want[1]);
 
     private static KompasContractException NoCollection(AddDimensionCommand command, string kind) =>
         new(

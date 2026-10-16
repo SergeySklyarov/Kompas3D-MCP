@@ -13341,11 +13341,16 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
     """
     import os as _os
 
-    # INVARIANT: the created document is addressed by the id the document LIST gained.
-    # MEASURED: `created_document_ids` of the response carries the raw COM handle ("0x…"), which no
-    # tool accepts, so the row proves BOTH halves - the list id works and the response id does not.
-    # DOC: ksdocument3d_loadfromadditionformat.html, d3formatconvtype.html (load_format_STEP = -3).
-    # History: docs/decisions/api-audit.md#step-import-mode
+    # INVARIANT: `created_document_ids` of the response carries HOST document ids - the values
+    # `kompas_list_documents` issues - so the created document is addressed by the id from the response,
+    # and that id is the one the list gained.
+    # INVARIANT: `target_path` is APPLIED through the documented `ksDocument3D.SaveAs` and confirmed by
+    # the path the document reports - never silently ignored.
+    # INVARIANT: a refused import leaves no registered document; a document it could not close is named
+    # (partial_effects true and documents_left_open), so "registered but never removed" cannot hide.
+    # DOC: ksdocument3d_loadfromadditionformat.html, d3formatconvtype.html (load_format_STEP = -3),
+    # ksdocument3d_saveas.html.
+    # History: docs/decisions/adapter-core.md#import-step-contract
 
     def call(tool, args, timeout=300):
         payload = dict(args)
@@ -13405,7 +13410,8 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
     rows = (
         ("STEP.import.discover",
          "импорт создаёт НОВЫЙ документ сеанса: список документов растёт ровно на него, вид — "
-         "деталь, и адресуется он только по id из списка"),
+         "деталь, и id из ответа (created_document_ids) — это id документа Хоста: он же в списке "
+         "и принимается kompas_get_context"),
         ("STEP.import.create",
          "импорт отвечает успехом и подтверждает геометрию: тело или компонент, уровень "
          "structure_checked"),
@@ -13415,10 +13421,12 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
         ("STEP.import.rebuild",
          "перестроение импортированного документа оставляет тело и объём на месте"),
         ("STEP.import.save_reopen",
-         "импортированный документ переживает save -> close -> reopen: тело и объём те же"),
+         "импортированный документ сохранён по target_path документированным SaveAs и переживает "
+         "close -> reopen: путь документа — target_path, файл на месте, тело и объём те же"),
         ("STEP.import.negative_tests",
-         "отказы названными кодами: нет файла INVALID_ARGUMENT, не-STEP файл IMPORT_FAILED — "
-         "без ложного успеха"),
+         "отказы названными кодами (нет файла INVALID_ARGUMENT, не-STEP файл IMPORT_FAILED) и "
+         "отказ НЕ оставляет зарегистрированных документов: список не вырос, partial_effects "
+         "назван, а зарегистрированных без снятия в trace нет"),
         ("STEP.import.geometry_validation",
          "объём и габарит импортированного тела совпали с исходной деталью в пределах допуска "
          "STEP-roundtrip"),
@@ -13442,26 +13450,30 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
     src_before, _ = context(source_doc)
 
     before = {d.get("id") for d in documents()}
+    target_path = _os.path.join(workdir, "P1_Block_imported.m3d")
     imp_env, imp_code = call("kompas_import_step", {
-        "application_id": app_id, "input_path": step_path, "desired_kind": "auto"}, timeout=300)
+        "application_id": app_id, "input_path": step_path, "desired_kind": "auto",
+        "target_path": target_path}, timeout=300)
     imp_res = result(imp_env)
     after_rows = documents()
     new_ids = sorted({d.get("id") for d in after_rows} - before)
     imp_doc = new_ids[0] if len(new_ids) == 1 else None
     imp_listed = next((d for d in after_rows if d.get("id") == imp_doc), {})
-    raw_ids = imp_res.get("created_document_ids") or []
-    raw_ctx, raw_code = context(raw_ids[0]) if raw_ids else ({}, "no_id_in_response")
+    resp_ids = imp_res.get("created_document_ids") or []
+    resp_ctx, resp_code = context(resp_ids[0]) if resp_ids else ({}, "no_id_in_response")
 
     rep.add("STEP.import.discover",
             rows[0][1],
             "PASS" if (not imp_code and len(new_ids) == 1
                        and imp_listed.get("kind") == "part"
                        and imp_res.get("created_document_kinds") == ["part"]
-                       and raw_ids and raw_code) else "FAIL",
+                       and resp_ids == [imp_doc]
+                       and not resp_code and resp_ctx.get("kind") == "part") else "FAIL",
             f"новых документов={len(new_ids)} kind={imp_listed.get('kind')} "
             f"kinds_в_ответе={imp_res.get('created_document_kinds')} "
-            f"created_document_ids={raw_ids} код_по_id_из_ответа={raw_code} "
-            f"(адресуемый id взят из разницы списков) err={imp_code} {emsg(imp_env)}")
+            f"created_document_ids={resp_ids} id_из_списка={imp_doc} "
+            f"get_context_по_id_из_ответа={resp_code} kind={resp_ctx.get('kind')} "
+            f"err={imp_code} {emsg(imp_env)}")
 
     rep.add("STEP.import.create",
             rows[1][1],
@@ -13510,11 +13522,10 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
             f"код={rb_code} объём до={imp_volume} после={rb_measure.get('volume_mm3')} "
             f"тел={len(rb_bodies)} new_revision={result(rb_env).get('new_revision')} {emsg(rb_env)}")
 
-    saved = _os.path.join(workdir, "P1_Block_imported.m3d")
-    imp_rev, _ = context(imp_doc) if imp_doc else ({}, None)
-    sv_env, sv_code = call("kompas_save_document", {
-        "document_id": imp_doc, "target_path": saved,
-        "expected_revision": imp_rev.get("revision")}) if imp_doc else ({}, "no_imported_document")
+    saved = target_path
+    # target_path is applied BY the import (documented SaveAs), so it is confirmed by the path the
+    # document itself reports - not by a return value and not by a second save route.
+    target_applied = (imp_ctx.get("path") == saved and _os.path.isfile(saved))
     close(imp_doc)
     op_env, op_code = call("kompas_open_document", {
         "application_id": app_id, "path": saved, "access": "read_only"})
@@ -13524,10 +13535,12 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
     re_measure, _ = measure(re_ref, ["volume"]) if re_ref else ({}, None)
     rep.add("STEP.import.save_reopen",
             rows[4][1],
-            "PASS" if (not sv_code and not op_code and len(re_bodies) == 1
+            "PASS" if (target_applied and not op_code and len(re_bodies) == 1
                        and near(re_measure.get("volume_mm3"), imp_volume, 1e-6)) else "FAIL",
-            f"save={sv_code} open={op_code} тел_после_переоткрытия={len(re_bodies)} "
-            f"объём={re_measure.get('volume_mm3')} ожидание={imp_volume} файл={saved}")
+            f"target_path={saved} путь_документа={imp_ctx.get('path')} "
+            f"файл_на_месте={_os.path.isfile(saved)} open={op_code} "
+            f"тел_после_переоткрытия={len(re_bodies)} объём={re_measure.get('volume_mm3')} "
+            f"ожидание={imp_volume}")
     close(re_doc)
 
     miss_env, miss_code = call("kompas_import_step", {
@@ -13536,18 +13549,37 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
     before_bad = {d.get("id") for d in documents()}
     bad_env, bad_code = call("kompas_import_step", {
         "application_id": app_id, "input_path": saved, "desired_kind": "auto"}, timeout=300)
-    leftover = sorted({d.get("id") for d in documents()} - before_bad)
+    after_bad = documents()
+    # Host side: a refused import must not grow the registry (the document list a client sees).
+    leftover = sorted({d.get("id") for d in after_bad} - before_bad)
     for doc in leftover:
         close(doc)
+    bad_error = (bad_env or {}).get("error") or {}
+    bad_details = bad_error.get("details") or {}
+    # KOMPAS side: the product names every document a failed route could not close
+    # (documents_left_open). So a document that is open but unregistered cannot hide: it would be
+    # either registered (and thus in `leftover`) or named here. "Registered but never removed" is
+    # proven absent by (a) no registry growth and (b) no leftovers named.
+    left_open = bad_details.get("documents_left_open") or []
+    bad_trace = bad_details.get("trace") or []
+    registrations = [t for t in bad_trace if "зарегистрирован как" in t]
+    removals = [t for t in bad_trace if "снят с регистрации" in t]
+    # Every registration line must be followed by a removal, unless the document is named as left open.
+    honest = (not registrations
+              or (len(removals) >= len(registrations) and not left_open)
+              or (bool(left_open) and bool(bad_error.get("partial_effects"))))
     rep.add("STEP.import.negative_tests",
             rows[5][1],
             "PASS" if (miss_code == "INVALID_ARGUMENT" and bad_code == "IMPORT_FAILED"
                        and (miss_env or {}).get("status") == "failed"
                        and (bad_env or {}).get("status") == "failed"
-                       and not result(miss_env) and not result(bad_env)) else "FAIL",
+                       and not result(miss_env) and not result(bad_env)
+                       and not leftover and honest) else "FAIL",
             f"нет_файла={miss_code} не-STEP={bad_code} "
-            f"документов_оставлено_отказом={len(leftover)} (закрыты здесь) "
-            f"partial_effects={(bad_env or {}).get('error', {}).get('partial_effects')}")
+            f"документов_Хоста_после_отказа={len(leftover)} "
+            f"зарегистрировано={len(registrations)} снято={len(removals)} "
+            f"documents_left_open={left_open} "
+            f"partial_effects={bad_error.get('partial_effects')}")
 
     rep.add("STEP.import.geometry_validation",
             rows[6][1],

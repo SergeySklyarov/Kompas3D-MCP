@@ -414,7 +414,7 @@ set_transform не считается успешным по одному воз�
 |---|---|---|
 | `kompas_export_step` | document_id, output_path, overwrite=false, validation_level | Результат содержит фактически достигнутую проверку |
 | `kompas_export_stl` | document_id, target_path, binary, max_edge_length_mm, normal_angle_deg | Файл STL; вид файла определён по содержимому, число треугольников прочитано ИЗ ФАЙЛА, габарит сверен с телом |
-| `kompas_import_step` | application_id, input_path, desired_kind auto/part/assembly, target_path|null | Указать созданные документы и типы тел, единицы |
+| `kompas_import_step` | application_id, input_path, desired_kind auto/part/assembly, target_path|null | `created_document_ids` — идентификаторы документов Хоста (принимаются `kompas_get_context`/`kompas_list_documents`); `target_path` применяется документированным `ksDocument3D.SaveAs`; неудачный импорт не оставляет зарегистрированных документов |
 | `kompas_export_flat_dxf` | part document_id, face_ref|null, output_path, tolerance_mm, kerf_compensation=false | Только доказанно плоская деталь постоянной толщины |
 | `kompas_export_sheet_unfold` | document_id, method native/calculated, bend_parameters, output paths | Дополнительная capability; без поддержки вернуть ошибку |
 | `kompas_export_image` | document_id, view, pixel_size, output_path | Растр документа; состояние камеры и источник явно |

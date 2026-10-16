@@ -6697,3 +6697,19 @@ IKompasDocument2D → IFragmentDocument`.
 («документ зарегистрирован как Part (id=…)»). В `kompas_list_documents` они НЕ появляются —
 измерено строкой `STEP.import.negative_tests` вертикального сценария (новых документов в
 списке 0).
+
+**ДАТИРОВАННАЯ ПОПРАВКА 16.10.2026 (наряд `IMPORT_STEP_CONTRACT_FIX`).** Два утверждения выше
+ОТМЕНЯЮТСЯ измерением после правки продукта. (1) `created_document_ids` теперь несёт ИДЕНТИФИКАТОР
+ДОКУМЕНТА ХОСТА: тот же, что прибавился в `kompas_list_documents` (`^[0-9a-f]{32}$`), и он принимается
+`kompas_get_context` — сырой указатель COM (`0x…`) из ответа ушёл. Смена смысла поля — ломающее
+изменение (до 1.0 MINOR). (2) Отказ импорта БОЛЬШЕ НЕ ОСТАВЛЯЕТ зарегистрированных документов: то, что
+открыл неудачный маршрут, закрывается документированным маршрутом API7
+`IKompasDocument.Close(kdDoNotSaveChanges)` (страница `ikompasdocument_close.html`) и снимается с
+регистрации до следующей попытки; закрыть не удалось — документ оставлен и назван
+(`partial_effects=true`, `details.documents_left_open`). Прежнее измерение («след в сеансе есть»)
+относилось к пути «тел нет», где снятие выполнялось, и к пути ИСКЛЮЧЕНИЯ, где оно НЕ выполнялось —
+именно этот второй путь и был дефектом. `target_path` ПРИМЕНЯЕТСЯ: маршрут `ksDocument3D.SaveAs`
+(`ksdocument3d_saveas.html` — «SaveAs - Сохранить документ-модель (деталь или сборку) с новым именем»,
+`BOOL SaveAs(BSTR fileName)`), запись подтверждается чтением пути документа. Проверено строками
+`STEP.import.discover`, `STEP.import.negative_tests`, `STEP.import.save_reopen`; решение —
+`docs/decisions/adapter-core.md#import-step-contract`.

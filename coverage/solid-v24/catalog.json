@@ -7436,11 +7436,11 @@
    "classification": "solid",
    "level": "mcp_verified",
    "evidence": {
-    "documentation": "Проводная проверка справки SDK 24 (зеркало репозитория): ksdocument3d_loadfromadditionformat.html — «LoadFromAdditionFormat - Загрузить документ из дополнительных форматов jgs, sat, xt, x_b, step, stl, jt, C3D», BOOL LoadFromAdditionFormat( BSTR fileName, LPDISPATCH additionPar ); d3formatconvtype.html — load_format_STEP = -3, «формат STEP, для открытия документов»; ksdocument3d_additionformatparam.html, ksadditionformatparam.html, ksadditionformatparam_init.html. Артефакты зеркала: reference/kompas-sdk-v24/sdk-docs/ksdocument3d_loadfromadditionformat.html, reference/kompas-sdk-v24/omega-docs/d3formatconvtype.html",
+    "documentation": "Проводная проверка справки SDK 24 (зеркало репозитория): ksdocument3d_loadfromadditionformat.html — «LoadFromAdditionFormat - Загрузить документ из дополнительных форматов jgs, sat, xt, x_b, step, stl, jt, C3D», BOOL LoadFromAdditionFormat( BSTR fileName, LPDISPATCH additionPar ); d3formatconvtype.html — load_format_STEP = -3, «формат STEP, для открытия документов»; ksdocument3d_additionformatparam.html, ksadditionformatparam.html, ksadditionformatparam_init.html; ksdocument3d_saveas.html — «SaveAs - Сохранить документ-модель (деталь или сборку) с новым именем», BOOL SaveAs( BSTR fileName ) — маршрут применения target_path. Артефакты зеркала: reference/kompas-sdk-v24/sdk-docs/ksdocument3d_loadfromadditionformat.html, reference/kompas-sdk-v24/omega-docs/d3formatconvtype.html, reference/kompas-sdk-v24/sdk-docs/ksdocument3d_saveas.html",
     "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799: ksDocument3D.LoadFromAdditionFormat(BSTR, LPDISPATCH)→Boolean, ksDocument3D.AdditionFormatParam()→ksAdditionFormatParam, ksAdditionFormatParam.format(Int16)/Init()",
     "runtime": "Живой прогон строк STEP.import.<действие> вертикального сценария scripts/mcp-smoke.py на Release-сборке: файл импорта — STEP, экспортированный тем же прогоном строкой E01"
    },
-   "route": "Импорт — API5: ksDocument3D.Create(true, true) → ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam.Init() → format = load_format_STEP(-3) → ksDocument3D.LoadFromAdditionFormat(fileName, param) → RebuildDocument() → UpdateDocumentParam(). Маршрут пробуется ДВАЖДЫ — с читающим селектором load_format_STEP и с умолчанием вендора; успехом считается только подтверждённая геометрия (тело или компонент), а не возврат конвертера.",
+   "route": "Импорт — API5: ksDocument3D.Create(true, true) → ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam.Init() → format = load_format_STEP(-3) → ksDocument3D.LoadFromAdditionFormat(fileName, param) → RebuildDocument() → UpdateDocumentParam(). Маршрут пробуется ДВАЖДЫ — с читающим селектором load_format_STEP и с умолчанием вендора; успехом считается только подтверждённая геометрия (тело или компонент), а не возврат конвертера. target_path применяется после успешного импорта документированным маршрутом ksDocument3D.SaveAs(fileName); неудачный маршрут закрывает созданный документ и снимает его с регистрации.",
    "mcp_support": "kompas_import_step",
    "operations": [
     {
@@ -7452,7 +7452,8 @@
       "d3formatconvtype",
       "ksdocument3d_additionformatparam",
       "ksadditionformatparam",
-      "ksadditionformatparam_init"
+      "ksadditionformatparam_init",
+      "ksdocument3d_saveas"
      ],
      "interfaces": {
       "api5": [

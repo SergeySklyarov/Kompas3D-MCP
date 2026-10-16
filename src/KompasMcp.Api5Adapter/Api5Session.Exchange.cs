@@ -3,9 +3,12 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using Kompas6API5;
+using Kompas6Constants;
+using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 
 namespace KompasMcp.Api5Adapter;
@@ -106,84 +109,136 @@ public sealed partial class Api5Session
                 $"Файл импорта не найден: {command.InputPath}");
         }
 
-        var documentsBefore = SnapshotDocuments(application, trace);
-        trace.Add($"документов до импорта: {documentsBefore.Count}");
+        // The comparison is over HOST ids, not COM handles: the registry is what kompas_list_documents
+        // answers, so the diff is exactly the set of ids a client can address.
+        // History: docs/decisions/adapter-core.md#import-step-contract
+        var registeredBefore = RegisteredDocumentIds();
+        trace.Add($"документов до импорта: {registeredBefore.Count}");
+
+        // Documents a failed route could not remove. Empty is the normal case; a non-empty list is what
+        // keeps the refusal from claiming a clean session it does not have.
+        var leftOpen = new List<string>();
 
         // Route 1 — LoadFromAdditionFormat on a fresh document, with the read-side selector.
-        var attempt = TryRouteLoadIntoNewDocument(application, command, trace);
+        var attempt = TryRouteLoadIntoNewDocument(application, command, trace, leftOpen, useReadSelector: true);
         if (attempt is null)
         {
             // Route 2 — the same call with the parameter left at vendor defaults.
-            attempt = TryRouteLoadIntoNewDocument(application, command, trace, useReadSelector: false);
+            attempt = TryRouteLoadIntoNewDocument(application, command, trace, leftOpen, useReadSelector: false);
         }
 
-        var documentsAfter = SnapshotDocuments(application, trace);
-        var created = documentsAfter.Except(documentsBefore).ToList();
+        var created = ImportStepContract.CreatedDocumentIds(registeredBefore, RegisteredDocumentIds());
         trace.Add($"новых документов: {created.Count}");
 
-        if (attempt is null && created.Count == 0)
+        if (attempt is null)
         {
+            var leftovers = ImportStepContract.DocumentsLeftOpen(leftOpen, Array.Empty<string>());
             throw new KompasContractException(
                 ErrorCodes.ImportFailed,
                 "Ни один маршрут импорта STEP не дал тел, компонентов или нового документа. " +
                 "Исторический провал spec 4.6 воспроизводится и на v24; причина не установлена.",
                 RetryPolicy.Never,
-                details: new Dictionary<string, object?> { ["trace"] = trace.ToArray() });
+                partialEffects: leftovers.Count > 0,
+                details: new Dictionary<string, object?>
+                {
+                    ["trace"] = trace.ToArray(),
+                    ["documents_left_open"] = leftovers,
+                });
         }
 
-        var bodies = attempt?.BodyCount ?? 0;
-        var components = attempt?.ComponentCount ?? 0;
-        var verified = bodies > 0 || components > 0;
+        // target_path is APPLIED, not ignored: the documented route ksDocument3D.SaveAs writes the
+        // imported document to the requested path. DOC: ksdocument3d_saveas.html.
+        ApplyTargetPath(attempt.DocumentId, command.TargetPath, trace);
 
-        if (attempt is null)
+        var unverified = new List<string>
         {
-            // Without an attempt there is nothing to report as imported, and the earlier branch
-            // already refused the "no documents appeared" case.
-            throw new KompasContractException(
-                ErrorCodes.ImportFailed,
-                "Ни один маршрут импорта не вернул документ: тела есть, но где именно — неизвестно.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?> { ["trace"] = trace.ToArray() });
-        }
-
-        if (!verified)
+            "geometry_roundtrip_not_checked — совпадение объёма и габарита с исходником требует отдельной проверки",
+            "units_conversion_not_checked — единицы импортированного документа не подтверждены",
+        };
+        if (leftOpen.Count > 0)
         {
-            throw new KompasContractException(
-                ErrorCodes.ImportFailed,
-                $"Импорт создал документ, но тел и компонентов в нём не найдено ({attempt.Summary}). " +
-                "Ложный PASS по факту существования файла не выдаётся.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?> { ["trace"] = trace.ToArray() });
+            unverified.Add("documents_left_open — неудачный маршрут оставил открытыми: "
+                + string.Join(", ", leftOpen));
         }
 
         return new ImportResultDto
         {
+            // The registry diff names the HOST ids; the attempt's own id is the fallback when the
+            // comparison is empty. A COM handle is never returned.
             CreatedDocumentIds = created.Count > 0 ? created : new[] { attempt.DocumentId },
             CreatedDocumentKinds = new[] { attempt.Kind },
-            BodyCount = bodies,
-            ComponentCount = components,
+            BodyCount = attempt.BodyCount,
+            ComponentCount = attempt.ComponentCount,
             // B-rep equality with the source is not claimed here and is not checked by any
             // published tool yet (see UnverifiedAspects below).
             ReachedLevel = VerificationLevel.StructureChecked,
-            UnverifiedAspects = new[]
-            {
-                "geometry_roundtrip_not_checked — совпадение объёма и габарита с исходником требует отдельной проверки",
-                "units_conversion_not_checked — единицы импортированного документа не подтверждены",
-            },
+            UnverifiedAspects = unverified.ToArray(),
             Trace = trace,
         };
     }
 
+    /// <summary>Apply the caller's target path through the documented route <c>ksDocument3D.SaveAs</c>
+    /// (DOC: ksdocument3d_saveas.html — «Сохранить документ-модель (деталь или сборку) с новым
+    /// именем») and confirm it by the path the document reports afterwards. The returned boolean alone
+    /// is not a confirmation, so the shared save path is used — it re-reads the file — rather than a
+    /// second write route. A failure here is a refusal with partial_effects: the document itself was
+    /// already created, so the session is not unchanged.</summary>
+    private void ApplyTargetPath(string documentId, string? targetPath, List<string> trace)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            return;
+        }
+
+        var entry = RequireDocument(documentId);
+        try
+        {
+            SaveDocument(entry, targetPath);
+        }
+        catch (KompasContractException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.ImportFailed,
+                $"Импорт создал документ, но сохранить его по target_path '{targetPath}' не удалось: {ex.Message}",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["trace"] = trace.ToArray(),
+                    ["document_id"] = documentId,
+                    ["target_path"] = targetPath,
+                });
+        }
+
+        trace.Add($"target_path применён: SaveAs → {RequireDocument(documentId).Path}");
+    }
+
     private sealed record ImportAttempt(string DocumentId, DocumentKind Kind, int BodyCount, int ComponentCount, string Summary);
 
-    private ImportAttempt? TryRouteLoadIntoNewDocument(ApplicationEntry application, ImportStepCommand command, List<string> trace, bool useReadSelector = true)
+    /// <summary>Try one documented route. On SUCCESS the created document is the answer and stays
+    /// registered. On ANY failure — including an exception after the document was created — what this
+    /// route opened is closed and unregistered here, BEFORE the next attempt, and what could not be
+    /// removed is appended to <paramref name="leftOpen"/> instead of being dropped silently.</summary>
+    /// <remarks>INVARIANT: a failed route leaves no registered document. MEASURED: the registration
+    /// used to survive an exception thrown after it, so the registry kept documents the refusal never
+    /// mentioned.
+    /// History: docs/decisions/adapter-core.md#import-step-contract</remarks>
+    private ImportAttempt? TryRouteLoadIntoNewDocument(
+        ApplicationEntry application,
+        ImportStepCommand command,
+        List<string> trace,
+        List<string> leftOpen,
+        bool useReadSelector = true)
     {
+        var route = useReadSelector ? "load_format_STEP=-3" : "параметр по умолчанию";
         ksDocument3D? target = null;
+        DocumentEntry? entry = null;
+        var keep = false;
         try
         {
             target = (ksDocument3D)application.Application.Document3D();
             var createdDocument = target.Create(true, true);
-            trace.Add($"маршрут «{(useReadSelector ? "load_format_STEP=-3" : "параметр по умолчанию")}»: Create → {createdDocument}");
+            trace.Add($"маршрут «{route}»: Create → {createdDocument}");
 
             var parameter = (ksAdditionFormatParam)target.AdditionFormatParam();
             parameter.Init();
@@ -198,7 +253,7 @@ public sealed partial class Api5Session
             target.UpdateDocumentParam();
 
             var documentId = RegisterImportedDocument(target, application, trace);
-            var entry = RequireDocument(documentId);
+            entry = RequireDocument(documentId);
             // A model just built by an import is a state of the BUILT model only if its own rebuild
             // applied every feature: the counts below must not describe a half-built model.
             SettleBuiltModel(entry);
@@ -208,17 +263,149 @@ public sealed partial class Api5Session
 
             if (bodies > 0 || components > 0)
             {
-                return new ImportAttempt(documentId, entry.Kind, bodies, components, useReadSelector ? "read-selector" : "default-param");
+                keep = true;
+                return new ImportAttempt(
+                    entry.Id, entry.Kind, bodies, components,
+                    useReadSelector ? "read-selector" : "default-param");
             }
 
-            // The converter may have opened its own document; look at the active one too.
-            DropImportedDocument(documentId);
+            trace.Add($"  маршрут «{route}» не дал ни тел, ни компонентов");
             return null;
         }
         catch (Exception ex)
         {
-            trace.Add($"  маршрут «{(useReadSelector ? "read-selector" : "default-param")}» → {ex.GetType().Name}: {ex.Message}");
+            trace.Add($"  маршрут «{route}» → {ex.GetType().Name}: {ex.Message}");
             return null;
+        }
+        finally
+        {
+            if (!keep)
+            {
+                RemoveFailedRouteDocument(application, target, entry, trace, leftOpen);
+            }
+        }
+    }
+
+    /// <summary>Close and unregister the document a failed route opened. The close goes through the
+    /// documented route with an explicit "what happens to unsaved changes" — the option-less API5
+    /// close() would put the question back to a user who is not there. When the close does not succeed
+    /// the document is LEFT (so <c>kompas_list_documents</c> tells the truth) and named.</summary>
+    private void RemoveFailedRouteDocument(
+        ApplicationEntry application,
+        ksDocument3D? target,
+        DocumentEntry? entry,
+        List<string> trace,
+        List<string> leftOpen)
+    {
+        if (entry is null && target is null)
+        {
+            return;
+        }
+
+        bool closed;
+        string? note;
+        if (entry is not null)
+        {
+            closed = TryCloseImportDocument(application, entry, out note);
+        }
+        else
+        {
+            closed = TryCloseImportDocument(application, target!, out note);
+        }
+
+        if (closed)
+        {
+            if (entry is not null)
+            {
+                DropDocument(entry, alreadyClosed: true);
+            }
+
+            var label = entry?.Id ?? "(без id)";
+            trace.Add(note is null
+                ? $"  документ {label} закрыт и снят с регистрации"
+                : $"  документ {label} закрыт ({note})");
+            return;
+        }
+
+        if (entry is not null)
+        {
+            leftOpen.Add(entry.Id);
+            trace.Add($"  документ {entry.Id} оставлен открытым: закрыть не удалось ({note})");
+            return;
+        }
+
+        // Never registered, so it has no host id to name: give it one, which also makes
+        // kompas_list_documents show what is really open.
+        var named = RegisterLeftoverDocument(application, target!, trace);
+        leftOpen.Add(named);
+        trace.Add($"  документ {named} оставлен открытым: закрыть не удалось ({note})");
+    }
+
+    /// <summary>Close a document opened by an import route, preferring the documented API7 route
+    /// (<c>IKompasDocument.Close(kdDoNotSaveChanges)</c> — DOC: ikompasdocument_close.html) and falling
+    /// back to the API5 handle. Returns true only when the document was actually closed; the reason is
+    /// named otherwise, so a failed close is never mistaken for a clean one.</summary>
+    private bool TryCloseImportDocument(ApplicationEntry application, DocumentEntry entry, out string? note) =>
+        TryCloseImportDocumentCore(application, entry.Document, out note);
+
+    private bool TryCloseImportDocument(ApplicationEntry application, ksDocument3D document, out string? note) =>
+        TryCloseImportDocumentCore(application, document, out note);
+
+    private bool TryCloseImportDocumentCore(ApplicationEntry application, ksDocument3D? document, out string? note)
+    {
+        note = null;
+        if (document is null)
+        {
+            note = "у документа нет 3D-дескриптора для закрытия";
+            return false;
+        }
+
+        try
+        {
+            if (BridgeForApplication(application).TransferTo7(document) is IKompasDocument document7)
+            {
+                if (document7.Close(DocumentCloseOptions.kdDoNotSaveChanges))
+                {
+                    return true;
+                }
+
+                note = "IKompasDocument.Close(kdDoNotSaveChanges) вернул false";
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            note = "перевод в API7 бросил: " + ex.Message;
+        }
+
+        try
+        {
+            // API5 ksDocument3D.close() has no "do not save" choice; it is the last resort and the
+            // limitation is named rather than hidden.
+            document.close();
+            note = "закрыт через API5 ksDocument3D.close(): у него нет выбора «не сохранять»";
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException)
+        {
+            note = "закрытие бросило: " + ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Register a document a failed route left open but never registered, so it has a host id
+    /// to be named by and shows up in <c>kompas_list_documents</c>. A registration that fails is
+    /// named instead of thrown: the import is already being reported as failed.</summary>
+    private string RegisterLeftoverDocument(ApplicationEntry application, ksDocument3D document, List<string> trace)
+    {
+        try
+        {
+            return RegisterImportedDocument(document, application, trace);
+        }
+        catch (Exception ex) when (ex is KompasContractException or COMException or InvalidCastException)
+        {
+            trace.Add($"  документ, созданный маршрутом, не удалось даже зарегистрировать: {ex.GetType().Name}");
+            return "незарегистрированный документ, созданный маршрутом";
         }
     }
 
@@ -232,41 +419,10 @@ public sealed partial class Api5Session
         return entry.Id;
     }
 
-    private void DropImportedDocument(string documentId)
-    {
-        try
-        {
-            var entry = RequireDocument(documentId);
-            DropDocument(entry);
-        }
-        catch (Exception ex) when (ex is KompasContractException or COMException)
-        {
-            // The import path is already being reported as failed.
-        }
-    }
-
-    private IReadOnlyList<string> SnapshotDocuments(ApplicationEntry application, List<string> trace)
-    {
-        // API5 exposes no document collection; the only identity usable for a before/after
-        // comparison is the IUnknown of the active document, so that is what is tracked.
-        var ids = new List<string>();
-        try
-        {
-            if (application.Application.ActiveDocument3D() is ksDocument3D active)
-            {
-                var pointer = Marshal.GetIUnknownForObject(active);
-                ids.Add("0x" + pointer.ToString("X", CultureInfo.InvariantCulture));
-                Marshal.Release(pointer);
-                ComApartment.Release(active);
-            }
-        }
-        catch (Exception ex) when (ex is COMException)
-        {
-            trace.Add("ActiveDocument3D недоступен: " + ex.GetType().Name);
-        }
-
-        return ids;
-    }
+    /// <summary>Host ids the session registry holds right now. The registry is what
+    /// <c>kompas_list_documents</c> answers, so a before/after comparison of these ids names what an
+    /// import created in the only identity a client can address.</summary>
+    private IReadOnlyList<string> RegisteredDocumentIds() => _documents.Keys.ToArray();
 
     /// <summary>In-product copy of the P0.7 measurement: build known geometry, read every quantity back
     /// with each unit selector, and refuse to publish anything whose scale is not confirmed.

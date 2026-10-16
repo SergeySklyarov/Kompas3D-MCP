@@ -24424,13 +24424,12 @@ def multi_body_checks(client, rep, app_id):
 
 
 def model_derived_sketch_checks(client, rep, app_id, workdir):
-    """G10/G11/G12: правка эскиза, которого сервер не рисовал, с точкой из зависимого тела.
+    """G10/G10v/G10r/G12: правка эскиза, которого сервер не рисовал, по фактическому составу модели.
 
     Проба G (`docs/acceptance/api7/sketch-geometry-reopen.md`, 11 шагов PASS) измерила маршрут
-    СЫРЫМИ COM-вызовами: после save→close→reopen у сервера нет памяти о координатах примитивов, но
-    цилиндрическая грань сквозного отверстия даёт центр и радиус, а точка (cx + r; cy) лежит на
-    окружности эскиза. Эта группа делает второй, более строгий шаг — то же самое через каталог
-    инструментов, на документе, переоткрытом настоящим MCP-вызовом.
+    СЫРЫМИ COM-вызовами: после save→close→reopen у сервера нет памяти о нарисованном профиле, но
+    перечень объектов эскиза читается из модели. Эта группа делает второй, более строгий шаг — то же
+    самое через каталог инструментов, на документе, переоткрытом настоящим MCP-вызовом.
 
     Ожидания аналитические и взяты из пробы, а не подогнаны после прогона: пластина 100×80×10 со
     сквозным Ø20 даёт 80000 − π·10²·10 = 76858.4073464102 мм³, после замены окружности на R12 —
@@ -24561,10 +24560,9 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
     # ═══════════════════════ G10: маршрут применим и измерен ═════════════════════════
     doc, rev, body, hole_sketch, err = build_plate_with_hole("SM02-sketch-reopen", r_before)
     if err:
-        for cid, what in (("G10", "правка эскиза после reopen с точкой из зависимого тела"),
+        for cid, what in (("G10", "правка эскиза после reopen: состав перечислен из модели"),
                           ("G10v", "зависимое тело изменилось на аналитику Ø20 → Ø24"),
                           ("G10r", "правка пережила второй reopen"),
-                          ("G11", "профиль не из окружности обязан отказывать"),
                           ("G12", "правка, уничтожившая тело, обязана отказывать")):
             rep.add(cid, what, "FAIL", err)
         return
@@ -24574,14 +24572,13 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
             "PASS" if v_built is not None and abs(v_built - v_before) <= max(0.01, 1e-6 * v_before) else "FAIL",
             f"V={v_built} ожидание={v_before:.6f}")
 
-    # save→close→reopen: единственный способ лишить сервер памяти о координатах примитивов.
+    # save→close→reopen: единственный способ лишить сервер памяти о нарисованном профиле эскиза.
     path = os.path.join(workdir, "SM02-sketch-reopen.m3d")
     doc, tag = save_close_reopen(doc, rev, path, "G10")
     if not doc:
-        rep.add("G10", "правка эскиза после reopen с точкой из зависимого тела", "FAIL", tag)
+        rep.add("G10", "правка эскиза после reopen: состав перечислен из модели", "FAIL", tag)
         rep.add("G10v", "зависимое тело изменилось на аналитику Ø20 → Ø24", "FAIL", tag)
         rep.add("G10r", "правка пережила второй reopen", "FAIL", tag)
-        rep.add("G11", "профиль не из окружности обязан отказывать", "FAIL", tag)
         rep.add("G12", "правка, уничтожившая тело, обязана отказывать", "FAIL", tag)
         return
 
@@ -24621,7 +24618,6 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
         "entities": [{"kind": "circle", "center_mm": [0, 0], "radius_mm": r_after}],
         "operation_id": str(uuid.uuid4())}, timeout=240)
     rp_res = (rp_env or {}).get("result") or {}
-    from_model = rp_res.get("probe_points_from_model")
 
     v_after_edit = volume(body)
     cyl_after = [f for f in faces(doc, body)
@@ -24630,10 +24626,18 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
     volume_ok = v_after_edit is not None and abs(v_after_edit - v_after) <= max(0.01, 1e-6 * v_after)
     lateral_ok = bool(cyl_after) and abs((cyl_after[0].get("area_mm2") or 0)
                                          - 2 * math.pi * r_after * 10) <= 0.01
-    rep.add("G10", "правка эскиза после reopen: точка выведена из зависимого тела, а не из памяти",
-            "PASS" if error_code(rp_env) is None and from_model is True else "FAIL",
-            f"probe_points_from_model={from_model} deleted={rp_res.get('deleted_entities')} "
-            f"expected={rp_res.get('expected_deleted')} err={error_code(rp_env)} "
+    # ПОСЫЛКА СТРОКИ ПЕРЕСТАВЛЕНА НАРЯДОМ EDIT_SKETCH_REPLACE_FIX. Прежняя редакция судила поле
+    # `probe_points_from_model` — признак того, что координата выведена ИЗ ЗАВИСИМОГО ТЕЛА. Наряд
+    # убрал и поле, и вывод координат: перечень удаляемого берётся из фактического состава эскиза.
+    # Строка судит то, что осталось обещанием контракта: правка после reopen проходит, старый профиль
+    # удалён ЦЕЛИКОМ и состав сверен перечитыванием. Обещание «точка из модели» заменено на «состав из
+    # модели» — строка переставлена, а не ослаблена.
+    rep.add("G10", "правка эскиза после reopen: состав перечислен из модели, старый профиль удалён",
+            "PASS" if error_code(rp_env) is None
+            and rp_res.get("deleted_entities") == rp_res.get("expected_deleted")
+            and rp_res.get("entity_count") == 1 else "FAIL",
+            f"удалено={rp_res.get('deleted_entities')} из {rp_res.get('expected_deleted')}; состав "
+            f"после={rp_res.get('entity_count')} {rp_res.get('kinds')}; err={error_code(rp_env)} "
             f"msg={describe(rp_env)[1]}")
     rep.add("G10v", "зависимое тело изменилось на аналитику Ø20 → Ø24",
             "PASS" if radius_ok and volume_ok and lateral_ok else "FAIL",
@@ -24662,18 +24666,19 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
     else:
         rep.add("G10r", "правка пережила второй reopen", "FAIL", tag2)
 
-    # ═══════════════════════ G11: граница маршрута держится ═════════════════════════
-    # Проба G измерила маршрут только для окружности в профиле. Замена на прямоугольник обязана
-    # отказать CAPABILITY_UNAVAILABLE: точки, лежащей на отрезке, из цилиндра не вывести.
+    # СТРОКА G11 «профиль не из окружности обязан отказывать» УДАЛЕНА нарядом EDIT_SKETCH_REPLACE_FIX
+    # как проверка СНЯТОГО требования, а не превращена в PASS. Её посылка (замена профиля не из
+    # окружности обязана отказать CAPABILITY_UNAVAILABLE/profile_not_circle) держалась на выводе
+    # координат из зависимого тела; наряд убрал вывод, а перечень удаляемого берётся из фактического
+    # состава эскиза и координат не требует. Замена профиля не из окружности проверяется строками
+    # SB-13 и SB-14 группы sketch_bulk.
     doc_b, rev_b, body_b, sketch_b, err_b = build_plate_with_hole("SM02-sketch-boundary", r_before)
     if err_b:
-        rep.add("G11", "профиль не из окружности обязан отказывать", "FAIL", err_b)
         rep.add("G12", "правка, уничтожившая тело, обязана отказывать", "FAIL", err_b)
     else:
         path_b = os.path.join(workdir, "SM02-sketch-boundary.m3d")
-        doc_b, tag_b = save_close_reopen(doc_b, rev_b, path_b, "G11")
+        doc_b, tag_b = save_close_reopen(doc_b, rev_b, path_b, "G12")
         if not doc_b:
-            rep.add("G11", "профиль не из окружности обязан отказывать", "FAIL", tag_b)
             rep.add("G12", "правка, уничтожившая тело, обязана отказывать", "FAIL", tag_b)
         else:
             # Контекст читается только у живого документа: `ctx(None)` вернул бы None-ревизию и
@@ -24682,19 +24687,6 @@ def model_derived_sketch_checks(client, rep, app_id, workdir):
 
             # Та же причина, что и в G10: после reopen живёт только ссылка из перечитанного дерева.
             sketch_b = new_sketch_ref(doc_b)
-
-            _e, rb_env, _r = client.tool("kompas_edit_sketch", {
-                "sketch_ref": sketch_b, "expected_revision": rev_b, "mode": "replace",
-                "entities": [{"kind": "rectangle", "start_mm": [-10, -10],
-                              "width_mm": 20, "height_mm": 20}],
-                "operation_id": str(uuid.uuid4())}, timeout=240)
-            code_b = error_code(rb_env)
-            details_b = ((rb_env or {}).get("error") or {}).get("details") or {}
-            rep.add("G11", "профиль не из окружности обязан отказывать (точки на отрезке не вывести)",
-                    "PASS" if code_b == "CAPABILITY_UNAVAILABLE"
-                    and details_b.get("derivation") == "profile_not_circle" else "FAIL",
-                    f"code={code_b} derivation={details_b.get('derivation')} "
-                    f"msg={describe(rb_env)[1]}")
 
             # ═══════════════════ G12: разрушающая правка не выдаётся за успех ═════════════
             # Проба G.9: R90 на пластине 100×80 проходит без единого отказа, а тело исчезает.
@@ -37544,28 +37536,37 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                 else:
                     problems_b.append("верхняя грань после reopen не найдена")
 
-                # ВЫВОД КООРДИНАТ ДЛЯ ПРАВКИ ЭСКИЗА НА ССЫЛОЧНОЙ ПЛОСКОСТИ — ОТКАЗ, А НЕ РАБОТА ПО
-                # НЕВЕРНОЙ ОСИ. Эскиз бобышки лежит на СМЕЩЁННОЙ плоскости и в этом сеансе сервером
-                # не рисовался (документ переоткрыт), значит координату для очистки вывести неоткуда:
-                # перенос 3D→2D измерен только для основной XY. Отказ обязан назвать причину, а не
-                # выдать координату по чужой оси — наряд §2.2.
+                # ПРАВКА ЭСКИЗА НА ССЫЛОЧНОЙ ПЛОСКОСТИ — ТЕПЕРЬ ПРОХОДИТ, А НЕ ОТКАЗЫВАЕТ. Прежняя
+                # редакция требовала отказа CAPABILITY_UNAVAILABLE/plane_not_xy: координату для
+                # очистки вывести неоткуда, перенос 3D→2D измерен только для основной XY. Наряд
+                # EDIT_SKETCH_REPLACE_FIX убрал вывод координат: перечень удаляемого берётся из
+                # фактического состава эскиза и опоры не спрашивает, поэтому предел снят вместе с
+                # механизмом. Профиль заменяется ТЕМ ЖЕ кругом, поэтому объём обязан остаться прежним.
                 if sk_from_tree:
                     env, code = call("kompas_edit_sketch", {
                         "sketch_ref": sk_from_tree, "expected_revision": ctx(doc2),
                         "mode": "replace", "entities": [circle]})
-                    err_details = ((env or {}).get("error") or {}).get("details") or {}
-                    b["derivation_refusal"] = {"error": code,
-                                               "derivation": err_details.get("derivation"),
-                                               "message": describe(env)}
-                    if not (code == "CAPABILITY_UNAVAILABLE"
-                            and err_details.get("derivation") == "plane_not_xy"):
+                    res5 = result(env) or {}
+                    b["referenced_plane_edit"] = {"error": code,
+                                                  "deleted": res5.get("deleted_entities"),
+                                                  "expected_deleted": res5.get("expected_deleted"),
+                                                  "entity_count": res5.get("entity_count"),
+                                                  "kinds": res5.get("kinds"),
+                                                  "message": describe(env)}
+                    if code is not None:
+                        problems_b.append(f"правка эскиза на ссылочной плоскости отказала: {code}")
+                    elif not (res5.get("deleted_entities") == res5.get("expected_deleted")
+                              and res5.get("entity_count") == 1
+                              and (res5.get("kinds") or []) == ["circle"]):
                         problems_b.append(
-                            "правка эскиза на ссылочной плоскости не отказала названной причиной: "
-                            f"err={code} derivation={err_details.get('derivation')!r}")
+                            "состав после правки не совпал с запрошенным: удалено "
+                            f"{res5.get('deleted_entities')} из {res5.get('expected_deleted')}, "
+                            f"состав {res5.get('kinds')}")
                     g5 = state(doc2)
-                    b["model_after_refusal"] = g5
+                    b["model_after_edit"] = g5
                     if not (g5["volumes"] and near(g5["volumes"][0], total_v)):
-                        problems_b.append(f"после отказа модель изменилась: объём {g5['volumes']}")
+                        problems_b.append(
+                            f"замена профиля тем же кругом изменила модель: объём {g5['volumes']}")
 
             reopen_ok = not problems_b
             out["save_reopen"] = {
@@ -37575,9 +37576,11 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                            f"{bool(b.get('sketch_ref_from_tree'))}; опора, прочитанная GetPlane из "
                            f"модели: {b.get('support_type_before')!r}, геометрия изменена="
                            f"{b.get('geometry_changed')!r}, ступень {b.get('apply_route')!r}; "
-                           f"правка эскиза на ссылочной плоскости отказывает "
-                           f"{b.get('derivation_refusal', {}).get('error')!r} с причиной "
-                           f"{b.get('derivation_refusal', {}).get('derivation')!r}"
+                           f"правка эскиза на ссылочной плоскости проходит "
+                           f"err={b.get('referenced_plane_edit', {}).get('error')!r}, удалено "
+                           f"{b.get('referenced_plane_edit', {}).get('deleted')} из "
+                           f"{b.get('referenced_plane_edit', {}).get('expected_deleted')}, состав "
+                           f"{b.get('referenced_plane_edit', {}).get('kinds')}"
                            + ("; НЕ ВЫПОЛНЕНО: " + "; ".join(problems_b) if problems_b else "")),
                 "details": b}
 
@@ -41624,13 +41627,8 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         # объясняла это тем, что «ссылка, сохранённая до перестроения, отбрасывается реестром».
         # Это утверждение НЕ ИЗМЕРЯЛОСЬ и оказалось неверным: BumpRevision продвигает реестр
         # (`References.RevisionForward`), и ссылка переживает мутацию — прежний прогон вызывал
-        # замену контура ИМЕННО ссылкой из `plate()` и получал `replace_error: null`. А вот память
-        # сервера о точках рисования эскиза ключуется СТРОКОЙ ссылки: с перенайденной ссылкой
-        # `_sketchProbePoints` промахивается, замена уходит в вывод координаты из цилиндрической
-        # грани, которой у прямоугольного профиля нет, и отвечает CAPABILITY_UNAVAILABLE с
-        # `derivation=no_cylindrical_face`. Измерено 21.09.2026 на бинарях
-        # `artifacts/publish-deproutes-20260921-b`: `replace_error: CAPABILITY_UNAVAILABLE`,
-        # `profile_replaced: false` — отказ ПРИБОРА (сменил адрес), выданный за отказ продукта.
+        # замену контура ИМЕННО ссылкой из `plate()` и получал `replace_error: null`. Перенайденная
+        # ссылка адресует тот же объект, но лишний обход дерева прибору не нужен.
         sk_created = scene["sketch"]
         sk_now = sk_created
         def enumerate_sketch(sketch_ref, address=None):

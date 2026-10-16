@@ -66,9 +66,9 @@ public sealed partial class Api5Session
         _sketchProfiles.Remove(reference.Id);
 
         // ONLY a named base plane is remembered. A reference support must NOT be: the frame of an offset
-        // or tilted plane is not one of the three standard frames, so a remembered XY would send the
-        // coordinate derivation of kompas_edit_sketch along the wrong axis. For a reference the frame is
-        // read back from the model instead (ResolveSketchPlaneBase).
+        // or tilted plane is not one of the three standard frames, so a remembered XY would name the
+        // wrong axis to the material-direction rule (BoxDirection). For a reference the frame is read
+        // back from the model instead (ResolveSketchPlaneBase).
         if (support.BasePlane is PlaneBase basePlane)
         {
             _sketchPlaneBase[reference.Id] = basePlane;
@@ -561,9 +561,9 @@ public sealed partial class Api5Session
 
     /// <summary>Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
     /// out of the model.</summary>
-    /// <remarks>A reopened document's sketch has no memory entry, so without this the derivation would be
-    /// useless exactly where it was built. An axis has no sign: this establishes "parallel to XY", not
-    /// "faces +Z" (probe G left the sign unmeasured).
+    /// <remarks>A reopened document's sketch has no memory entry, so the read-back is the only source
+    /// exactly where the memory was lost. An axis has no sign: this establishes "parallel to XY", not
+    /// "faces +Z" (probe G left the sign unmeasured). The caller is the material-direction rule.
     /// History: docs/decisions/adapter-core.md#resolve-sketch-plane-base</remarks>
     private PlaneBase? ResolveSketchPlaneBase(string sketchRef, SketchTarget target)
     {

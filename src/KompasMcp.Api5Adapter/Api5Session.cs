@@ -198,11 +198,11 @@ public sealed partial class Api5Session : IDisposable
                     ["kompas_process_ids"] = kompasProcesses,
                     ["rot_entries_matching_kompas"] = entries.Count,
                     ["rot_total_entries"] = total,
-                    // NOT candidates: named so a foreign file (a PDF, a project) is not mistaken for an
-                    // attachable instance. File names only — never the full paths of another user's files.
-                    ["rot_other_entry_names"] = names.Take(10).Select(FileNameOnly).ToArray(),
-                    ["rot_other_entry_names_note"] =
-                        "прочие записи ROT (не КОМПАС, не рассматриваются как кандидаты attach)",
+                    // A COUNT, never the names: a foreign ROT entry is somebody else's document (a PDF, a
+                    // project) and its file name is not the diagnosis. The count is what tells "the table
+                    // holds other things" apart from "the table is empty".
+                    // History: docs/decisions/adapter-core.md#attach-diagnosis-no-foreign-names
+                    ["rot_other_entries"] = names.Count,
                 });
         }
 
@@ -255,19 +255,6 @@ public sealed partial class Api5Session : IDisposable
         return WithVisibility(
             Register(only.Entry.Object!, only.Pid.Value, ApplicationOwnership.Attached, "attach"),
             ConnectMode.Attach, command.MakeVisible);
-    }
-
-    /// <summary>The last path segment of a ROT display name: a foreign entry is named, never located —
-    /// the full path of another user's file does not belong in a refusal.</summary>
-    private static string FileNameOnly(string displayName)
-    {
-        if (string.IsNullOrEmpty(displayName))
-        {
-            return displayName;
-        }
-
-        var cut = displayName.LastIndexOfAny(['\\', '/']);
-        return cut >= 0 && cut + 1 < displayName.Length ? displayName[(cut + 1)..] : displayName;
     }
 
     private int? ResolveProcessId(object kompasObject, int[] newlyAppeared)    {

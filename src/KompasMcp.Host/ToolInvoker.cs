@@ -8,6 +8,7 @@ using KompasMcp.Domain.Journaling;
 using KompasMcp.Domain.Queueing;
 using KompasMcp.Domain.Paths;
 using KompasMcp.Domain.Schema;
+using KompasMcp.Domain.Verification;
 using KompasMcp.Host.Catalog;
 
 namespace KompasMcp.Host;
@@ -863,7 +864,13 @@ public sealed class ToolInvoker : IAsyncDisposable
             // The Worker actually observed the model or the file, so its verification level wins. The
             // Host's own value is a floor, never a ceiling: claiming "geometry_checked" here would be
             // overclaiming, and downgrading the Worker's honest answer would hide proof.
-            Verification = WorkerVerification(result) ?? new VerificationDto(
+            // Three sources, strongest first: the Worker's own verification block; the reached level the
+            // RESULT published on its own; the conservative floor for a payload that published neither.
+            // INVARIANT: the envelope describes the RESULT, never the call the client made.
+            // History: docs/decisions/host.md#verification-aggregation
+            Verification = WorkerVerification(result)
+                ?? ResultVerification.From(result, status)
+                ?? new VerificationDto(
                 status == OperationStatus.Succeeded
                     ? tool.Behaviour.ReadOnly ? VerificationLevel.ArgumentValidated : VerificationLevel.CallReturned
                     : VerificationLevel.None,

@@ -173,6 +173,53 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(body["rot_kompas_entries_unavailable"]!.GetValue<string>()));
     }
 
+    /// <summary>INVARIANT: the file policy is published BEFORE the first save, from the SAME two lists the
+    /// <c>PATH_NOT_ALLOWED</c> refusal names.</summary>
+    /// <remarks>MEASURED defect: the allowed roots were visible only inside the refusal, so a client had to
+    /// provoke a failed save to learn them. The merge takes the options, not a second copy of the roots, so
+    /// the published policy cannot drift from the one the path policy enforces.
+    /// History: docs/decisions/host.md#capabilities-roots</remarks>
+    [Fact]
+    public void Capabilities_PublishTheSameRootsThePathRefusalNames()
+    {
+        var options = new HostOptions
+        {
+            ReadOnlyRoots = new[] { @"C:\models" },
+            WritableRoots = new[] { @"C:\sandbox" },
+            ExportRoots = new[] { @"C:\export" },
+        };
+
+        var bare = new ResultEnvelope<JsonNode?>
+        {
+            Status = OperationStatus.Succeeded,
+            Result = new JsonObject(),
+        };
+
+        var body = (JsonObject)HostSession.WithCapabilitiesCatalog(bare, options).Result!;
+
+        Assert.Equal(new[] { @"C:\models" },
+            ((JsonArray)body["read_only_roots"]!).Select(n => n!.GetValue<string>()));
+        Assert.Equal(new[] { @"C:\sandbox", @"C:\export" },
+            ((JsonArray)body["writable_roots"]!).Select(n => n!.GetValue<string>()));
+    }
+
+    /// <summary>Without options the field is simply absent — an empty list would read as "nothing is
+    /// allowed", which is a claim this overload cannot make.</summary>
+    [Fact]
+    public void Capabilities_WithoutOptions_DoNotInventAnEmptyPolicy()
+    {
+        var bare = new ResultEnvelope<JsonNode?>
+        {
+            Status = OperationStatus.Succeeded,
+            Result = new JsonObject(),
+        };
+
+        var body = (JsonObject)HostSession.WithCapabilitiesCatalog(bare).Result!;
+
+        Assert.False(body.ContainsKey("read_only_roots"));
+        Assert.False(body.ContainsKey("writable_roots"));
+    }
+
     // Acquire and release.
 
     [Fact]

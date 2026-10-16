@@ -107,7 +107,7 @@ public sealed class HostSession : IAsyncDisposable
             // while this Host owned no session.
             // History: docs/decisions/host.md#capabilities-catalog
             return string.Equals(tool.Name, CapabilitiesTool, StringComparison.Ordinal)
-                ? WithCapabilitiesCatalog(answer)
+                ? WithCapabilitiesCatalog(answer, _options)
                 : answer;
         }
 
@@ -1286,7 +1286,8 @@ public sealed class HostSession : IAsyncDisposable
     /// the session state. INVARIANT: <c>rot_kompas_entries</c> is <c>null</c> with a NAMED reason when the
     /// enumeration did not happen; zero is a different statement ("there are no entries").
     /// History: docs/decisions/host.md#capabilities-catalog</remarks>
-    public static ResultEnvelope<JsonNode?> WithCapabilitiesCatalog(ResultEnvelope<JsonNode?> envelope)
+    public static ResultEnvelope<JsonNode?> WithCapabilitiesCatalog(
+        ResultEnvelope<JsonNode?> envelope, HostOptions? options = null)
     {
         if (envelope.Result is not JsonObject result)
         {
@@ -1298,6 +1299,20 @@ public sealed class HostSession : IAsyncDisposable
             ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
         node["tool_count"] = ToolCatalog.All.Count;
         node["server_version"] = Program.ServerVersion;
+
+        // The file policy is published HERE, from the SAME two lists the PATH_NOT_ALLOWED refusal names,
+        // so a client can pick an allowed path before its first save instead of provoking a refusal to
+        // learn the rule. INVARIANT: one source — a second copy of the roots would drift from the one the
+        // policy actually enforces.
+        // History: docs/decisions/host.md#capabilities-roots
+        if (options is not null)
+        {
+            node["read_only_roots"] = new JsonArray(
+                options.ReadOnlyRoots.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+            node["writable_roots"] = new JsonArray(
+                options.WritableRoots.Concat(options.ExportRoots)
+                    .Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+        }
 
         if (!node.ContainsKey("rot_kompas_entries"))
         {

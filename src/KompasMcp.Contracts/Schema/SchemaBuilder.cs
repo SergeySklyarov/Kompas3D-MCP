@@ -270,8 +270,21 @@ public static class Sch
     }
 
     /// <summary>Three finite coordinates in public units.</summary>
+    /// <remarks>INVARIANT: the field's OWN description states the fixed length. MEASURED defect: a client
+    /// that does not expand <c>$ref</c> and does not count <c>minItems</c> showed the field as a bare
+    /// array, so a two-element axis point reached the validator and was refused with "Минимум 3
+    /// элементов" only AFTER the call. <c>minItems</c>/<c>maxItems</c> stay as the machine-checkable
+    /// half of the same rule.
+    /// History: docs/decisions/host.md#point-array-arity</remarks>
     public static JsonObject Vec3(string description) =>
-        Arr(Num(description + " Компонента, мм."), description, 3, 3);
+        Arr(Num(description + " Компонента, мм."),
+            description + " Ровно три координаты [x, y, z], мм.", 3, 3);
+
+    /// <summary>Two finite coordinates in public units — the planar twin of <see cref="Vec3"/>, with the
+    /// same fixed-length rule stated in the field's own description.</summary>
+    public static JsonObject Vec2(string description) =>
+        Arr(Num(description + " Компонента, мм."),
+            description + " Ровно две координаты [x, y], мм.", 2, 2);
 
     public static JsonObject Ref(string pointer) => new() { ["$ref"] = pointer };
 

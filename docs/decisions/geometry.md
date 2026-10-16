@@ -308,3 +308,22 @@ IGES, VRML, STL»), `ksdocument3d_additionformatparam.html`, `ksadditionformatpa
 **Уровень — MINOR**: в ответе появилось необязательное поле (`inertia.density_kg_per_m3`); входной
 контракт не менялся (`contract-diff` — 0 структурных ломок, выросло только описание инструмента).
 
+
+## <a id="measure-centroid"></a>Центр масс тела читается, а не остаётся пустым (наряд `CLIENT_REPORT_FIXES`, 17.10.2026)
+
+**Что было.** Ветвь измерения ТЕЛА обрабатывала `bbox`, `volume`, `surface_area`, `inertia` и `mass`, а
+ветви для `centroid` в ней не было вовсе. Клиент 15.10.2026 запросил
+`kompas_measure(properties=[volume, bbox, surface_area, centroid])`, получил `centroid_mm = null` и
+ПУСТОЙ `unverified_aspects` — то есть отличить «не запрошено» от «не прочитано» было нечем, хотя
+описание инструмента обещало чтение центроида у тела. Ветви ГРАНИ и РЕБРА этот случай называли
+(`centroid_not_read_for_face` / `_for_edge`) — пропущено было только тело.
+
+**Что решено.** Центр масс читается тем же документированным маршрутом, что объём и площадь:
+`ksBody.CalcMassInertiaProperties(ST_MIX_MM|ST_MIX_KG)` → `ksMassInertiaParam.xc/yc/zc`. DOC:
+`ksmassinertiaparam_props.html` — «xc, yc, zc — Координаты центра масс в глобальной (исходной) системе
+координат»; `ksmassinertiaparam.html`, примечание 2, даёт указатель через
+`ksBody::CalcMassInertiaProperties`, примечание 3 задаёт размерность длины через `bitVector`, поэтому
+при `ST_MIX_MM` три значения — миллиметры. Запрошенный, но не прочитанный центроид НАЗЫВАЕТСЯ аспектом
+`centroid_not_read` с причиной (интерфейс не вернулся / значения не конечны / свойство не читается);
+нечитаемое значение не подменяется нулём. Поведение поля не менялось (`centroid_mm` остаётся списком
+трёх чисел), поэтому структурных ломок нет — уровень PATCH.

@@ -2,19 +2,25 @@
 
   python scripts/tools-list-size.py [--host <KompasMcp.Host.exe>] [--json <out.json>] [--dump <tools.json>]
 
-Печатает итоги и пять крупнейших инструментов. `--json` - итоги и строки по инструментам (так снято
-`tools-list-size.json` в доказательствах приёмки), `--dump` - сам массив `tools`, вход для
-`scripts/contract-diff.py`.
+Печатает итоги, пять крупнейших инструментов и ПОВТОР в описаниях: какая доля текста описаний
+встречается у нескольких инструментов (общий пролог, общий протокол) и какие строки повторяются
+чаще всего. `--json` - итоги, строки по инструментам и повтор (так снято `tools-list-size.json` в
+доказательствах приёмки), `--dump` - сам массив `tools`, вход для `scripts/contract-diff.py`.
 
-Мера - символы массива `tools` в `json.dumps(..., ensure_ascii=False)` с разделителями по умолчанию;
-`tools_array_compact` - без пробелов, это мера стража `ToolListSizeTests`.
-History: docs/decisions/host.md#tools-list-size-guard"""
+Мера размера - символы массива `tools` в `json.dumps(..., ensure_ascii=False)` с разделителями по
+умолчанию; `tools_array_compact` - без пробелов, это мера стража `ToolListSizeTests`.
+
+Мера повтора - предложения описаний (разделитель - точка с пробелом или перевод строки), сравнение
+после сжатия пробелов: два инструмента, написавшие ОДНУ фразу с разными переносами, считаются
+повтором, а совпадение подстроки внутри разных фраз - нет.
+History: docs/decisions/host.md#tools-list-size-guard, docs/decisions/host.md#tools-list-repetition"""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -141,6 +147,50 @@ def measure(tools):
     return totals, rows
 
 
+# A sentence ends at a period followed by whitespace, or at a line break. Splitting on the period alone
+# would cut abbreviations and decimals; splitting only on the line break would miss two sentences written
+# on one line.
+_SENTENCE = re.compile(r"(?<=\.)\s+|\n+")
+
+
+def sentences(text):
+    """Sentences of one description, whitespace-collapsed. Shorter than 20 characters is dropped: a
+    fragment like «мм.» repeated everywhere is not a protocol, and counting it would inflate the share."""
+    parts = [re.sub(r"\s+", " ", piece).strip() for piece in _SENTENCE.split(text or "")]
+    return [piece for piece in parts if len(piece) >= 20]
+
+
+def repetition(tools):
+    """How much of the descriptions' text is written in MORE THAN ONE tool."""
+    seen = {}
+    per_tool = {}
+    total_chars = 0
+    for tool in tools:
+        name = tool["name"]
+        own = sentences(tool.get("description"))
+        per_tool[name] = own
+        total_chars += sum(len(s) for s in own)
+        for sentence in set(own):
+            entry = seen.setdefault(sentence, [])
+            entry.append(name)
+
+    repeated = {s: names for s, names in seen.items() if len(names) > 1}
+    repeated_chars = sum(len(s) for s in repeated)
+    # Every tool that carries a repeated sentence pays for it once; the first carrier is the original.
+    repeated_instances = sum(len(names) - 1 for names in repeated.values())
+    top = sorted(repeated.items(), key=lambda item: (-len(item[1]), -len(item[0])))
+    return {
+        "tools": len(tools),
+        "sentence_chars": total_chars,
+        "repeated_sentences": len(repeated),
+        "repeated_chars": repeated_chars,
+        "repeated_share": round(repeated_chars / total_chars, 4) if total_chars else 0.0,
+        "repeated_instances": repeated_instances,
+        "top": [{"tools": len(names), "chars": len(sentence), "sentence": sentence[:160]}
+                for sentence, names in top[:10]],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Размер tools/list собранного Хоста.")
     parser.add_argument("--host", default=DEFAULT_HOST, help="KompasMcp.Host.exe (по умолчанию Release x64)")
@@ -164,6 +214,7 @@ def main():
 
     totals, rows = measure(tools)
     rows.sort(key=lambda row: -row["total"])
+    repeat = repetition(tools)
 
     print(f"host={args.host}")
     for key, value in totals.items():
@@ -173,6 +224,13 @@ def main():
         print("  {name:<34} total={total:>7} description={description:>6} defs={defs:>7} "
               "defs_count={defs_count:>2} field_descriptions={field_descriptions:>7}".format(**row))
 
+    print("repetition across tool descriptions:")
+    for key in ("sentence_chars", "repeated_sentences", "repeated_chars", "repeated_share",
+                "repeated_instances"):
+        print(f"{key:>24} = {repeat[key]}")
+    for item in repeat["top"]:
+        print(f"  tools={item['tools']:>3} chars={item['chars']:>5}  {item['sentence']}")
+
     if args.dump:
         with open(args.dump, "w", encoding="utf-8") as handle:
             json.dump(tools, handle, ensure_ascii=False)
@@ -180,7 +238,8 @@ def main():
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
-            json.dump({"totals": totals, "tools": rows}, handle, ensure_ascii=False, indent=1)
+            json.dump({"totals": totals, "tools": rows, "repetition": repeat}, handle,
+                      ensure_ascii=False, indent=1)
         print(f"json={args.json}")
 
 

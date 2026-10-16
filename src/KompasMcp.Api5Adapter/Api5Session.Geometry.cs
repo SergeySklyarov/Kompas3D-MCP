@@ -4345,6 +4345,7 @@ public sealed partial class Api5Session
         double? volume = null;
         double? area = null;
         double? mass = null;
+        IReadOnlyList<double>? centroid = null;
         InertiaDto? inertia = null;
 
         if (stored.Payload is ksBody body)
@@ -4362,6 +4363,11 @@ public sealed partial class Api5Session
             if (command.Properties.Contains(MeasurableProperty.SurfaceArea))
             {
                 area = MeasureArea(body, unverified);
+            }
+
+            if (command.Properties.Contains(MeasurableProperty.Centroid))
+            {
+                centroid = ReadCentroid(body, unverified);
             }
 
             if (command.Properties.Contains(MeasurableProperty.Inertia))
@@ -4469,6 +4475,7 @@ public sealed partial class Api5Session
             VolumeMm3 = volume,
             SurfaceAreaMm2 = area,
             MassKg = mass,
+            CentroidMm = centroid,
             Inertia = inertia,
             UnverifiedAspects = unverified,
         };
@@ -4701,6 +4708,43 @@ public sealed partial class Api5Session
         }
 
         return area;
+    }
+
+    /// <summary>Centre of mass of a BODY, mm, from the same mass-centre interface the volume comes from.</summary>
+    /// <remarks>DOC: <c>ksmassinertiaparam_props.html</c> — <c>xc, yc, zc</c> are «Координаты центра масс в
+    /// глобальной (исходной) системе координат»; <c>ksmassinertiaparam.html</c> note 2 gives the pointer
+    /// through <c>ksBody::CalcMassInertiaProperties</c> and note 3 sets the length unit by <c>bitVector</c>,
+    /// so at <c>ST_MIX_MM</c> the three values are millimetres.
+    /// INVARIANT: a REQUESTED centroid that did not read is NAMED in <c>unverified_aspects</c>. MEASURED
+    /// defect: the body branch had no <c>centroid</c> arm at all, so the field came back null with an empty
+    /// list of unverified aspects — indistinguishable from "not requested".
+    /// History: docs/decisions/geometry.md#measure-centroid</remarks>
+    private static IReadOnlyList<double>? ReadCentroid(ksBody body, List<string> unverified)
+    {
+        var properties = MassProperties(body, (uint)KompasUnits.MassMmKg);
+        if (properties is null)
+        {
+            unverified.Add("centroid_not_read — CalcMassInertiaProperties не вернул ksMassInertiaParam");
+            return null;
+        }
+
+        try
+        {
+            double x = properties.xc, y = properties.yc, z = properties.zc;
+            if (double.IsFinite(x) && double.IsFinite(y) && double.IsFinite(z))
+            {
+                return new[] { x, y, z };
+            }
+
+            unverified.Add("centroid_not_read — координаты центра масс не конечны");
+        }
+        catch (Exception ex) when (ex is COMException or MissingMethodException
+            or TargetInvocationException or InvalidCastException)
+        {
+            unverified.Add("centroid_not_read — координаты центра масс не читаются: " + ex.GetType().Name);
+        }
+
+        return null;
     }
 
     /// <summary>Mass-centre properties with an explicit unit selector: millimetres for length, kilograms

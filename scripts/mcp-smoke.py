@@ -10570,14 +10570,19 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
           and det.get("reason") in ("kompas_process_not_running", "kompas_process_not_in_rot",
                                     "rot_empty")
           and process_ids == []
-          and isinstance(det.get("rot_other_entry_names"), list)
-          and "не КОМПАС" in str(det.get("rot_other_entry_names_note", "")))
+          # Имена чужих документов НЕ выдаются, но счётчик остаётся: «в таблице есть посторонние
+          # записи» и «таблица пуста» — разные диагнозы, а имя файла клиента диагнозом не является.
+          # History: docs/decisions/adapter-core.md#attach-diagnosis-no-foreign-names
+          and "rot_other_entry_names" not in det
+          and isinstance(det.get("rot_other_entries"), int))
     rep.add("CB10.13",
             "OBS-019/attach: attach при НУЛЕ записей КОМПАС отвечает APPLICATION_DISCONNECTED с "
             "названной причиной и kompas_process_ids=[] — это «не найдено», а не «неоднозначно»; "
-            "прочие записи ROT названы не-кандидатами",
+            "прочие записи ROT названы СЧЁТЧИКОМ, без имён чужих документов",
             "PASS" if ok else "FAIL",
             f"code={attach_code} reason={det.get('reason')!r} process_ids={process_ids!r} "
+            f"rot_other_entries={det.get('rot_other_entries')!r} "
+            f"rot_other_entry_names_present={'rot_other_entry_names' in det} "
             f"rot_matching={det.get('rot_entries_matching_kompas')!r} "
             f"rot_total={det.get('rot_total_entries')!r} msg={emsg(a_env)}",
             details={"details": det})
@@ -14275,6 +14280,23 @@ def main():
         rep.add("F02", "выход через .. не протаскивает запись наружу",
                 "PASS" if code == "PATH_NOT_ALLOWED" else "FAIL", f"code={code}")
 
+        # F03: политика путей видна ДО первой попытки сохранения и совпадает с той, что называет отказ.
+        # Один источник: корни приходят в capabilities из тех же двух списков, что и PATH_NOT_ALLOWED,
+        # поэтому расхождение между ними — дефект, а не две разные формулировки одного правила.
+        # History: docs/decisions/host.md#capabilities-roots
+        _e, caps_env, _r = client.tool("kompas_capabilities", {}, timeout=60)
+        caps_res = result(caps_env) or {}
+        denied = details_of(env)
+        rep.add("F03", "корни в kompas_capabilities совпадают с корнями отказа PATH_NOT_ALLOWED",
+                "PASS" if (isinstance(caps_res.get("read_only_roots"), list)
+                           and isinstance(caps_res.get("writable_roots"), list)
+                           and caps_res.get("read_only_roots") == denied.get("read_only_roots")
+                           and caps_res.get("writable_roots") == denied.get("writable_roots")) else "FAIL",
+                f"capabilities: read_only={caps_res.get('read_only_roots')!r} "
+                f"writable={caps_res.get('writable_roots')!r}; отказ: "
+                f"read_only={denied.get('read_only_roots')!r} writable={denied.get('writable_roots')!r}",
+                details={"capabilities": caps_res, "refusal_details": denied})
+
         h_err, h_env, _ = client.tool("kompas_health", {"detail": "minimal"})
         rep.add("H01", "kompas_health отвечает без подключения к КОМПАС",
                 "PASS" if h_env and h_env.get("status") == "succeeded" else "FAIL",
@@ -14769,7 +14791,7 @@ def main():
                         json.dumps(bodies, ensure_ascii=False)[:240])
 
         if body_ref:
-            m_err, m_env, _ = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["bbox", "volume", "surface_area"]})
+            m_err, m_env, _ = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["bbox", "volume", "surface_area", "centroid"]})
             mr = (m_env or {}).get("result") or {}
             dims_ok = False
             bbox = mr.get("bbox") or {}
@@ -14782,6 +14804,23 @@ def main():
                     "PASS" if mr.get("volume_mm3") and abs(mr["volume_mm3"] - 80000) <= 8 else
                     ("UNKNOWN" if mr.get("volume_mm3") is None else "FAIL"),
                     f"volume={mr.get('volume_mm3')} unverified={mr.get('unverified_aspects')}")
+
+            # U01b: запрошенный центроид либо прочитан, либо НАЗВАН своей причиной. Пустое значение при
+            # пустом перечне неотличимо от «забыли заполнить», а брусок 100×80×10 имеет центр масс
+            # (50, 40, 5) — читаемый маршрут у тела есть.
+            # History: docs/decisions/geometry.md#measure-centroid
+            centroid = mr.get("centroid_mm")
+            u_aspects = list(mr.get("unverified_aspects") or [])
+            centroid_named = any("centroid" in str(a) for a in u_aspects)
+            if centroid is None:
+                centroid_ok = centroid_named
+            else:
+                centroid_ok = (len(centroid) == 3
+                               and all(isinstance(v, (int, float)) for v in centroid)
+                               and all(abs(centroid[i] - [50, 40, 5][i]) <= 0.001 for i in range(3)))
+            rep.add("U01b", "запрошенный centroid либо прочитан (50, 40, 5), либо назван причиной",
+                    "PASS" if centroid_ok else "FAIL",
+                    f"centroid_mm={centroid!r} named={centroid_named} unverified={u_aspects!r}")
 
             st_err, st_env, _ = client.tool("kompas_measure", {"target_ref": "face:111111111111", "properties": ["bbox"]})
             code = error_code(st_env)
@@ -15111,6 +15150,25 @@ def main():
                 "PASS" if os.path.exists(exp_path) and exres.get("byte_length") else "FAIL",
                 f"bytes={exres.get('byte_length')} level={((ex_env or {}).get('verification') or {}).get('level')}")
 
+        # E01b: внешний уровень конверта описывает РЕЗУЛЬТАТ, а не вызов. Полезная нагрузка экспорта
+        # несёт `reached_level` без блока `verification`, поэтому до правки снаружи стоял
+        # `call_returned`, а внутри — достигнутый уровень: клиент, читавший только конверт, узнавал
+        # меньше, чем уже лежало рядом. Оба перечня неподтверждённых аспектов обязаны совпасть.
+        # History: docs/decisions/host.md#verification-aggregation
+        ex_ver = (ex_env or {}).get("verification") or {}
+        ex_reached = exres.get("reached_level")
+        ex_aspects = list(exres.get("unverified_aspects") or [])
+        ex_env_aspects = list(ex_ver.get("unverified_aspects") or [])
+        # Перечень конверта — это перечень РЕЗУЛЬТАТА; пустой перечень результата заменяется
+        # ИМЕНОВАННЫМ пробелом, а не пустым списком (иначе он читался бы как «подтверждено всё»).
+        aspects_ok = (ex_env_aspects == ex_aspects if ex_aspects
+                      else ex_env_aspects == ["unverified_aspects_not_published_by_worker_payload"])
+        rep.add("E01b", "внешний verification.level экспорта равен достигнутому уровню результата",
+                "PASS" if (ex_reached is not None and ex_ver.get("level") == ex_reached
+                           and ex_ver.get("level") != "call_returned" and aspects_ok) else "FAIL",
+                f"verification.level={ex_ver.get('level')!r} result.reached_level={ex_reached!r} "
+                f"verification.unverified={ex_env_aspects!r} result.unverified={ex_aspects!r}")
+
         im_err, im_env, _ = client.tool("kompas_import_step", {
             "application_id": app_id, "input_path": exp_path, "desired_kind": "auto",
             "operation_id": str(uuid.uuid4())}, timeout=300)
@@ -15119,9 +15177,15 @@ def main():
                 "PASS" if (im_env or {}).get("status") == "succeeded" and (imres.get("body_count", 0) > 0 or imres.get("component_count", 0) > 0) else "FAIL",
                 f"bodies={imres.get('body_count')} comps={imres.get('component_count')} err={((im_env or {}).get('error') or {}).get('code')}")
 
-        rep.add("E03", "у импорта указан достигнутый уровень проверки",
-                "PASS" if ((im_env or {}).get("verification") or {}).get("level") else "UNKNOWN",
-                f"level={((im_env or {}).get('verification') or {}).get('level')} unverified={((im_env or {}).get('verification') or {}).get('unverified_aspects')}")
+        im_ver = (im_env or {}).get("verification") or {}
+        im_reached = imres.get("reached_level")
+        rep.add("E03", "внешний уровень импорта равен достигнутому, а перечень — перечню результата",
+                "PASS" if (im_reached is not None and im_ver.get("level") == im_reached
+                           and list(im_ver.get("unverified_aspects") or [])
+                           == list(imres.get("unverified_aspects") or [])) else "FAIL",
+                f"level={im_ver.get('level')!r} reached_level={im_reached!r} "
+                f"unverified={im_ver.get('unverified_aspects')!r} "
+                f"result.unverified={imres.get('unverified_aspects')!r}")
 
         # ── STEP.import: режим импорта STEP получает строку матрицы (наряд DEBT_IMPORT_STEP_ROW) ──
         # INVARIANT: the row is proven by the mode's OWN calls in this run - the file is the STEP

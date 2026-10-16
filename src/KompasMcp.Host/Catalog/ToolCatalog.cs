@@ -94,6 +94,16 @@ public static class ToolCatalog
         // History: docs/decisions/host.md#couplings-minitems
         0, 64);
 
+    /// <summary>What the <c>operation_id</c> FIELD says about itself.</summary>
+    /// <remarks>MEASURED defect: the published definition (<c>$defs/operation_id</c>) already named UUID v4
+    /// and the exact length, but a client that does not expand <c>$ref</c> showed the field as a plain
+    /// string, and the first request was refused with INVALID_ARGUMENT only AFTER the call. The rule is
+    /// therefore stated at the field as well, so it is visible without resolving anything; the definition
+    /// stays the single source and the validator's target.
+    /// History: docs/decisions/host.md#operation-id-field</remarks>
+    private const string OperationIdField =
+        "UUID v4, 36 символов, например 8f14e45f-ceea-467f-a1b2-000000000001 (определение - в $defs/operation_id).";
+
     /// <summary>Definitions shared by every tool, so a document id means the same thing everywhere.</summary>
     public static JsonObject SharedDefinitions { get; } = Sch.Props(
         ("operation_id", Sch.Uuid("UUID v4, 36 символов, например 8f14e45f-ceea-467f-a1b2-000000000001. Идентификатор мутации для повторного вызова: НОВЫЙ id на каждую новую операцию; тот же id с теми же аргументами возвращает уже известный результат и повторно не обращается к КОМПАС; тот же id с другими аргументами даёт OPERATION_ID_CONFLICT.")),
@@ -136,7 +146,10 @@ public static class ToolCatalog
                 + "числа и разные вопросы: первый считает процессы ОС, второй — кандидатов attach. "
                 + "Ответ одинаков и когда Worker запущен, и когда его нет. Режимы и ограничения "
                 + "КАЖДОГО инструмента читаются из его схемы и описания в tools/list и здесь не "
-                + "пересказываются: перечень без выдачи ограничений выдавал бы их за проверенные.",
+                + "пересказываются: перечень без выдачи ограничений выдавал бы их за проверенные. "
+                + "Политика путей видна ЗДЕСЬ, до первой попытки: read_only_roots и writable_roots "
+                + "приходят из того же источника, что и отказ PATH_NOT_ALLOWED, поэтому клиент "
+                + "выбирает разрешённый путь, не провоцируя пробный отказ.",
                 Sch.Props(),
                 WorkerCommands.EnvironmentProbe),
 
@@ -181,7 +194,7 @@ public static class ToolCatalog
                 + "документы новому Worker не известны, и правки могли остаться несохранёнными. Выход "
                 + "один и он явный — acknowledge_unknown_document_state=true.",
                 Sch.Props(
-                    ("operation_id", Sch.Nullable(Sch.Ref("#/$defs/operation_id"))),
+                    ("operation_id", Sch.Described(Sch.Nullable(Sch.Ref("#/$defs/operation_id")), OperationIdField)),
                     ("acknowledge_unknown_document_state", Sch.Nullable(Sch.Bool(
                         "Принять на себя неизвестное состояние документов: Worker терялся или "
                         + "перезапускался, и правки его документов могли остаться в КОМПАС "
@@ -193,7 +206,7 @@ public static class ToolCatalog
                 replaysOperationId: true),
 
             Mutation("kompas_connect", "Подключиться к КОМПАС",
-                "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION; при НУЛЕ кандидатов код APPLICATION_DISCONNECTED с причиной reason: kompas_process_not_running — процесс не запущен, kompas_process_not_in_rot — запущен, но не зарегистрирован в ROT, rot_empty — перечисление ROT пусто; в details приходят kompas_process_ids, rot_entries_matching_kompas, rot_total_entries и имена ПРОЧИХ записей ROT как не-кандидаты); launch — запустить собственный. Обычные инструменты новое приложение не создают. КАНДИДАТЫ attach — экземпляры, зарегистрированные в Running Object Table (ROT) под ProgID КОМПАС, а НЕ все процессы KOMPAS.exe: процесс без записи в ROT кандидатом не является, поэтому running_instances и rot_kompas_entries в kompas_capabilities — разные числа. При нескольких кандидатах нужен явный process_id: выбор «первого попавшегося» запрещён.",
+                "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION; при НУЛЕ кандидатов код APPLICATION_DISCONNECTED с причиной reason: kompas_process_not_running — процесс не запущен, kompas_process_not_in_rot — запущен, но не зарегистрирован в ROT, rot_empty — перечисление ROT пусто; в details приходят kompas_process_ids, rot_entries_matching_kompas, rot_total_entries и rot_other_entries — СЧЁТЧИК прочих записей ROT; имена чужих документов в отказе не выдаются вовсе); launch — запустить собственный. Обычные инструменты новое приложение не создают. КАНДИДАТЫ attach — экземпляры, зарегистрированные в Running Object Table (ROT) под ProgID КОМПАС, а НЕ все процессы KOMPAS.exe: процесс без записи в ROT кандидатом не является, поэтому running_instances и rot_kompas_entries в kompas_capabilities — разные числа. При нескольких кандидатах нужен явный process_id: выбор «первого попавшегося» запрещён.",
                 Sch.Props(
                     ("mode", Sch.Enum("Способ получения экземпляра.", "attach", "launch")),
                     ("process_id", Sch.Nullable(Sch.Int("Явный PID экземпляра КОМПАС для attach."))),
@@ -1343,7 +1356,8 @@ public static class ToolCatalog
                     ("expected_hole_count", Sch.Nullable(Sch.Int(
                         "Аналитическое ожидание числа экземпляров-отверстий. Точное совпадение.", 0, 100_000))),
                     ("expected_hole_centers_mm", Sch.Nullable(Sch.Arr(
-                        Sch.Arr(Sch.Num("Компонента координаты, мм."), null, 3, 3),
+                        Sch.Arr(Sch.Num("Компонента координаты, мм."),
+                            "Точка оси экземпляра. Ровно три координаты [x, y, z], мм.", 3, 3),
                         "Аналитические координаты осей каждого экземпляра в координатах модели, мм. Объём не отличает четыре " +
                         "отверстия от трёх и одного наложенного - этот набор отличает.")))),
                 WorkerCommands.PatternGrid,
@@ -1429,7 +1443,8 @@ public static class ToolCatalog
                     ("expected_hole_height_mm", Sch.Nullable(Sch.Num("Высота цилиндрической грани-экземпляра, мм.", 0d, 1e6d))),
                     ("expected_hole_count", Sch.Nullable(Sch.Int("Ожидаемое число экземпляров-отверстий.", 0, 100_000))),
                     ("expected_hole_centers_mm", Sch.Nullable(Sch.Arr(
-                        Sch.Arr(Sch.Num("Компонента координаты, мм."), null, 3, 3),
+                        Sch.Arr(Sch.Num("Компонента координаты, мм."),
+                            "Точка оси экземпляра. Ровно три координаты [x, y, z], мм.", 3, 3),
                         "Аналитические координаты осей каждого экземпляра, мм.")))),
                 WorkerCommands.PatternCircular,
                 requiresDocument: false,
@@ -1498,7 +1513,8 @@ public static class ToolCatalog
                     ("expected_hole_height_mm", Sch.Nullable(Sch.Num("Высота цилиндрической грани-экземпляра, мм.", 0d, 1e6d))),
                     ("expected_hole_count", Sch.Nullable(Sch.Int("Ожидаемое число экземпляров-отверстий.", 0, 100_000))),
                     ("expected_hole_centers_mm", Sch.Nullable(Sch.Arr(
-                        Sch.Arr(Sch.Num("Компонента координаты, мм."), null, 3, 3),
+                        Sch.Arr(Sch.Num("Компонента координаты, мм."),
+                            "Точка оси экземпляра. Ровно три координаты [x, y, z], мм.", 3, 3),
                         "Аналитические координаты осей каждого экземпляра, мм.")))),
                 WorkerCommands.PatternMirror,
                 requiresDocument: false,
@@ -3389,7 +3405,9 @@ public static class ToolCatalog
         // refused.
         if (requiresOperationId)
         {
-            properties["operation_id"] = Sch.Ref("#/$defs/operation_id");
+            // The description travels WITH the $ref: see OperationIdField for why the rule is repeated
+            // at the field instead of only in the definition.
+            properties["operation_id"] = Sch.Described(Sch.Ref("#/$defs/operation_id"), OperationIdField);
         }
 
         return new ToolDefinition(
@@ -3472,8 +3490,11 @@ public static class ToolCatalog
     private static JsonObject TransformSchema() => Sch.ObjAll("transform", new[]
     {
         ("origin_mm", Sch.Ref("#/$defs/vector3")),
-        ("x_axis", Sch.Arr(Sch.Num("Компонента единичной оси X."), "Ось X правого базиса, единичная.", 3, 3)),
-        ("y_axis", Sch.Arr(Sch.Num("Компонента единичной оси Y."), "Ось Y: единичная и ортогональная X. Z = X×Y вычисляет сервер.", 3, 3)),
+        ("x_axis", Sch.Arr(Sch.Num("Компонента единичной оси X."),
+            "Ось X правого базиса, единичная. Ровно три компоненты [x, y, z] (безразмерные).", 3, 3)),
+        ("y_axis", Sch.Arr(Sch.Num("Компонента единичной оси Y."),
+            "Ось Y: единичная и ортогональная X. Z = X×Y вычисляет сервер. Ровно три компоненты [x, y, z] "
+            + "(безразмерные).", 3, 3)),
     }, "Жёсткое размещение: начало и две ортонормированные оси правого базиса.");
 
     private static JsonObject BboxSchema() => Sch.ObjAll("bbox", new[]
@@ -3565,9 +3586,9 @@ public static class ToolCatalog
             + "заданные вершины); оба перечитываются одним объектом.",
         ["properties"] = Sch.Props(
             ("kind", Sch.Enum("Тип примитива.", "line", "circle", "arc", "rectangle", "polyline", "spline")),
-            ("start_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."), "Начало / угол прямоугольника.", 2, 2))),
-            ("end_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."), "Конец отрезка.", 2, 2))),
-            ("center_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."), "Центр дуги/окружности.", 2, 2))),
+            ("start_mm", Sch.Nullable(Sch.Vec2("Начало / угол прямоугольника."))),
+            ("end_mm", Sch.Nullable(Sch.Vec2("Конец отрезка."))),
+            ("center_mm", Sch.Nullable(Sch.Vec2("Центр дуги/окружности."))),
             ("radius_mm", Sch.Nullable(Sch.PositiveMm("Радиус"))),
             ("start_deg", Sch.Nullable(Sch.Num(
                 "Начальный угол дуги, градусы. Отсчёт от оси +X системы координат эскиза; положительный угол — "
@@ -3578,11 +3599,13 @@ public static class ToolCatalog
                 + "Размах больше 180° ядро чтит: дуга идёт по указанной стороне, а не по меньшей.",
                 -720, 720))),
             ("start_point_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."),
-                "Дуга по концам: начальная точка на окружности. Взаимоисключающе с start_deg/sweep_deg: "
+                "Ровно две координаты [x, y], мм. Дуга по концам: начальная точка на окружности. "
+                + "Взаимоисключающе с start_deg/sweep_deg: "
                 + "дуга задаётся ЛИБО углами, ЛИБО концами, и смешение отвергается до COM. Точка обязана "
                 + "лежать на окружности (center_mm, radius_mm) с относительным допуском 1e-6.", 2, 2))),
             ("end_point_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."),
-                "Дуга по концам: конечная точка на окружности. Обязательна вместе с start_point_mm и "
+                "Ровно две координаты [x, y], мм. Дуга по концам: конечная точка на окружности. "
+                + "Обязательна вместе с start_point_mm и "
                 + "clockwise.", 2, 2))),
             ("clockwise", Sch.Nullable(Sch.Bool(
                 "Дуга по концам: направление отрисовки. true — по часовой стрелке, false — против. "
@@ -3590,7 +3613,8 @@ public static class ToolCatalog
                 + "называют две разные дуги, и умолчание нарисовало бы дополняющую."))),
             ("width_mm", Sch.Nullable(Sch.PositiveMm("Ширина прямоугольника"))),
             ("height_mm", Sch.Nullable(Sch.PositiveMm("Высота прямоугольника"))),
-            ("points_mm", Sch.Nullable(Sch.Arr(Sch.Arr(Sch.Num("Координата, мм."), "Точка", 2, 2),
+            ("points_mm", Sch.Nullable(Sch.Arr(Sch.Arr(Sch.Num("Координата, мм."),
+                "Точка. Ровно две координаты [x, y], мм.", 2, 2),
                 "Вершины полилинии или сплайна, мм. Предел " + SketchLimits.MaxPolylineVertices + " вершин на один примитив "
                 + "задан СХЕМОЙ MCP, а не ядром. Полилиния рисуется ОДНИМ объектом ломаной и перечитывается одним "
                 + "объектом: в kompas_list_sketch_entities на неё приходит одна строка с entity_kind=polyline и "

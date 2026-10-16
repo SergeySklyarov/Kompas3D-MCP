@@ -11,12 +11,14 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Suppress, restore and delete a feature (docs/05 §4.4, §7; SM-30 in the catalog).</summary>
 /// <remarks>MEASURED by probe L on live v24: <c>ksFeature.excluded</c> toggles the extrusion body
-/// (<c>true</c> removes, <c>false</c> restores, count unchanged) and one <c>RebuildDocument()</c> suffices
-/// (no <c>ksEntity.Update()</c>, unlike a parameter edit P2.3); <c>ksDocument3D.DeleteObject(entity)</c>
-/// returns true, count minus one. INVARIANT: no "dependent features" member exists in API5 or API7
-/// (reflection: 0 matches for Dependent*/Preceding*/UsedBy*), so the server returns candidates — features
-/// after the deleted one — whose presence blocks deletion until the caller agrees.
-/// History: docs/decisions/adapter-core.md#lifecycle-suppress-delete</remarks>
+/// (<c>true</c> removes, <c>false</c> restores, count unchanged) and one <c>RebuildDocument()</c> suffices.
+/// DOC: ksentity_excluded.html - «исключение объекта из расчета происходит сразу, без вызова Update.
+/// Поэтому изменение объектов (и вызов Update) нужно делать до переключения Excluded в True»: the write
+/// below is the only change in this call, so no <c>Update()</c> precedes or follows it.
+/// INVARIANT: no "dependent features" member exists in API5 or API7 (reflection: 0 matches for
+/// Dependent*/Preceding*/UsedBy*), so the server returns candidates — features after the deleted one —
+/// whose presence blocks deletion until the caller agrees.
+/// History: docs/decisions/adapter-core.md#suppress-order</remarks>
 public partial class Api5Session
 {
     public SuppressFeatureResult SetFeatureSuppressed(SuppressFeatureCommand command)
@@ -66,6 +68,9 @@ public partial class Api5Session
         var modelBeforeRecheck = ReadModelState(document);
         var revisionBeforeWrite = document.Revision;
 
+        // DOC: ksentity_excluded.html - «исключение объекта из расчета происходит сразу, без вызова
+        // Update. Поэтому изменение объектов (и вызов Update) нужно делать до переключения Excluded в
+        // True». This call changes nothing else, so the precondition holds and no Update() is needed.
         feature.excluded = command.Suppressed;
         // Settled, not a single call: the state read below is what a later restore is compared against.
         SettleRebuild(document);

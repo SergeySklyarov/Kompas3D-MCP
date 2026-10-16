@@ -39921,6 +39921,113 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
              "после отказа верную геометрию возвращает: kompas_rebuild или повторное подавление+снятие",
              "NAMED", "ни один цикл не отказал — измерять нечего")
 
+    # ── Сохранение и переоткрытие ПОСЛЕ подавления (наряд DEBT_SUPPRESS_ORDER) ────────────────────
+    # ЗАЧЕМ. Справка называет `excluded` признаком включения/выключения из расчета и требует одного:
+    # после установки Excluded=True исключение происходит СРАЗУ, без вызова Update, а изменение
+    # объектов (и вызов Update) надо делать ДО переключения (DOC: ksentity_excluded.html). Свойство
+    # модели обязано пережить сохранение и переоткрытие, и этого не проверяла НИ ОДНА строка: `L03`
+    # переоткрывает документ ДО подавления, а `unavailable_cycle` сохраняет МЕЖДУ подавлением и
+    # снятием, но файл заново не открывает.
+    # ВТОРОЕ. Справка добавляет: «Начиная с КОМПАС-3D V12, исключенные из расчета объекты считаются не
+    # валидными» (там же, примечание 2): подавленный признак обязан отвечать `is_valid=false`, а
+    # снятый - `is_valid=true`. Это проверяется отдельной строкой, а не подразумевается.
+    def feature_names(doc):
+        env, _ = call("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else []
+        return [row.get("name") for row in rows]
+
+    def save_reopen_cycle(setup_name, label):
+        """Подавить → сохранить → закрыть → открыть: состояние то же, ссылка его не переживает."""
+        doc, fref, analytic = SETUPS[setup_name](label)
+        rec = {"setup": setup_name, "document": doc}
+        if not doc or not fref or analytic is None:
+            rec.update({"stage": "setup", "code": "SETUP_FAILED"})
+            close(doc)
+            return rec
+        try:
+            rec["feature_name"] = feature_state(fref).get("name")
+            rec["analytic_suppressed_mm3"] = analytic["suppressed"]
+            rec["state_before"] = state_of(doc)
+            rec["feature_before"] = feature_state(fref)
+            rev = revision(doc)
+            env_sup, code_sup = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": True})
+            rec["suppress_code"] = code_sup
+            rec["state_suppressed"] = state_of(doc)
+            rec["feature_suppressed"] = feature_state(fref)
+            rec["features_suppressed"] = feature_names(doc)
+            if code_sup is not None:
+                return rec
+            rev = (env_sup or {}).get("revision_after") or rev
+            path = os.path.join(workdir, "sr-save-reopen-%s.m3d" % setup_name)
+            env_sv, code_sv = call("kompas_save_document", {
+                "document_id": doc, "target_path": path, "expected_revision": rev})
+            rec["save_code"] = code_sv
+            rec["save_path"] = path
+            if code_sv is not None:
+                return rec
+            _ec, code_cl = call("kompas_close_document", {
+                "document_id": doc, "dirty_policy": "refuse"})
+            rec["close_code"] = code_cl
+            env_op, code_op = call("kompas_open_document", {
+                "application_id": app_id, "path": path, "access": "edit"})
+            rec["open_code"] = code_op
+            doc2 = result(env_op).get("document_id") or (env_op or {}).get("document_id")
+            rec["reopened_document"] = doc2
+            if not doc2:
+                return rec
+            rec["state_reopened"] = state_of(doc2)
+            rec["features_reopened"] = feature_names(doc2)
+            # Ссылка, взятая ДО переоткрытия, снятию не годится: измеряется КОД отказа, а не
+            # предположение. Свежую ссылку взять негде - подавленный признак не показывается
+            # kompas_list_features (измеренное ограничение контракта).
+            rev2 = revision(doc2)
+            _eo, code_old = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev2, "suppressed": False})
+            rec["restore_with_old_ref_code"] = code_old
+            doc = doc2
+        finally:
+            close(doc)
+        return rec
+
+    for name in SUPPRESS_REPEAT_SETUPS:
+        rec = save_reopen_cycle(name, "SR-save-reopen-%s" % name)
+        sup = (rec.get("state_suppressed") or {}).get("volume_total")
+        reo = (rec.get("state_reopened") or {}).get("volume_total")
+        hidden_after_reopen = rec.get("feature_name") not in (rec.get("features_reopened") or [])
+        ok = (rec.get("suppress_code") is None and rec.get("save_code") is None
+              and rec.get("close_code") is None and rec.get("open_code") is None
+              and near(reo, sup) and near(sup, rec.get("analytic_suppressed_mm3"))
+              and hidden_after_reopen
+              and rec.get("restore_with_old_ref_code") in ("STALE_REFERENCE", "REVISION_CONFLICT",
+                                                           "INVALID_ARGUMENT"))
+        emit("SR.%s.save_reopen" % name,
+             "постановка %s: подавление переживает save → close → open (объём и тела те же), ссылка "
+             "до переоткрытия снятию не годится, подавленный признак в дереве не показывается"
+             % name,
+             "PASS" if ok else "FAIL",
+             "подавление=%s сохранение=%s закрытие=%s открытие=%s; объём подан=%s переоткрыт=%s "
+             "(ожидание %s); признаков до=%s после=%s; снятие по СТАРОЙ ссылке=%s"
+             % (rec.get("suppress_code"), rec.get("save_code"), rec.get("close_code"),
+                rec.get("open_code"), sup, reo, rec.get("analytic_suppressed_mm3"),
+                len(rec.get("features_suppressed") or []),
+                len(rec.get("features_reopened") or []), rec.get("restore_with_old_ref_code")),
+             details=rec)
+
+        fs_before = rec.get("feature_before") or {}
+        fs_sup = rec.get("feature_suppressed") or {}
+        invalid_ok = (fs_sup.get("excluded") is True and fs_sup.get("is_valid") is False
+                      and fs_before.get("excluded") is False and fs_before.get("is_valid") is True)
+        emit("SR.%s.suppressed_invalid" % name,
+             "постановка %s: подавленный признак отвечает excluded=true и is_valid=false, снятый — "
+             "excluded=false и is_valid=true (DOC: ksentity_excluded.html, примечание 2)" % name,
+             "PASS" if invalid_ok else "FAIL",
+             "до: excluded=%s is_valid=%s; подавлено: excluded=%s is_valid=%s object_error=%s"
+             % (fs_before.get("excluded"), fs_before.get("is_valid"), fs_sup.get("excluded"),
+                fs_sup.get("is_valid"), fs_sup.get("object_error")),
+             details={"before": fs_before, "suppressed": fs_sup})
+
     # ── Контроль в СВЕЖЕМ сеансе ──────────────────────────────────────────────────────────────────
     call("kompas_disconnect", {"application_id": app_id, "close_owned_application": True})
     env, code = call("kompas_connect", {"mode": "launch", "make_visible": False})

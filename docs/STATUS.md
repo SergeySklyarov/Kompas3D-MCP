@@ -42,7 +42,9 @@
   `PointArrayArityTests`, два случая в `HostSessionLifecycleTests`); `--self-test` 82/0;
   `contract-diff.py` до/после — **0 структурных ломок** (изменились только описания и объём полей);
   `--emit-schemas` 61 схема, `update-tool-listing.py`/`emit-coverage-matrix.py`/`sync-matrix-rows.py`
-  без дрейфа; стражи `lint-dashes`/`check-evidence-links`/`long-comment-blocks` — 0.
+  без дрейфа; стражи `lint-dashes`/`check-evidence-links`/`long-comment-blocks` — 0; зачётный
+  `--all --host <Release>` на ЧИСТОМ `ac8f42a` (`source_tree_dirty=false`, прогон
+  `20261016-232046-all-ac8f42a`, 33 мин): **PASS 1651 / NAMED 5 / FAIL 0**.
 
 - **Размеры чертежа в масштабированном виде: радиус — в листовых мм, число — отдельно
   (`DRAWING_DIMENSIONS_FIX`, 16.10.2026).** Двенадцатый наряд цикла 0.9.0; дефекты заказчика (A),

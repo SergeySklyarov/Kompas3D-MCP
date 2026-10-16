@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
@@ -68,126 +68,23 @@ internal static class Api7SketchConstraints
     public static IReadOnlyList<string> VocabularyProblems { get; } =
         SketchConstraintTypes.AgreementProblems(TypeVocabulary.Keys);
 
-    /// <summary>Enumerates the objects of a sketch with their addresses, inside ONE session that the
-    /// caller owns.</summary>
+    /// <summary>The objects of a sketch, enumerated inside ONE session that the caller owns.</summary>
+    /// <remarks>The enumeration itself lives in <see cref="Api7SketchEntities.ObjectsInSession"/> — the
+    /// module of sketch ENTITIES owns the route; this module only adds the constraint host.
+    /// History: docs/decisions/adapter-api7.md#sketch-constraints</remarks>
     public static (IReadOnlyList<SketchConstraintObject> Objects, string? Failure) EnumerateInSession(
         IFragmentDocument fragment, List<string> notes)
     {
-        var rows = new List<SketchConstraintObject>();
-
-        IViews? views;
-        try
+        var (objects, failure) = Api7SketchEntities.ObjectsInSession(fragment, notes);
+        if (failure is not null)
         {
-            views = Api7Views.Of(fragment);
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views: " + ex.GetType().Name);
+            return (Array.Empty<SketchConstraintObject>(), failure);
         }
 
-        if (views is null)
-        {
-            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views → null");
-        }
-
-        // The fragment document issues the address: under BeginEdit the current document IS the sketch
-        // fragment, and the entity belongs to it.
-        var addressDocument = fragment as IKompasDocument1;
-        if (addressDocument is null)
-        {
-            notes.Add("документ фрагмента не отвечает QI(IKompasDocument1): адреса не выдаются");
-        }
-
-        var viewCount = SafeInt(() => views.Count) ?? 0;
-        for (var v = 0; v < viewCount; v++)
-        {
-            IView? view;
-            try
-            {
-                view = views.get_View(v);
-            }
-            catch (Exception ex) when (ex is COMException or InvalidCastException)
-            {
-                notes.Add($"вид {v}: не получен ({ex.GetType().Name})");
-                continue;
-            }
-
-            if (view is not IDrawingContainer container)
-            {
-                notes.Add($"вид {v}: не отвечает QI(IDrawingContainer)");
-                continue;
-            }
-
-            object? raw;
-            try
-            {
-                raw = container.get_Objects(new[] { (int)DrawingObjectTypeEnum.ksAllObj });
-            }
-            catch (Exception ex) when (ex is COMException or InvalidCastException)
-            {
-                notes.Add($"вид {v}: GetObjects бросил {ex.GetType().Name}");
-                continue;
-            }
-
-            if (raw is not Array array)
-            {
-                notes.Add($"вид {v}: GetObjects вернул не массив");
-                continue;
-            }
-
-            foreach (var item in array)
-            {
-                if (item is not IDrawingObject drawing)
-                {
-                    notes.Add($"элемент {rows.Count}: не отвечает IDrawingObject");
-                    continue;
-                }
-
-                rows.Add(new SketchConstraintObject(
-                    rows.Count,
-                    AddressOf(drawing, addressDocument, notes, rows.Count),
-                    KindOf(drawing),
-                    drawing,
-                    drawing as IDrawingObject1));
-            }
-        }
-
-        return (rows, null);
-    }
-
-    private static string? AddressOf(IDrawingObject drawing, IKompasDocument1? document, List<string> notes,
-        int index)
-    {
-        if (document is null || drawing is not IKompasAPIObject apiObject)
-        {
-            return null;
-        }
-
-        try
-        {
-            // DOC (ksapi_ikompasdocument_getobjectid.html): GetObjectId(object, parent), «parent —
-            // родительский документ объекта (nullptr — текущий документ)». Under BeginEdit the current
-            // document is the sketch fragment, where the entity lives; a fragment receiver yields a
-            // non-empty address, a part receiver yields "" WITHOUT an exception.
-            return document.GetObjectId(apiObject, null);
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            notes.Add($"объект {index}: адрес не выдан ({ex.GetType().Name})");
-            return null;
-        }
-    }
-
-    private static string? KindOf(IDrawingObject drawing)
-    {
-        try
-        {
-            return drawing.DrawingObjectType.ToString();
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            return null;
-        }
+        return (objects
+            .Select(o => new SketchConstraintObject(
+                o.Index, o.Address, o.Kind, o.Drawing, o.Drawing as IDrawingObject1))
+            .ToList(), null);
     }
 
     /// <summary>Reads the constraint list of an object. MUST be called inside the session — see the
@@ -487,17 +384,6 @@ internal static class Api7SketchConstraints
         }
     }
 
-    private static int? SafeInt(Func<int?> read)
-    {
-        try
-        {
-            return read();
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            return null;
-        }
-    }
 
     private static bool? ReadBool(Func<bool> read, List<string> notes, string what)
     {

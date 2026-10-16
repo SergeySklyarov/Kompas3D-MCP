@@ -3712,6 +3712,106 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
              "stale_code": stale_code, "rows_after_stale": rows_summary(listed_stale)})
     close(doc)
 
+    # ── SB-13..SB-15: замена удаляет ФАКТИЧЕСКИЙ состав, а не найденное по координате ───────────────
+    # ДЕФЕКТ ЗАКАЗЧИКА (P1, bugs-inbox/bug-report-10152026-1105.md §1): контур из двух полуокружностей
+    # и двух замыкающих отрезков заменялся отражённым; ответ был succeeded с deleted_entities=2, в
+    # эскизе оставались СТАРЫЕ дуги (6 объектов вместо 4), и следующее выдавливание отказывало кодом
+    # КОМПАС 54. Причина: удаление шло по сохранённым точкам-пробам, а конец дуги лежит и на отрезке,
+    # поэтому находился отрезок. Теперь перечень удаляемого — фактический состав эскиза.
+    def arc_line_profile(y):
+        """Две полуокружности и два замыкающих отрезка — контур отчёта клиента."""
+        return [
+            {"kind": "arc", "center_mm": [106.0, y], "radius_mm": 56.0,
+             "start_deg": 0.0, "sweep_deg": 180.0},
+            {"kind": "line", "start_mm": [50.0, y], "end_mm": [162.0, y]},
+            {"kind": "arc", "center_mm": [266.0, y], "radius_mm": 59.0,
+             "start_deg": 0.0, "sweep_deg": 180.0},
+            {"kind": "line", "start_mm": [207.0, y], "end_mm": [325.0, y]},
+        ]
+
+    half_disc_area = math.pi * 56.0 ** 2 / 2 + math.pi * 59.0 ** 2 / 2
+
+    doc, rev, code = new_part("SB_REPLACE_COMPOSITION")
+    sk, rev, code = new_sketch(doc, rev, "replace-composition")
+    _ea, code_append, rev = edit(sk, rev, arc_line_profile(170.0))
+    before = listing(sk)[0]
+    env_repl, code_repl, rev = edit(sk, rev, arc_line_profile(-170.0))
+    repl_result = result(env_repl) or {}
+    after = listing(sk)[0]
+    after_rows = (after or {}).get("rows") or []
+    old_arcs = [r for r in after_rows
+                if r.get("kind") == "ksDrArc" and near(r.get("center_y_mm"), 170.0, 1e-6)]
+    env_fin, code_fin = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                      "require_closed_profile": True})
+    rev = rev_of(env_fin, rev)
+    fin_result = result(env_fin) or {}
+    env_x, code_x, rev = extrude(sk, rev, 10.0)
+    volume = (body_measure(doc) or {}).get("volume_mm3")
+    expected_volume = half_disc_area * 10.0
+    rep.add("SB-13.replace_composition",
+            "replace удаляет ВЕСЬ фактический состав эскиза: старых дуг не остаётся, состав равен "
+            "запрошенному, профиль замкнут и следующее выдавливание проходит",
+            "PASS" if (code_append is None and code_repl is None and code_fin is None
+                       and object_count(after) == 4 and len(after_rows) == 4 and not old_arcs
+                       and fin_result.get("profile_input_check") == "passed"
+                       and code_x is None
+                       and near(volume, expected_volume, volume_tolerance(expected_volume)))
+            else "FAIL",
+            f"состав до={object_count(before)}, после={object_count(after)} "
+            f"(строк {len(after_rows)}); старых дуг осталось {len(old_arcs)}; удалено "
+            f"{repl_result.get('deleted_entities')} из {repl_result.get('expected_deleted')}; "
+            f"profile_input_check={fin_result.get('profile_input_check')}; выдавливание={code_x}, "
+            f"объём {volume} против аналитики {expected_volume}",
+            {"before": rows_summary(before), "after": rows_summary(after),
+             "replace_result": repl_result, "extrude_error": code_x, "volume_mm3": volume,
+             "analytic_mm3": expected_volume})
+    close(doc)
+
+    # Замена полной окружностью: в эскизе не остаётся ни одной дуги прежнего профиля.
+    doc, rev, code = new_part("SB_REPLACE_CIRCLE")
+    sk, rev, code = new_sketch(doc, rev, "replace-circle")
+    _ea, code_append, rev = edit(sk, rev, arc_line_profile(170.0))
+    env_repl, code_repl, rev = edit(sk, rev, [
+        {"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 20.0}])
+    repl_result = result(env_repl) or {}
+    after = listing(sk)[0]
+    after_rows = (after or {}).get("rows") or []
+    env_x, code_x, rev = extrude(sk, rev, 10.0)
+    volume = (body_measure(doc) or {}).get("volume_mm3")
+    expected_volume = math.pi * 20.0 ** 2 * 10.0
+    rep.add("SB-14.replace_circle",
+            "replace полной окружностью оставляет ровно одну окружность: дуги прежнего профиля не "
+            "переживают замену, выдавливание даёт объём цилиндра",
+            "PASS" if (code_append is None and code_repl is None and code_x is None
+                       and object_count(after) == 1 and len(after_rows) == 1
+                       and after_rows[0].get("kind") == "ksDrCircle"
+                       and near(volume, expected_volume, volume_tolerance(expected_volume)))
+            else "FAIL",
+            f"состав после={object_count(after)} (строк {len(after_rows)}: "
+            f"{[r.get('kind') for r in after_rows]}); удалено {repl_result.get('deleted_entities')} "
+            f"из {repl_result.get('expected_deleted')}; выдавливание={code_x}, объём {volume} против "
+            f"аналитики {expected_volume}",
+            {"after": rows_summary(after), "replace_result": repl_result,
+             "extrude_error": code_x, "volume_mm3": volume, "analytic_mm3": expected_volume})
+    close(doc)
+
+    # Очистка профиля, у которого концы дуг совпадают с концами отрезков: эскиз обязан стать пустым.
+    doc, rev, code = new_part("SB_DELETE_COMPOSITION")
+    sk, rev, code = new_sketch(doc, rev, "delete-composition")
+    _ea, code_append, rev = edit(sk, rev, arc_line_profile(170.0))
+    env_del, code_del, rev = edit(sk, rev, [], mode="delete_entities")
+    del_result = result(env_del) or {}
+    after = listing(sk)[0]
+    rep.add("SB-15.delete_entities_composition",
+            "delete_entities очищает эскиз ЦЕЛИКОМ: концы дуг совпадают с концами отрезков, но в "
+            "эскизе не остаётся ни одного объекта",
+            "PASS" if (code_append is None and code_del is None and object_count(after) == 0
+                       and not ((after or {}).get("rows") or [])) else "FAIL",
+            f"состав после={object_count(after)} (строк {len((after or {}).get('rows') or [])}); "
+            f"удалено {del_result.get('deleted_entities')} из {del_result.get('expected_deleted')}",
+            {"after": rows_summary(after), "delete_result": del_result})
+    close(doc)
+
     # ── SB-12: часть D (вставка фрагмента) — снята с записью ───────────────────────────────
     # ШАГ 0 ЧАСТИ D (наряд §5) решён ДО кода: справка описывает вставку фрагмента в ГРАФИЧЕСКИЙ
     # ДОКУМЕНТ (раздел «Графический документ (Интерфейсы - ksDocument2D и IDocument2D)», страница

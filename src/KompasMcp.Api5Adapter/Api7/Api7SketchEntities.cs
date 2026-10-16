@@ -267,6 +267,116 @@ internal static class Api7SketchEntities
         }
     }
 
+    /// <summary>One drawing object of a sketch, with the address and the read-back kind of its type.</summary>
+    internal sealed record SketchDrawingObject(int Index, string? Address, string? Kind, IDrawingObject Drawing);
+
+    /// <summary>The drawing objects of a sketch, enumerated INSIDE a session the caller already owns.</summary>
+    /// <remarks>INVARIANT: an object and its address are alive only between <c>BeginEdit</c> and
+    /// <c>EndEdit</c>, so the session is the caller's — this method never opens one, and a nested
+    /// <c>BeginEdit</c> answers <c>null</c> (MEASURED). The route is the one <see cref="Read"/> uses.
+    /// DOC: <c>ikompasdocument2d_viewsandlayersmanager.html</c> (the views manager),
+    /// <c>ksapi_idrawingcontainer_getobjects.html</c> (the object array),
+    /// <c>ksapi_ikompasdocument_getobjectid.html</c> (the address).
+    /// History: docs/decisions/adapter-api7.md#sketch-entities</remarks>
+    public static (IReadOnlyList<SketchDrawingObject> Objects, string? Failure) ObjectsInSession(
+        IFragmentDocument fragment, List<string> notes)
+    {
+        var rows = new List<SketchDrawingObject>();
+
+        IViews? views;
+        try
+        {
+            views = Api7Views.Of(fragment);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views: " + ex.GetType().Name);
+        }
+
+        if (views is null)
+        {
+            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views → null");
+        }
+
+        // The fragment document issues the address: under BeginEdit the current document IS the sketch
+        // fragment, and the entity belongs to it.
+        var addressDocument = fragment as IKompasDocument1;
+        if (addressDocument is null)
+        {
+            notes.Add("документ фрагмента не отвечает QI(IKompasDocument1): адреса не выдаются");
+        }
+
+        var viewCount = SafeI(() => views.Count) ?? 0;
+        for (var v = 0; v < viewCount; v++)
+        {
+            IView? view;
+            try
+            {
+                view = views.get_View(v);
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                notes.Add($"вид {v}: не получен ({ex.GetType().Name})");
+                continue;
+            }
+
+            if (view is not IDrawingContainer container)
+            {
+                notes.Add($"вид {v}: не отвечает QI(IDrawingContainer)");
+                continue;
+            }
+
+            foreach (var item in ReadObjects(container, notes, v))
+            {
+                if (item is not IDrawingObject drawing)
+                {
+                    notes.Add($"элемент {rows.Count}: не отвечает IDrawingObject");
+                    continue;
+                }
+
+                rows.Add(new SketchDrawingObject(
+                    rows.Count, AddressOf(drawing, addressDocument, notes, rows.Count), KindOf(drawing), drawing));
+            }
+        }
+
+        return (rows, null);
+    }
+
+    private static string? AddressOf(
+        IDrawingObject drawing, IKompasDocument1? document, List<string> notes, int index)
+    {
+        if (document is null || drawing is not IKompasAPIObject apiObject)
+        {
+            return null;
+        }
+
+        try
+        {
+            // DOC (ksapi_ikompasdocument_getobjectid.html): GetObjectId(object, parent), «parent —
+            // родительский документ объекта (nullptr — текущий документ)». Under BeginEdit the current
+            // document is the sketch fragment, where the entity lives; a fragment receiver yields a
+            // non-empty address, a part receiver yields "" WITHOUT an exception.
+            return document.GetObjectId(apiObject, null);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            notes.Add($"объект {index}: адрес не выдан ({ex.GetType().Name})");
+            return null;
+        }
+    }
+
+    private static string? KindOf(IDrawingObject drawing)
+    {
+        try
+        {
+            return drawing.DrawingObjectType.ToString();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     private static IReadOnlyList<object> ReadObjects(
         IDrawingContainer container, List<string> notes, int viewIndex)
     {

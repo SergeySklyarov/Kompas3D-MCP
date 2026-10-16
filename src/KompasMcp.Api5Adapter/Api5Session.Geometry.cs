@@ -1,6 +1,8 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using KompasAPI7;
+using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -60,7 +62,6 @@ public sealed partial class Api5Session
 
         // A sketch created here is empty by construction, so replace and delete_entities are meaningful
         // from the start; a sketch this server never drew is refused instead of quietly appending.
-        _sketchProbePoints[reference.Id] = new List<double[]>();
         _sketchProfileBox.Remove(reference.Id);
         _sketchProfiles.Remove(reference.Id);
 
@@ -177,11 +178,6 @@ public sealed partial class Api5Session
     /// History: docs/decisions/adapter-core.md#sketch-profiles-contour-list</remarks>
     private readonly Dictionary<string, SketchProfile> _sketchProfiles = new(StringComparer.Ordinal);
 
-    /// <summary>Points lying on the primitives this server drew into each sketch. API5 gives no way to
-    /// enumerate sketch objects (no ksFirstObj/ksGetObjCount/GetSegmentContainer in this interop), so a
-    /// remembered coordinate is the only handle that makes replace and delete_entities real.</summary>
-    private readonly Dictionary<string, List<double[]>> _sketchProbePoints = new(StringComparer.Ordinal);
-
     /// <summary>Extent of everything this server drew into each sketch, in sketch coordinates. It lets a
     /// declared target body be checked against the contour before anything is mutated
     /// (<see cref="TargetBodyGuard.ProfileMayAffectBody"/>) — KOMPAS offers no way to ask a sketch where
@@ -201,6 +197,11 @@ public sealed partial class Api5Session
     /// and the declared offset is not readable back from the model.</summary>
     private readonly Dictionary<string, string> _sketchPlaneHint = new(StringComparer.Ordinal);
 
+    /// <summary>How many objects the composition check reads even when it expects almost none: a clear
+    /// expects ZERO, and a floor keeps the refusal able to NAME what survived instead of reporting one
+    /// leftover of many.</summary>
+    private const int CompositionReadFloor = 64;
+
     public EditSketchResult EditSketch(EditSketchCommand command)
     {
         var target = RequireSketch(command.SketchRef);
@@ -217,20 +218,6 @@ public sealed partial class Api5Session
             SketchValidation.Validate(entity);
         }
 
-        // Clearing a sketch is possible only through ksFindObj(x, y, limit) → ksDeleteObj(ref): the 2D API
-        // exposes no enumeration at all (ksFirstObj, ksGetObjCount, GetSegmentContainer, SketchEntities are
-        // absent), so the only way to point at an object is a coordinate that lies on it. The server
-        // remembers probe points for what it drew; for a sketch it did not draw the coordinate is derived
-        // from the model, allowed only inside the configuration probe G covered.
-        var knownPoints = _sketchProbePoints.TryGetValue(command.SketchRef, out var remembered)
-            ? remembered
-            : null;
-        string? derivedFrom = null;
-        if (command.Mode != SketchEditMode.Append && knownPoints is null)
-        {
-            knownPoints = DeriveProbePointsFromModel(command, target, document, out derivedFrom);
-        }
-
         // BeginEdit is declared to return object. A hard cast would throw InvalidCastException, escaping as
         // an unclassified failure; naming the runtime type turns "it broke" into "the API handed back X".
         // BeginEdit is called exactly once — a second call would re-enter edit mode.
@@ -245,32 +232,59 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        var deleted = 0;
-        var deleteAttempts = 0;
-        var cleared = true;
-        if (command.Mode != SketchEditMode.Append && knownPoints is not null)
+        // INVARIANT: what is deleted is the composition the sketch ACTUALLY holds, read through the same
+        // documented route kompas_list_sketch_entities reads — never coordinates remembered from drawing.
+        // MEASURED: a coordinate hits the object found FIRST, so an arc sharing its ends with a chord was
+        // never found: it stayed in the sketch while the call answered succeeded, and the next extrusion
+        // failed with KOMPAS code 54.
+        // History: docs/decisions/adapter-sketch.md#sketch-replace
+        var cleared = 0;
+        var present = 0;
+        var sessionNotes = new List<string>();
+        if (command.Mode != SketchEditMode.Append)
         {
-            // Vendor convention, measured in P2.6: for these 2D calls 1 means success and 0 means
-            // "not found / not deleted" — the opposite of a C# bool. One object is hit by several probe
-            // points (a circle answers at both ends of a diameter), and a second ksDeleteObj on the same
-            // ref fails by definition — so what is counted is distinct objects found by ksFindObj.
-            var foundRefs = new HashSet<int>();
-            foreach (var point in knownPoints)
+            var (objects, enumerationFailure) = SketchObjectsInSession(document, editing, sessionNotes);
+            if (enumerationFailure is not null)
             {
-                var found = editor.ksFindObj(point[0], point[1], 1e-3);
-                if (found != 0)
+                SafeEndSketchEdit(target.Definition);
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"{command.Mode} невозможен: состав эскиза не перечислен — {enumerationFailure}. "
+                    + "Удалять «примерно то» вместо фактического состава нельзя: остаток был бы выдан "
+                    + "за очищенный эскиз.",
+                    RetryPolicy.ReacquireContext,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["mode"] = command.Mode.ToString().ToLowerInvariant(),
+                        ["failure"] = enumerationFailure,
+                        ["notes"] = sessionNotes,
+                    });
+            }
+
+            foreach (var item in objects)
+            {
+                // Only geometry is the edit's business. A dimension or a symbol is not a primitive, and
+                // removing it would silently take away something the caller never asked to replace.
+                if (item.Kind is null || !SketchComposition.GeometryKinds.Contains(item.Kind))
                 {
-                    foundRefs.Add(found);
+                    sessionNotes.Add($"объект {item.Index} вида «{item.Kind ?? "не прочитан"}» — не геометрия "
+                        + "эскиза, оставлен на месте");
+                    continue;
+                }
+
+                present++;
+                try
+                {
+                    // DOC: <c>idrawingobject_delete.html</c> — IDrawingObject.Delete() removes THIS object.
+                    // The return is not the verdict: the composition is re-read after the edit.
+                    item.Drawing.Delete();
+                    cleared++;
+                }
+                catch (Exception ex) when (ex is COMException or InvalidCastException)
+                {
+                    sessionNotes.Add($"объект {item.Index} не удалён: {ex.GetType().Name}");
                 }
             }
-
-            deleteAttempts = foundRefs.Count;
-            foreach (var found in foundRefs)
-            {
-                deleted += editor.ksDeleteObj(found) == 1 ? 1 : 0;
-            }
-
-            cleared = deleted == deleteAttempts;
         }
 
         if (command.Mode == SketchEditMode.DeleteEntities)
@@ -298,15 +312,13 @@ public sealed partial class Api5Session
             // goes away either way: an empty sketch has no profile to check, and a dirty one has an
             // unknown one.
             _sketchProfileBox.Remove(command.SketchRef);
-            if (cleared)
-            {
-                _sketchProbePoints[command.SketchRef] = new List<double[]>();
-            }
+
+            // A clear leaves NO geometry; anything else is a leftover, not a success.
+            VerifySketchComposition(target, command, Array.Empty<SketchEntityKind>(), sessionNotes);
 
             return new EditSketchResult(0, Array.Empty<string>(),
                 EditClosedOut: true, ProfileAreaMm2: null,
-                DeletedEntities: deleted, ExpectedDeleted: deleteAttempts,
-                ProbePointsFromModel: derivedFrom is not null);
+                DeletedEntities: cleared, ExpectedDeleted: present);
         }
 
         var kinds = new List<string>();
@@ -362,8 +374,7 @@ public sealed partial class Api5Session
         // merely not computable is KEPT, because the contour list is what lets the extrusion name WHY the
         // expectation is missing — dropping it made a drawn profile report "never recorded".
         // History: docs/decisions/adapter-core.md#sketch-profiles-contour-list
-        var freshPoints = ProbePointsOf(command.Entities);
-        var partialClear = command.Mode == SketchEditMode.Replace && !cleared;
+        var partialClear = command.Mode == SketchEditMode.Replace && cleared != present;
         if (partialClear)
         {
             _sketchProfiles.Remove(command.SketchRef);
@@ -418,27 +429,135 @@ public sealed partial class Api5Session
                 footprint) ?? footprint.Value;
         }
 
+        // The composition is re-read from the model BEFORE the profile is remembered: a sketch that does
+        // not hold what was asked for must not be described to the next call as if it did.
         if (command.Mode == SketchEditMode.Replace)
         {
-            _sketchProbePoints[command.SketchRef] = freshPoints;
-        }
-        else if (_sketchProbePoints.TryGetValue(command.SketchRef, out var existing))
-        {
-            existing.AddRange(freshPoints);
-        }
-        else
-        {
-            _sketchProbePoints[command.SketchRef] = freshPoints;
+            VerifySketchComposition(
+                target, command, command.Entities.Select(entity => entity.Kind).ToList(), sessionNotes);
         }
 
         return new EditSketchResult(kinds.Count, kinds,
             EditClosedOut: ended,
             ProfileAreaMm2: profileAreaMm2,
-            DeletedEntities: deleted,
-            ExpectedDeleted: deleteAttempts,
-            ProbePointsFromModel: derivedFrom is not null,
+            DeletedEntities: cleared,
+            ExpectedDeleted: present,
             ProfileAreaUnavailable: profileAreaUnavailable);
     }
+
+    /// <summary>The drawing objects the sketch actually holds, enumerated inside the open edit session.</summary>
+    /// <remarks>INVARIANT: the session is the caller's — a nested <c>BeginEdit</c> answers <c>null</c>
+    /// (MEASURED), so the objects come from the session already open rather than from one opened here.
+    /// MEASURED: the object <c>ksSketchDefinition.BeginEdit()</c> hands back does NOT answer
+    /// <c>QI(IFragmentDocument)</c>; the documented <c>KompasObject.TransferInterface</c> with
+    /// <c>ksAPI7Dual</c> turns it into the fragment document the enumeration route needs.
+    /// DOC: <c>kssketchdefinition_beginedit.html</c>, <c>kompasobject_transferinterface.html</c>.
+    /// History: docs/decisions/adapter-sketch.md#sketch-replace</remarks>
+    private (IReadOnlyList<Api7SketchEntities.SketchDrawingObject> Objects, string? Failure)
+        SketchObjectsInSession(DocumentEntry document, object session, List<string> notes)
+    {
+        if (BridgeFor(document).TransferTo7(session) is not IFragmentDocument fragment)
+        {
+            return (Array.Empty<Api7SketchEntities.SketchDrawingObject>(),
+                $"сеанс правки (тип {session.GetType().Name}) не переносится в API7 как IFragmentDocument: "
+                + "состав эскиза перечислить нечем");
+        }
+
+        return Api7SketchEntities.ObjectsInSession(fragment, notes);
+    }
+
+    /// <summary>Refuses an edit whose result is not the composition that was asked for.</summary>
+    /// <remarks>INVARIANT: the composition is READ BACK out of the model, never taken from the answers of
+    /// the delete and draw calls. MEASURED: those answers said <c>succeeded</c> while two old arcs stayed
+    /// in the sketch and the next extrusion failed with KOMPAS code 54.
+    /// History: docs/decisions/adapter-sketch.md#sketch-replace</remarks>
+    private void VerifySketchComposition(
+        SketchTarget target,
+        EditSketchCommand command,
+        IReadOnlyList<SketchEntityKind> requested,
+        List<string> notes)
+    {
+        var expected = SketchComposition.ExpectedReadBackKinds(requested);
+        var (observed, readFailure) = ReadSketchComposition(target, expected.Count, notes);
+        var mode = command.Mode.ToString().ToLowerInvariant();
+
+        if (observed is null)
+        {
+            DropRememberedProfile(command.SketchRef);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Состав эскиза после {mode} не прочитан — {readFailure}. Перечитать его нечем, а "
+                + "непроверенная правка успехом не объявляется.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["mode"] = mode,
+                    ["failure"] = readFailure,
+                    ["notes"] = notes,
+                });
+        }
+
+        var verdict = SketchComposition.Verify(expected, observed);
+        if (verdict.Matches)
+        {
+            return;
+        }
+
+        DropRememberedProfile(command.SketchRef);
+        throw new KompasContractException(
+            ErrorCodes.GeometryFailed,
+            $"Состав эскиза после {mode} не совпал с запрошенным: {DescribeMismatch(verdict)}. Вызовы "
+            + "удаления и рисования отвечали успехом, поэтому успех не выдаётся: расхождение измерено "
+            + "перечитыванием эскиза.",
+            RetryPolicy.AfterReconciliation,
+            partialEffects: true,
+            details: new Dictionary<string, object?>
+            {
+                ["mode"] = mode,
+                ["mismatch"] = verdict.ReasonCode,
+                ["expected_kinds"] = expected,
+                ["leftover_kinds"] = verdict.Leftover,
+                ["missing_kinds"] = verdict.Missing,
+                ["ignored_non_geometry"] = verdict.IgnoredNonGeometry,
+                ["unreadable_kinds"] = verdict.UnreadableKinds,
+                ["notes"] = notes,
+            });
+    }
+
+    /// <summary>Kinds of every object the sketch holds after an edit, read back from the model.</summary>
+    /// <remarks>The read stops once the sketch holds more than was asked for: one extra object is already
+    /// a mismatch, and reading a whole five-thousand-object sketch to name it would cost more than the
+    /// answer is worth.</remarks>
+    private (IReadOnlyList<string?>? Kinds, string? Failure) ReadSketchComposition(
+        SketchTarget target, int expectedCount, List<string> notes)
+    {
+        var bridge = BridgeFor(target.Document);
+        var limit = Math.Max(CompositionReadFloor, expectedCount + 1);
+        var (read, failure) = Api7SketchEntities.Read(bridge, target.Sketch, limit);
+        if (read is null)
+        {
+            return (null, failure);
+        }
+
+        notes.Add($"состав после правки прочитан: объектов {read.Rows.Count}, предел перечисления {limit}");
+        return (read.Rows.Select(row => row.Kind).ToList(), null);
+    }
+
+    /// <summary>A sketch whose model is not what was asked for has no profile worth remembering.</summary>
+    private void DropRememberedProfile(string sketchRef)
+    {
+        _sketchProfiles.Remove(sketchRef);
+        _sketchProfileBox.Remove(sketchRef);
+    }
+
+    private static string DescribeMismatch(SketchCompositionVerdict verdict) => verdict.ReasonCode switch
+    {
+        "kind_unreadable" => $"вид {verdict.UnreadableKinds} объектов прочитать не удалось, а «не "
+            + "прочитано» — не «объекта нет»",
+        "missing_objects" => $"в эскизе нет запрошенного: {string.Join(", ", verdict.Missing)}",
+        _ => $"в эскизе осталось лишнее: {string.Join(", ", verdict.Leftover)}",
+    };
 
     /// <summary>Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
     /// out of the model.</summary>
@@ -522,166 +641,6 @@ public sealed partial class Api5Session
             });
     }
 
-    /// <summary>Coordinates for <c>ksFindObj</c> taken from the model itself, for a sketch this server did
-    /// not draw and therefore cannot remember.</summary>
-    /// <remarks>Route measured by probe G on a reopened document: the through cut is found by type, its
-    /// sketch via <c>GetSketch()</c>, and the coordinate from the cylindrical face it left —
-    /// <c>GetSurfaceParam() → ksCylinderParam</c> gives centre and radius, and <c>(cx + r; cy)</c> lies on
-    /// the sketch circle. Guarded by <see cref="SketchPointDerivation.Verdict"/>: only a base-XY sketch with
-    /// a circular profile qualifies.
-    /// History: docs/decisions/adapter-core.md#derive-probe-points-from-model</remarks>
-    private List<double[]> DeriveProbePointsFromModel(
-        EditSketchCommand command,
-        SketchTarget target,
-        DocumentEntry document,
-        out string derivation)
-    {
-        var planeBase = ResolveSketchPlaneBase(command.SketchRef, target);
-        var verdict = SketchPointDerivation.Verdict(
-            planeBase,
-            command.Entities.Select(entity => entity.Kind).ToList());
-        if (!verdict.IsAllowed)
-        {
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                $"{command.Mode} невозможен для этого эскиза: в API5 нет перечисления объектов эскиза, " +
-                $"удаление идёт найденным по координате объектом, а вывести координату из модели нельзя — " +
-                $"{verdict.Reason}",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["mode"] = command.Mode.ToString().ToLowerInvariant(),
-                    ["derivation"] = verdict.ReasonCode,
-                    ["measured_scope"] = "эскиз на основной XY, в профиле окружность, вырезание сквозное",
-                });
-        }
-
-        // The feature is located by the dependent body rather than by name: probe F measured that a name
-        // does not survive the API5↔API7 transition, so an identity on it would break on re-open.
-        var part = document.PartNow();
-        double[]? center = null;
-        double radius = 0d;
-        var candidates = 0;
-        if (part.EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.OperationElement)) is ksEntityCollection collection)
-        {
-            for (var i = 0; i < collection.GetCount(); i++)
-            {
-                if (collection.GetByIndex(i) is not ksEntity entity)
-                {
-                    continue;
-                }
-
-                var sketch = entity.GetDefinition() switch
-                {
-                    ksBaseExtrusionDefinition b => b.GetSketch() as ksEntity,
-                    ksBossExtrusionDefinition s => s.GetSketch() as ksEntity,
-                    ksCutExtrusionDefinition c => c.GetSketch() as ksEntity,
-                    _ => null,
-                };
-
-                // Only the sketch being edited is of interest. Compared by IUnknown, not by name: the same
-                // COM object can arrive as a different RCW.
-                if (sketch is null || !SameComObject(sketch, target.Sketch))
-                {
-                    continue;
-                }
-
-                if (FaceOfSketchHole(part, out var faceCenter, out var faceRadius, out var faceAxis))
-                {
-                    center = faceCenter;
-                    radius = faceRadius;
-                    candidates++;
-                }
-
-                _ = faceAxis;
-            }
-        }
-
-        if (center is null)
-        {
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                $"{command.Mode} невозможен: координата для поиска объекта эскиза выводится из цилиндрической " +
-                "грани зависимого тела, а такой грани у тела нет. Памяти о рисовании эскиза тоже нет — " +
-                "эскиз создан не этим сервером (например, документ переоткрыт).",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["mode"] = command.Mode.ToString().ToLowerInvariant(),
-                    ["derivation"] = "no_cylindrical_face",
-                });
-        }
-
-        if (candidates > 1)
-        {
-            // Two cylinders of the same radius would make the choice between them arbitrary, and
-            // deleting the wrong one is worse than refusing.
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                $"Координата неоднозначна: подходящих цилиндрических граней {candidates}. " +
-                "Выбор одной из них был бы догадкой, а удаление чужого объекта необратимо на модели.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["mode"] = command.Mode.ToString().ToLowerInvariant(),
-                    ["derivation"] = "ambiguous_face",
-                    ["candidates"] = candidates,
-                });
-        }
-
-        derivation = "cylinder_face_of_dependent_body";
-        return SketchPointDerivation.PointsOnCircle(center, radius).ToList();
-    }
-
-    /// <summary>Centre, radius and axis of the hole wall left by the feature that consumes a sketch.</summary>
-    /// <remarks>Returns the first cylindrical face whose axis is normal to the XY plane — the configuration
-    /// probe G measured. The geometry is confirmed afterwards by measuring the dependent body, the only
-    /// evidence the probe found trustworthy (G.9: every call answered success while the body vanished).</remarks>
-    private static bool FaceOfSketchHole(
-        ksPart part,
-        out double[]? center,
-        out double radiusMm,
-        out double[]? axis)
-    {
-        center = null;
-        radiusMm = 0d;
-        axis = null;
-        try
-        {
-            var body = AsInterface<ksBody>(part.GetMainBody());
-            if (body is null || body.FaceCollection() is not ksFaceCollection faces)
-            {
-                return false;
-            }
-
-            for (var i = 0; i < faces.GetCount(); i++)
-            {
-                if (AsInterface<ksFaceDefinition>(faces.GetByIndex(i)) is not ksFaceDefinition face)
-                {
-                    continue;
-                }
-
-                var (radius, _, origin, direction) = CylinderGeometry(face);
-                if (radius is not double r || origin is not { Length: >= 2 }
-                    || !SketchPointDerivation.AxisIsNormalToXyPlane(direction))
-                {
-                    continue;
-                }
-
-                center = new[] { origin[0], origin[1] };
-                radiusMm = r;
-                axis = direction;
-                return true;
-            }
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            // No face readable means no derived point, and the caller refuses with that reason.
-        }
-
-        return false;
-    }
-
     /// <summary>Whether two COM wrappers point at the same object. Used instead of a name comparison because
     /// probe F measured that names do not survive the API5↔API7 transition (a feature named "f-ch2" answers
     /// "Chamfer:1" through API7), so any identity built on a name is a latent defect.</summary>
@@ -716,49 +675,6 @@ public sealed partial class Api5Session
                 Marshal.Release(rightPointer);
             }
         }
-    }
-
-    /// <summary>Points that provably lie on the drawn primitives — what ksFindObj needs to find them again.
-    /// Midpoints of rectangle sides and of a segment, and a point on the circumference for a circle (its
-    /// centre lies on nothing). Anything without such a point contributes none.</summary>
-    private static List<double[]> ProbePointsOf(IEnumerable<SketchEntityDto> entities)
-    {
-        var points = new List<double[]>();
-        foreach (var entity in entities)
-        {
-            switch (entity.Kind)
-            {
-                case SketchEntityKind.Line when entity.StartMm is { Count: 2 } start && entity.EndMm is { Count: 2 } end:
-                    points.Add(new[] { (start[0] + end[0]) / 2d, (start[1] + end[1]) / 2d });
-                    break;
-                case SketchEntityKind.Circle when entity.CenterMm is { Count: 2 } center && entity.RadiusMm > 0:
-                    points.Add(new[] { center[0] + entity.RadiusMm.Value, center[1] });
-                    points.Add(new[] { center[0] - entity.RadiusMm.Value, center[1] });
-                    break;
-                case SketchEntityKind.Rectangle when entity.StartMm is { Count: 2 } corner:
-                    var x0 = corner[0];
-                    var y0 = corner[1];
-                    var x1 = x0 + entity.WidthMm ?? 0d;
-                    var y1 = y0 + entity.HeightMm ?? 0d;
-                    points.Add(new[] { (x0 + x1) / 2d, y0 });
-                    points.Add(new[] { (x0 + x1) / 2d, y1 });
-                    points.Add(new[] { x0, (y0 + y1) / 2d });
-                    points.Add(new[] { x1, (y0 + y1) / 2d });
-                    break;
-                case SketchEntityKind.Polyline when entity.PointsMm is { Count: >= 2 } path:
-                    for (var i = 0; i + 1 < path.Count; i++)
-                    {
-                        points.Add(new[]
-                        {
-                            (path[i][0] + path[i + 1][0]) / 2d,
-                            (path[i][1] + path[i + 1][1]) / 2d,
-                        });
-                    }
-                    break;
-            }
-        }
-
-        return points;
     }
 
     private static bool SafeEndSketchEdit(ksSketchDefinition definition)
@@ -4888,14 +4804,14 @@ public sealed partial class Api5Session
     };
 }
 
-/// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts what was actually deleted (vendor
-/// convention 1 = success; by the object found at the stored coordinate), <see cref="ExpectedDeleted"/> how
-/// many were expected — the difference is not smoothed away: a partial cleanup means a dirty profile.
+/// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts the objects the clear issued
+/// <c>IDrawingObject.Delete()</c> on and <see cref="ExpectedDeleted"/> how many the sketch held — the
+/// difference is not smoothed away: a partial cleanup means a dirty profile. Neither is the verdict: the
+/// composition is re-read after the edit and a mismatch is a refusal, not a success.
 /// <see cref="ProfileAreaUnavailable"/> is why <see cref="ProfileAreaMm2"/> is null: the SERVER's reading of
 /// the input, with the PLACE (the caller's primitive numbers and where they meet), never the kernel's
-/// verdict. <paramref name="ProbePointsFromModel"/>: the delete coordinates came from the dependent body
-/// rather than session memory.
-/// History: docs/decisions/adapter-core.md#edit-sketch-result, adapter-sketch.md#profile-input-diagnosis</summary>
+/// verdict.
+/// History: docs/decisions/adapter-sketch.md#sketch-replace, adapter-sketch.md#profile-input-diagnosis</summary>
 public sealed record EditSketchResult(
     int EntityCount,
     IReadOnlyList<string> Kinds,
@@ -4903,7 +4819,6 @@ public sealed record EditSketchResult(
     double? ProfileAreaMm2,
     int DeletedEntities = 0,
     int ExpectedDeleted = 0,
-    bool ProbePointsFromModel = false,
     string? ProfileAreaUnavailable = null);
 
 /// <summary>What the server's own analysis of the sketch INPUT says. It is deliberately NOT a confirmation

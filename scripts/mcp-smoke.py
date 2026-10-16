@@ -44877,6 +44877,137 @@ def shutdown_checks(host, config, workdir, rep):
                 pass
         force_stop(pid)
 
+    # ═══════════ SD.09: много несохранённых документов ═══════════
+    # Наряд DEBT_SHUTDOWN_MANY_DOCS (долг 22). До него время завершения было измерено только на ОДНОМ
+    # документе, а предел числа документов не назывался: спасательные копии снимаются по одной, и их
+    # сумма могла перерасти окно Хоста 20 с — тогда Хост убивает Worker посреди работы, отчёта нет, а
+    # завершение по PID делает сам Worker, то есть экземпляр может остаться сиротой. Строка строит
+    # ДЕСЯТЬ несохранённых документов разных типов (девять деталей, открытых с диска и изменённых, и
+    # чертёж, открытый маршрутом API5 2D — у него НЕТ нативного `IDrawingDocument`, и закрытие идёт
+    # ветвью API5, которую наряд назвал непроверенной) и требует ТРИ вещи сразу: своего КОМПАС после
+    # конца связи нет, каждая деталь ЛИБО спасена копией, ЛИБО названа причиной (молчаливая потеря
+    # правок — не PASS), и время завершения в пределе окна. Строка, проверяющая только «процесс ушёл»,
+    # пропустила бы молчаливую потерю: поэтому копии СЧИТАЮТСЯ по отчёту Worker.
+    def worker_log_of(probe):
+        try:
+            with open(probe.config, encoding="utf-8-sig") as fh:
+                return _json.load(fh).get("worker_log_path")
+        except OSError:
+            return None
+
+    def last_shutdown_entry(path):
+        """Последняя запись «owned instance shutdown» журнала Worker.
+
+        ПОЧЕМУ ЖУРНАЛ, А НЕ ОТВЕТ. На пути конца связи Хост пишет кадр Shutdown и ответ НЕ читает,
+        поэтому отчёт Worker клиенту не возвращается; на пути `kompas_disconnect` он возвращается. Строка
+        про конец связи обязана читать то, что действительно есть, — журнал.
+        """
+        last = None
+        if not path:
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        row = _json.loads(line)
+                    except ValueError:
+                        continue
+                    if row.get("message") == "owned instance shutdown":
+                        last = row
+        except OSError:
+            return None
+        return last
+
+    def build_saved_drawing(probe, app, client_path, name):
+        """Чертёж, сохранённый на диск и затем ОТКРЫТЫЙ с диска.
+
+        Открытие `.cdw` идёт документированным маршрутом API5 2D (`ksDocument2D.ksOpenDocument`), и у
+        такого документа есть дескриптор `ksDocument2D`, но НЕТ нативного `IDrawingDocument`: закрытие
+        идёт ветвью API5 (`ksCloseDocument()`), у которой нет выбора «не сохранять». Правка —
+        документированная запись в ячейку основной надписи (`IStamp` → `IText.Str`): она подтверждается
+        перечитыванием самой ячейки, поэтому «чертёж изменён» здесь измерено, а не предположено.
+        """
+        env, code = call(probe, "kompas_create_document",
+                         {"application_id": app, "kind": "drawing", "name": name})
+        doc = result(env).get("id") or result(env).get("document_id")
+        if not doc:
+            return None, "create_document(drawing): %s" % code
+        env, code = call(probe, "kompas_save_document",
+                         {"document_id": doc, "expected_revision": revision(probe, doc),
+                          "target_path": client_path}, timeout=300)
+        if code:
+            return None, "save_document(drawing): %s" % code
+        call(probe, "kompas_close_document",
+             {"document_id": doc, "dirty_policy": "discard"}, timeout=180)
+        env, code = call(probe, "kompas_open_document",
+                         {"application_id": app, "path": client_path, "access": "edit"}, timeout=300)
+        doc = result(env).get("document_id") or result(env).get("id")
+        if not doc:
+            return None, "open_document(drawing): %s" % code
+        env, code = call(probe, "kompas_set_title_block", {
+            "document_id": doc, "expected_revision": revision(probe, doc),
+            "cells": {"1": "SD-09"}}, timeout=180)
+        if code:
+            return None, "set_title_block: %s" % code
+        if context(probe, doc).get("dirty") is not True:
+            return None, "чертёж не помечен изменённым после записи в основную надпись"
+        return doc, None
+
+    sd09_text = ("десять несохранённых документов (детали + чертёж API5-пути): КОМПАС завершён, "
+                 "копии сняты или названы, время в пределе окна")
+    probe = open_host("sd09")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.09", sd09_text, "FAIL", "launch: %s" % code)
+        else:
+            built = 0
+            problem = None
+            for i in range(9):
+                path = _os.path.join(workdir, "sd-many-part-%02d.m3d" % i)
+                _doc, problem = build_saved_part(probe, app, path, "SD-many-%02d" % i)
+                if problem:
+                    problem = "документ %d: %s" % (i, problem)
+                    break
+                built += 1
+            if problem is None:
+                drawing_path = _os.path.join(workdir, "sd-many-drawing.cdw")
+                _d, problem = build_saved_drawing(probe, app, drawing_path, "SD-many-dwg")
+                if problem is None:
+                    built += 1
+            if problem is not None:
+                rep.add("SD.09", sd09_text, "FAIL", problem)
+            else:
+                log_path = worker_log_of(probe)
+                started = _time.monotonic()
+                probe.p.stdin.close()
+                gone = wait_gone(pid, 45)
+                elapsed = _time.monotonic() - started
+                entry = last_shutdown_entry(log_path)
+                copies = (entry or {}).get("rescue_copies") or []
+                # Имя поля отличается НАМЕРЕННО и это НЕ ошибка строки: журнал Worker пишет запись
+                # `new { DocumentId, Path, Reason }` (поля `path`), а ответ `kompas_disconnect` называет
+                # то же поле `rescue_copy`. Читаются оба, чтобы строка не зависела от того, каким путём
+                # пришёл отчёт, — но именно ЖУРНАЛ доступен на пути конца связи.
+                rescued = [row for row in copies if row.get("path") or row.get("rescue_copy")]
+                named = [row for row in copies if not (row.get("path") or row.get("rescue_copy"))]
+                report_complete = entry is not None and (len(rescued) + len(named)) >= built
+                ok = gone and report_complete and elapsed <= 20.0
+                rep.add("SD.09", sd09_text, "PASS" if ok else "FAIL",
+                        "построено=%d ушёл=%s t=%.1f с копий=%d названо=%d бюджет=%s мс "
+                        "фазы(спасение/закрытие/выход)=%s/%s/%s мс отчёт=%s"
+                        % (built, gone, elapsed, len(rescued), len(named),
+                           (entry or {}).get("session_end_budget_ms"),
+                           (entry or {}).get("rescue_ms"), (entry or {}).get("close_ms"),
+                           (entry or {}).get("quit_ms"), entry is not None))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
+        force_stop(pid)
+
     # ═══════════ SD.08: после группы не осталось процессов ЭТОГО прогона ═══════════
     remaining_kompas = sorted(p for p in started_kompas if alive(p))
     live_hosts = pids_of("KompasMcp.Host.exe") or set()

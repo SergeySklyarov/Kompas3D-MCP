@@ -219,8 +219,14 @@ public static class ToolCatalog
                 + "только потом вызывается KompasObject.Quit(). Принудительное завершение по PID — последняя "
                 + "мера: оно применяется, лишь если после Quit() процесс СВОЕГО экземпляра всё ещё жив, и о "
                 + "нём сообщает killed_by_pid. Экземпляр, к которому сервер ПОДКЛЮЧИЛСЯ (attach), не "
-                + "закрывается и не завершается никогда. Ответ несёт owned_instance_shutdown с полями "
-                + "quit_issued, process_exited, process_id, killed_by_pid, rescue_copies, problems.",
+                + "закрывается и не завершается никогда. Всё завершение ограничено бюджетом времени "
+                + "session_end_budget_ms (меньше окна, после которого Хост убивает Worker): копии снимаются, "
+                + "пока бюджет позволяет, и документ, которому бюджета не хватило, НАЗВАН причиной в "
+                + "rescue_copies, а не пропущен молча; столько же названо полем rescue_skipped_by_budget, "
+                + "не закрытые документы — close_skipped_by_budget. Ответ несёт owned_instance_shutdown с "
+                + "полями quit_issued, process_exited, process_id, killed_by_pid, rescue_copies, problems, "
+                + "session_end_budget_ms, rescue_skipped_by_budget, close_skipped_by_budget и phase_ms "
+                + "(миллисекунды по фазам: rescue, close, quit).",
                 Sch.Props(
                     ("application_id", Sch.Ref("#/$defs/application_id")),
                     ("close_owned_application", Sch.Bool("Штатно завершить собственный (launched) экземпляр.", false))),

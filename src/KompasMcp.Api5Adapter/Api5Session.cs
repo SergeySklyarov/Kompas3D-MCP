@@ -350,10 +350,11 @@ public sealed partial class Api5Session : IDisposable
     /// unsaved document left <c>KOMPAS.exe</c> alive on a "save changes?" window. The DOCUMENTED
     /// <c>IKompasDocument.Close(kdDoNotSaveChanges)</c> before <c>Quit()</c> ended it; suppressing dialogs
     /// did not. DOC: ikompasdocument_close.html. History: docs/decisions/host.md#shutdown-no-orphans</remarks>
-    /// <param name="copies">Where a rescue copy of an unsaved document goes. <c>null</c> — no rescue copy
-    /// is taken (the document's edits are dropped); the caller names that choice.</param>
+    /// <param name="copies">Where a rescue copy of an unsaved document goes; <c>null</c> - no copy is
+    /// taken and the caller names that choice. <paramref name="budget"/> bounds the whole sequence.</param>
     public OwnedShutdownReport? Disconnect(
-        string applicationId, bool closeOwnedApplication, DocumentControlCopies? copies = null)
+        string applicationId, bool closeOwnedApplication, DocumentControlCopies? copies = null,
+        SessionEndBudget? budget = null)
     {
         if (!_applications.TryGetValue(applicationId, out var application))
         {
@@ -364,7 +365,7 @@ public sealed partial class Api5Session : IDisposable
         // instance: killing the user's KOMPAS is forbidden (spec 1.6).
         if (closeOwnedApplication && application.Ownership == ApplicationOwnership.Launched)
         {
-            return ShutdownOwned(application, copies);
+            return ShutdownOwned(application, copies, budget);
         }
 
         foreach (var document in _documents.Values.Where(d => d.ApplicationId == applicationId).ToArray())
@@ -385,22 +386,27 @@ public sealed partial class Api5Session : IDisposable
         return null;
     }
 
-    /// <summary>Stop an instance this server launched without leaving it behind: rescue copy of every
-    /// document with unsaved changes, the DOCUMENTED close-without-save for every document, then
-    /// <c>Quit()</c> — and, as the LAST resort only, termination of that one PID.</summary>
-    /// <remarks>INVARIANT: the rescue copy is written BEFORE the close, or the unsaved work would be
-    /// discarded before it was copied. INVARIANT: the client's own file is never the rescue target.
-    /// MEASURED: the whole sequence (rescue + close + quit) took 763-832 ms on a 472 KB and a 756 KB
-    /// document — well inside the Host's 20 s shutdown window.
-    /// History: docs/decisions/host.md#shutdown-no-orphans</remarks>
-    public OwnedShutdownReport ShutdownOwned(ApplicationEntry application, DocumentControlCopies? copies)
+    /// <summary>Stop an instance this server launched without leaving it behind: rescue copy, the
+    /// DOCUMENTED close-without-save for every document, then <c>Quit()</c>, and LAST the one PID.</summary>
+    /// <remarks>INVARIANT: the rescue copy is written BEFORE the close; the client's own file is never
+    /// the target. INVARIANT: the whole sequence fits <see cref="SessionEndBudget"/>, or the Host would
+    /// kill the Worker before it terminates its own instance's PID - that termination is the Worker's
+    /// job, so a killed Worker leaves the instance behind. The budget bounds the rescue loop only; the
+    /// close, <c>Quit()</c> and the exit wait are reserved for it, and a spent budget skips the wait.
+    /// History: docs/decisions/host.md#shutdown-no-orphans, #shutdown-many-docs</remarks>
+    public OwnedShutdownReport ShutdownOwned(
+        ApplicationEntry application, DocumentControlCopies? copies, SessionEndBudget? budget = null)
     {
+        var clock = budget ?? new SessionEndBudget();
         var rescued = new List<OwnedShutdownRescue>();
         var problems = new List<string>();
         var mine = _documents.Values.Where(d => d.ApplicationId == application.Id).ToArray();
+        var skippedByBudget = 0;
 
-        // (а) Rescue copy of every document that still carries unsaved changes. The FILE the client
-        // opened is not touched: the copy is written through the documented SaveAs into the service path.
+        // (а) Rescue copy of every document that still carries unsaved changes, WHILE the budget allows.
+        // The FILE the client opened is not touched: the copy goes through the documented SaveAs into
+        // the service path.
+        var rescueClock = System.Diagnostics.Stopwatch.StartNew();
         foreach (var document in mine)
         {
             if (!IsDirty(document))
@@ -412,6 +418,16 @@ public sealed partial class Api5Session : IDisposable
             {
                 rescued.Add(new OwnedShutdownRescue(document.Id, null,
                     "каталог служебных копий не задан: спасательная копия не снята, правки теряются"));
+                continue;
+            }
+
+            if (!clock.CanRescueMore)
+            {
+                // A copy that would not fit is NOT started: the Worker must reach its own exit before the
+                // Host's window ends, and a half-written copy is worse than a NAMED absence. Which
+                // documents were skipped is stated, not left to be inferred from a missing file.
+                skippedByBudget++;
+                rescued.Add(new OwnedShutdownRescue(document.Id, null, OwnedShutdownRescue.BudgetExhausted));
                 continue;
             }
 
@@ -427,11 +443,27 @@ public sealed partial class Api5Session : IDisposable
             rescued.Add(new OwnedShutdownRescue(document.Id, ok ? target : null, ok ? null : reason));
         }
 
+        var rescueMs = rescueClock.ElapsedMilliseconds;
+
         // (б) Close every document through the documented close-without-save, so Quit() finds nothing
         // to ask about. MEASURED: this is the step that makes the difference — the dialog appears for a
-        // document that is still open and modified when Quit() runs.
+        // document that is still open and modified when Quit() runs. INVARIANT: the close is bounded by
+        // the SAME budget: it grows with the number of documents just as the copies do, and a close that
+        // would not fit is stopped — the instance is then taken down by its own PID, because nobody can
+        // answer the dialog the close prevents.
+        var closeClock = System.Diagnostics.Stopwatch.StartNew();
+        var closeSkippedByBudget = 0;
         foreach (var document in mine)
         {
+            if (clock.Exhausted)
+            {
+                // `alreadyClosed: true` here means "do NOT run a close route": the document is left OPEN
+                // on purpose, because a close that does not fit the budget is what the budget forbids.
+                closeSkippedByBudget++;
+                DropDocument(document, alreadyClosed: true);
+                continue;
+            }
+
             var problem = CloseDiscarding(document);
             if (problem is not null)
             {
@@ -441,7 +473,16 @@ public sealed partial class Api5Session : IDisposable
             DropDocument(document, alreadyClosed: true);
         }
 
+        if (closeSkippedByBudget > 0)
+        {
+            problems.Add($"документов не закрыто из-за бюджета завершения: {closeSkippedByBudget}; "
+                + "Quit() может спросить о сохранении, поэтому экземпляр завершается по своему PID");
+        }
+
+        var closeMs = closeClock.ElapsedMilliseconds;
+
         // (г) Quit() — the documented shutdown of an instance this server started.
+        var quitClock = System.Diagnostics.Stopwatch.StartNew();
         var quitIssued = false;
         try
         {
@@ -455,9 +496,11 @@ public sealed partial class Api5Session : IDisposable
 
         // LAST RESORT. Quit() is asynchronous and answers at once, so "the call returned" says nothing
         // about the process. Only the PID THIS session launched is ever terminated (spec 1.6 forbids
-        // killing by name and forbids touching an attached instance).
+        // killing by name and forbids touching an attached instance). INVARIANT: an already spent budget
+        // does not wait at all - waiting is what would let the Host kill the Worker before this step.
         var processId = application.ProcessId;
-        var exited = WaitForProcessExit(processId, KompasExitWaitMs);
+        var exitWaitMs = clock.Exhausted ? 0 : KompasExitWaitMs;
+        var exited = WaitForProcessExit(processId, exitWaitMs);
         var killed = false;
         if (!exited && processId is int pid)
         {
@@ -468,10 +511,13 @@ public sealed partial class Api5Session : IDisposable
             }
         }
 
+        var quitMs = quitClock.ElapsedMilliseconds;
+
         ComApartment.Release(application.Application);
         _applications.Remove(application.Id);
 
-        return new OwnedShutdownReport(rescued, problems, quitIssued, exited, killed, processId);
+        return new OwnedShutdownReport(rescued, problems, quitIssued, exited, killed, processId,
+            clock.TotalMs, skippedByBudget, closeSkippedByBudget, rescueMs, closeMs, quitMs);
     }
 
     /// <summary>How long to wait for the launched instance to leave after <c>Quit()</c> before the PID is
@@ -1932,23 +1978,38 @@ public sealed record ApplicationEntry(
 /// <remarks>"No copy" and "copy taken" are different states and are never conflated: a rescue copy that
 /// could not be written means the edits WERE dropped, and the client has to be told.
 /// History: docs/decisions/files.md#rescue-copies</remarks>
-public sealed record OwnedShutdownRescue(string DocumentId, string? Path, string? Reason);
+public sealed record OwnedShutdownRescue(string DocumentId, string? Path, string? Reason)
+{
+    /// <summary>The NAMED reason of a document whose rescue copy did not fit the session-end budget.</summary>
+    /// <remarks>"No copy" and "copy taken" are different states; so are "no copy because it failed" and
+    /// "no copy because the window ran out". The client is told which one it got.
+    /// History: docs/decisions/host.md#shutdown-many-docs</remarks>
+    public const string BudgetExhausted =
+        "спасательная копия НЕ снята: истёк бюджет завершения сеанса (правки теряются)";
+}
 
 /// <summary>What stopping an instance this server launched actually did.</summary>
-/// <param name="Rescued">Rescue copies, one entry per document that had unsaved changes.</param>
-/// <param name="Problems">Named failures of the close/quit steps. Empty is a claim, not a default.</param>
-/// <param name="QuitIssued">Whether <c>Quit()</c> was called and returned.</param>
-/// <param name="ProcessExited">Whether the process is gone — the number that says if an orphan was left.</param>
-/// <param name="KilledByPid">Whether the last resort — terminating that one PID — had to be used.</param>
-/// <param name="ProcessId">The PID attributed to this session's own launch, or <c>null</c> if it was never
-/// attributed (then nothing was terminated and the report says so).</param>
+/// <remarks>Rescued - one entry per document with unsaved changes; a document the budget cut short
+/// carries <see cref="OwnedShutdownRescue.BudgetExhausted"/> and no path. Problems - named failures of
+/// the close/quit steps. QuitIssued / ProcessExited / KilledByPid / ProcessId - whether <c>Quit()</c>
+/// returned, whether the process is gone (the orphan number), whether the PID had to be terminated.
+/// BudgetMs / RescueSkippedByBudget / CloseSkippedByBudget / phase times - the budget, the documents it
+/// left unrescued and left open, and where the time went, so "all rescued" and "the budget was the
+/// limit" are different answers.
+/// History: docs/decisions/host.md#shutdown-many-docs</remarks>
 public sealed record OwnedShutdownReport(
     IReadOnlyList<OwnedShutdownRescue> Rescued,
     IReadOnlyList<string> Problems,
     bool QuitIssued,
     bool ProcessExited,
     bool KilledByPid,
-    int? ProcessId);
+    int? ProcessId,
+    int BudgetMs,
+    int RescueSkippedByBudget,
+    int CloseSkippedByBudget,
+    long RescueMs,
+    long CloseMs,
+    long QuitMs);
 
 /// <summary>A document registered by the server, with its live COM handles and revision.</summary>
 /// <remarks>MEASURED: a DRAWING has no <c>ksDocument3D</c>/<c>ksPart</c> at all — it is an API5

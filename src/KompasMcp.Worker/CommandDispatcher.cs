@@ -795,7 +795,8 @@ public sealed class CommandDispatcher
     private object? Disconnect(IpcFrame request)
     {
         var command = Argument<DisconnectCommand>(request);
-        var shutdown = _session.Disconnect(command.ApplicationId, command.CloseOwnedApplication, _controlCopies);
+        var shutdown = _session.Disconnect(
+            command.ApplicationId, command.CloseOwnedApplication, _controlCopies, new SessionEndBudget());
         var node = new JsonObject { ["application_id"] = command.ApplicationId, ["disconnected"] = true };
         if (shutdown is not null)
         {
@@ -835,6 +836,18 @@ public sealed class CommandDispatcher
             ["killed_by_pid"] = shutdown.KilledByPid,
             ["rescue_copies"] = rescued,
             ["problems"] = problems,
+            // WHY these three: "everything was rescued" and "the budget cut the rescues short" are
+            // different outcomes, and the second must not look like the first.
+            // History: docs/decisions/host.md#shutdown-many-docs
+            ["session_end_budget_ms"] = shutdown.BudgetMs,
+            ["rescue_skipped_by_budget"] = shutdown.RescueSkippedByBudget,
+            ["close_skipped_by_budget"] = shutdown.CloseSkippedByBudget,
+            ["phase_ms"] = new JsonObject
+            {
+                ["rescue"] = shutdown.RescueMs,
+                ["close"] = shutdown.CloseMs,
+                ["quit"] = shutdown.QuitMs,
+            },
         };
     }
 
@@ -1595,6 +1608,12 @@ public sealed class CommandDispatcher
                     killed_by_pid = report.KilledByPid,
                     rescue_copies = report.Rescued.Select(c => new { c.DocumentId, c.Path, c.Reason }).ToArray(),
                     problems = report.Problems.ToArray(),
+                    session_end_budget_ms = report.BudgetMs,
+                    rescue_skipped_by_budget = report.RescueSkippedByBudget,
+                    close_skipped_by_budget = report.CloseSkippedByBudget,
+                    rescue_ms = report.RescueMs,
+                    close_ms = report.CloseMs,
+                    quit_ms = report.QuitMs,
                 });
 
                 if (!report.ProcessExited)

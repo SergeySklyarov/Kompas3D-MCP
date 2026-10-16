@@ -13,15 +13,24 @@ recorded only when the RECEIVER's type is a COM interface of the installed inter
 exists on that type. Everything else is kept in separate buckets - "no type established" is NOT "no
 route", and it must never be counted as confirmed.
 
-TWO SHAPES OF "NO ROUTE" THAT ARE NOT THE SAME:
-  * `unknown`        - the receiver's type could not be established (a local from a foreign API, a
-                       chain through a property the model does not carry);
-  * `unknown-member` - the receiver's type IS a COM interface but the member is not on it (a typo,
-                       or a member that exists on another interface).
-Both are reported with their sites; neither is a confirmation.
+SHAPES OF "NO ROUTE" THAT ARE NOT THE SAME. Each site carries a REASON, so the remainder can be read
+instead of guessed at, and only two of the five are gaps in THIS instrument:
+  * `foreign-receiver` / `head-not-declared`     - the head is no local this instrument tracks;
+  * `unknown` / `head-type-not-established`      - the local IS tracked, its type is not (a `var` from
+                                                   a call the interop model does not describe);
+  * `unknown` / `head-type-not-com`              - the type is known and is not a COM interface: the
+                                                   chain legitimately leaves the interop;
+  * `unknown` / `chain-broken-on-com-type`       - a COM type whose chain broke: a GAP here;
+  * `unknown-member` / `member-not-on-interface` - a COM type that does not carry that member.
+None of the five is a confirmation.
 
 `--self-test` proves the negative control: a call added to a COPY of the adapter must appear in the
 inventory, and the same copy with that line removed must not.
+
+A RECEIVER'S TYPE IS READ FROM WHAT THE CODE WRITES, NOT FROM ONE SPELLING OF IT: a declaration, the
+RETURN of a called member, and the name an `is` pattern introduces all count. The namespace is
+stripped before the model is asked, and a name's type is the binding in force at the line, because a
+name is reused across methods in one file. History: docs/decisions/api-audit.md#audit-receiver-types
 """
 
 from __future__ import annotations
@@ -55,15 +64,50 @@ ADAPTER_DLL = os.path.join(ROOT, "src", "KompasMcp.Api5Adapter", "bin", "x64", "
 # accepts only capitals silently fails to type every API5 receiver, which reads as "no route".
 TYPE_NAME = r"(?:ks[A-Za-z0-9_]*|[A-Z]\w*)"
 
+# THE TYPE AS IT IS WRITTEN. The adapter names an interop type behind its namespace
+# (`KompasAPI7.IView`, `Kompas6API5.ksPart`) far more often than by its bare name, and a pattern that
+# accepted only the bare name left every such receiver untyped - which reads as "no route". INVARIANT:
+# the namespace is STRIPPED before the model is asked (`simple_type`), because the model carries the
+# interop's OWN names (`IView`, not `KompasAPI7.IView`). `global::` is the same name with the alias
+# spelled out; `?` is C#'s nullable annotation and not part of the type.
+QUALIFIED = r"(?:global::)?(?:" + TYPE_NAME + r"\s*\.\s*)*" + TYPE_NAME + r"\s*\??"
+
 # `a.b.c().Member` - a receiver chain of simple names, each optionally a call. Nested parentheses in
-# an argument list are not modelled: such an access lands in `unparsed`, which is named, not dropped.
+# an argument list are not modelled: such an access is not silently dropped, it lands in one of the
+# named buckets below with its reason.
 ACCESS = re.compile(r"(?<![\w.])([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*(?:\s*\([^()]*\))?)*)"
                     r"\s*\.\s*([A-Za-z_]\w*)")
-TYPED_LOCAL = re.compile(r"(?<![\w.])(" + TYPE_NAME + r")\s+([a-z_]\w*)\s*(?=[;,)=])")
-CAST_ASSIGN = re.compile(r"([a-z_]\w*)\s*=\s*\(\s*(" + TYPE_NAME + r")\s*\)")
-FOREACH = re.compile(r"foreach\s*\(\s*(?:var|(" + TYPE_NAME + r"))\s+([a-z_]\w*)\s+in\b")
-OUT_PARAM = re.compile(r"\bout\s+(?:var|(" + TYPE_NAME + r"))\s+([a-z_]\w*)")
+
+# A C# keyword in the NAME position is not a name: without this, `x is COMException or ...` declares a
+# local called `or`.
+NOT_KEYWORD = r"(?!(?:or|and|is|not|null|true|false|new|in|out|ref|var|when)\b)"
+
+TYPED_LOCAL = re.compile(r"(?<![\w.])(" + QUALIFIED + r")\s+([a-z_]\w*)\s*(?=[;,)=])")
+CAST_ASSIGN = re.compile(r"([a-z_]\w*)\s*=\s*\(\s*(" + QUALIFIED + r")\s*\)")
+FOREACH = re.compile(r"foreach\s*\(\s*(?:var|(" + QUALIFIED + r"))\s+([a-z_]\w*)\s+in\b")
+OUT_PARAM = re.compile(r"\bout\s+(?:var|(" + QUALIFIED + r"))\s+([a-z_]\w*)")
+# `is`/`is not` DECLARES the type of the name it introduces (`if (document is IKompasDocument2D d2d)`).
+# Without it the declared name stays untyped, and every member read through it is lost.
+PATTERN_IS = re.compile(r"\bis\s+(?:not\s+)?(" + QUALIFIED + r")\s+" + NOT_KEYWORD + r"([a-z_]\w*)\b")
 ASSIGN = re.compile(r"(?<![\w.])([a-z_]\w*)\s*=\s*([^=;]+);")
+
+# The interop NAMESPACE each model source declares its types in, so a probe can spell a type the way
+# the adapter does. A tag without an entry here has no qualified spelling and is not probed that way.
+NAMESPACE = {"api5": "Kompas6API5", "api7": "KompasAPI7"}
+
+
+def simple_type(name):
+    """The type as the interop model spells it: `global::`, the namespace and `?` removed.
+
+    The model carries the interop's OWN names, so `KompasAPI7.IView` must be reduced before it can be
+    looked up. MEASURED: the adapter writes the qualified form in every `KompasAPI7.*` declaration,
+    and not reducing it left those receivers untyped - which reads as "no route".
+    """
+    name = name.strip()
+    if name.startswith("global::"):
+        name = name[len("global::"):].strip()
+    name = name.rstrip("?").strip()
+    return name.rsplit(".", 1)[-1] if "." in name else name
 
 
 def run_scan(assembly, resolve_dir=None):
@@ -210,8 +254,11 @@ def split_chain(expr):
     return [segment for segment in segments if segment]
 
 
-def expression_type(expr, table, model, depth=0):
+def expression_type(expr, table, model, line, depth=0):
     """Type of a receiver expression, or None when it cannot be established.
+
+    `line` is where the expression is READ: a local's type is the binding in force there, not the
+    first one written anywhere in the file.
 
     A CAST DECLARES THE TYPE OF ITS ASSIGNMENT TARGET, NEVER OF ITS OPERAND - measured on this
     project, and it cost a whole route: `parameter = (ksRasterFormatParam)document.Document.X()`
@@ -222,22 +269,22 @@ def expression_type(expr, table, model, depth=0):
     expr = expr.strip().rstrip(";").strip()
     if not expr:
         return None
-    cast = re.match(r"^\(\s*(" + TYPE_NAME + r")\s*\)\s*(.+)$", expr, re.S)
+    cast = re.match(r"^\(\s*(" + QUALIFIED + r")\s*\)\s*(.+)$", expr, re.S)
     if cast:
-        return cast.group(1)
-    new = re.match(r"^new\s+(" + TYPE_NAME + r")", expr)
+        return simple_type(cast.group(1))
+    new = re.match(r"^new\s+(" + QUALIFIED + r")", expr)
     if new:
-        return new.group(1)
-    as_cast = re.match(r"^(.+?)\s+as\s+(" + TYPE_NAME + r")\s*$", expr, re.S)
+        return simple_type(new.group(1))
+    as_cast = re.match(r"^(.+?)\s+as\s+(" + QUALIFIED + r")\s*$", expr, re.S)
     if as_cast:
-        return as_cast.group(2)
+        return simple_type(as_cast.group(2))
     segments = split_chain(expr)
     if not segments:
         return None
     head = segments[0]
     if head.endswith(")"):
         return None
-    current = table.get(head)
+    current = type_at(table, head, line)
     for segment in segments[1:]:
         if current is None:
             return None
@@ -249,36 +296,77 @@ def expression_type(expr, table, model, depth=0):
     return current
 
 
+def bind(table, name, line, type_name):
+    """Record that `name` carries `type_name` from `line` on.
+
+    Bindings are KEPT IN ORDER and never collapsed to one value per name: a name is reused across
+    methods in this adapter (`application` is `ApplicationEntry?` in one method and `IApplication` in
+    the next), and one first-in-file value typed the reads of one method with the other method's type
+    - MEASURED: that both LOST real routes and invented others. `type_name` is None for `var`, which
+    declares a name WITHOUT a type; keeping that apart from "no binding at all" is what tells the
+    `head-type-not-established` bucket from `head-not-declared`.
+    """
+    table.setdefault(name, []).append((line, type_name))
+
+
+def type_at(table, name, line):
+    """The type in force for `name` at `line`: the nearest PRECEDING binding, else the first one.
+
+    The fallback covers a member field read by a method written above its declaration: with nothing
+    bound before the use there is no nearer binding to prefer.
+    """
+    bindings = table.get(name)
+    if not bindings:
+        return None
+    preceding = [entry for entry in bindings if entry[0] <= line]
+    chosen = max(preceding, key=lambda entry: entry[0]) if preceding \
+        else min(bindings, key=lambda entry: entry[0])
+    return chosen[1]
+
+
 def file_table(lines, model):
-    """`{local name: type}` for one file, from declarations, assignments and casts."""
+    """`{local name: [(line, type), ...]}` for one file, in source order.
+
+    Scopes are NOT modelled: the line is the whole of what this instrument knows about where a
+    binding applies, and it is enough for the reuse this adapter actually does.
+    """
     table = {}
-    for line in lines:
+    for number, line in enumerate(lines, start=1):
         for match in TYPED_LOCAL.finditer(line):
-            table.setdefault(match.group(2), match.group(1))
+            bind(table, match.group(2), number, simple_type(match.group(1)))
+        for match in PATTERN_IS.finditer(line):
+            bind(table, match.group(2), number, simple_type(match.group(1)))
         for match in FOREACH.finditer(line):
-            if match.group(2):
-                table.setdefault(match.group(2), match.group(1))
+            bind(table, match.group(2), number,
+                 simple_type(match.group(1)) if match.group(1) else None)
         for match in OUT_PARAM.finditer(line):
-            if match.group(2):
-                table.setdefault(match.group(2), match.group(1))
+            bind(table, match.group(2), number,
+                 simple_type(match.group(1)) if match.group(1) else None)
         for match in CAST_ASSIGN.finditer(line):
-            table[match.group(1)] = match.group(2)
+            bind(table, match.group(1), number, simple_type(match.group(2)))
     # A second pass infers the types of `var` locals and of plain assignments, now that the explicit
     # declarations are known. Two passes, because `var x = part.Body` needs `part` first.
-    for line in lines:
+    for number, line in enumerate(lines, start=1):
         for match in ASSIGN.finditer(line):
-            inferred = expression_type(match.group(2), table, model)
+            inferred = expression_type(match.group(2), table, model, number)
             if inferred:
-                table[match.group(1)] = inferred
+                bind(table, match.group(1), number, inferred)
     return table
 
 
 def collect_routes(source_dir=ADAPTER_SRC, model=None):
-    """Every COM member the adapter calls, with the receiver's type and the call sites."""
+    """Every COM member the adapter calls, with the receiver's type and the call sites.
+
+    Returns the routes, the unresolved counts by KIND, the sites of each kind, and the same two again
+    by REASON. The kind says what was missing; the reason says WHY, which is what makes the remainder
+    readable instead of a single unexplained number.
+    """
     model = model or build_model()
     routes = collections.OrderedDict()
     unresolved = collections.Counter()
     unresolved_sites = collections.defaultdict(list)
+    reasons = collections.Counter()
+    reason_sites = collections.defaultdict(list)
     for root, _dirs, files in os.walk(source_dir):
         for name in sorted(files):
             if not name.endswith(".cs"):
@@ -299,26 +387,37 @@ def collect_routes(source_dir=ADAPTER_SRC, model=None):
                     if receiver_expr.split(".")[-1] in ("System", "Math", "Console", "String",
                                                         "Convert", "Enum", "Task", "Path", "File"):
                         continue
-                    receiver_type = expression_type(receiver_expr, table, model)
+                    receiver_type = expression_type(receiver_expr, table, model, number)
                     if receiver_type is None:
-                        # A receiver whose HEAD is a declared local is a gap in THIS instrument: the
-                        # type was known and the chain still did not resolve. A receiver on an
-                        # undeclared head is a member of an object this instrument does not model
-                        # (the adapter's own classes, framework types); counting those as COM gaps
-                        # would inflate the number and make an ordinary `list.Count` read as a
-                        # missing route.
+                        # The head is what the chain STARTS from, and the four outcomes below are not
+                        # the same thing: two of them are a gap in THIS instrument and two are not.
+                        # Counting them as one number made an ordinary `list.Count` and a lost COM
+                        # route look alike.
                         head = receiver_expr.split(".")[0].split("(")[0].strip()
-                        kind = "unknown" if head in table else "foreign-receiver"
+                        bound = type_at(table, head, number)
+                        if head not in table:
+                            kind, reason = "foreign-receiver", "head-not-declared"
+                        elif bound is None:
+                            kind, reason = "unknown", "head-type-not-established"
+                        elif not model.is_com_interface(bound):
+                            kind, reason = "unknown", "head-type-not-com"
+                        else:
+                            kind, reason = "unknown", "chain-broken-on-com-type"
+                        site = f"{relative}:{number}:{receiver_expr}"
                         unresolved[kind] += 1
-                        unresolved_sites[kind].append(f"{relative}:{number}:{receiver_expr}")
+                        unresolved_sites[kind].append(site)
+                        reasons[reason] += 1
+                        reason_sites[reason].append(site)
                         continue
                     if not model.is_com_interface(receiver_type):
                         continue
                     record = model.member(receiver_type, member)
                     if record is None:
+                        site = f"{relative}:{number}:{receiver_type}.{member}"
                         unresolved["unknown-member"] += 1
-                        unresolved_sites["unknown-member"].append(
-                            f"{relative}:{number}:{receiver_type}.{member}")
+                        unresolved_sites["unknown-member"].append(site)
+                        reasons["member-not-on-interface"] += 1
+                        reason_sites["member-not-on-interface"].append(site)
                         continue
                     key = (record["declared_on"], member)
                     route = routes.setdefault(key, {
@@ -343,7 +442,8 @@ def collect_routes(source_dir=ADAPTER_SRC, model=None):
     for route in routes.values():
         route["sites"].sort()
         route["receivers"].sort()
-    return list(routes.values()), dict(unresolved), dict(unresolved_sites)
+    return (list(routes.values()), dict(unresolved), dict(unresolved_sites),
+            dict(reasons), dict(reason_sites))
 
 
 REFLECTION = re.compile(r"(?:GetMethod|GetProperty|GetField)\s*\(\s*\"(\w+)\""
@@ -403,7 +503,7 @@ def scan_extras(source_dir, model):
                     segments = split_chain(chain)
                     if not segments or len(segments) < 2:
                         continue
-                    holder = expression_type(".".join(segments[:-1]), table, model)
+                    holder = expression_type(".".join(segments[:-1]), table, model, number)
                     if holder and model.is_com_interface(holder):
                         indexers.append({"interface": holder, "member": segments[-1],
                                          "site": f"{relative}:{number}"})
@@ -455,7 +555,13 @@ def build_model():
 
 
 def self_test():
-    """The negative control of the inventory: an ADDED call must appear, and only it."""
+    """The negative control of the inventory: an ADDED call must appear, and only it.
+
+    FOUR SPELLINGS of the same idea are probed SEPARATELY, because each one failed on its own: a bare
+    declaration, a declaration behind the interop's NAMESPACE, a type taken from the RETURN of a COM
+    call, and a name introduced by an `is` pattern. One shared probe could not say WHICH spelling the
+    instrument read.
+    """
     failures = []
     checks = 0
 
@@ -467,9 +573,10 @@ def self_test():
             failures.append(name)
 
     model = build_model()
+    com = model.type_names()
     check("модель знает COM-интерфейсы установленного interop",
-          {"ksPart", "ksDocument3D", "ksEntity"} <= model.type_names(),
-          f"типов-интерфейсов {len(model.type_names())}")
+          {"ksPart", "ksDocument3D", "ksEntity"} <= com,
+          f"типов-интерфейсов {len(com)}")
     check("член наследуется с НАЗВАННЫМ владельцем",
           model.member("ksPart", "NewEntity") is not None
           and model.member("ksPart", "NewEntity")["declared_on"] == "ksPart")
@@ -482,36 +589,137 @@ def self_test():
           strip_code('var a = "part.NewEntity(1)"; // b.NewEntity(2)\n') .count("NewEntity") == 0,
           strip_code('var a = "part.NewEntity(1)"; // b.NewEntity(2)\n'))
     check("каст задаёт тип ЦЕЛИ присваивания, а не операнда",
-          expression_type("(ksRasterFormatParam)document.Document.X()", {}, model)
+          expression_type("(ksRasterFormatParam)document.Document.X()", {}, model, 1)
           == "ksRasterFormatParam")
     check("цепочка разрешается через модель",
-          expression_type("part.NewEntity", {"part": "ksPart"}, model) is not None)
+          expression_type("part.NewEntity", {"part": [(1, "ksPart")]}, model, 1) is not None)
+    check("полное имя сводится к имени типа модели",
+          simple_type("KompasAPI7.IView") == "IView"
+          and simple_type("global::KompasAPI7.IView") == "IView"
+          and simple_type("Kompas6API5.ksPart?") == "ksPart",
+          simple_type("global::KompasAPI7.IView"))
+    check("объявление полным именем и образец `is` типизируют имя",
+          type_at(file_table(["KompasAPI7.IDrawingObject? axis = null;"], model), "axis", 1)
+          == "IDrawingObject"
+          and type_at(file_table(["if (x is not KompasAPI7.ICircle circle)"], model),
+                      "circle", 1) == "ICircle",
+          str(file_table(["KompasAPI7.IDrawingObject? axis = null;"], model)))
+    check("имя, ПЕРЕИСПОЛЬЗОВАННОЕ в файле, читается по ближайшему объявлению",
+          type_at(file_table(["ksPart a;", "a.X;", "ksEntity a;", "a.Y;"], model), "a", 2)
+          == "ksPart"
+          and type_at(file_table(["ksPart a;", "a.X;", "ksEntity a;", "a.Y;"], model), "a", 4)
+          == "ksEntity")
 
     with tempfile.TemporaryDirectory() as tmp:
         copy = os.path.join(tmp, "adapter")
         shutil.copytree(ADAPTER_SRC, copy, ignore=shutil.ignore_patterns("bin", "obj"))
         baseline = {route["route"] for route in collect_routes(copy, model)[0]}
-        # Подсаживаемое обращение берётся ИЗ МОДЕЛИ и НЕ из инвентаря: обращение, которое в адаптере
-        # уже есть (`ksPart.NewEntity`), не различает «прибор увидел подсаженное» и «прибор увидел
-        # старое», и первая редакция этой проверки именно так и проходила.
-        candidate = next((member for (type_name, member) in sorted(model.members)
-                          if type_name == "ksPart"
-                          and model.members[(type_name, member)]["kind"] == "method"
-                          and f"{type_name}.{member}" not in baseline), None)
+        used = set()
+
+        def absent(owner, kind="method"):
+            """A member of `owner` the adapter does NOT call.
+
+            An access the adapter already contains (`ksPart.NewEntity`) cannot tell "the instrument
+            saw the planted line" from "the instrument saw the old one", and the first edition of
+            this check passed for exactly that reason.
+            """
+            member = next((m for (o, m) in sorted(model.members)
+                           if o == owner and model.members[(o, m)]["kind"] == kind
+                           and f"{owner}.{m}" not in baseline and (o, m) not in used), None)
+            if member:
+                used.add((owner, member))
+            return member
+
+        def spelling(owner):
+            """`owner` as the adapter writes it: behind its interop NAMESPACE when it has one."""
+            tag = (model.types.get(owner) or {}).get("tag")
+            return f"{NAMESPACE[tag]}.{owner}" if tag in NAMESPACE else owner
+
+        def call(owner, member):
+            return f"{member}()" if model.members[(owner, member)]["kind"] == "method" else member
+
+        # 1. Bare declaration - the control the instrument already had.
+        candidate = absent("ksPart")
         check("найдено обращение, которого в адаптере нет", candidate is not None, str(candidate))
-        probe = os.path.join(copy, "AuditProbe.cs")
-        with open(probe, "w", encoding="utf-8") as handle:
-            handle.write("internal static class AuditProbe {\n"
-                         "    internal static void Run(ksPart part) {\n"
-                         f"        part.{candidate}();\n"
-                         "    }\n"
-                         "}\n")
-        added = {route["route"] for route in collect_routes(copy, model)[0]}
-        check("подсаженный вызов появился в инвентаре", f"ksPart.{candidate}" in added,
-              f"маршрутов {len(added)}")
-        os.remove(probe)
+
+        # 2. The SAME kind of declaration, spelled behind the interop namespace.
+        qualified = absent("ksPart")
+
+        # 3. The receiver's type is the RETURN of a COM member call, not a spelling at all.
+        hop = next(((o, m) for (o, m) in sorted(model.members)
+                    if o in com and (model.members[(o, m)]["return"] or "") in com
+                    and absent(model.members[(o, m)]["return"])), (None, None))
+        hop_type = model.members[hop]["return"] if hop[0] else None
+        inner = hop_type and absent(hop_type)
+        check("найдена пара «член, возвращающий COM-интерфейс» + член на нём",
+              hop[0] is not None and inner is not None,
+              f"{hop[0]}.{hop[1]} -> {hop_type}.{inner}")
+
+        # 4. The name is introduced by an `is` pattern, again behind the namespace.
+        pattern = absent("ksPart")
+
+        probes = {
+            "AuditProbe.cs":
+                "internal static class AuditProbe {\n"
+                "    internal static void Run(ksPart part) {\n"
+                f"        part.{call('ksPart', candidate)};\n"
+                "    }\n"
+                "}\n",
+            "AuditProbeQualified.cs":
+                "internal static class AuditProbeQualified {\n"
+                "    internal static void Run(ksPart part) {\n"
+                f"        {spelling('ksPart')} probe = part;\n"
+                f"        probe.{call('ksPart', qualified)};\n"
+                "    }\n"
+                "}\n",
+            "AuditProbeFromCall.cs":
+                "internal static class AuditProbeFromCall {\n"
+                f"    internal static void Run({hop[0]} source) {{\n"
+                f"        var probe = source.{call(hop[0], hop[1])};\n"
+                f"        probe.{call(hop_type, inner)};\n"
+                "    }\n"
+                "}\n",
+            "AuditProbePattern.cs":
+                "internal static class AuditProbePattern {\n"
+                "    internal static void Run(object candidate) {\n"
+                f"        if (candidate is {spelling('ksPart')} probe)\n"
+                "        {\n"
+                f"            probe.{call('ksPart', pattern)};\n"
+                "        }\n"
+                "    }\n"
+                "}\n",
+        }
+        paths = []
+        for name, text in probes.items():
+            paths.append(os.path.join(copy, name))
+            with open(paths[-1], "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+        added, kinds, _sites, reason_counts, _reason_sites = collect_routes(copy, model)
+        found = {route["route"]: route for route in added}
+
+        def planted(route, receiver_type):
+            record = found.get(route)
+            return record is not None and record["receiver_type"] == receiver_type
+
+        check("подсаженный вызов появился в инвентаре", planted(f"ksPart.{candidate}", "ksPart"),
+              f"маршрутов {len(found)}")
+        check("объявление ПОЛНЫМ именем разрешено",
+              planted(f"ksPart.{qualified}", "ksPart"), f"Kompas6API5.ksPart probe")
+        check("тип из ВОЗВРАТА вызванного члена разрешён",
+              planted(f"{hop_type}.{inner}", hop_type), f"var probe = source.{hop[1]}")
+        check("имя из образца `is` разрешено",
+              planted(f"ksPart.{pattern}", "ksPart"), f"candidate is Kompas6API5.ksPart probe")
+        check("у каждого нетипизированного получателя РОВНО одна причина",
+              sum(reason_counts.values()) == sum(kinds.values()),
+              f"причин {sum(reason_counts.values())} при {sum(kinds.values())}")
+
+        for path in paths:
+            os.remove(path)
         removed = {route["route"] for route in collect_routes(copy, model)[0]}
-        check("после снятия строки маршрут исчез", f"ksPart.{candidate}" not in removed)
+        check("после снятия строк маршруты исчезли",
+              not {f"ksPart.{candidate}", f"ksPart.{qualified}", f"{hop_type}.{inner}",
+                   f"ksPart.{pattern}"} & removed)
         check("остальной инвентарь не изменился", removed == baseline,
               f"разница {sorted(removed ^ baseline)[:5]}")
 
@@ -535,7 +743,7 @@ def main():
         return self_test()
 
     model = build_model()
-    routes, counts, sites = collect_routes(args.source, model)
+    routes, counts, sites, reasons, reason_sites = collect_routes(args.source, model)
     extras = scan_extras(args.source, model)
     by_assembly = collections.Counter(route["assembly"] for route in routes)
     result = {
@@ -551,15 +759,20 @@ def main():
         "receivers_without_type": {
             "total": sum(counts.values()),
             "by_kind": counts,
+            "by_reason": reasons,
             "sites": {key: value[:200] for key, value in sites.items()},
+            "reason_sites": {key: value[:200] for key, value in reason_sites.items()},
             "note": "получатель не типизирован - это НЕ доказательство отсутствия маршрута; "
-                    "перечислено честно, чтобы пробел прибора не читался как полнота",
+                    "перечислено честно, чтобы пробел прибора не читался как полнота. `by_reason` "
+                    "называет ПРИЧИНУ каждой корзины; пробелы прибора - только "
+                    "`chain-broken-on-com-type` и `member-not-on-interface`",
         },
     }
     out = args.out or default_out("routes")
     save_json(out, result)
     print(f"COM-маршрутов: {len(routes)} ({dict(by_assembly)})")
     print(f"получателей без типа: {sum(counts.values())} {counts}")
+    print(f"причины: {reasons}")
     print(f"записано: {out}")
     return 0
 

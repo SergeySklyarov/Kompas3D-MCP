@@ -14285,7 +14285,9 @@ def main():
         # поэтому расхождение между ними — дефект, а не две разные формулировки одного правила.
         # History: docs/decisions/host.md#capabilities-roots
         _e, caps_env, _r = client.tool("kompas_capabilities", {}, timeout=60)
-        caps_res = result(caps_env) or {}
+        # НЕ через помощник `result`: внутри `main` это имя уже занято локальной переменной (разбор
+        # ответа kompas_list_bodies), и вызов помощника до её присваивания — UnboundLocalError.
+        caps_res = (caps_env or {}).get("result") or {}
         denied = details_of(env)
         rep.add("F03", "корни в kompas_capabilities совпадают с корнями отказа PATH_NOT_ALLOWED",
                 "PASS" if (isinstance(caps_res.get("read_only_roots"), list)

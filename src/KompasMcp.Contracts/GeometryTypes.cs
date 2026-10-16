@@ -341,6 +341,13 @@ public sealed record InertiaDto
     /// <summary>System of <see cref="Axial"/>, <see cref="Centrifugal"/> and <see cref="Plane"/>: "central".</summary>
     public required string System { get; init; }
 
+    /// <summary>kg/m³. Density of the part MATERIAL the moments below were computed with — the interface's
+    /// own <c>r</c>, NOT the caller's <c>density_kg_per_m3</c>, which governs <c>mass_kg</c> alone. Null
+    /// with its reason in <see cref="Notes"/> when it did not read.</summary>
+    /// <remarks>DOC: <c>ksmassinertiaparam_r.html</c> — <c>r</c> is «Плотность материала».
+    /// History: docs/decisions/geometry.md#measure-density</remarks>
+    public double? DensityKgPerM3 { get; init; }
+
     public InertiaAxialDto? Axial { get; init; }
 
     public InertiaCentrifugalDto? Centrifugal { get; init; }

@@ -35,13 +35,15 @@ public readonly record struct InertiaAxisReading(double[]? Vector, string? Failu
 /// KOMPAS.</summary>
 /// <remarks>INVARIANT: <c>units</c> and <c>system</c> are mandatory — one and the same name <c>Jx</c>
 /// denotes three different quantities in three systems, so a bare number is not a measurement.
-/// INVARIANT: every group that stayed null is named in <c>notes</c>.
-/// History: docs/decisions/geometry.md#inertia</remarks>
+/// INVARIANT: the density carried here is the MATERIAL one the kernel integrated over — reported as a
+/// value, never assumed equal to the caller's density. INVARIANT: a group that stayed null is named in
+/// <c>notes</c>. History: docs/decisions/geometry.md#inertia</remarks>
 public static class InertiaBlock
 {
     public static InertiaDto Build(
         string units,
         string system,
+        InertiaReading densityKgPerM3,
         InertiaReading jx,
         InertiaReading jy,
         InertiaReading jz,
@@ -73,7 +75,7 @@ public static class InertiaBlock
         var notes = new List<string>();
         var axesNotes = new List<string>();
 
-        Collect(notes, jx, jy, jz, jxjy, jxz, jyz, jx0z, jy0z, jx0y, jx0, jy0, jz0);
+        Collect(notes, densityKgPerM3, jx, jy, jz, jxjy, jxz, jyz, jx0z, jy0z, jx0y, jx0, jy0, jz0);
         CollectAxis(axesNotes, axisX);
         CollectAxis(axesNotes, axisY);
         CollectAxis(axesNotes, axisZ);
@@ -83,6 +85,7 @@ public static class InertiaBlock
         {
             Units = units,
             System = system,
+            DensityKgPerM3 = densityKgPerM3.Value,
             Axial = new InertiaAxialDto { Jx = jx.Value, Jy = jy.Value, Jz = jz.Value },
             Centrifugal = new InertiaCentrifugalDto { Jxjy = jxjy.Value, Jxz = jxz.Value, Jyz = jyz.Value },
             Plane = new InertiaPlaneDto { Jx0z = jx0z.Value, Jy0z = jy0z.Value, Jx0y = jx0y.Value },

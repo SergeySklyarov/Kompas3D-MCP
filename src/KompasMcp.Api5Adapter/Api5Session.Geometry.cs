@@ -4366,7 +4366,15 @@ public sealed partial class Api5Session
 
             if (command.Properties.Contains(MeasurableProperty.Inertia))
             {
-                inertia = ReadInertia(body, command.InertiaUnits, unverified);
+                inertia = ReadInertia(body, command.InertiaUnits, ReadMaterialDensity(document), unverified);
+                // The moments come from the MATERIAL density, mass_kg from the caller's argument. When the
+                // two differ the caller must learn it here, or the moments pass for the ones they expected.
+                var densityMismatch = InertiaDensity.MismatchAspect(
+                    inertia.DensityKgPerM3, command.DensityKgPerM3);
+                if (densityMismatch is not null)
+                {
+                    unverified.Add(densityMismatch);
+                }
             }
 
             if (command.Properties.Contains(MeasurableProperty.Mass))
@@ -4709,6 +4717,33 @@ public sealed partial class Api5Session
         }
     }
 
+    /// <summary>Density of the part's MATERIAL in kg/m3, read by the SAME documented MCI route the material
+    /// block publishes — <c>ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r</c>, whose unit is set by
+    /// <c>bitVector</c>. This is the density the inertia integral used, NOT the caller's argument.</summary>
+    /// <remarks>DOC: <c>ksmassinertiaparam_r.html</c> — <c>r</c> is «Плотность материала»;
+    /// <c>ksmassinertiaparam.html</c> note 3 — the dimensions of everything the interface returns are set by
+    /// <c>bitVector</c> in <c>[ST_MIX_MM..ST_MIX_KG]</c>, so at <c>ST_MIX_M|ST_MIX_KG</c> it is kg/m3.
+    /// INVARIANT: a density that did not read is a NAMED failure carried into the block's notes — it is
+    /// never assumed to equal the caller's density.
+    /// History: docs/decisions/geometry.md#measure-density</remarks>
+    private static InertiaReading ReadMaterialDensity(DocumentEntry document)
+    {
+        if (document.Part is not ksPart part)
+        {
+            return InertiaReading.Failed(
+                "material_density_not_read — верхний компонент документа не доступен как ksPart");
+        }
+
+        // Reuse the material block's own route so the two densities are read the same way and in the same
+        // unit; its reason is carried through rather than re-worded here.
+        var notes = new List<string>();
+        var (density, read) = ReadPhysicalDensity(part, notes);
+        return read && density is double value
+            ? InertiaReading.Ok(value)
+            : InertiaReading.Failed("material_density_not_read — "
+                + (notes.Count > 0 ? notes[0] : "причина не установлена"));
+    }
+
     /// <summary>Mass-centre inertia of a BODY: axial, centrifugal, plane and principal central moments
     /// plus the principal axis directions.</summary>
     /// <remarks>DOC: <c>ksmassinertiaparam.html</c> — «МЦХ тела вращения или выдавливания»; the pointer is
@@ -4721,7 +4756,8 @@ public sealed partial class Api5Session
     /// a value that does not read stays null with its reason named (the assembly rule lives in
     /// <see cref="InertiaBlock"/> and is unit-tested).
     /// History: docs/decisions/geometry.md#inertia</remarks>
-    private InertiaDto ReadInertia(ksBody body, InertiaUnits units, List<string> unverified)
+    private InertiaDto ReadInertia(
+        ksBody body, InertiaUnits units, InertiaReading materialDensity, List<string> unverified)
     {
         var bitVector = units == InertiaUnits.MKg ? KompasUnits.MassMKg : KompasUnits.MassMmKg;
         var properties = MassProperties(body, (uint)bitVector);
@@ -4740,6 +4776,7 @@ public sealed partial class Api5Session
         var block = InertiaBlock.Build(
             units == InertiaUnits.MKg ? "m|kg" : "mm|kg",
             InertiaBlock.CentralSystem,
+            materialDensity,
             Scalar(() => properties.jx, "jx"),
             Scalar(() => properties.jy, "jy"),
             Scalar(() => properties.jz, "jz"),

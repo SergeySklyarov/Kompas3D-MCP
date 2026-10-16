@@ -156,7 +156,7 @@ public sealed class StlInertiaDomainTests
     // ---------------------------------------------------------------- inertia block
 
     private static InertiaDto BuildAllOk() => InertiaBlock.Build(
-        "mm|kg", InertiaBlock.CentralSystem,
+        "mm|kg", InertiaBlock.CentralSystem, InertiaReading.Ok(7800),
         InertiaReading.Ok(1), InertiaReading.Ok(2), InertiaReading.Ok(3),
         InertiaReading.Ok(0), InertiaReading.Ok(0), InertiaReading.Ok(0),
         InertiaReading.Ok(4), InertiaReading.Ok(5), InertiaReading.Ok(6),
@@ -172,6 +172,7 @@ public sealed class StlInertiaDomainTests
 
         Assert.Equal("mm|kg", block.Units);
         Assert.Equal(InertiaBlock.CentralSystem, block.System);
+        Assert.Equal(7800d, block.DensityKgPerM3);
         Assert.Equal(InertiaBlock.PrincipalSystem, block.Principal!.System);
         Assert.Empty(block.Notes);
         Assert.Equal(3d, block.Axial!.Jz);
@@ -185,7 +186,7 @@ public sealed class StlInertiaDomainTests
     public void InertiaBlock_UnreadValueIsNullWithReasonNotZero()
     {
         var block = InertiaBlock.Build(
-            "mm|kg", InertiaBlock.CentralSystem,
+            "mm|kg", InertiaBlock.CentralSystem, InertiaReading.Ok(7800),
             InertiaReading.Failed("jx_not_read — свойство jx не читается: COMException"),
             InertiaReading.Ok(2), InertiaReading.Ok(3),
             InertiaReading.Ok(0), InertiaReading.Ok(0), InertiaReading.Ok(0),
@@ -212,7 +213,7 @@ public sealed class StlInertiaDomainTests
     public void InertiaBlock_RequiresUnitsAndSystem(string units, string system)
     {
         Assert.Throws<ArgumentException>(() => InertiaBlock.Build(
-            units, system,
+            units, system, InertiaReading.Ok(7800),
             InertiaReading.Ok(1), InertiaReading.Ok(2), InertiaReading.Ok(3),
             InertiaReading.Ok(0), InertiaReading.Ok(0), InertiaReading.Ok(0),
             InertiaReading.Ok(4), InertiaReading.Ok(5), InertiaReading.Ok(6),
@@ -231,6 +232,50 @@ public sealed class StlInertiaDomainTests
         Assert.False(reading.Read);
         Assert.Null(reading.Value);
         Assert.StartsWith("jz_not_finite", reading.Failure);
+    }
+
+    /// <summary>An unread MATERIAL density is null WITH its reason — never a zero and never a silent
+    /// fallback to the caller's argument, which is a different number.</summary>
+    [Fact]
+    public void InertiaBlock_UnreadDensityIsNullWithReasonNotZero()
+    {
+        var block = InertiaBlock.Build(
+            "mm|kg", InertiaBlock.CentralSystem,
+            InertiaReading.Failed("material_density_not_read — верхний компонент не доступен как ksPart"),
+            InertiaReading.Ok(1), InertiaReading.Ok(2), InertiaReading.Ok(3),
+            InertiaReading.Ok(0), InertiaReading.Ok(0), InertiaReading.Ok(0),
+            InertiaReading.Ok(4), InertiaReading.Ok(5), InertiaReading.Ok(6),
+            InertiaReading.Ok(1), InertiaReading.Ok(2), InertiaReading.Ok(3),
+            InertiaAxisReading.Ok(new[] { 1d, 0, 0 }),
+            InertiaAxisReading.Ok(new[] { 0d, 1, 0 }),
+            InertiaAxisReading.Ok(new[] { 0d, 0, 1 }));
+
+        Assert.Null(block.DensityKgPerM3);
+        Assert.Contains(block.Notes, n => n.StartsWith("material_density_not_read"));
+    }
+
+    /// <summary>The two densities are different numbers: when they differ the divergence is NAMED with
+    /// both, and when they agree (inside the read-back allowance) nothing is said.</summary>
+    [Theory]
+    [InlineData(7856d, 7800d, true)]
+    [InlineData(7800d, 7800d, false)]
+    [InlineData(7800.4d, 7800d, false)]
+    [InlineData(7800d, null, false)]
+    [InlineData(null, 7800d, false)]
+    public void InertiaDensity_NamesMismatchWithBothDensities(double? material, double? requested, bool named)
+    {
+        var aspect = InertiaDensity.MismatchAspect(material, requested);
+
+        if (!named)
+        {
+            Assert.Null(aspect);
+            return;
+        }
+
+        Assert.NotNull(aspect);
+        Assert.StartsWith("inertia_density_mismatch", aspect);
+        Assert.Contains("7856", aspect);
+        Assert.Contains("7800", aspect);
     }
 
     // ---------------------------------------------------------------- helpers

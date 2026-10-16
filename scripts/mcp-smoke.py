@@ -11062,6 +11062,10 @@ EI_REFERENCE = {
     "cylinder_height_mm": 50.0,
     "density_kg_per_m3": 7800.0,
     "material_name": "Сталь 45 ГОСТ 1050-2013",
+    # Материал ВТОРОЙ детали записывается ДРУГОЙ плотностью: блок inertia считает моменты по плотности
+    # МАТЕРИАЛА, а mass_kg — по аргументу density_kg_per_m3, и расхождение обязано быть названо.
+    "mismatch_density_kg_per_m3": 7856.0,
+    "mismatch_material_name": "Сталь 10 ГОСТ 1050-2013",
     "plate_width_mm": 100.0,
     "plate_height_mm": 80.0,
     "plate_depth_mm": 10.0,
@@ -11093,6 +11097,7 @@ def export_inertia_checks(client, rep, app_id, workdir):
     тензор сборки, расчёт геометрии или триангуляции на стороне сервера — вне объёма блока.
     """
     import os as _os
+    import re as _re
     import struct as _struct
 
     ref = dict(EI_REFERENCE)
@@ -11240,6 +11245,8 @@ def export_inertia_checks(client, rep, app_id, workdir):
             ("EI.07.inertia_principal", "главные центральные совпали с осевыми, оси ортонормированы"),
             ("EI.08.inertia_offdiag", "центробежные ≈ 0, плоскостные прочитаны"),
             ("EI.09.inertia_units", "смена единицы мм|кг -> м|кг делит момент на 1e6"),
+            ("EI.14.inertia_density_mismatch", "плотность материала != запрошенной: ответ называет обе, моменты посчитаны по материалу, масса — по запрошенной, аспект назван"),
+            ("EI.15.inertia_density_equal", "плотности равны: блок называет плотность материала, аспекта расхождения нет, прежнее ожидание jz = m r^2/2"),
             ("EI.10.refusals", "отказы предусмотренными кодами без ложного успеха"),
             ("EI.11.idempotency", "идемпотентность, OPERATION_ID_CONFLICT и REVISION_CONFLICT"),
             ("EI.12.no_mutation", "kompas_measure с inertia модель не меняет"),
@@ -11277,11 +11284,16 @@ def export_inertia_checks(client, rep, app_id, workdir):
     # ── построение эталона через MCP ───────────────────────────────────────────────────────────────
     cyl_doc, cyl_err, _ = new_document("part", "EI-cylinder")
     plate_doc, plate_err, _ = new_document("part", "EI-plate")
+    # Третья деталь нужна ровно для расхождения плотностей: у неё материал ЗАПИСЫВАЕТСЯ другой
+    # плотностью, и она не участвует в строках, где плотности совпадают.
+    dense_doc, dense_err, _ = new_document("part", "EI-cylinder-dense")
     build_error = None
     if not cyl_doc:
         build_error = f"create_document(cylinder): {cyl_err}"
     elif not plate_doc:
         build_error = f"create_document(plate): {plate_err}"
+    elif not dense_doc:
+        build_error = f"create_document(cylinder-dense): {dense_err}"
 
     cyl_sketch = None
     if cyl_doc and not build_error:
@@ -11295,10 +11307,16 @@ def export_inertia_checks(client, rep, app_id, workdir):
             [{"kind": "rectangle", "start_mm": [0.0, 0.0],
               "width_mm": ref["plate_width_mm"], "height_mm": ref["plate_height_mm"]}],
             "ei-plate", ref["plate_depth_mm"])
+    if dense_doc and not build_error:
+        _, build_error = draw_and_extrude(
+            dense_doc, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": radius}],
+            "ei-circle-dense", height)
 
     cyl_volume = None
     plate_volume = None
+    dense_volume = None
     material_ok = False
+    dense_material_ok = False
     if cyl_doc and not build_error:
         env, code = call("kompas_set_material", {
             "document_id": cyl_doc, "expected_revision": current_rev(cyl_doc),
@@ -11307,22 +11325,36 @@ def export_inertia_checks(client, rep, app_id, workdir):
         material_ok = (not code and written.get("name_matches")
                        and written.get("density_matches")
                        and near(written.get("read_density_kg_per_m3_after"), density, 0.5))
+        env, code = call("kompas_set_material", {
+            "document_id": dense_doc, "expected_revision": current_rev(dense_doc),
+            "material_name": ref["mismatch_material_name"],
+            "density_kg_per_m3": ref["mismatch_density_kg_per_m3"]})
+        written = result(env)
+        dense_material_ok = (not code and written.get("name_matches")
+                             and written.get("density_matches")
+                             and near(written.get("read_density_kg_per_m3_after"),
+                                      ref["mismatch_density_kg_per_m3"], 0.5))
         cyl_volume = volume_of(body_of(cyl_doc))
         plate_volume = volume_of(body_of(plate_doc))
+        dense_volume = volume_of(body_of(dense_doc))
 
     rep.add("EI.00.setup",
             "эталон собран через MCP: цилиндр r=20 h=50 (V = pi r^2 h) и плита 100x80x10 (V = 80000); "
-            "плотность 7800 кг/м3 записана материалом и подтверждена перечитыванием",
-            "PASS" if (not build_error and material_ok
+            "плотность 7800 кг/м3 записана материалом и подтверждена перечитыванием; вторая деталь "
+            "получила материал ДРУГОЙ плотности",
+            "PASS" if (not build_error and material_ok and dense_material_ok
                        and near(cyl_volume, cylinder_volume, ref["volume_tolerance_mm3"])
-                       and near(plate_volume, 80000.0, ref["volume_tolerance_mm3"])) else "FAIL",
+                       and near(plate_volume, 80000.0, ref["volume_tolerance_mm3"])
+                       and near(dense_volume, cylinder_volume, ref["volume_tolerance_mm3"])) else "FAIL",
             f"cylinder_volume={cyl_volume} (аналитика {cylinder_volume:.6f}) plate_volume={plate_volume} "
-            f"material_ok={material_ok} error={build_error}")
+            f"dense_volume={dense_volume} material_ok={material_ok} dense_material_ok={dense_material_ok} "
+            f"error={build_error}")
 
-    if build_error or not cyl_doc or not plate_doc:
+    if build_error or not cyl_doc or not plate_doc or not dense_doc:
         fail_all(f"эталон не построен: {build_error}")
         close(cyl_doc)
         close(plate_doc)
+        close(dense_doc)
         return
 
     cyl_body = body_of(cyl_doc)
@@ -11533,6 +11565,70 @@ def export_inertia_checks(client, rep, app_id, workdir):
             "PASS" if (not code and units_ok) else "FAIL",
             f"error={code} units(mm|kg)={inertia.get('units')} units(m|kg)={m_inertia.get('units')} "
             f"jz_mm={jz} jz_m={m_jz} отношение={ratio} (ожидание {units_ratio_expected:.0f})")
+
+    # ── EI.14.inertia_density_mismatch ─────────────────────────────────────────────────────────────
+    # Плотность МАТЕРИАЛА детали != аргумента density_kg_per_m3. Блок inertia обязан НАЗВАТЬ плотность
+    # материала, по которой посчитаны моменты, а масса — считаться по ЗАПРОШЕННОЙ: два разных числа в
+    # одном ответе, и расхождение названо аспектом, а не выдано за моменты по запрошенной плотности.
+    dense_body = body_of(dense_doc)
+    dense_material_density = ref["mismatch_density_kg_per_m3"]
+    dense_jz_material = dense_material_density * cylinder_volume * 1e-9 * radius * radius / 2.0
+    dense_jz_requested = mass_kg * radius * radius / 2.0
+    # volume запрошен вместе с mass: масса считается от ПРОЧИТАННОГО объёма, а объём читается только
+    # тогда, когда запрошен (иначе mass остаётся null — это названо в отчёте как находка вне наряда).
+    env, code = call_raw("kompas_measure", {
+        "target_ref": dense_body, "properties": ["inertia", "mass", "volume"],
+        "density_kg_per_m3": density})
+    dm = result(env)
+    dm_inertia = dm.get("inertia") or {}
+    dm_aspects = dm.get("unverified_aspects") or []
+    dm_mismatch = next((str(a) for a in dm_aspects if "inertia_density_mismatch" in str(a)), None)
+    dm_named = dm_inertia.get("density_kg_per_m3")
+    dm_jz = (dm_inertia.get("axial") or {}).get("jz")
+    # Аспект называет плотности ЧИСЛАМИ (плотность материала приходит из ядра с плавающей погрешностью,
+    # например 7855.999999999997), поэтому обе плотности ищутся в тексте ЧИСЛОМ, а не подстрокой.
+    dm_numbers = [float(m) for m in _re.findall(r"\d+(?:\.\d+)?", dm_mismatch or "")]
+    dm_names_both = (any(abs(n - dense_material_density) <= 0.5 for n in dm_numbers)
+                     and any(abs(n - density) <= 0.5 for n in dm_numbers))
+    dm_ok = (not code
+             and near(dm_named, dense_material_density, 0.5)
+             and rel_near(dm_jz, dense_jz_material, ref["inertia_relative"])
+             and not rel_near(dm_jz, dense_jz_requested, ref["inertia_relative"])
+             and rel_near(dm.get("mass_kg"), mass_kg, ref["inertia_relative"])
+             and dm_mismatch is not None
+             and dm_names_both)
+    rep.add("EI.14.inertia_density_mismatch",
+            "материал детали записан плотностью, ОТЛИЧНОЙ от аргумента density_kg_per_m3: блок inertia "
+            "называет плотность МАТЕРИАЛА в поле density_kg_per_m3, моменты совпали с аналитикой по "
+            "материалу и НЕ совпали с посчитанными по запрошенной, mass_kg — по запрошенной; аспект "
+            "inertia_density_mismatch называет обе плотности",
+            "PASS" if dm_ok else "FAIL",
+            f"error={code} material_density={dense_material_density} requested={density} "
+            f"inertia.density_kg_per_m3={dm_named} jz={dm_jz} (по материалу {dense_jz_material:.6f}, "
+            f"по запрошенной {dense_jz_requested:.6f}) mass_kg={dm.get('mass_kg')} "
+            f"(по запрошенной {mass_kg:.6f}) аспект={dm_mismatch}")
+
+    # ── EI.15.inertia_density_equal ────────────────────────────────────────────────────────────────
+    # Плотности равны — прежнее ожидание держится: jz = m r^2 / 2, блок называет ту же плотность,
+    # аспекта расхождения нет.
+    env, code = call_raw("kompas_measure", {
+        "target_ref": cyl_body, "properties": ["inertia", "mass", "volume"],
+        "density_kg_per_m3": density})
+    eq = result(env)
+    eq_inertia = eq.get("inertia") or {}
+    eq_aspects = eq.get("unverified_aspects") or []
+    eq_ok = (not code
+             and near(eq_inertia.get("density_kg_per_m3"), density, 0.5)
+             and rel_near((eq_inertia.get("axial") or {}).get("jz"), jz_expected, ref["inertia_relative"])
+             and rel_near(eq.get("mass_kg"), mass_kg, ref["inertia_relative"])
+             and not any("inertia_density_mismatch" in str(a) for a in eq_aspects))
+    rep.add("EI.15.inertia_density_equal",
+            "плотность материала равна аргументу: блок inertia называет её, моменты совпали с прежним "
+            "ожиданием jz = m r^2 / 2, mass_kg — то же число, аспекта расхождения нет",
+            "PASS" if eq_ok else "FAIL",
+            f"error={code} inertia.density_kg_per_m3={eq_inertia.get('density_kg_per_m3')} "
+            f"jz={(eq_inertia.get('axial') or {}).get('jz')} (аналитика {jz_expected:.6f}) "
+            f"mass_kg={eq.get('mass_kg')} (аналитика {mass_kg:.6f}) аспекты={eq_aspects}")
 
     # ── EI.10.refusals ─────────────────────────────────────────────────────────────────────────────
     outside = "D:\\ei-not-allowed-" + uuid.uuid4().hex[:8] + "\\out.stl"
@@ -11747,6 +11843,7 @@ def export_inertia_checks(client, rep, app_id, workdir):
 
     close(cyl_doc)
     close(plate_doc)
+    close(dense_doc)
     close(asm_doc)
 
 

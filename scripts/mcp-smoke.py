@@ -15151,6 +15151,19 @@ def level_at_most(res, ceiling):
     return level is None or _LEVEL_RANK.get(level, 99) <= _LEVEL_RANK[ceiling]
 
 
+def declared_expectation_warning(res):
+    """Предупреждение правила заявленного ожидания: непустой `warnings` с названной разностью.
+
+    Читается из нагрузки, а не из кода: правило публикует предупреждение ТЕКСТОМ, и строка обязана
+    проверить его наличие, а не «вызов вернул что-то». Общее правило и его единственный текст -
+    `DeclaredExpectation.NotConfirmedWarning`, поэтому строка ищет его, а не пересказ.
+    """
+    warnings = (res or {}).get("warnings")
+    if not isinstance(warnings, list):
+        return False
+    return any("Заявленное ожидание не подтверждено" in str(w) for w in warnings)
+
+
 def check_failed(res, name):
     for item in checks_of(res):
         if item.get("name") == name:
@@ -27251,6 +27264,188 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
                             + " object_error=" + repr(det.get("object_error"))
                             + " feature_ref=" + repr(det.get("feature_ref"))
                             + " V " + str(v_before) + "->" + str(v_after))
+        close(doc)
+
+    # ========= EX46/EX47/EX48/EX49: призма профиля - ВЕРХНЯЯ ГРАНИЦА, а не равенство =============
+    # INVARIANT: приклеивание, пересекающее тело, добавляет МЕНЬШЕ призмы профиля (площадь x глубину),
+    # а вырезание через полость снимает меньше: обе операции верны, и равенство с призмой провалом быть
+    # не может. Тогда проходит проверка верхней границы, а ожидание названо невычисленным.
+    # INVARIANT: сама граница судит то, что может: больше призмы, ноль и обратный знак - провал.
+    # TEST: держит решение границы (`VolumeBound`) на живом КОМПАС; модульные тесты - `VolumeBoundTests`.
+    # History: docs/decisions/adapter-core.md#volume-bound
+
+    def _by_name(env):
+        return {c.get("name"): c for c in checks_of(env)}
+
+    def _delta(env):
+        return ((env or {}).get("result") or {}).get("volume_delta_mm3")
+
+    def _named(env, prefix):
+        return any(str(u).startswith(prefix) for u in unverified_of(env))
+
+    # ── EX46: boss, пересекающий тело, — не провал ───────────────────────────────────────────────
+    ex46_desc = ("boss, пересекающий тело: прибавка меньше призмы - не провал, "
+                 "проверка верхней границы пройдена")
+    doc, rev, body, err = build_plate("SM02-boss-overlap")
+    if err:
+        rep.add("EX46", ex46_desc, "FAIL", err)
+    else:
+        # Эскиз ВНУТРИ пластины (z=5): призма 30x30x10 занимает z=5..15, но z=5..10 уже занято телом,
+        # поэтому прибавится ровно 30x30x5 = 4500 против призмы 9000.
+        sk, rev, serr = sketch(doc, rev, PAD, "boss-overlap", 5)
+        if serr:
+            rep.add("EX46", ex46_desc, "FAIL", serr)
+        else:
+            rev, env46, code46 = extrude(doc, rev, sk, operation="boss", depth_mm=10,
+                                         direction="positive", end_condition="blind",
+                                         target_body_ref=body)
+            chk46 = _by_name(env46)
+            delta46 = _delta(env46)
+            rep.add("EX46", ex46_desc,
+                    "PASS" if (code46 is None
+                               and chk46.get("volume_upper_bound", {}).get("passed") is True
+                               and "volume_delta" not in chk46
+                               and _named(env46, "expected_volume_not_computed")
+                               and isinstance(delta46, (int, float))
+                               and abs(delta46 - 4500.0) <= 0.01) else "FAIL",
+                    "code=" + str(code46) + " дельта=" + str(delta46) + " ожидание=4500"
+                    + " volume_upper_bound=" + str(chk46.get("volume_upper_bound"))
+                    + " volume_delta=" + repr(chk46.get("volume_delta"))
+                    + " unverified=" + str(unverified_of(env46)))
+        close(doc)
+
+    # ── EX47: вырезание кольца вокруг уже существующего отверстия — не провал ───────────────────
+    ex47_desc = ("cut кольца вокруг существующего отверстия: снято меньше призмы - не провал, "
+                 "проверка верхней границы пройдена")
+    doc, rev, body, err = build_plate("SM02-cut-cavity")
+    if err:
+        rep.add("EX47", ex47_desc, "FAIL", err)
+    else:
+        sk, rev, serr = sketch(doc, rev, HOLE, "cut-cavity-hole", 10)
+        if serr:
+            rep.add("EX47", ex47_desc, "FAIL", serr)
+            close(doc)
+        else:
+            rev, _e, code_h = extrude(doc, rev, sk, operation="cut", depth_mm=10,
+                                      direction="positive", end_condition="blind",
+                                      target_body_ref=body)
+            rows = bodies(doc)
+            body2 = rows[0]["body_ref"] if rows else None
+            if code_h is not None or not body2:
+                rep.add("EX47", ex47_desc, "FAIL",
+                        "подготовка: отверстие не снято: code=" + str(code_h))
+            else:
+                # Кольцо R10 вокруг отверстия R5: призма pi*10^2*10, снимается pi*(10^2-5^2)*10.
+                sk2, rev, serr2 = sketch(doc, rev, {"kind": "circle", "center_mm": [0, 0],
+                                                    "radius_mm": 10.0}, "cut-cavity-ring", 10)
+                if serr2:
+                    rep.add("EX47", ex47_desc, "FAIL", serr2)
+                else:
+                    rev, env47, code47 = extrude(doc, rev, sk2, operation="cut", depth_mm=10,
+                                                 direction="positive", end_condition="blind",
+                                                 target_body_ref=body2)
+                    chk47 = _by_name(env47)
+                    delta47 = _delta(env47)
+                    ring = math.pi * (100.0 - 25.0) * 10.0
+                    rep.add("EX47", ex47_desc,
+                            "PASS" if (code47 is None
+                                       and chk47.get("volume_upper_bound", {}).get("passed") is True
+                                       and "volume_delta" not in chk47
+                                       and _named(env47, "expected_volume_not_computed")
+                                       and isinstance(delta47, (int, float))
+                                       and abs(delta47 - ring) <= 0.01) else "FAIL",
+                            "code=" + str(code47) + " дельта=" + str(delta47)
+                            + " ожидание=" + str(ring)
+                            + " volume_upper_bound=" + str(chk47.get("volume_upper_bound"))
+                            + " volume_delta=" + repr(chk47.get("volume_delta"))
+                            + " unverified=" + str(unverified_of(env47)))
+        close(doc)
+
+    # ── EX48: boss ровно по призме — подтверждение равенством ───────────────────────────────────
+    ex48_desc = "boss ровно по призме: равенство подтверждает геометрию, уровня geometry_checked"
+    doc, rev, body, err = build_plate("SM02-boss-exact")
+    if err:
+        rep.add("EX48", ex48_desc, "FAIL", err)
+    else:
+        sk, rev, serr = sketch(doc, rev, PAD, "boss-exact", 10)
+        if serr:
+            rep.add("EX48", ex48_desc, "FAIL", serr)
+        else:
+            rev, env48, code48 = extrude(doc, rev, sk, operation="boss", depth_mm=10,
+                                         direction="positive", end_condition="blind",
+                                         target_body_ref=body)
+            chk48 = _by_name(env48)
+            delta48 = _delta(env48)
+            rep.add("EX48", ex48_desc,
+                    "PASS" if (code48 is None
+                               and chk48.get("volume_delta", {}).get("passed") is True
+                               and (chk48.get("expected_basis") or {}).get("observed") == "profile_area_x_depth"
+                               and "volume_upper_bound" not in chk48
+                               and verification_level(env48) == "geometry_checked"
+                               and isinstance(delta48, (int, float))
+                               and abs(delta48 - 9000.0) <= 0.01) else "FAIL",
+                            "code=" + str(code48) + " дельта=" + str(delta48) + " ожидание=9000"
+                            + " volume_delta=" + str(chk48.get("volume_delta"))
+                            + " базис=" + str((chk48.get("expected_basis") or {}).get("observed"))
+                            + " уровень=" + str(verification_level(env48)))
+        close(doc)
+
+    # ── EX49/EX49m: явное ожидание клиента — отдельно от призмы и НЕ слабее ─────────────────────
+    # MEASURED: призма и явное ожидание судятся раздельно. Совпавшее ожидание подтверждает геометрию
+    # (geometry_checked), несовпавшее - провал проверки с предупреждением и уровнем не выше
+    # structure_checked, но вызов НЕ отвергается: модель может отстать на одну операцию.
+    ex49_desc = ("явное ожидание клиента не совпало: проверка провалена, вызов успешен, "
+                 "уровень не выше structure_checked")
+    doc, rev, body, err = build_plate("SM02-declared")
+    if err:
+        for cid in ("EX49", "EX49m"):
+            rep.add(cid, ex49_desc, "FAIL", err)
+    else:
+        sk, rev, serr = sketch(doc, rev, PAD, "declared-pad", 10)
+        if serr:
+            for cid in ("EX49", "EX49m"):
+                rep.add(cid, ex49_desc, "FAIL", serr)
+            close(doc)
+        else:
+            # Прибавка здесь ровно призма (30x30x10 = 9000): верное ожидание и заведомо неверное.
+            rev, env49m, code49m = extrude(doc, rev, sk, operation="boss", depth_mm=10,
+                                           direction="positive", end_condition="blind",
+                                           target_body_ref=body,
+                                           expected_volume_delta_mm3=9000.0)
+            chk49m = _by_name(env49m)
+            rep.add("EX49m", "явное ожидание клиента совпало: подтверждение и geometry_checked",
+                    "PASS" if (code49m is None
+                               and chk49m.get("expected_volume_delta", {}).get("passed") is True
+                               and verification_level(env49m) == "geometry_checked"
+                               and not declared_expectation_warning(env49m)) else "FAIL",
+                    "code=" + str(code49m) + " ожидание=" + str(chk49m.get("expected_volume_delta"))
+                    + " уровень=" + str(verification_level(env49m))
+                    + " warnings=" + str((env49m or {}).get("warnings")))
+
+            rows = bodies(doc)
+            body_now = rows[0]["body_ref"] if rows else None
+            if body_now is None:
+                rep.add("EX49", ex49_desc, "FAIL", "тело не найдено")
+            else:
+                sk2, rev, serr2 = sketch(doc, rev, PAD, "declared-pad-bad", 20)
+                if serr2:
+                    rep.add("EX49", ex49_desc, "FAIL", serr2)
+                else:
+                    rev, env49, code49 = extrude(doc, rev, sk2, operation="boss", depth_mm=10,
+                                                 direction="positive", end_condition="blind",
+                                                 target_body_ref=body_now,
+                                                 expected_volume_delta_mm3=99000.0)
+                    chk49 = _by_name(env49)
+                    rep.add("EX49", ex49_desc,
+                            "PASS" if (code49 is None
+                                       and chk49.get("expected_volume_delta", {}).get("passed") is False
+                                       and _named(env49, "declared_expectation_not_confirmed")
+                                       and declared_expectation_warning(env49)
+                                       and level_at_most(env49, "structure_checked")) else "FAIL",
+                            "code=" + str(code49) + " ожидание=" + str(chk49.get("expected_volume_delta"))
+                            + " уровень=" + str(verification_level(env49))
+                            + " warnings=" + str((env49 or {}).get("warnings"))
+                            + " unverified=" + str(unverified_of(env49)))
         close(doc)
 
 

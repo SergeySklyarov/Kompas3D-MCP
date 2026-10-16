@@ -1227,82 +1227,84 @@ public sealed partial class Api5Session
         // extrusion there is no target — the feature is expected to bring a NEW body — so the delta
         // is that body's own volume, a reading rather than a subtraction from an assumed zero.
         var affectedAfter = bodyTarget is null ? null : changes.MatchedOf(bodyTarget.Index);
-        double? measuredDelta;
-        string measuredBasis;
         var attribution = new List<NamedCheck>();
-        var createdBodies = changes.NewBodies;
 
-        if (bodyTarget is not null)
+        // ONE rule for "how much material did this feature move", used for the answer AND for the re-read
+        // of a declared expectation: were they separate, the re-read would judge a different quantity than
+        // the first read. `sink` receives the attribution check; a re-read passes null, because that check
+        // belongs to the answer and not to a repeat measurement.
+        (double? Delta, string Basis) MeasureDelta(BodyComparison snapshotChanges, List<NamedCheck>? sink)
         {
-            var volumeBefore = bodyTarget.Snapshot.Volume;
-            var volumeAfter = affectedAfter?.Volume;
-            measuredDelta = volumeBefore is double low && volumeAfter is double high
-                ? (command.Operation == ExtrudeOperation.Cut ? low - high : high - low)
-                : null;
-            measuredBasis = $"target_body_{bodyTarget.Index}";
-        }
-        else
-        {
+            if (bodyTarget is not null)
+            {
+                var volumeBefore = bodyTarget.Snapshot.Volume;
+                var volumeAfter = snapshotChanges.MatchedOf(bodyTarget.Index)?.Volume;
+                double? delta = volumeBefore is double low && volumeAfter is double high
+                    ? (command.Operation == ExtrudeOperation.Cut ? low - high : high - low)
+                    : null;
+                return (delta, $"target_body_{bodyTarget.Index}");
+            }
+
             // The "before" and "after" of the delta are measured document sums; no number here is invented.
             // Where the material went: into exactly one body, and that body must be named — one correct sum
             // is not enough, since an error in one body can be balanced by an error in another. Both a new
             // body and a changed existing one are accepted.
+            var created = snapshotChanges.NewBodies;
             var priorMoved = bodiesBefore
-                .Where(s => VolumeMoved(changes.DeltaOf(s.Index), s.Volume))
+                .Where(s => VolumeMoved(snapshotChanges.DeltaOf(s.Index), s.Volume))
                 .Select(s => s.Index)
                 .ToArray();
 
-            if (createdBodies.Count == 1 && priorMoved.Length == 0)
+            if (created.Count == 1 && priorMoved.Length == 0)
             {
-                measuredDelta = createdBodies[0].Volume;
-                measuredBasis = "new_body_volume";
-                attribution.Add(new NamedCheck(
+                sink?.Add(new NamedCheck(
                     "body_change_attribution",
-                    measuredDelta is not null,
-                    Observed: $"новое тело {createdBodies[0].Index}: V={Range(createdBodies[0].Volume)}; "
+                    created[0].Volume is not null,
+                    Observed: $"новое тело {created[0].Index}: V={Range(created[0].Volume)}; "
                               + $"прежних тел {bodiesBefore.Count}, изменилось 0",
                     Expected: "изменилось ровно одно тело — новое"));
+                return (created[0].Volume, "new_body_volume");
             }
-            else if (createdBodies.Count == 0 && priorMoved.Length == 1)
+
+            if (created.Count == 0 && priorMoved.Length == 1)
             {
                 var index = priorMoved[0];
-                measuredDelta = changes.DeltaOf(index);
-                measuredBasis = $"existing_body_{index}_delta";
-                attribution.Add(new NamedCheck(
+                var delta = snapshotChanges.DeltaOf(index);
+                sink?.Add(new NamedCheck(
                     "body_change_attribution",
-                    measuredDelta is not null,
-                    Observed: $"новых тел 0; тело {index} изменилось на {Range(measuredDelta)}",
+                    delta is not null,
+                    Observed: $"новых тел 0; тело {index} изменилось на {Range(delta)}",
                     Expected: "изменилось ровно одно тело — новое"));
+                return (delta, $"existing_body_{index}_delta");
             }
-            else
-            {
-                measuredDelta = null;
-                measuredBasis = "not_attributable";
-                attribution.Add(new NamedCheck(
-                    "body_change_attribution",
-                    false,
-                    Observed: $"новых тел {createdBodies.Count}"
-                              + (createdBodies.Count == 0
-                                  ? string.Empty
-                                  : $" [{string.Join("; ", createdBodies.Select(b => $"тел{b.Index} V={Range(b.Volume)}"))}]")
-                              + $"; прежних тел изменилось {priorMoved.Length}"
-                              + (priorMoved.Length == 0
-                                  ? string.Empty
-                                  : $" [{string.Join(", ", priorMoved.Select(i => $"тел{i}"))}]"),
-                    Expected: "изменилось ровно одно тело — новое"));
-            }
+
+            sink?.Add(new NamedCheck(
+                "body_change_attribution",
+                false,
+                Observed: $"новых тел {created.Count}"
+                          + (created.Count == 0
+                              ? string.Empty
+                              : $" [{string.Join("; ", created.Select(b => $"тел{b.Index} V={Range(b.Volume)}"))}]")
+                          + $"; прежних тел изменилось {priorMoved.Length}"
+                          + (priorMoved.Length == 0
+                              ? string.Empty
+                              : $" [{string.Join(", ", priorMoved.Select(i => $"тел{i}"))}]"),
+                Expected: "изменилось ровно одно тело — новое"));
+            return (null, "not_attributable");
         }
 
-        // Expected change = the analytic area of the profile the server itself drew × depth: the region the
-        // contours enclose (a contour inside another is a hole), recomputed from the whole profile rather than
-        // remembered as a number. When the region is not analytically known (arcs, free polylines, touching
-        // contours, a profile drawn outside this session), the answer says so.
-        // INVARIANT: an expectation that CANNOT be computed yields NO expected_basis / volume_delta check with
-        // passed=false; its reason goes to unverified_aspects instead. "Not confirmed" and "checked and did not
-        // match" are different states, and a not_computable check on a correct feature named the second.
+        var (measuredDelta, measuredBasis) = MeasureDelta(changes, attribution);
+
+        // The analytic figure = the area of the region the drawn profile encloses (a contour inside another
+        // is a hole) × depth. It is an UPPER BOUND of the material the feature can move, not its exact
+        // value: an overlapping boss adds less, a cut through a cavity removes less.
+        // INVARIANT: an expectation that CANNOT be computed yields NO expected_basis / volume_delta check
+        // with passed=false; its reason goes to unverified_aspects. "Not confirmed" and "checked and did not
+        // match" are different states.
         // History: docs/decisions/adapter-core.md#extrude-self-check
-        double? expected = null;
-        string? expectedBasis = null;
+        // History: docs/decisions/adapter-core.md#volume-bound
+        double? upperBound = null;
+        string? boundBasis = null;
         string? expectedUnavailable = null;
         var profileOutcome = _sketchProfiles.TryGetValue(command.SketchRef, out var profile)
             ? profile.Outcome
@@ -1328,8 +1330,8 @@ public sealed partial class Api5Session
             // the resolved target body, not whatever GetMainBody returns in a multi-body part.
             if (ThroughExtentMm(document, target.Sketch, bodyTarget?.Body) is double extentMm)
             {
-                expected = profileAreaMm2 * extentMm;
-                expectedBasis = $"profile_area_x_body_extent_{extentMm:0.####}mm";
+                upperBound = profileAreaMm2 * extentMm;
+                boundBasis = $"profile_area_x_body_extent_{extentMm:0.####}mm";
             }
             else
             {
@@ -1339,8 +1341,8 @@ public sealed partial class Api5Session
         }
         else
         {
-            expected = profileAreaMm2 * DepthOf(command);
-            expectedBasis = "profile_area_x_depth";
+            upperBound = profileAreaMm2 * DepthOf(command);
+            boundBasis = "profile_area_x_depth";
         }
 
         var checks = new List<NamedCheck>
@@ -1349,11 +1351,12 @@ public sealed partial class Api5Session
             new("body_present", bodyCount >= 1, Observed: bodyCount.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
 
-        if (expectedBasis is not null)
+        if (boundBasis is not null)
         {
-            // Emitted ONLY when the expectation exists: a check with passed=false here said "the basis is
-            // wrong" where the truth was "there is no basis to state".
-            checks.Add(new NamedCheck("expected_basis", true, Observed: expectedBasis));
+            // Emitted ONLY when the analytic figure exists: a check with passed=false here said "the basis
+            // is wrong" where the truth was "there is no basis to state". The basis names where the figure
+            // comes from; in the equality case that figure IS the exact expectation.
+            checks.Add(new NamedCheck("expected_basis", true, Observed: boundBasis));
         }
 
         // Reported always, gated only for a boss. A cut may divide one body into two (a through slot
@@ -1371,29 +1374,44 @@ public sealed partial class Api5Session
 
         checks.AddRange(attribution);
 
+        // INVARIANT: the prism is an UPPER BOUND of the material this feature moved, so a gain inside it is
+        // NOT a failed check — an overlapping boss adds less than the prism and a cut through a cavity
+        // removes less, and neither is a defect. INVARIANT: the bound still judges what it can — a gain
+        // above the prism, a zero gain and a gain of the wrong sign stay failures, so extra material and a
+        // no-op are still caught.
+        // History: docs/decisions/adapter-core.md#volume-bound
         var geometryConfirmed = false;
-        if (expected is double expectedDelta)
+        string? expectedNotComputed = null;
+        var volumeDeltaFailed = false;
+        var bound = VolumeBound.Evaluate(measuredDelta, upperBound);
+        switch (bound.Verdict)
         {
-            if (measuredDelta is not double measured)
-            {
+            case VolumeBoundVerdict.Confirmed:
+                geometryConfirmed = true;
+                checks.Add(new NamedCheck("volume_delta", true,
+                    Observed: Mm3(bound.MeasuredMm3), Expected: Mm3(bound.BoundMm3)));
+                break;
+
+            case VolumeBoundVerdict.WithinBound:
+                // The bound check is the only claim the measurement supports; the exact figure is unknown.
+                checks.Add(new NamedCheck("volume_upper_bound", true,
+                    Observed: Mm3(bound.MeasuredMm3), Expected: "≤ " + Mm3(bound.BoundMm3)));
+                expectedNotComputed = bound.Reason;
+                break;
+
+            case VolumeBoundVerdict.OutsideBound:
+                volumeDeltaFailed = true;
+                checks.Add(new NamedCheck("volume_delta", false,
+                    Observed: Mm3(bound.MeasuredMm3), Expected: Mm3(bound.BoundMm3)));
+                break;
+
+            case VolumeBoundVerdict.Unread:
                 // An unread delta is "not confirmed", not zero: zero would pass off the unverified as measured.
-                checks.Add(new NamedCheck(
-                    "volume_delta",
-                    false,
-                    Observed: measuredBasis == "not_attributable"
-                        ? "no_single_body_changed"
-                        : "no_delta_reading",
-                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
-            }
-            else
-            {
-                geometryConfirmed = Math.Abs(measured - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-                checks.Add(new NamedCheck(
-                    "volume_delta",
-                    geometryConfirmed,
-                    Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
-            }
+                volumeDeltaFailed = true;
+                checks.Add(new NamedCheck("volume_delta", false,
+                    Observed: measuredBasis == "not_attributable" ? "no_single_body_changed" : "no_delta_reading",
+                    Expected: Mm3(bound.BoundMm3)));
+                break;
         }
 
         // Attribution is required exactly where it was computed: base has no target, and without it "a delta
@@ -1401,12 +1419,47 @@ public sealed partial class Api5Session
         // selector_choose_type / target_body_affected / nontarget_bodies_unchanged below.
         geometryConfirmed &= attribution.All(c => c.Passed);
 
+        // The client's OWN expectation is judged separately from the prism, and the bound rule does NOT
+        // weaken it: a declared expectation is the exact figure the caller holds the feature to. INVARIANT:
+        // a declared expectation that did not hold is a FAILED CHECK, a warning and a lowered level — never
+        // a refusal, because the model may read one operation behind.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        // History: docs/decisions/adapter-core.md#volume-bound
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeDeltaMm3, measuredDelta, ReReadMeasuredDelta);
+        if (declared.IsDeclared)
+        {
+            checks.Add(DeclaredExpectation.Check("expected_volume_delta", declared));
+            geometryConfirmed |= declared.IsConfirmed;
+        }
+
+        // The re-read repeats the MEASUREMENT by the same rule as the first read — the "before" side is a
+        // pre-operation number and is not re-read — so a stale read does not become a false mismatch.
+        double? ReReadMeasuredDelta() =>
+            MeasureDelta(CompareBodySnapshots(bodiesBefore, ReadBodySnapshots(document.PartNow())), null).Delta;
+
         var unverified = new List<string>();
         if (expectedUnavailable is not null)
         {
             // Named BEFORE the other aspects: this is why the feature is not geometry_checked, and it is
             // a statement about the expectation, not about the geometry that was built.
             unverified.Add(expectedUnavailable);
+        }
+
+        if (expectedNotComputed is not null && !declared.IsDeclared)
+        {
+            // The prism is only an upper bound here, so the exact figure is unknown — named, not hidden.
+            // With a client-declared expectation the exact figure IS known and that check judges it instead.
+            unverified.Add(expectedNotComputed);
+        }
+
+        if (declared.IsNotConfirmed || declared.IsUnverifiable)
+        {
+            // FIRST among the gaps, as at every other call site: this is the expectation the CALLER asked
+            // for, and the reason the level was capped. "We could not compare" is a gap, never a mismatch.
+            unverified.Insert(0, declared.IsNotConfirmed
+                ? DeclaredExpectation.NotConfirmedReason("приращение объёма выдавливания", declared)
+                : DeclaredExpectation.UnverifiableReason("приращение объёма выдавливания", declared));
         }
 
         if (bodyTarget is not null)
@@ -1551,9 +1604,12 @@ public sealed partial class Api5Session
             unverified.Add("profile_inside_target_not_proven — сверены габариты профиля и тела по двум осям плоскости, вхождение контура в материал не проверялось");
         }
 
-        if (expected is not null && !geometryConfirmed)
+        if (volumeDeltaFailed)
         {
-            unverified.Add("volume_delta_not_confirmed — КОМПАС сообщает только об успехе вызова; пока измерение не совпало, признак считается недоказанным");
+            // The reason travels with the failure: "outside the bound" and "the delta could not be read" are
+            // different facts, and one generic line would name neither.
+            unverified.Add(bound.Reason
+                ?? "volume_delta_not_confirmed — КОМПАС сообщает только об успехе вызова; пока измерение не совпало, признак считается недоказанным");
         }
 
         if (bodyTarget is null && attribution.Any(c => !c.Passed))
@@ -1604,10 +1660,33 @@ public sealed partial class Api5Session
             }
         }
 
+        // A declared expectation that did not hold caps the level: a mismatch never reads as geometry_checked.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        var level = geometryConfirmed
+            ? VerificationLevel.GeometryChecked
+            : VerificationLevel.CallReturned;
         var verification = new VerificationDto(
-            geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
+            DeclaredExpectation.CapLevel(level, declared),
             checks,
             unverified);
+
+        // Warnings of three different origins, one list: a declared expectation that did not hold is read
+        // first among the geometry-related ones, and a name is never dropped because another one exists.
+        var warnings = new List<string>();
+        if (DeclaredExpectation.Warnings(declared) is { } declaredWarnings)
+        {
+            warnings.AddRange(declaredWarnings);
+        }
+
+        if (material.Divergence is not null)
+        {
+            warnings.Add(material.Divergence);
+        }
+
+        if (towardMismatch is not null)
+        {
+            warnings.Add(towardMismatch);
+        }
 
         var hint = command.EndCondition == ExtrudeEndCondition.Through
             ? $"{command.Operation} насквозь"
@@ -1636,13 +1715,7 @@ public sealed partial class Api5Session
             material.Reason,
             material.Source,
             material.SketchNormal,
-            Warnings: (material.Divergence, towardMismatch) switch
-            {
-                (null, null) => null,
-                (not null, null) => new[] { material.Divergence },
-                (null, not null) => new[] { towardMismatch },
-                _ => new[] { material.Divergence, towardMismatch },
-            },
+            Warnings: warnings.Count == 0 ? null : warnings.ToArray(),
             MaterialTowardRequested: resolved.RequestedToward,
             DirectionResolved: resolved.RequestedToward is null ? null : DirectionWord(resolved.Direction),
             MaterialTowardRequestedAxis: resolved.RequestedAxis);
@@ -2065,6 +2138,12 @@ public sealed partial class Api5Session
     /// a measured volume is not dressed up as a match the kernel did not produce.</summary>
     private static string Range(double? value) =>
         value?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "нет";
+
+    /// <summary>A volume as a check reads it: invariant culture and a fixed scale, so the same figure reads
+    /// the same way in every locale; an unread volume is the word, never 0.</summary>
+    private static string Mm3(double? value) => value is double number
+        ? number.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
+        : "не читается";
 
     /// <summary>An integer reading for a report row: "нет" is "not read", never 0.</summary>
     private static string Range(int? value) =>

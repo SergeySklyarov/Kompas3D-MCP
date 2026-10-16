@@ -937,6 +937,13 @@ public sealed record ExtrudeCommand
 
     public string? TargetBodyRef { get; init; }
 
+    /// <summary>Analytic expectation of the MATERIAL this feature moves, in mm³: positive means material
+    /// added by base/boss and material removed by cut, so the sign is part of the quantity. Declared
+    /// SEPARATELY from the server's own prism (profile area × depth), which is only an upper bound of that
+    /// figure. A declared expectation that did not hold is a failed check, never a refusal.</summary>
+    /// <remarks>History: docs/decisions/adapter-core.md#volume-bound</remarks>
+    public double? ExpectedVolumeDeltaMm3 { get; init; }
+
     /// <summary>Revision the caller read; mismatch is REVISION_CONFLICT before anything is created.</summary>
     public required long ExpectedRevision { get; init; }
 }

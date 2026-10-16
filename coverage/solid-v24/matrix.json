@@ -899,7 +899,11 @@
     "F08.04.suppress_restore",
     "F08.04.delete_dependencies",
     "F08.04.negative_tests",
-    "F08.04.geometry_validation"
+    "F08.04.geometry_validation",
+    "EX46",
+    "EX48",
+    "EX49",
+    "EX49m"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -1012,7 +1016,8 @@
     "F08.06.suppress_restore",
     "F08.06.delete_dependencies",
     "F08.06.negative_tests",
-    "F08.06.geometry_validation"
+    "F08.06.geometry_validation",
+    "EX47"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",

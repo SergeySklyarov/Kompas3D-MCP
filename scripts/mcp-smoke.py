@@ -8015,6 +8015,26 @@ def drawing_checks(client, rep, app_id, workdir):
                        and demand_created is True) else "FAIL",
             f"read_back={(demand_read or '')[:70]!r} is_created={demand_created} "
             f"level={level(env)} error={code}")
+    # РАЗМЕЩЕНИЕ (наряд §2 (B)): размещение ПРОВЕРЯЕТСЯ ЧТЕНИЕМ габаритов блока (BlocksGabarits) и
+    # свободного места листа (GetPlaceInsideFrames) — а не признаком успеха записи. Блок, не влезающий
+    # в свободное место, переносится документированным ЗАПИСЫВАЕМЫМ BlocksGabarits, а остаток выхода
+    # назван явно (demand_outside_sheet). demand_placement_not_checked уходит ТОЛЬКО по такому чтению.
+    _ver = (result(env) or {}).get("verification") or {}
+    _checks = {c.get("name"): c for c in (_ver.get("checks") or [])}
+    _unver = _ver.get("unverified_aspects") or []
+    _within = _checks.get("demand_within_sheet") or {}
+    _outside_named = any("demand_outside_sheet" in u for u in _unver)
+    _unchecked = any("demand_placement_not_checked" in u for u in _unver)
+    rep.add("DRW-06.technical_demand.placement",
+            "размещение блока техтребований ПРОВЕРЯЕТСЯ ЧТЕНИЕМ габаритов блока и свободного места "
+            "листа: проверка demand_within_sheet называет числа, выход за пределы листа назван явно "
+            "(demand_outside_sheet), а demand_placement_not_checked уходит из unverified_aspects "
+            "только по такому подтверждению",
+            "PASS" if (not code and "demand_within_sheet" in _checks and not _unchecked
+                       and (_within.get("passed") is True or _outside_named)) else "FAIL",
+            f"within_sheet={_within.get('observed')!r} passed={_within.get('passed')} "
+            f"auto_placement={(_checks.get('demand_auto_placement') or {}).get('passed')} "
+            f"unverified={_unver}")
     env, code = call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": ""})
     empty_demand_ok = (not code and result(env).get("read_back") == "")

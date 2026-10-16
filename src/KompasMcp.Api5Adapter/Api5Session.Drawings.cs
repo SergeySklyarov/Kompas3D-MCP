@@ -34,6 +34,11 @@ public sealed partial class Api5Session
         ["dimetric"] = 10,
     };
 
+    /// <summary>Half a tenth of a millimetre: a block touching the frame is not "outside the sheet".
+    /// The kernel returns gabarits and frames as doubles, so an exact comparison would refuse a block
+    /// that sits exactly on the frame because of floating-point noise.</summary>
+    private const double PlacementToleranceMm = 0.05;
+
     /// <summary>Create standard associative views of a saved model file.</summary>
     /// <remarks>DOC: <c>iviews_addstandartviews.html</c> —
     /// <c>AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)</c>;
@@ -272,6 +277,18 @@ public sealed partial class Api5Session
         if (!allMatched)
         {
             unverified.Add("view_edit_not_confirmed — перечитанное свойство расходится с заданным");
+        }
+
+        // MEASURED: a dimension's Radius is stored in SHEET mm and taken as-is (see
+        // #drawing-dimensions-scale), while its anchor points are in VIEW mm and follow the scale.
+        // Changing the scale of a view that already holds dimensions therefore leaves those dimensions
+        // on the OLD sheet radius: their geometry no longer matches the rescaled projection. That is
+        // named here rather than returned as a silent success.
+        if (command.Scale is not null && ReadDimensions(document, view, limit: 1).Dimensions.Count > 0)
+        {
+            unverified.Add("dimensions_keep_sheet_radius — в виде уже есть размеры: их радиус хранится "
+                + "в мм ЛИСТА и при смене масштаба ядром не пересчитывается, поэтому геометрия этих "
+                + "размеров расходится с масштабированной проекцией; размеры надо поставить заново");
         }
 
         var verification = new VerificationDto(
@@ -1050,8 +1067,32 @@ public sealed partial class Api5Session
             ComApartment.Release(text);
         }
 
+        // DOC: itechnicaldemand_autoplacement.html — AutoPlacement is a WRITABLE parameter applied by
+        // Update(). It is set BEFORE Update() runs, so the kernel places the block itself while the
+        // parameters are being applied, instead of the server guessing coordinates. A refused flag
+        // write is not fatal here: the read below names the state it actually found.
+        try
+        {
+            demand.AutoPlacement = true;
+        }
+        catch (COMException)
+        {
+            // Named by the placement read; the flag is a parameter, not the verdict.
+        }
+
         ConfirmUpdate(demand.Update(), "technical_demand");
         BumpRevision(document, "drawing.set_technical_demand");
+
+        // INVARIANT: placement is never assumed from the flag write returning true — the block's
+        // bounds and the sheet's free area are READ back and compared. MEASURED: the flag alone does
+        // not relocate a block that already sits outside, so the documented WRITABLE BlocksGabarits is
+        // used for that case and the outcome is read back again.
+        var placement = ReadDemandPlacement(document, demand);
+        if (placement is { WithinSheet: false, Gabarits: { Count: 4 } gabarits, Frames: { Count: 4 } frames })
+        {
+            TryMoveDemandInsideSheet(demand, gabarits, frames);
+            placement = ReadDemandPlacement(document, demand);
+        }
 
         // Read the block back: the display flag and the text are the evidence, not the setter or Update().
         string? readBack = null;
@@ -1077,11 +1118,29 @@ public sealed partial class Api5Session
             new("text_read_back", matched, matched ? "совпало" : (readBack is null ? "не прочитано" : "расхождение"), "совпало"),
             new("is_created", isCreated == true, isCreated?.ToString() ?? "null", "true"),
         };
-        var unverified = new List<string>
+        if (placement.AutoPlacement is not null)
         {
-            "demand_placement_not_checked — сервер не проверяет размещение блока требований на листе "
-            + "(AutoPlacement/BlocksGabarits не задаются)",
-        };
+            checks.Add(new("demand_auto_placement", placement.AutoPlacement == true,
+                placement.AutoPlacement.ToString(), "true"));
+        }
+        if (placement.WithinSheet is not null)
+        {
+            checks.Add(new("demand_within_sheet", placement.WithinSheet == true,
+                placement.Observed ?? "не прочитано", "в пределах листа"));
+        }
+
+        var unverified = new List<string>();
+        if (placement.WithinSheet is null)
+        {
+            unverified.Add(
+                "demand_placement_not_checked — размещение блока не подтверждено чтением границ: "
+                + (placement.Reason ?? "члены размещения не отдали значений"));
+        }
+        else if (placement.WithinSheet == false)
+        {
+            unverified.Add("demand_outside_sheet — блок технических требований выходит за пределы "
+                + "листа: " + placement.Observed);
+        }
         if (!matched)
         {
             unverified.Add("demand_text_not_matched — перечитанный текст расходится с записанным");
@@ -1183,17 +1242,34 @@ public sealed partial class Api5Session
         }
 
         var isCreated = SafeBool(() => demand.IsCreated);
+        var placement = ReadDemandPlacement(document, demand);
         var checks = new List<NamedCheck>
         {
             new("is_created", isCreated == true, isCreated?.ToString() ?? "null", "true"),
         };
+        if (placement.WithinSheet is not null)
+        {
+            checks.Add(new("demand_within_sheet", placement.WithinSheet == true,
+                placement.Observed ?? "не прочитано", "в пределах листа"));
+        }
+
+        var unverified = new List<string>();
+        if (placement.WithinSheet is null)
+        {
+            unverified.Add(
+                "demand_placement_not_checked — размещение блока не подтверждено чтением границ: "
+                + (placement.Reason ?? "члены размещения не отдали значений"));
+        }
+        else if (placement.WithinSheet == false)
+        {
+            unverified.Add("demand_outside_sheet — блок технических требований выходит за пределы "
+                + "листа: " + placement.Observed);
+        }
+
         var verification = new VerificationDto(
             isCreated == true ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
             checks,
-            new List<string>
-            {
-                "demand_placement_not_checked — сервер не проверяет размещение блока требований на листе",
-            });
+            unverified);
         return new GetTechnicalDemandResult(text, isCreated, verification);
     }
 
@@ -2072,6 +2148,140 @@ public sealed partial class Api5Session
                 $"Чертёж «{document.Id}» не отдал блок технических требований (TechnicalDemand = null).",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
+    }
+
+    /// <summary>Where the technical-requirements block sits on its sheet, as READ from the document.</summary>
+    /// <remarks>Every member is nullable on purpose: <c>null</c> means "the call did not happen" and
+    /// differs from <c>false</c> ("the call happened and said no") — mixing them would pass a failed read
+    /// off as a product refusal. History: docs/decisions/drawings.md#technical-demand-placement</remarks>
+    private sealed record DemandPlacement(
+        bool? AutoPlacement,
+        bool? WithinSheet,
+        string? Observed,
+        string? Reason,
+        IReadOnlyList<double>? Gabarits = null,
+        IReadOnlyList<double>? Frames = null);
+
+    /// <summary>Read the block's bounds and the sheet's free area; never writes.</summary>
+    /// <remarks>DOC: <c>itechnicaldemand_blocksgabarits.html</c> — <c>BlocksGabarits</c> is a
+    /// <c>VT_ARRAY|VT_R8</c> of «габариты технических требований»; <c>ikompasdocument_layoutsheets.html</c>
+    /// and <c>ilayoutsheets_item.html</c> — the sheet; <c>ilayoutsheet_getplaceinsideframes.html</c> —
+    /// <c>GetPlaceInsideFrames(Left, Top, Right, Bottom)</c> gives «свободное место внутри рамок»,
+    /// Left/Top being the upper-left point and Right/Bottom the lower-right one.
+    /// History: docs/decisions/drawings.md#technical-demand-placement</remarks>
+    private DemandPlacement ReadDemandPlacement(DocumentEntry document, ITechnicalDemand demand)
+    {
+        var autoPlacement = SafeBool(() => demand.AutoPlacement);
+        var gabarits = SafeDoubles(() => demand.BlocksGabarits);
+        var frames = SafeDoubles(() => ReadSheetFrames(document));
+
+        if (gabarits is not { Count: 4 })
+        {
+            return new DemandPlacement(autoPlacement, null, null,
+                "BlocksGabarits не отдал четыре числа");
+        }
+        if (frames is not { Count: 4 })
+        {
+            return new DemandPlacement(autoPlacement, null, null,
+                "свободное место листа не прочитано");
+        }
+
+        var blockX = (Math.Min(gabarits[0], gabarits[2]), Math.Max(gabarits[0], gabarits[2]));
+        var blockY = (Math.Min(gabarits[1], gabarits[3]), Math.Max(gabarits[1], gabarits[3]));
+        var frameX = (Math.Min(frames[0], frames[2]), Math.Max(frames[0], frames[2]));
+        var frameY = (Math.Min(frames[1], frames[3]), Math.Max(frames[1], frames[3]));
+
+        var within = blockX.Item1 >= frameX.Item1 - PlacementToleranceMm
+            && blockX.Item2 <= frameX.Item2 + PlacementToleranceMm
+            && blockY.Item1 >= frameY.Item1 - PlacementToleranceMm
+            && blockY.Item2 <= frameY.Item2 + PlacementToleranceMm;
+
+        var observed = string.Format(
+            CultureInfo.InvariantCulture,
+            "блок x[{0:F1}..{1:F1}] y[{2:F1}..{3:F1}], лист x[{4:F1}..{5:F1}] y[{6:F1}..{7:F1}]",
+            blockX.Item1, blockX.Item2, blockY.Item1, blockY.Item2,
+            frameX.Item1, frameX.Item2, frameY.Item1, frameY.Item2);
+
+        return new DemandPlacement(autoPlacement, within, observed, null, gabarits, frames);
+    }
+
+    /// <summary>Move the block to the free area's top-left corner through the WRITABLE
+    /// <c>BlocksGabarits</c>, keeping the block's own size.</summary>
+    /// <remarks>MEASURED: the auto-placement flag alone does NOT relocate a block that already sits
+    /// outside the sheet, so the documented write of <c>BlocksGabarits</c> is what actually sets the
+    /// placement; its four numbers are the two corner pairs in sheet mm ({0,2} = X, {1,3} = Y, measured
+    /// on a fresh drawing). A refused write is not fatal: the caller re-reads and names the result.
+    /// History: docs/decisions/drawings.md#technical-demand-placement</remarks>
+    private void TryMoveDemandInsideSheet(
+        ITechnicalDemand demand, IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
+    {
+        var width = Math.Abs(gabarits[2] - gabarits[0]);
+        var height = Math.Abs(gabarits[3] - gabarits[1]);
+        var left = Math.Min(frames[0], frames[2]);
+        var top = Math.Max(frames[1], frames[3]);
+
+        try
+        {
+            demand.BlocksGabarits = new double[] { left, top - height, left + width, top };
+            demand.Update();
+        }
+        catch (COMException)
+        {
+            // Named by the re-read below: the write is a parameter, not the verdict.
+        }
+    }
+
+    /// <summary>The sheet's free area inside the frames, in sheet mm; <c>null</c> when unreadable.</summary>
+    private IReadOnlyList<double>? ReadSheetFrames(DocumentEntry document)
+    {
+        if (RequireDrawing7(document).LayoutSheets is not ILayoutSheets sheets || sheets.Count == 0)
+        {
+            return null;
+        }
+
+        if (sheets[(object)0] is not ILayoutSheet sheet)
+        {
+            return null;
+        }
+
+        return sheet.GetPlaceInsideFrames(out var left, out var top, out var right, out var bottom)
+            ? new[] { left, top, right, bottom }
+            : null;
+    }
+
+    private static IReadOnlyList<double>? SafeDoubles(Func<object?> call)
+    {
+        try
+        {
+            return AsDoubles(call());
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A COM <c>VT_ARRAY|VT_R8</c> as doubles; <c>null</c> when it is not a full numeric array.</summary>
+    private static IReadOnlyList<double>? AsDoubles(object? value)
+    {
+        if (value is not Array array)
+        {
+            return null;
+        }
+
+        var result = new double[array.Length];
+        var index = 0;
+        foreach (var item in array)
+        {
+            if (item is null)
+            {
+                return null;
+            }
+
+            result[index++] = Convert.ToDouble(item, CultureInfo.InvariantCulture);
+        }
+
+        return result;
     }
 
     private static void EnsurePoints(IReadOnlyList<double>? point, string name)

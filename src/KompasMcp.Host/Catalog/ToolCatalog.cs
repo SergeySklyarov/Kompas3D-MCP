@@ -2619,9 +2619,13 @@ public static class ToolCatalog
                 + "(справка v24: idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, "
                 + "itechnicaldemand_update.html, itechnicaldemand_iscreated.html). Ответ несёт "
                 + "перечитанный текст и признак IsCreated («отображение технических требований в "
-                + "документе»): успех Update() сам по себе доказательством не считается. ГРАНИЦА, "
-                + "НАЗВАННАЯ ПРЯМО: размещение блока на листе (AutoPlacement, BlocksGabarits) "
-                + "сервером не задаётся и не проверяется.",
+                + "документе»): успех Update() сам по себе доказательством не считается. РАЗМЕЩЕНИЕ "
+                + "БЛОКА: применяется документированное авторазмещение (ITechnicalDemand.AutoPlacement, "
+                + "itechnicaldemand_autoplacement.html), затем габариты блока (BlocksGabarits, "
+                + "itechnicaldemand_blocksgabarits.html) сверяются со свободным местом листа "
+                + "(ILayoutSheet.GetPlaceInsideFrames, ilayoutsheet_getplaceinsideframes.html); проверка "
+                + "demand_within_sheet называет числа. Выход блока за пределы листа — явное "
+                + "предупреждение demand_outside_sheet в unverified_aspects, а не молчаливый успех.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -2657,7 +2661,10 @@ public static class ToolCatalog
                 + "itechnicaldemand_text.html, itechnicaldemand_iscreated.html). Отдельный маршрут чтения "
                 + "нужен потому, что kompas_set_technical_demand СНАЧАЛА перезаписывает текст, и "
                 + "перечитывание совпадёт даже на документе, потерявшем блок при сохранении/переоткрытии. "
-                + "Этот инструмент не несёт ожидаемого текста и потому служит независимой проверкой.",
+                + "Этот инструмент не несёт ожидаемого текста и потому служит независимой проверкой. "
+                + "РАЗМЕЩЕНИЕ: читаются признак авторазмещения и габариты блока и сверяются со свободным "
+                + "местом листа (ITechnicalDemand.AutoPlacement/BlocksGabarits, "
+                + "ILayoutSheet.GetPlaceInsideFrames) — ничего не записывается.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.GetTechnicalDemand,

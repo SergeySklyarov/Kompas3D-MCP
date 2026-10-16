@@ -283,7 +283,8 @@ public partial class Api5Session
         // from the body, and the check stands after the two refusals above and before the declared
         // expectation: an axis on the wrong face is a more precise finding than a mismatched delta.
         // History: docs/decisions/adapter-features.md#edge-placement-other-ops
-        CheckHolePlacement(document, baseFacePlane, command.DiameterMm, referenceDto?.Id, checks, unverified);
+        CheckHolePlacement(document, baseFacePlane, command.DiameterMm,
+            command.Mode == HoleMode.BlindFlat, referenceDto?.Id, checks, unverified);
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = effect.Verdict == HoleEffectVerdict.Confirmed

@@ -197,7 +197,7 @@ public partial class Api5Session
         // then opens the wrong one, which the volume does not tell apart on a body with equivalent faces.
         // The placement is read AFTER the rebuild, so a refusal names the state that stayed in the tree.
         // History: docs/decisions/adapter-features.md#edge-placement-other-ops
-        CheckShellPlacement(document, requestedPlanes, reference.Id, checks, unverified);
+        CheckShellPlacement(document, requestedPlanes, faces.Count, reference.Id, checks, unverified);
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).

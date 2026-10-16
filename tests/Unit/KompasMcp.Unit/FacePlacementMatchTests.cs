@@ -66,17 +66,17 @@ public class FacePlacementMatchTests
         Assert.Equal("shell_face_not_removed", result.Code);
     }
 
-    /// <summary>A COPLANAR SIBLING smaller than the requested face is not "the requested face is still
-    /// there": the gap is named rather than turned into a refusal.</summary>
+    /// <summary>MEASURED on the plate: the shell leaves the 704 mm² rim of the wall in the requested
+    /// plane, so a remainder SMALLER than the requested face is not that face still being there.</summary>
     [Fact]
-    public void RemovedFaceGone_NamesTheGapForASmallerCoplanarRemainder()
+    public void RemovedFaceGone_ConfirmsWhenOnlyASmallerCoplanarRemainderStays()
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
-        var after = new[] { Face([0d, 0d, 10d], [0d, 0d, 1d], 500d) };
+        var after = new[] { Face([0d, 0d, 10d], [0d, 0d, 1d], 704d) };
 
         var result = FacePlacementMatch.RemovedFaceGone(requested, after);
 
-        Assert.Equal(FacePlacementMatch.Verdict.Unverified, result.Verdict);
+        Assert.Equal(FacePlacementMatch.Verdict.Confirmed, result.Verdict);
         Assert.False(result.IsRefusal);
     }
 
@@ -109,7 +109,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 10d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 10d, true);
 
         Assert.Equal(FacePlacementMatch.Verdict.Confirmed, result.Verdict);
     }
@@ -121,7 +121,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [50d, 15d, 5d], [1d, 0d, 0d], 10d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [50d, 15d, 5d], [1d, 0d, 0d], 10d, true);
 
         Assert.True(result.IsRefusal);
         Assert.Equal("hole_on_other_face", result.Code);
@@ -134,7 +134,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 6d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 6d, true);
 
         Assert.True(result.IsRefusal);
         Assert.Equal("hole_on_other_face", result.Code);
@@ -146,7 +146,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 4d], [0d, 0d, 1d], 6d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 4d], [0d, 0d, 1d], 6d, true);
 
         Assert.Equal(FacePlacementMatch.Verdict.Confirmed, result.Verdict);
     }
@@ -158,7 +158,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, -1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 10d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 10d, true);
 
         Assert.Equal(FacePlacementMatch.Verdict.Confirmed, result.Verdict);
     }
@@ -170,10 +170,36 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], null);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], null, true);
 
         Assert.Equal(FacePlacementMatch.Verdict.Unverified, result.Verdict);
         Assert.False(result.IsRefusal);
+    }
+
+    /// <summary>MEASURED: a through hole's pilot cylinder is CUT by its counterbore, so it spans only the
+    /// part below the recess (z 0…6 on a 10-thick plate). The requested plane at z = 10 is then outside
+    /// its extent and that must NOT be read as a wrong face.</summary>
+    [Fact]
+    public void HoleAxisOnFace_DoesNotConsultTheExtentWhenTheCylinderDoesNotStartAtTheEntrance()
+    {
+        var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
+
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 1d], 6d, false);
+
+        Assert.Equal(FacePlacementMatch.Verdict.Confirmed, result.Verdict);
+        Assert.False(result.IsRefusal);
+    }
+
+    /// <summary>The direction is still decisive for a through hole: another face is still refused.</summary>
+    [Fact]
+    public void HoleAxisOnFace_StillRefusesAnotherFaceWhenTheCylinderDoesNotStartAtTheEntrance()
+    {
+        var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
+
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [50d, 15d, 5d], [1d, 0d, 0d], 6d, false);
+
+        Assert.True(result.IsRefusal);
+        Assert.Equal("hole_on_other_face", result.Code);
     }
 
     [Fact]
@@ -181,7 +207,7 @@ public class FacePlacementMatchTests
     {
         var requested = Face([0d, 0d, 10d], [0d, 0d, 1d], 8000d);
 
-        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 0d], 10d);
+        var result = FacePlacementMatch.HoleAxisOnFace(requested, [25d, 15d, 0d], [0d, 0d, 0d], 10d, true);
 
         Assert.Equal(FacePlacementMatch.Verdict.Unverified, result.Verdict);
     }

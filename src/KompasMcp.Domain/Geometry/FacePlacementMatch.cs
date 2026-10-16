@@ -48,9 +48,10 @@ public static class FacePlacementMatch
     }
 
     /// <summary>Whether the face the shell was asked to REMOVE is really gone from the body.</summary>
-    /// <remarks>A removed face leaves no face in its plane. The area guard keeps a COPLANAR SIBLING
-    /// (a face the body had before the operation, in the same plane) from reading as "the requested
-    /// face is still there": only a remainder at least as large as the requested face is that.
+    /// <remarks>A removed face leaves no face in its plane, but the operation does NOT leave the plane
+    /// empty: MEASURED, a shell that removes the top face of a 100×80×10 plate leaves the 704 mm² rim of
+    /// the wall in the very same plane. So the criterion is the requested face's FULL AREA: only a
+    /// remainder at least as large as the requested face is that face still being there.
     /// <paramref name="facesAfter"/> is every planar face of the body AFTER the operation.</remarks>
     public static Result RemovedFaceGone(PlanarFace requested, IReadOnlyList<PlanarFace> facesAfter)
     {
@@ -63,7 +64,7 @@ public static class FacePlacementMatch
         if (double.IsNaN(requested.AreaMm2) || requested.AreaMm2 <= 0d)
         {
             return Result.Unverified(
-                "Площадь запрошенной грани не прочитана: отличить «грани нет» от «остался кусок» нечем.");
+                "Площадь запрошенной грани не прочитана: отличить «грани нет» от «осталась часть» нечем.");
         }
 
         var remaining = 0d;
@@ -92,28 +93,25 @@ public static class FacePlacementMatch
                 + Num(requested.AreaMm2) + " мм²: снята НЕ запрошенная грань.");
         }
 
-        if (remaining > AreaToleranceMm2)
-        {
-            return Result.Unverified(
-                "В плоскости запрошенной грани осталась грань площадью " + Num(remaining) + " мм² из "
-                + Num(requested.AreaMm2) + " мм²: это меньше запрошенной, и «снята запрошенная» от "
-                + "«снята её часть» этим чтением не отличается.");
-        }
-
         return Result.Confirmed(
-            "В плоскости запрошенной грани граней не осталось: снята именно она.");
+            "В плоскости запрошенной грани граней её площади не осталось (остаток " + Num(remaining)
+            + " мм² из " + Num(requested.AreaMm2) + " мм²): снята именно она.");
     }
 
     /// <summary>Whether the drilled axis lies ON the face the hole was asked to enter.</summary>
-    /// <param name="axisExtentMm">The length of the cylindrical face along its axis, or <c>null</c> when
-    /// the kernel did not report it. With it, the requested plane must CUT the axis segment — a hole
-    /// that opens onto the opposite, parallel face has its whole cylinder on one side of the requested
-    /// plane and is caught; without it the direction alone decides and the gap is named.</param>
+    /// <param name="axisExtentMm">Length of the cylindrical face along its axis, or <c>null</c> when the
+    /// kernel did not report it. Consulted only when <paramref name="cylinderStartsAtEntrance"/>: there the
+    /// requested plane must CUT the axis segment.</param>
+    /// <param name="cylinderStartsAtEntrance">True for a blind hole, whose cylindrical face runs from the
+    /// entrance into the body. MEASURED: a through hole's pilot cylinder is CUT by its counterbore or
+    /// countersink, so it spans only the part below the recess and the requested plane is legitimately
+    /// outside its extent — using the extent there refused correct holes.</param>
     public static Result HoleAxisOnFace(
         PlanarFace requested,
         IReadOnlyList<double> axisOrigin,
         IReadOnlyList<double> axisDirection,
-        double? axisExtentMm)
+        double? axisExtentMm,
+        bool cylinderStartsAtEntrance)
     {
         if (!Unit(requested.Normal, out var normal))
         {
@@ -137,6 +135,13 @@ public static class FacePlacementMatch
             return Result.Refused("hole_on_other_face",
                 "Ось отверстия не перпендикулярна запрошенной грани (косинус " + Num(along)
                 + " вместо 1): отверстие построено НЕ по запрошенной грани.");
+        }
+
+        if (!cylinderStartsAtEntrance)
+        {
+            return Result.Confirmed(
+                "Ось отверстия перпендикулярна запрошенной грани. Вход именно на ней этим чтением не "
+                + "подтверждается: у сквозного режима цилиндр пилота рассечён выточкой или зенковкой.");
         }
 
         if (axisExtentMm is not double extent || !(extent > 0d))

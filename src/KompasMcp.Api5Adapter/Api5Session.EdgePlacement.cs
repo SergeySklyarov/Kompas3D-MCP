@@ -391,10 +391,19 @@ public partial class Api5Session
     private static void CheckShellPlacement(
         DocumentEntry document,
         IReadOnlyList<(string Reference, FacePlacementMatch.PlanarFace Placement)> requested,
+        int requestedTotal,
         string featureReference,
         List<NamedCheck> checks,
         List<string> unverified)
     {
+        if (requested.Count < requestedTotal)
+        {
+            unverified.Add(
+                "shell_placement_not_checked — запрошенных граней " + requestedTotal
+                + ", из них прочиталось как плоские " + requested.Count
+                + ": прилегание снятой грани к запрошенной проверить нечем");
+        }
+
         var after = PlanarFacePlacements(document);
         foreach (var (reference, placement) in requested)
         {
@@ -432,10 +441,15 @@ public partial class Api5Session
     }
 
     /// <summary>Refuses when the drilled axis did not land on the requested base face.</summary>
+    /// <param name="cylinderStartsAtEntrance">True for a blind hole: its cylindrical face runs from the
+    /// entrance into the body, so the requested plane must cut it. MEASURED: a through hole's pilot
+    /// cylinder is cut by its counterbore or countersink, so its extent legitimately lies wholly on one
+    /// side of the requested plane — the extent must not be consulted there.</param>
     private static void CheckHolePlacement(
         DocumentEntry document,
         FacePlacementMatch.PlanarFace? baseFace,
         double diameterMm,
+        bool cylinderStartsAtEntrance,
         string? featureReference,
         List<NamedCheck> checks,
         List<string> unverified)
@@ -460,7 +474,7 @@ public partial class Api5Session
 
         var results = cylinders
             .Select(c => (Cylinder: c, Result: FacePlacementMatch.HoleAxisOnFace(
-                baseFace, c.Point, c.Direction, c.ExtentMm)))
+                baseFace, c.Point, c.Direction, c.ExtentMm, cylinderStartsAtEntrance)))
             .ToList();
 
         var confirmed = results.Where(r => r.Result.Verdict == FacePlacementMatch.Verdict.Confirmed).ToList();

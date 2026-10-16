@@ -22616,6 +22616,34 @@ def release_040_checks(client, rep, app_id, workdir):
             "axis=%s err=%s ссылка=%s"
             % (axis_ref, error_code(a_env), ref_id(result(a_env).get("reference_id"))))
 
+    # R40.09 — РАЗМЕЩЕНИЕ наклонной плоскости: она построена ВОКРУГ ЗАПРОШЕННОЙ прямой и под
+    # запрошенным углом. Наряд `DEBT_EDGE_PLACEMENT` (долг 23): ссылка на базовую прямую может
+    # разрешиться в другую прямую, и объём с габаритом этого не различают. Признак читается ИЗ МОДЕЛИ
+    # отдельным инструментом (`kompas_list_aux_geometry` публикует `angle_deg` и `line_name`), рядом
+    # стоят проверки продукта `angle_read_back` и `base_line_read_back` — два маршрута на одно
+    # утверждение, а не один с самим собой.
+    rows_after, _ = aux_rows(doc3)
+    tilted = next((r for r in rows_after if r.get("name") == "r040-tilted"), None)
+    checks_a = checks_of(a_env)
+    angle_check = checks_a.get("angle_read_back")
+    line_check = checks_a.get("base_line_read_back")
+    read_angle = (tilted or {}).get("angle_deg")
+    read_line = (tilted or {}).get("line_name")
+    rep.add("R40.09", "create_aux_geometry plane/angle: плоскость наклонена вокруг ЗАПРОШЕННОЙ "
+                      "прямой и под запрошенным углом — читается из модели",
+            "PASS" if (tilted is not None and read_angle is not None
+                       and abs(float(read_angle) - 30.0) <= 1e-6
+                       and read_line == "r040-axis"
+                       and angle_check is not None and angle_check.get("passed") is True
+                       and line_check is not None and line_check.get("passed") is True) else "FAIL",
+            "плоскость=«%s» угол_из_модели=%s (запрошено 30.0) базовая_прямая_из_модели=%r "
+            "(запрошена «r040-axis»); проверки продукта: angle_read_back=%s base_line_read_back=%s"
+            % ((tilted or {}).get("name"), read_angle, read_line,
+               json.dumps(angle_check, ensure_ascii=False),
+               json.dumps(line_check, ensure_ascii=False)),
+            details={"tilted": tilted, "angle_read_back": angle_check,
+                     "base_line_read_back": line_check})
+
 
 def e08_checks(client, rep, app_id, workdir):
     """Группа E08: оставшиеся находки клиента после 0.4.0 (наряд `CLIENT_BUGS_20261008`).
@@ -31363,6 +31391,47 @@ def hole_checks(client, rep, app_id, workdir):
                         "FAIL", "ссылка на признак не выдана в details отказа")
         close(doc_f)
 
+    # ═════════════ HO.27: ось отверстия лежит на ЗАПРОШЕННОЙ грани ═════════════
+    # Наряд `DEBT_EDGE_PLACEMENT` (долг 23): опорная грань адресуется ССЫЛКОЙ, и ядро может разрешить
+    # её в другую грань тела, а на теле с равнозначными гранями объём переноса не различает. Признак —
+    # ось найденной цилиндрической грани запрошенного диаметра: она обязана быть перпендикулярна
+    # нормали запрошенной грани, а её цилиндр — пересекать плоскость запрошенной грани. Ось читается
+    # ИЗ ТЕЛА (`kompas_read_topology`), а не берётся из ответа создания: две проверки одного
+    # утверждения двумя маршрутами — это то, что отличает «параметр перечитан» от «ось измерена».
+    p27_desc = "отверстие: ось лежит на ЗАПРОШЕННОЙ грани, а не на другой"
+    doc_27, rev_27, err_27 = new_doc("SM07-placement")
+    if not doc_27:
+        rep.add("HO.27", p27_desc, "FAIL", f"документ не создан: {err_27}")
+    else:
+        rev_27, top_27, body_27, berr_27 = build_plate_xy(
+            doc_27, rev_27, "h-placement", 120.0, 80.0, 32.0)
+        if berr_27:
+            rep.add("HO.27", p27_desc, "FAIL", f"заготовка: {berr_27}")
+        else:
+            _e, env_27, _r = client.tool("kompas_hole", {
+                "face_ref": top_27, "expected_revision": rev_27, "mode": "blind_flat",
+                "diameter_mm": 10.0, "depth_mm": 8.0,
+                "expected_volume_delta_mm3": 628.3185307179587,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            checks_27 = {c.get("name"): c for c in checks_of((env_27 or {}).get("result"))}
+            placement_27 = checks_27.get("axis_on_requested_face")
+            cyl_27 = [f for f in faces(doc_27, body_27)
+                      if f.get("surface_type") == "cylinder"
+                      and f.get("radius_mm") is not None and abs(f["radius_mm"] - 5.0) <= 0.01]
+            axis_27 = (cyl_27[0].get("axis_mm") or []) if cyl_27 else []
+            axis_ok_27 = len(axis_27) >= 3 and abs(abs(float(axis_27[2])) - 1.0) <= 1e-6
+            rep.add("HO.27", p27_desc,
+                    "PASS" if (error_code(env_27) is None and placement_27 is not None
+                               and placement_27.get("passed") is True
+                               and len(cyl_27) == 1 and axis_ok_27) else "FAIL",
+                    f"err={error_code(env_27)} axis_on_requested_face="
+                    f"{json.dumps(placement_27, ensure_ascii=False) if placement_27 else 'проверки нет'}; "
+                    f"цилиндров_Ø10={len(cyl_27)} ось_из_тела={axis_27} (запрошена верхняя грань, "
+                    f"нормаль +Z); V={volume(body_27)} msg={describe(env_27)[1]}",
+                    details={"check": placement_27, "axis_mm": axis_27,
+                             "cylinders": len(cyl_27)})
+        close(doc_27)
+
 
 def rotation_checks(client, rep, app_id, workdir):
     """RO: вращение SM-03 через MCP — три вида операции, ось, полный оборот, границы контракта.
@@ -35389,6 +35458,32 @@ def b5_acceptance_checks(client, rep, app_id, workdir):
            f"объём с цепочкой 0/0: {v} (ожидание {LOFT_PYRAMID} — как БЕЗ цепочки); цепочек "
            f"прочитано из модели: {chains} (ожидание 1): «цепочка создана» объёмом не доказывается",
            details={"volume": v, "couplings_count": chains})
+
+    # B5.10 — РАЗМЕЩЕНИЕ ОБОЛОЧКИ: снята ЗАПРОШЕННАЯ грань. Наряд `DEBT_EDGE_PLACEMENT` (долг 23):
+    # грань адресуется ССЫЛКОЙ, ядро может разрешить её в другую грань тела, а на теле с
+    # равнозначными гранями объём переноса не различает (перенос верхней грани пластины на нижнюю
+    # не меняет объём вообще). Строка судится ДВУМЯ путями: проверкой продукта
+    # (`requested_face_removed`) И независимым чтением ТОПОЛОГИИ — в плоскости запрошенной верхней
+    # грани (нормаль +Z, площадь 8000) после оболочки граней быть не должно, тогда как дно полости
+    # лежит в плоскости z = 8 и площадью 7296 от запрошенной отличается.
+    d, _r, env, err = mk_shell("B510", want=SHELL_INWARD2)
+    checks = checks_of((env or {}).get("result"))
+    placement = next((c for c in checks if c.get("name") == "requested_face_removed"), None)
+    top_gone = not any(
+        abs(float((f.get("normal_at_center") or [None, None, None])[2] or 0.0) - 1.0) < 1e-9
+        and f.get("area_mm2") is not None and abs(float(f["area_mm2"]) - 8000.0) < 1e-6
+        for f in (faces_of(d) or []))
+    b5_row("B5.10", "оболочка: снята ЗАПРОШЕННАЯ грань — проверка продукта И независимое чтение "
+                    "топологии (в плоскости запрошенной грани граней нет)",
+           err is None and error_of(env) is None and placement is not None
+           and placement.get("passed") is True and top_gone,
+           f"err={error_of(env)} requested_face_removed="
+           f"{json.dumps(placement, ensure_ascii=False) if placement else 'проверки нет'}; "
+           f"граней в плоскости z=10 (нормаль +Z, площадь 8000): {'нет' if top_gone else 'ЕСТЬ'}; "
+           f"граней всего {len(faces_of(d) or [])} (ожидание 11)",
+           details={"check": placement, "top_plane_face_present": not top_gone,
+                    "face_count": len(faces_of(d) or [])})
+    close(d)
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
 # Группа F08: остаток F-08 по строкам B1/B2/AUX — десять действий на КАЖДЫЙ режим

@@ -60,6 +60,11 @@ public partial class Api5Session
 
         ValidateHoleMode(command);
 
+        // The base face reduced to its PLANE before the mutation: the axis is read from the body after it,
+        // and the two together are what tells "drilled into the face that was asked for" from "into
+        // another one" (the volume cannot tell them apart on a body with equivalent faces).
+        var baseFacePlane = PlanarPlacementOf(face);
+
         var volumeBefore = ReadVolume(document);
         var facesBefore = CountFaces(document);
         var bodiesBefore = CountBodies(document);
@@ -273,6 +278,12 @@ public partial class Api5Session
                     ["face_count_after"] = facesAfter,
                 });
         }
+
+        // The base face is a REFERENCE too, so the hole may land on a different face. The axis is read
+        // from the body, and the check stands after the two refusals above and before the declared
+        // expectation: an axis on the wrong face is a more precise finding than a mismatched delta.
+        // History: docs/decisions/adapter-features.md#edge-placement-other-ops
+        CheckHolePlacement(document, baseFacePlane, command.DiameterMm, referenceDto?.Id, checks, unverified);
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = effect.Verdict == HoleEffectVerdict.Confirmed

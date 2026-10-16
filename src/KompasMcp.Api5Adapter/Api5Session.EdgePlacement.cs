@@ -5,14 +5,14 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Where the surface a fillet or a chamfer produced ACTUALLY landed.</summary>
-/// <remarks>WHY. These operations address edges by REFERENCE, and the kernel may re-resolve a reference to
-/// a different edge of the same topology on a rebuild; on a body whose corners are equivalent the volume
-/// then cannot tell "built where asked" from "built elsewhere", while the response says <c>succeeded</c>.
-/// The criterion for this family is the PLACEMENT of the new surface, and the two faces that meet at the
-/// requested edge still CONTAIN its line after the operation. INVARIANT: the decision is the pure rule
-/// <see cref="EdgeSurfaceMatch"/>; an unread surface is a NAMED gap, never a refusal.
-/// History: docs/decisions/adapter-features.md#fillet-on-other-edge</remarks>
+/// <summary>Where an operation that names an EDGE or a FACE by reference actually landed.</summary>
+/// <remarks>WHY. The kernel may re-resolve such a reference to a different edge or face of the same
+/// topology, and on a body with equivalent candidates the volume cannot tell "built where asked" from
+/// "built elsewhere" while the response says <c>succeeded</c>. The criterion is the PLACEMENT: a fillet
+/// cylinder one radius from both faces at the edge, a chamfer cutting them at the two legs, a removed
+/// face gone from its plane, a drilled axis on its base face, a tilted plane about its base line.
+/// INVARIANT: both decisions are pure rules (<see cref="EdgeSurfaceMatch"/>, <see cref="FacePlacementMatch"/>);
+/// an unread value is a NAMED gap. History: docs/decisions/adapter-features.md#fillet-on-other-edge</remarks>
 public partial class Api5Session
 {
     /// <summary>How far a face's plane may be from the edge line and still count as meeting the edge there,
@@ -288,6 +288,221 @@ public partial class Api5Session
             ["checked_edges"] = measured,
             ["planar_faces"] = planes.Count,
         }, unverified);
+    }
+
+    /// <summary>One face reduced to a plane and an area, or null when it is not planar or did not read.
+    /// Route P2.5, the same one <c>kompas_read_topology</c> publishes with.</summary>
+    private static FacePlacementMatch.PlanarFace? PlanarPlacementOf(ksFaceDefinition face)
+    {
+        try
+        {
+            if (face.GetSurface() is not ksSurface surface
+                || surface.GetSurfaceParam() is not ksPlaneParam plane
+                || plane.GetPlacement() is not ksPlacement placement
+                || !placement.GetOrigin(out var x, out var y, out var z)
+                || !placement.GetVector(2, out var nx, out var ny, out var nz))
+            {
+                return null;
+            }
+
+            var area = SafeDouble(() => face.GetArea((uint)KompasUnits.LengthMm)) ?? double.NaN;
+            return new FacePlacementMatch.PlanarFace(new[] { x, y, z }, new[] { nx, ny, nz }, area);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Every PLANAR face of the body reduced to the placement rule's inputs. A face that did not
+    /// read is simply absent: the caller names the absence where it matters.</summary>
+    private static List<FacePlacementMatch.PlanarFace> PlanarFacePlacements(DocumentEntry document)
+    {
+        var found = new List<FacePlacementMatch.PlanarFace>();
+        if (document.Kind != DocumentKind.Part || document.PartNow().GetMainBody() is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            return found;
+        }
+
+        for (var i = 0; i < faces.GetCount(); i++)
+        {
+            if (AsInterface<ksFaceDefinition>(faces.GetByIndex(i)) is not ksFaceDefinition face)
+            {
+                continue;
+            }
+
+            if (PlanarPlacementOf(face) is { } placement)
+            {
+                found.Add(placement);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>A cylindrical face reduced to what the hole-placement rule needs: a point on its axis, the
+    /// axis direction, the radius and the length of the cylinder along the axis.</summary>
+    private sealed record AxisCylinder(double[] Point, double[] Direction, double RadiusMm, double? ExtentMm);
+
+    /// <summary>Cylindrical faces of the body whose radius is <paramref name="radiusMm"/>.</summary>
+    private static List<AxisCylinder> CylindersOfRadius(DocumentEntry document, double radiusMm)
+    {
+        var found = new List<AxisCylinder>();
+        if (document.Kind != DocumentKind.Part || document.PartNow().GetMainBody() is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            return found;
+        }
+
+        for (var i = 0; i < faces.GetCount(); i++)
+        {
+            if (AsInterface<ksFaceDefinition>(faces.GetByIndex(i)) is not ksFaceDefinition face)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (face.GetSurface() is not ksSurface surface || !surface.IsCylinder()
+                    || surface.GetSurfaceParam() is not ksCylinderParam cylinder
+                    || Math.Abs(cylinder.radius - radiusMm) > HoleRadiusToleranceMm
+                    || cylinder.GetPlacement() is not ksPlacement placement
+                    || !placement.GetOrigin(out var x, out var y, out var z)
+                    || !placement.GetVector(2, out var ax, out var ay, out var az))
+                {
+                    continue;
+                }
+
+                found.Add(new AxisCylinder(new[] { x, y, z }, new[] { ax, ay, az }, cylinder.radius,
+                    cylinder.height));
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                // A face whose parameters KOMPAS did not return is no reason to abandon the search.
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Refuses when the shell removed a face other than the one it was asked to remove.
+    /// INVARIANT: a gap in the reading is NAMED, never turned into a refusal.</summary>
+    private static void CheckShellPlacement(
+        DocumentEntry document,
+        IReadOnlyList<(string Reference, FacePlacementMatch.PlanarFace Placement)> requested,
+        string featureReference,
+        List<NamedCheck> checks,
+        List<string> unverified)
+    {
+        var after = PlanarFacePlacements(document);
+        foreach (var (reference, placement) in requested)
+        {
+            var result = FacePlacementMatch.RemovedFaceGone(placement, after);
+            if (result.Verdict == FacePlacementMatch.Verdict.Unverified)
+            {
+                unverified.Add("shell_placement_not_checked — грань " + reference + ": " + result.Detail);
+                continue;
+            }
+
+            if (result.IsRefusal)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    "Оболочка сняла НЕ запрошенную грань " + reference + ". " + result.Detail
+                    + " Признак создан и остался в дереве, но геометрия не та, которую просил клиент. "
+                    + "Удалите признак вызовом kompas_delete_feature по feature_ref и повторите.",
+                    RetryPolicy.ReacquireContext,
+                    partialEffects: true,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["code"] = result.Code,
+                        ["feature_ref"] = featureReference,
+                        ["requested_face"] = reference,
+                        ["requested_area_mm2"] = placement.AreaMm2,
+                        ["requested_plane_point_mm"] = placement.Point,
+                        ["requested_plane_normal"] = placement.Normal,
+                        ["planar_faces_after"] = after.Count,
+                    });
+            }
+
+            checks.Add(new NamedCheck("requested_face_removed", true,
+                Observed: result.Detail, Expected: "в плоскости запрошенной грани граней нет"));
+        }
+    }
+
+    /// <summary>Refuses when the drilled axis did not land on the requested base face.</summary>
+    private static void CheckHolePlacement(
+        DocumentEntry document,
+        FacePlacementMatch.PlanarFace? baseFace,
+        double diameterMm,
+        string? featureReference,
+        List<NamedCheck> checks,
+        List<string> unverified)
+    {
+        if (baseFace is null)
+        {
+            unverified.Add(
+                "hole_placement_not_checked — опорная грань не плоская либо её поверхность не прочитана: "
+                + "прилегание оси к запрошенной грани проверить нечем");
+            return;
+        }
+
+        var cylinders = CylindersOfRadius(document, diameterMm / 2d);
+        if (cylinders.Count == 0)
+        {
+            unverified.Add(
+                "hole_placement_not_checked — цилиндрической грани диаметра "
+                + diameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+                + " мм на теле не найдено: сверять ось не с чем");
+            return;
+        }
+
+        var results = cylinders
+            .Select(c => (Cylinder: c, Result: FacePlacementMatch.HoleAxisOnFace(
+                baseFace, c.Point, c.Direction, c.ExtentMm)))
+            .ToList();
+
+        var confirmed = results.Where(r => r.Result.Verdict == FacePlacementMatch.Verdict.Confirmed).ToList();
+        if (confirmed.Count > 0)
+        {
+            checks.Add(new NamedCheck("axis_on_requested_face", true,
+                Observed: confirmed[0].Result.Detail,
+                Expected: "ось отверстия перпендикулярна запрошенной грани и пересекает её"));
+            return;
+        }
+
+        var refused = results.Where(r => r.Result.IsRefusal).ToList();
+        if (refused.Count > 0)
+        {
+            var measured = results
+                .Select(r => (object?)new Dictionary<string, object?>
+                {
+                    ["axis_point_mm"] = r.Cylinder.Point,
+                    ["axis_direction"] = r.Cylinder.Direction,
+                    ["cylinder_extent_mm"] = r.Cylinder.ExtentMm,
+                    ["detail"] = r.Result.Detail,
+                })
+                .ToList();
+
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Отверстие построено НЕ по запрошенной грани. " + refused[0].Result.Detail
+                + " Признак создан и остался в дереве: удалите его вызовом kompas_delete_feature по "
+                + "feature_ref и повторите вызов.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = refused[0].Result.Code,
+                    ["feature_ref"] = featureReference,
+                    ["requested_face_plane_point_mm"] = baseFace.Point,
+                    ["requested_face_plane_normal"] = baseFace.Normal,
+                    ["cylinders_of_diameter"] = measured,
+                });
+        }
+
+        unverified.Add("hole_placement_not_checked — " + results[0].Result.Detail);
     }
 
     /// <summary>The planar faces whose plane contains the requested edge line. Both endpoints must lie in

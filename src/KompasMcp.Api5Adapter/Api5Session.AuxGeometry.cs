@@ -4,6 +4,7 @@ using Kompas6Constants3D;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Geometry;
 using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter;
@@ -102,6 +103,13 @@ public sealed partial class Api5Session
         double? angle = null;
         double? offset = null;
         bool? sign = null;
+        // Placement of a TILTED plane: the base line it was tilted about and the angle it took. Read from
+        // the model after the rebuild, compared with the request by the pure rule.
+        FacePlacementMatch.Result? placement = null;
+        string? placementRequestedLine = null;
+        string? placementReadLine = null;
+        double? placementRequestedAngle = null;
+        double? placementReadAngle = null;
 
         switch (key)
         {
@@ -138,11 +146,12 @@ public sealed partial class Api5Session
             {
                 var support = ResolvePlaneSupport(document, bridge, command, diagnostics);
                 var baseLine = ResolveAxisObject(document, bridge, command.BaseAxisRef, diagnostics);
+                var requestedAngle = command.AngleDeg ?? throw Missing("angle_deg", key);
                 var (plane, planeFailure) = Api7AuxGeometry.CreatePlaneByAngle(
                     RequirePlanes(auxiliary, diagnostics),
                     support,
                     baseLine,
-                    command.AngleDeg ?? throw Missing("angle_deg", key),
+                    requestedAngle,
                     command.Direction ?? true,
                     command.Name);
                 if (plane is null)
@@ -163,6 +172,13 @@ public sealed partial class Api5Session
                 baseName = read.BaseName;
                 lineName = read.LineName;
                 diagnostics.AddRange(read.Notes);
+                // The base line is a REFERENCE as well, so the plane may be tilted about a different one.
+                placementRequestedLine = SafeName(baseLine);
+                placementReadLine = read.LineName;
+                placementRequestedAngle = requestedAngle;
+                placementReadAngle = read.AngleDeg;
+                placement = FacePlacementMatch.AngledPlaneOnBaseLine(
+                    requestedAngle, read.AngleDeg, placementRequestedLine, read.LineName);
                 break;
             }
 
@@ -321,6 +337,27 @@ public sealed partial class Api5Session
         RebuildApi7AndSettle(model, document);
         BumpRevision(document, "aux." + key.Replace('/', '.'));
 
+        // The refusal stands AFTER the rebuild and names the object that stayed in the container.
+        // History: docs/decisions/adapter-features.md#edge-placement-other-ops
+        if (placement is { IsRefusal: true } refused)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                refused.Detail + " Признак создан и остался в дереве: удалите его вызовом "
+                + "kompas_delete_feature по feature_ref и повторите вызов.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = refused.Code,
+                    ["feature_ref"] = referenceId,
+                    ["requested_angle_deg"] = placementRequestedAngle,
+                    ["read_angle_deg"] = placementReadAngle,
+                    ["requested_base_line"] = placementRequestedLine,
+                    ["read_base_line"] = placementReadLine,
+                });
+        }
+
         var counts = AuxCounts(model, auxiliary);
         diagnostics.Add($"После создания: плоскостей {counts.Planes}, осей {counts.Axes}, точек {counts.Points}.");
 
@@ -353,8 +390,53 @@ public sealed partial class Api5Session
             Diagnostics: diagnostics,
             Verification: new VerificationDto(
                 VerificationLevel.CallReturned,
-                new[] { new NamedCheck("mode_read_back", modeMatches, Observed: mode, Expected: command.Mode) },
-                new[] { "geometry_not_checked" }));
+                PlacementChecks(mode, command.Mode, placement, placementRequestedLine, placementReadLine,
+                    placementRequestedAngle, placementReadAngle),
+                PlacementGaps(placement)));
+    }
+
+    /// <summary>The checks of a creation: the mode read back, plus — for a tilted plane — the base line
+    /// and the angle it was actually built with.</summary>
+    private static List<NamedCheck> PlacementChecks(
+        string? mode,
+        string expectedMode,
+        FacePlacementMatch.Result? placement,
+        string? requestedLine,
+        string? readLine,
+        double? requestedAngle,
+        double? readAngle)
+    {
+        var checks = new List<NamedCheck>
+        {
+            new("mode_read_back", string.Equals(mode, expectedMode, StringComparison.Ordinal),
+                Observed: mode, Expected: expectedMode),
+        };
+
+        if (placement is { Verdict: FacePlacementMatch.Verdict.Confirmed })
+        {
+            checks.Add(new NamedCheck("base_line_read_back", true,
+                Observed: readLine ?? "не задавалась", Expected: requestedLine ?? "не задавалась"));
+            checks.Add(new NamedCheck("angle_read_back",
+                readAngle is not null && requestedAngle is not null
+                    && Math.Abs(readAngle.Value - requestedAngle.Value)
+                       <= FacePlacementMatch.AngleToleranceDeg,
+                Observed: FormatNum(readAngle), Expected: FormatNum(requestedAngle)));
+        }
+
+        return checks;
+    }
+
+    /// <summary>What the placement comparison could NOT establish. A gap is named, never turned into a
+    /// refusal and never silently dropped.</summary>
+    private static List<string> PlacementGaps(FacePlacementMatch.Result? placement)
+    {
+        var gaps = new List<string> { "geometry_not_checked" };
+        if (placement is { Verdict: FacePlacementMatch.Verdict.Unverified } unverified)
+        {
+            gaps.Add("plane_placement_not_checked — " + unverified.Detail);
+        }
+
+        return gaps;
     }
 
     /// <summary>Edit an existing plane as a part object: offset, angle, sign, support.</summary>

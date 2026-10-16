@@ -86,6 +86,18 @@ public partial class Api5Session
             faces.Add(face);
         }
 
+        // The requested faces reduced to their PLANES before the mutation: afterwards the face itself is
+        // gone, and the plane is what the placement rule needs. A face that does not read is simply
+        // absent here, and the gap is named after the operation.
+        var requestedPlanes = new List<(string Reference, FacePlacementMatch.PlanarFace Placement)>();
+        for (var i = 0; i < faces.Count; i++)
+        {
+            if (PlanarPlacementOf(faces[i]) is { } planar)
+            {
+                requestedPlanes.Add((i < command.FaceRefs.Count ? command.FaceRefs[i] : "<без ссылки>", planar));
+            }
+        }
+
         var part = document.PartNow();
         var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
@@ -180,6 +192,13 @@ public partial class Api5Session
             Expected: "объём изменился относительно исходного тела"));
 
         var unverified = new List<string>();
+
+        // The face is addressed by REFERENCE, and the kernel may re-resolve it to another face: the shell
+        // then opens the wrong one, which the volume does not tell apart on a body with equivalent faces.
+        // The placement is read AFTER the rebuild, so a refusal names the state that stayed in the tree.
+        // History: docs/decisions/adapter-features.md#edge-placement-other-ops
+        CheckShellPlacement(document, requestedPlanes, reference.Id, checks, unverified);
+
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var geometryConfirmed = false;

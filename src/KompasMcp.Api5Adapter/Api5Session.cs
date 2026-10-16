@@ -391,8 +391,8 @@ public sealed partial class Api5Session : IDisposable
     /// <remarks>INVARIANT: the rescue copy is written BEFORE the close; the client's own file is never
     /// the target. INVARIANT: the whole sequence fits <see cref="SessionEndBudget"/>, or the Host would
     /// kill the Worker before it terminates its own instance's PID - that termination is the Worker's
-    /// job, so a killed Worker leaves the instance behind. The budget bounds the rescue loop only; the
-    /// close, <c>Quit()</c> and the exit wait are reserved for it, and a spent budget skips the wait.
+    /// job, so a killed Worker leaves the instance behind. The budget bounds the rescue loop and the
+    /// close alike; whatever it cuts short is NAMED, and a spent budget also skips the exit wait.
     /// History: docs/decisions/host.md#shutdown-no-orphans, #shutdown-many-docs</remarks>
     public OwnedShutdownReport ShutdownOwned(
         ApplicationEntry application, DocumentControlCopies? copies, SessionEndBudget? budget = null)
@@ -1993,9 +1993,8 @@ public sealed record OwnedShutdownRescue(string DocumentId, string? Path, string
 /// carries <see cref="OwnedShutdownRescue.BudgetExhausted"/> and no path. Problems - named failures of
 /// the close/quit steps. QuitIssued / ProcessExited / KilledByPid / ProcessId - whether <c>Quit()</c>
 /// returned, whether the process is gone (the orphan number), whether the PID had to be terminated.
-/// BudgetMs / RescueSkippedByBudget / CloseSkippedByBudget / phase times - the budget, the documents it
-/// left unrescued and left open, and where the time went, so "all rescued" and "the budget was the
-/// limit" are different answers.
+/// BudgetMs / RescueSkippedByBudget / CloseSkippedByBudget / phase times - the budget and what it cut
+/// short, so "all rescued" and "the budget was the limit" are different answers.
 /// History: docs/decisions/host.md#shutdown-many-docs</remarks>
 public sealed record OwnedShutdownReport(
     IReadOnlyList<OwnedShutdownRescue> Rescued,

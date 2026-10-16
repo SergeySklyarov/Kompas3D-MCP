@@ -3746,6 +3746,7 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
     rev = rev_of(env_fin, rev)
     fin_result = result(env_fin) or {}
     env_x, code_x, rev = extrude(sk, rev, 10.0)
+    extrude_volume = (result(env_x) or {}).get("volume_mm3")
     volume = (body_measure(doc) or {}).get("volume_mm3")
     expected_volume = half_disc_area * 10.0
     rep.add("SB-13.replace_composition",
@@ -3755,15 +3756,16 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
                        and object_count(after) == 4 and len(after_rows) == 4 and not old_arcs
                        and fin_result.get("profile_input_check") == "passed"
                        and code_x is None
-                       and near(volume, expected_volume, volume_tolerance(expected_volume)))
+                       and near(extrude_volume, expected_volume, volume_tolerance(expected_volume)))
             else "FAIL",
             f"состав до={object_count(before)}, после={object_count(after)} "
             f"(строк {len(after_rows)}); старых дуг осталось {len(old_arcs)}; удалено "
             f"{repl_result.get('deleted_entities')} из {repl_result.get('expected_deleted')}; "
             f"profile_input_check={fin_result.get('profile_input_check')}; выдавливание={code_x}, "
-            f"объём {volume} против аналитики {expected_volume}",
+            f"объём по документу {extrude_volume} против аналитики {expected_volume}",
             {"before": rows_summary(before), "after": rows_summary(after),
-             "replace_result": repl_result, "extrude_error": code_x, "volume_mm3": volume,
+             "replace_result": repl_result, "extrude_error": code_x,
+             "extrude_volume_mm3": extrude_volume, "body_volume_mm3": volume,
              "analytic_mm3": expected_volume})
     close(doc)
 
@@ -3777,7 +3779,7 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
     after = listing(sk)[0]
     after_rows = (after or {}).get("rows") or []
     env_x, code_x, rev = extrude(sk, rev, 10.0)
-    volume = (body_measure(doc) or {}).get("volume_mm3")
+    extrude_volume = (result(env_x) or {}).get("volume_mm3")
     expected_volume = math.pi * 20.0 ** 2 * 10.0
     rep.add("SB-14.replace_circle",
             "replace полной окружностью оставляет ровно одну окружность: дуги прежнего профиля не "
@@ -3785,14 +3787,15 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
             "PASS" if (code_append is None and code_repl is None and code_x is None
                        and object_count(after) == 1 and len(after_rows) == 1
                        and after_rows[0].get("kind") == "ksDrCircle"
-                       and near(volume, expected_volume, volume_tolerance(expected_volume)))
+                       and near(extrude_volume, expected_volume, volume_tolerance(expected_volume)))
             else "FAIL",
             f"состав после={object_count(after)} (строк {len(after_rows)}: "
             f"{[r.get('kind') for r in after_rows]}); удалено {repl_result.get('deleted_entities')} "
-            f"из {repl_result.get('expected_deleted')}; выдавливание={code_x}, объём {volume} против "
-            f"аналитики {expected_volume}",
+            f"из {repl_result.get('expected_deleted')}; выдавливание={code_x}, объём по документу "
+            f"{extrude_volume} против аналитики {expected_volume}",
             {"after": rows_summary(after), "replace_result": repl_result,
-             "extrude_error": code_x, "volume_mm3": volume, "analytic_mm3": expected_volume})
+             "extrude_error": code_x, "extrude_volume_mm3": extrude_volume,
+             "analytic_mm3": expected_volume})
     close(doc)
 
     # Очистка профиля, у которого концы дуг совпадают с концами отрезков: эскиз обязан стать пустым.

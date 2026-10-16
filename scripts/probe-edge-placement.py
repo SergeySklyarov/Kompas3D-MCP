@@ -17,6 +17,11 @@
 
 Usage:
   python scripts/probe-edge-placement.py --host <KompasMcp.Host.exe> --iterations 20 --out <файл>
+  python scripts/probe-edge-placement.py --host ... --only shell-inward --out <файл>   # одна постановка
+
+Постановки: shell-inward, shell-outward, hole-blind_flat, hole-through_counterbore, aux-plane_angle.
+Каждая может идти СВОИМ процессом (свой каталог --out, своя изолированная конфигурация): серия
+занимает десятки минут, и постановки друг от друга не зависят.
 
 Журналы прибора изолированы: Хост получает КОПИЮ конфигурации с перенаправленными путями
 (`localconfig.isolate_config`), иначе проба затирала бы журнал клиентского сеанса.
@@ -409,7 +414,10 @@ def main():
         ("hole-through_counterbore", lambda one, i: hole_experiment(one, i, "through_counterbore")),
         ("aux-plane_angle", lambda one, i: aux_experiment(one, i)),
     )
+    only = argument("--only")
     for label, run in plans:
+        if only and label != only:
+            continue
         report["setups"][label] = series(host, isolated, iterations, workdir, label, run)
 
     report["summary"] = {label: summarize(records)

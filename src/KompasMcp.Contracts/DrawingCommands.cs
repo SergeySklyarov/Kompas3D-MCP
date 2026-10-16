@@ -348,6 +348,22 @@ public sealed record DimensionReadingDto
     /// <summary>Nominal, mm: linear — anchor-point distance; radial/diametral — the radius.</summary>
     public double? ValueMm { get; init; }
 
+    /// <summary>The number the dimension SHOWS, parsed from its caption text
+    /// (<c>IDimensionText.NominalText</c> → <c>ITextLine.Str</c>): the diameter for a diametral
+    /// dimension, the radius for a radial one, the distance for a linear one. Independent of
+    /// <see cref="ValueMm"/>, which is the measured GEOMETRY. Null when the object does not answer
+    /// QI(IDimensionText). MEASURED: <c>NominalValue</c> is NOT used — it re-reads as the kernel's own
+    /// value (the sheet radius, doubled for a diametral dimension), not as the displayed number.
+    /// History: docs/decisions/drawings.md#drawing-dimensions-scale</summary>
+    public double? NominalMm { get; init; }
+
+    /// <summary>The caption of the number (<c>IDimensionText.NominalText</c>). Null when not answered.</summary>
+    public string? Caption { get; init; }
+
+    /// <summary>True when the number was overridden rather than computed — <c>AutoNominalValue</c> is
+    /// false. Null when the object does not answer QI(IDimensionText).</summary>
+    public bool? CaptionOverridden { get; init; }
+
     /// <summary><c>X1,Y1</c> for a linear dimension; the centre <c>Xc,Yc</c> otherwise.</summary>
     public IReadOnlyList<double>? Point1 { get; init; }
 

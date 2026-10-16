@@ -523,12 +523,16 @@ public sealed partial class Api5Session
                 var value = (x1 is { } a && y1 is { } b && x2 is { } c && y2 is { } d)
                     ? (double?)Math.Sqrt(((c - a) * (c - a)) + ((d - b) * (d - b)))
                     : null;
+                var (nominal, caption, overridden) = ReadDimensionText(dim);
                 rows.Add(new DimensionReadingDto
                 {
                     Kind = "linear",
                     DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
                     Valid = SafeBool(() => dim.Valid),
                     ValueMm = value,
+                    NominalMm = nominal,
+                    Caption = caption,
+                    CaptionOverridden = overridden,
                     Point1 = (x1 is { } p && y1 is { } q) ? new[] { p, q } : null,
                     Point2 = (x2 is { } p2 && y2 is { } q2) ? new[] { p2, q2 } : null,
                 });
@@ -568,12 +572,16 @@ public sealed partial class Api5Session
 
                 var xc = SafeDouble(() => dim.Xc);
                 var yc = SafeDouble(() => dim.Yc);
+                var (nominal, caption, overridden) = ReadDimensionText(dim);
                 rows.Add(new DimensionReadingDto
                 {
                     Kind = "radial",
                     DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
                     Valid = SafeBool(() => dim.Valid),
                     ValueMm = SafeDouble(() => dim.Radius),
+                    NominalMm = nominal,
+                    Caption = caption,
+                    CaptionOverridden = overridden,
                     Point1 = (xc is { } p && yc is { } q) ? new[] { p, q } : null,
                     Point2 = null,
                 });
@@ -613,12 +621,16 @@ public sealed partial class Api5Session
 
                 var xc = SafeDouble(() => dim.Xc);
                 var yc = SafeDouble(() => dim.Yc);
+                var (nominal, caption, overridden) = ReadDimensionText(dim);
                 rows.Add(new DimensionReadingDto
                 {
                     Kind = "diametral",
                     DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
                     Valid = SafeBool(() => dim.Valid),
                     ValueMm = SafeDouble(() => dim.Radius),
+                    NominalMm = nominal,
+                    Caption = caption,
+                    CaptionOverridden = overridden,
                     Point1 = (xc is { } p && yc is { } q) ? new[] { p, q } : null,
                     Point2 = null,
                 });
@@ -707,6 +719,7 @@ public sealed partial class Api5Session
                     valueMm = Distance(p1, p2);
                     kindWire = "linear";
                     var row = ReadLineDimension(document, command.ViewRef, dim, kindWire, valueMm);
+                    RefusePointMismatch(document, p1, p2, row);
                     BumpRevision(document, "drawing.add_dimension");
                     return FinishDimension(document, row, valueMm);
                 }
@@ -719,19 +732,26 @@ public sealed partial class Api5Session
             case "radial":
             case "diametral":
             {
-                if (valueMm is null && command.ValueMm is double given)
-                {
-                    valueMm = given;
-                }
-
+                // INVARIANT: a view dimension's anchor points are in VIEW mm and the kernel scales them,
+                // but Radius is taken AS IS in SHEET mm (MEASURED — see
+                // docs/decisions/drawings.md#drawing-dimensions-scale). The model radius is therefore
+                // scaled here, and the displayed number — which the kernel derives from that sheet
+                // radius — is written explicitly whenever the scale would make it wrong.
                 var isRadial = kind == "radial";
+                var scale = ReadViewScale(view);
+                var modelRadius = command.ValueMm ?? DeriveRadius(command);
+                var sheetRadius = modelRadius * scale;
+                var nominal = isRadial ? modelRadius : modelRadius * 2d;
+                var writeNominal = Math.Abs(scale - 1d) > 1e-9;
 
                 double centreX = p1[0];
                 double centreY = p1[1];
-                double radius = command.ValueMm ?? DeriveRadius(command);
 
                 bool updated;
                 double? readRadius;
+                double? readNumber = null;
+                double? readXc;
+                double? readYc;
                 if (isRadial)
                 {
                     var collection = container.RadialDimensions;
@@ -745,15 +765,23 @@ public sealed partial class Api5Session
                     {
                         radial.Xc = centreX;
                         radial.Yc = centreY;
-                        radial.Radius = radius;
+                        radial.Radius = sheetRadius;
                         if (position is { Count: >= 2 })
                         {
                             radial.ShelfX = position[0];
                             radial.ShelfY = position[1];
                         }
 
+                        if (writeNominal)
+                        {
+                            SetDimensionNominal(radial, nominal);
+                        }
+
                         updated = radial.Update();
+                        readNumber = writeNominal ? ReadDimensionNumber(radial) : null;
                         readRadius = SafeDouble(() => radial.Radius);
+                        readXc = SafeDouble(() => radial.Xc);
+                        readYc = SafeDouble(() => radial.Yc);
                     }
                     finally
                     {
@@ -773,9 +801,17 @@ public sealed partial class Api5Session
                     {
                         diametral.Xc = centreX;
                         diametral.Yc = centreY;
-                        diametral.Radius = radius;
+                        diametral.Radius = sheetRadius;
+                        if (writeNominal)
+                        {
+                            SetDimensionNominal(diametral, nominal);
+                        }
+
                         updated = diametral.Update();
+                        readNumber = writeNominal ? ReadDimensionNumber(diametral) : null;
                         readRadius = SafeDouble(() => diametral.Radius);
+                        readXc = SafeDouble(() => diametral.Xc);
+                        readYc = SafeDouble(() => diametral.Yc);
                     }
                     finally
                     {
@@ -784,8 +820,10 @@ public sealed partial class Api5Session
                 }
 
                 ConfirmUpdate(updated, kind);
+                RefuseDimensionMismatch(kind, document, centreX, centreY, sheetRadius, nominal, writeNominal,
+                    readXc, readYc, readRadius, readNumber);
                 kindWire = kind;
-                var value = readRadius;
+                var value = readRadius is { } read ? read / scale : readRadius;
                 valueMm = value;
                 var label = isRadial ? "radial" : "diametral";
                 var row = new DimensionRowDto
@@ -2069,6 +2107,185 @@ public sealed partial class Api5Session
             RetryPolicy.Never,
             details: new Dictionary<string, object?> { ["dimension_type"] = command.DimensionType });
     }
+
+    /// <summary>The number a dimension shows, its caption and whether it was overridden — through the
+    /// documented extra interface; all three null when the object does not answer QI(IDimensionText).</summary>
+    /// <remarks>DOC: <c>idimensiontext_props.html</c> — <c>NominalValue</c>, <c>NominalText</c>,
+    /// <c>AutoNominalValue</c>; <c>idimensiontext.html</c> — the interface is an extra one of
+    /// <c>ILineDimension</c>/<c>IRadialDimension</c>/<c>IDiametralDimension</c>.
+    /// History: docs/decisions/drawings.md#drawing-dimensions-scale</remarks>
+    private static (double? Nominal, string? Caption, bool? Overridden) ReadDimensionText(object dimension)
+    {
+        if (dimension is not KompasAPI7.IDimensionText text)
+        {
+            return (null, null, null);
+        }
+
+        var overridden = SafeBool(() => text.AutoNominalValue) is { } auto ? !auto : (bool?)null;
+        string? caption = null;
+        try
+        {
+            // DOC: idimensiontext_props.html — NominalText is the text of the number;
+            // itextline_getstr.html — ITextLine.Str is that text. MEASURED: NominalValue RE-READS as the
+            // kernel's own value (the sheet radius, doubled for a diametral dimension), NOT as the
+            // displayed number, so the number is taken from the TEXT. The caption is OPTIONAL.
+            if (text.NominalText is KompasAPI7.ITextLine line)
+            {
+                caption = SafeString(() => line.Str);
+            }
+        }
+        catch (COMException)
+        {
+            caption = null;
+        }
+
+        return (ParseNumber(caption), caption, overridden);
+    }
+
+    /// <summary>A dimension number parsed from its caption text, which the kernel writes with the
+    /// locale's decimal comma; null when the text is absent or is not a plain number.</summary>
+    private static double? ParseNumber(string? text) =>
+        text is not null
+        && double.TryParse(text.Replace(',', '.').Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : null;
+
+    /// <summary>The view scale a dimension's radius must be multiplied by, or 1 if the view reports none.</summary>
+    /// <remarks>MEASURED: the kernel scales a dimension's anchor points by the view scale but takes
+    /// <c>Radius</c> as-is in sheet mm — docs/decisions/drawings.md#drawing-dimensions-scale.</remarks>
+    private static double ReadViewScale(IView view)
+    {
+        var scale = SafeDouble(() => view.Scale);
+        return scale is > 0 ? scale.Value : 1d;
+    }
+
+    /// <summary>Write a dimension's displayed number through the documented extra interface.</summary>
+    /// <remarks>DOC: <c>idimensiontext.html</c> — <c>IDimensionText</c> is an extra interface of
+    /// <c>ILineDimension</c>/<c>IRadialDimension</c>/<c>IDiametralDimension</c>;
+    /// <c>idimensiontext_nominalvalue.html</c> — «значение размера», read/write. MEASURED: the value is
+    /// applied by <c>Update()</c>, so it must be written BEFORE the update; writing it clears
+    /// <c>AutoNominalValue</c>.
+    /// History: docs/decisions/drawings.md#drawing-dimensions-scale</remarks>
+    private static void SetDimensionNominal(object dimension, double nominal)
+    {
+        if (dimension is KompasAPI7.IDimensionText text)
+        {
+            text.NominalValue = nominal;
+        }
+    }
+
+    /// <summary>The number a dimension DISPLAYS, parsed from the documented caption text; null when the
+    /// object does not answer QI(IDimensionText) or its caption is not a plain number.</summary>
+    /// <remarks>DOC: <c>idimensiontext_props.html</c> — <c>NominalText</c> is the text of the number;
+    /// <c>itextline_getstr.html</c> — <c>ITextLine.Str</c> is that text. MEASURED: <c>NominalValue</c>
+    /// RE-READS as the kernel's own value (the sheet radius, doubled for a diametral dimension) rather
+    /// than the written one, so the number is verified through the TEXT.
+    /// History: docs/decisions/drawings.md#drawing-dimensions-scale</remarks>
+    private static double? ReadDimensionNumber(object dimension)
+    {
+        if (dimension is not KompasAPI7.IDimensionText text)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (text.NominalText is not KompasAPI7.ITextLine line)
+            {
+                return null;
+            }
+
+            var caption = SafeString(() => line.Str);
+            return ParseNumber(caption);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Refuse a radial/diametral dimension that did not read back as requested.</summary>
+    /// <remarks>INVARIANT: a re-read centre, radius or number that disagrees with the request is a FAILED
+    /// creation, never a success — the caller would otherwise build a part at the wrong size. The created
+    /// object stays in the document and that partial effect is named in the refusal.</remarks>
+    private static void RefuseDimensionMismatch(
+        string kind, DocumentEntry document, double centreX, double centreY, double sheetRadius,
+        double nominal, bool nominalWritten, double? readXc, double? readYc, double? readRadius,
+        double? readNumber)
+    {
+        var mismatches = new List<string>();
+        if (readXc is null || !Near(readXc.Value, centreX))
+        {
+            mismatches.Add($"Xc: задано {Api5Number(centreX)}, прочитано {Api5Number(readXc)}");
+        }
+
+        if (readYc is null || !Near(readYc.Value, centreY))
+        {
+            mismatches.Add($"Yc: задано {Api5Number(centreY)}, прочитано {Api5Number(readYc)}");
+        }
+
+        if (readRadius is null || !Near(readRadius.Value, sheetRadius))
+        {
+            mismatches.Add($"радиус: задано {Api5Number(sheetRadius)}, прочитано {Api5Number(readRadius)}");
+        }
+
+        if (nominalWritten && (readNumber is null || !Near(readNumber.Value, nominal)))
+        {
+            mismatches.Add($"число размера: задано {Api5Number(nominal)}, показано {Api5Number(readNumber)}");
+        }
+
+        if (mismatches.Count == 0)
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.GeometryFailed,
+            $"Размер '{kind}' создан, но перечитанные параметры расходятся с заданными: "
+            + string.Join("; ", mismatches) + ". Размер оставлен в документе.",
+            RetryPolicy.SameOperationId,
+            details: new Dictionary<string, object?>
+            {
+                ["dimension_type"] = kind,
+                ["document_id"] = document.Id,
+                ["partial_effects"] = true,
+                ["mismatches"] = mismatches,
+            });
+    }
+
+    /// <summary>Refuse a linear dimension whose re-read anchor points differ from the request.</summary>
+    /// <remarks>INVARIANT: same rule as <see cref="RefuseDimensionMismatch"/> — the points are in VIEW mm,
+    /// so a read-back that disagrees means the dimension does not measure what was asked.</remarks>
+    private static void RefusePointMismatch(
+        DocumentEntry document, IReadOnlyList<double> p1, IReadOnlyList<double> p2, DimensionRowDto row)
+    {
+        if (NearPair(row.Point1, p1) && NearPair(row.Point2, p2))
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.GeometryFailed,
+            "Линейный размер создан, но перечитанные точки привязки расходятся с заданными. "
+            + "Размер оставлен в документе.",
+            RetryPolicy.SameOperationId,
+            details: new Dictionary<string, object?>
+            {
+                ["dimension_type"] = "linear",
+                ["document_id"] = document.Id,
+                ["partial_effects"] = true,
+                ["point1_requested"] = p1,
+                ["point1_read"] = row.Point1,
+                ["point2_requested"] = p2,
+                ["point2_read"] = row.Point2,
+            });
+    }
+
+    private static bool Near(double a, double b) => Math.Abs(a - b) <= Math.Max(1e-6, Math.Abs(b) * 1e-6);
+
+    private static bool NearPair(IReadOnlyList<double>? read, IReadOnlyList<double> want) =>
+        read is { Count: >= 2 } && Near(read[0], want[0]) && Near(read[1], want[1]);
 
     private static KompasContractException NoCollection(AddDimensionCommand command, string kind) =>
         new(

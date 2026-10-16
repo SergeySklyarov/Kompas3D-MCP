@@ -7803,7 +7803,10 @@ def drawing_checks(client, rep, app_id, workdir):
     if assoc:
         edit_ref = assoc[0].get("view_ref")
         scale_before = assoc[0].get("scale")
-        new_scale = 2.0
+        # 1:2 — масштаб, на котором воспроизводился дефект заказчика (A): точки размера задаются и
+        # читаются в мм ВИДА, а радиус ядро берёт в мм ЛИСТА, поэтому размеры ниже ставятся в
+        # масштабированном виде и число проверяется отдельной строкой.
+        new_scale = 0.5
         env, code = call("kompas_edit_view", {
             "document_id": drw, "expected_revision": current_rev(drw),
             "view_ref": edit_ref, "scale": new_scale})
@@ -7899,6 +7902,30 @@ def drawing_checks(client, rep, app_id, workdir):
                 "ассоциативность размера к модели НАЗВАНА непроверенной, а не заявлена",
                 "PASS" if isinstance(unverified(env), list) else "FAIL",
                 f"unverified_aspects={unverified(env)}")
+
+        # ===== ЧИСЛО РАЗМЕРА ПРОТИВ ГЕОМЕТРИИ В МАСШТАБИРОВАННОМ ВИДЕ (наряд DRAWING_DIMENSIONS_FIX) =====
+        # Вид масштабирован (1:2) правкой выше, размеры поставлены в нём. MEASURED: ядро выводит
+        # показанное число диаметрального размера из ЛИСТОВОГО радиуса, поэтому сервер пишет радиус
+        # как value_mm * масштаб вида, а число задаёт документированным IDimensionText. Проверка
+        # берёт ОБА поля одного размера: nominal_mm (число, которое показывает размер) и value_mm
+        # (геометрия — листовой радиус), и требует, чтобы они РАЗЛИЧАЛИСЬ ровно на масштаб вида.
+        env, _code = call("kompas_list_dimensions", {"document_id": drw, "view_ref": view_ref})
+        _rows = result(env).get("dimensions") or []
+        _dd = next((r for r in _rows if r.get("kind") == "diametral"), None)
+        rep.add("DRW-03.dimension.read.nominal_vs_geometry",
+                "число диаметрального размера (nominal_mm) — ДИАМЕТР 25.0, а value_mm — ГЕОМЕТРИЯ "
+                "(листовой радиус 6.25 при масштабе 1:2): описание прямо говорит, что value_mm — "
+                "не номинал",
+                "PASS" if (_dd is not None
+                           and close_enough(_dd.get("nominal_mm"), HOLE_DIAMETER_MM, TOL_MM)
+                           and close_enough(_dd.get("value_mm"), HOLE_RADIUS_MM * new_scale, TOL_MM)
+                           and _dd.get("caption_overridden") is True) else "FAIL",
+                f"value(геометрия)={None if _dd is None else _dd.get('value_mm')} "
+                f"nominal(число)={None if _dd is None else _dd.get('nominal_mm')} "
+                f"caption={None if _dd is None else _dd.get('caption')!r} "
+                f"overridden={None if _dd is None else _dd.get('caption_overridden')} "
+                f"масштаб={new_scale} эталон_диаметра={HOLE_DIAMETER_MM} "
+                f"эталон_листового_радиуса={HOLE_RADIUS_MM * new_scale}")
 
         # Отрицательный контроль: ссылка вида, которой сервер НЕ выдавал (чужой uuid), отвергается
         # НАЗВАННЫМ кодом, а не разрешается вслепую. Обычная мутация ссылок вида НЕ отзывает —

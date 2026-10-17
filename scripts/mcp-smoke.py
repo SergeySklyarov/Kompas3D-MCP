@@ -628,6 +628,9 @@ RUN_GROUPS = (
     ("drawing", "drawing", "drawing-acceptance.json",
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
+    ("section", "section", "section-acceptance.json",
+     "Приёмка DRW-07: разрезы модели на чертеже — простой и ступенчатый, чтение, правка, удаление "
+     "(наряд SECTION_VIEWS)"),
     ("variables_material", "variables-material", "variables-material-acceptance.json",
      "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль "
      "variables-material-minimal-v1)"),
@@ -695,6 +698,7 @@ ALL_GROUPS_EXTRA = (
     ("mate", ["--mate-only"]),
     ("interference", ["--interference-only"]),
     ("drawing", ["--drawing-only"]),
+    ("section", ["--section-only"]),
     ("variables_material", ["--variables-material-only"]),
     ("variables_bind", ["--variables-bind-only"]),
     ("export_inertia", ["--export-inertia-only"]),
@@ -7497,6 +7501,213 @@ def mate_checks(client, rep, app_id, workdir):
                     f"{sum(1 for a in orientation_ok if not a)}; допуск {dot_tolerance}")
 
 
+def section_checks(client, rep, app_id, workdir):
+    """DRW-07.* — разрезы модели на чертеже (наряд SECTION_VIEWS, семейство DRW-07.section_view).
+
+    ЗАЧЕМ ЭТА ГРУППА. Инструменты разреза построены по документированному маршруту API7
+    (`ISymbols2DContainer.CutLines` -> `ICutLines.Add` -> `ICutLine.Points` -> `IDrawingObject.Update`,
+    затем `IViews.Add(vt_Section)` + `IAssociationView.BaseObject`). Живая проба показала, что маршрут
+    работает ТОЛЬКО типизированными вызовами: через IDispatch те же члены принимают запись и не
+    применяют её. Группа подтверждает маршрут через настоящий MCP на бинарях поставки.
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО. Каждая положительная строка опирается на ПЕРЕЧИТЫВАНИЕ объекта:
+    обозначение, трасса, сторона стрелок, масштаб, число объектов. Строка `succeeded` без
+    перечитывания доказательством не считается.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Контур разреза по выгрузке DXF не сверяется (пункт 4.1 наряда), снимок PNG не
+    снимается (пункт 4.6): обе строки называются отдельно, чтобы отсутствие не читалось как успех.
+    """
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def ref_id(value):
+        return value.get("id") if isinstance(value, dict) else value
+
+    plate_w, plate_d, plate_h = 120.0, 80.0, 32.0
+    part_path = os.path.join(workdir, "section-plate.m3d")
+    drawing_path = os.path.join(workdir, "section-plate.cdw")
+
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "part", "name": "SectionPlate"})
+    part = result(env).get("document_id") or (env or {}).get("document_id")
+    rev = (env or {}).get("revision_after") or 1
+    if not part:
+        rep.add("DRW-07.setup", "Плита для разреза", "FAIL", f"деталь не создана: {code}")
+        return
+
+    env, code = call("kompas_create_sketch", {
+        "document_id": part, "expected_revision": rev,
+        "plane": {"base": "xy", "offset_mm": 0}, "name": "plate"})
+    rev = (env or {}).get("revision_after") or rev
+    sketch = ref_id(result(env).get("id")) or ref_id(result(env).get("sketch_ref"))
+    env, code = call("kompas_edit_sketch", {
+        "sketch_ref": sketch, "expected_revision": rev, "mode": "append",
+        "entities": [{"kind": "rectangle", "start_mm": [0, 0],
+                      "width_mm": plate_w, "height_mm": plate_d}]})
+    rev = (env or {}).get("revision_after") or rev
+    env, code = call("kompas_finish_sketch", {
+        "sketch_ref": sketch, "require_closed_profile": False})
+    rev = (env or {}).get("revision_after") or rev
+    env, code = call("kompas_extrude", {
+        "sketch_ref": sketch, "expected_revision": rev, "operation": "base",
+        "depth_mm": plate_h, "direction": "positive"})
+    rev = (env or {}).get("revision_after") or rev
+    body_ok = code is None
+
+    env, code = call("kompas_save_document", {
+        "document_id": part, "expected_revision": rev, "target_path": part_path})
+    rev = (env or {}).get("revision_after") or rev
+    saved_model = code is None and os.path.exists(part_path)
+
+    rep.add("DRW-07.setup", "Плита 120 x 80 x 32 и её файл на диске",
+            "PASS" if body_ok and saved_model else "FAIL",
+            f"тело={body_ok} файл={saved_model} code={code}")
+
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "SectionPlate"})
+    drawing = result(env).get("document_id") or (env or {}).get("document_id")
+    drawing_rev = (env or {}).get("revision_after") or 1
+    if not drawing:
+        rep.add("DRW-07.drawing", "Чертёж для разреза", "FAIL", f"чертёж не создан: {code}")
+        return
+
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drawing, "expected_revision": drawing_rev,
+        "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+        "x": 150.0, "y": 150.0})
+    drawing_rev = (env or {}).get("revision_after") or drawing_rev
+    views_ok = code is None
+
+    # Мутация требует файла на диске: без него Хост отказывает до COM (сторож работает).
+    env, code = call("kompas_save_document", {
+        "document_id": drawing, "expected_revision": drawing_rev, "target_path": drawing_path})
+    drawing_rev = (env or {}).get("revision_after") or drawing_rev
+    rep.add("DRW-07.setup_views", "Стандартные виды и файл чертежа",
+            "PASS" if views_ok and code is None else "FAIL",
+            f"виды={views_ok} файл={code is None}")
+
+    env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+    views = result(env).get("views") or []
+    associative = [row for row in views if row.get("source_path")]
+    trace = [-10.0, 30.0, 45.0, 30.0, 45.0, 60.0, 75.0, 60.0, 75.0, 50.0, 130.0, 50.0]
+
+    # Какой вид вырождает Z, решает адаптер (GetProjectionPoint), поэтому кандидаты перебираются:
+    # строка ниже подтверждает, что РАЗРЕЗ строится, а не что угадан опорный вид.
+    created = None
+    section = {}
+    attempts = []
+    for candidate in sorted(associative, key=lambda r: r.get("object_count") or 0, reverse=True):
+        env, code = call("kompas_create_section_view", {
+            "document_id": drawing, "expected_revision": drawing_rev,
+            "base_view_ref": candidate.get("view_ref"), "mode": "stepped",
+            "trace_model": trace, "look": "left", "x": 150.0, "y": 60.0})
+        attempts.append(code or "ok")
+        if code is None:
+            created = env
+            section = result(env).get("section") or {}
+            drawing_rev = (env or {}).get("revision_after") or drawing_rev
+            break
+
+    rep.add("DRW-07.create.stepped",
+            "Ступенчатый разрез по трассе из шести точек: вид-разрез построен и перечитан",
+            "PASS" if created and (section.get("object_count") or 0) > 0 else "FAIL",
+            f"попытки={attempts} вид={section.get('view_ref')} тип={section.get('view_type')} "
+            f"Section={section.get('section')} обозначение={section.get('designation')!r} "
+            f"объектов={section.get('object_count')} штриховка={section.get('hatch_step')}/"
+            f"{section.get('hatch_angle')}",
+            {"section": section})
+
+    view_ref = section.get("view_ref")
+    if not view_ref:
+        rep.add("DRW-07.read", "Чтение разреза", "NAMED", "разрез не построен — читать нечего")
+        rep.add("DRW-07.update", "Правка разреза", "NAMED", "разрез не построен — править нечего")
+        rep.add("DRW-07.delete", "Удаление разреза", "NAMED", "разрез не построен — удалять нечего")
+    else:
+        env, code = call("kompas_get_section_view", {
+            "document_id": drawing, "view_ref": view_ref})
+        read = result(env).get("section") or {}
+        same = (read.get("designation") == section.get("designation")
+                and read.get("trace_view") == section.get("trace_view"))
+        rep.add("DRW-07.read",
+                "Разрез, прочитанный отдельным вызовом, совпадает с созданным (обозначение и трасса)",
+                "PASS" if code is None and same else "FAIL",
+                f"code={code} обозначение={read.get('designation')!r} режим={read.get('mode')} "
+                f"объектов={read.get('object_count')} совпало={same}")
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+
+        env, code = call("kompas_update_section_view", {
+            "document_id": drawing, "expected_revision": drawing_rev, "view_ref": view_ref,
+            "look": "right", "scale": 0.5})
+        after = result(env).get("after") or {}
+        changed = (code is None and after.get("look_left") is False
+                   and abs((after.get("scale") or 0) - 0.5) < 1e-9
+                   and (after.get("object_count") or 0) > 0)
+        rep.add("DRW-07.update",
+                "Правка: сторона стрелок и масштаб применены к ТОМУ ЖЕ виду и перечитаны",
+                "PASS" if changed else "FAIL",
+                f"code={code} было={((result(env).get('before') or {}).get('designation'))!r} "
+                f"стало={after.get('designation')!r} стрелки_влево={after.get('look_left')} "
+                f"масштаб={after.get('scale')} объектов={after.get('object_count')}")
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+
+        # The baseline is the collection JUST BEFORE the delete: the creation added one view, so
+        # comparing with the count from before the creation would pass a delete that removed nothing.
+        env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+        views_before_delete = len(result(env).get("views") or [])
+        env, code = call("kompas_delete_section_view", {
+            "document_id": drawing, "expected_revision": drawing_rev, "view_ref": view_ref})
+        removed = result(env)
+        deleted = (code is None and removed.get("view_deleted") is True
+                   and (removed.get("remaining_views") or 99) < views_before_delete)
+        rep.add("DRW-07.delete",
+                "Удаление: вид и его линия уходят, коллекция видов уменьшается",
+                "PASS" if deleted else "FAIL",
+                f"code={code} вид={removed.get('view_deleted')} линия={removed.get('cut_line_deleted')} "
+                f"осталось={removed.get('remaining_views')}")
+
+    # Отрицательные строки: отказ приходит ДО изменения документа, и это видно по ревизии.
+    base_view = associative[0].get("view_ref") if associative else None
+    env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+    current_rev = (env or {}).get("revision_after")
+    for cid, description, arguments in (
+        ("DRW-07.negative_tests.odd_coordinates",
+         "Нечётное число координат трассы отвергается INVALID_ARGUMENT",
+         {"mode": "stepped", "trace_model": [0.0, 0.0, 10.0, 0.0, 10.0]}),
+        ("DRW-07.negative_tests.three_points",
+         "Три точки в ступенчатом разрезе отвергаются INVALID_ARGUMENT",
+         {"mode": "stepped", "trace_model": [0.0, 0.0, 20.0, 0.0, 20.0, 20.0]}),
+        ("DRW-07.negative_tests.both_traces",
+         "Трасса сразу в двух системах координат отвергается INVALID_ARGUMENT",
+         {"mode": "stepped", "trace_model": trace, "trace_view": trace}),
+        ("DRW-07.negative_tests.unsupported_mode",
+         "Режим вне опубликованных отвергается CAPABILITY_UNAVAILABLE по имени",
+         {"mode": "broken", "trace_model": trace}),
+    ):
+        payload = {"document_id": drawing, "base_view_ref": base_view}
+        payload.update(arguments)
+        if current_rev:
+            payload["expected_revision"] = current_rev
+        env, code = call("kompas_create_section_view", payload)
+        # `broken` is outside the published enum, so the SCHEMA refuses it before the tool's own
+        # mode check runs; both answers are the documented refusal, and the row names which came.
+        expected = ("INVALID_ARGUMENT", "CAPABILITY_UNAVAILABLE") \
+            if arguments.get("mode") == "broken" else ("INVALID_ARGUMENT",)
+        rep.add(cid, description, "PASS" if code in expected else "FAIL",
+                f"code={code} ожидалось={expected}")
+
+    rep.add("DRW-07.geometry_validation",
+            "Контур разреза по выгрузке DXF и снимок PNG",
+            "NAMED",
+            "не проверяется в этой редакции группы: строка 4.1 наряда (сверка контура по DXF) и 4.6 "
+            "(снимки) впереди; отсутствие названо, а не выдано за успех")
+
 def drawing_checks(client, rep, app_id, workdir):
     """DRW.* — чертёжный блок через MCP (блок DRW, профиль `drawings-minimal-v1`).
 
@@ -13884,6 +14095,7 @@ def main():
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
     drawing_only = "--drawing-only" in sys.argv
+    section_only = "--section-only" in sys.argv
 
     # Домен ПЕРЕМЕННЫХ И МАТЕРИАЛА (блок VM, профиль `variables-material-minimal-v1`): одна группа,
     # свой сеанс, своя ветка. Клетка матрицы обязана находиться по ИМЕНИ строки (`VM.<NN>.<действие>`),
@@ -14533,6 +14745,14 @@ def main():
 
         if drawing_only:
             drawing_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if section_only:
+            section_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -45299,6 +45519,7 @@ EXTRA_GROUP_CHECKS = {
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
     "drawing": lambda c, r, a, w, v, p: drawing_checks(c, r, a, w),
+    "section": lambda c, r, a, w, v, p: section_checks(c, r, a, w),
     "variables_material": lambda c, r, a, w, v, p: variables_material_checks(
         c, r, a, w, reference_path=v),
     "variables_bind": lambda c, r, a, w, v, p: variables_bind_checks(c, r, a, w),

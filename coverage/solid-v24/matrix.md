@@ -146,18 +146,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 343
-- **строк_полностью_закрыто:** 153
-- **строк_с_каким_либо_прогрессом:** 168
+- **строк_каталога:** 352
+- **строк_полностью_закрыто:** 159
+- **строк_с_каким_либо_прогрессом:** 177
 - **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
-- **операций:** 125
+- **операций:** 134
 - **режимов_и_вариантов:** 209
-- **применимых_действий:** 2873
-- **действий_verified:** 1032
-- **покрытие_действий:** 35.9%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1032, 'not_applicable': 557}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 54, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2901
+- **действий_verified:** 1055
+- **покрытие_действий:** 36.4%
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1055, 'not_applicable': 619, 'implemented': 5}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -690,6 +690,15 @@
 | `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-04.title_block.set.create, DRW-04.title_block.set.negative_tests, DRW-04.title_block.set.save_reopen |
 | `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
 | `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
+| `DRW-07.section_view.create.stepped` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | код | OK | н/п | н/п | OK | код | DRW-07.section_view.create.stepped |
+| `DRW-07.section_view.create.simple` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.create.simple |
+| `DRW-07.section_view.read` | DRW | later | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.read |
+| `DRW-07.section_view.update` | DRW | later | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.section_view.update |
+| `DRW-07.section_view.delete` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | OK | OK | н/п | DRW-07.section_view.delete |
+| `DRW-07.section_view.save_reopen` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.save_reopen |
+| `DRW-07.section_view.rebuild` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | код | н/п | н/п | н/п | н/п | код | DRW-07.section_view.rebuild |
+| `DRW-07.section_view.geometry_validation` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | код | DRW-07.section_view.geometry_validation |
+| `DRW-07.section_view.negative_tests` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.section_view.negative_tests |
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
 | `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests, VM-02.variable.set_value.save_reopen |
 | `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests, VM-03.variable.set_expression.geometry_validation, VM-03.variable.set_expression.save_reopen |
@@ -1189,6 +1198,25 @@
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
   - Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.
   - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
+- `DRW-07.section_view.create.stepped` — не закрыт
+  - Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).
+  - Перестроение после изменения модели проверено чтением вида, но не контуром — строка rebuild держит уровень implemented.
+- `DRW-07.section_view.create.simple` — закрыт целиком
+  - Контур простого разреза по DXF не сверялся: строка доказывает построение и перечитывание вида, а не геометрию контура.
+- `DRW-07.section_view.read` — закрыт целиком
+  - Отказ на виде другого типа проверен строкой отрицательных проверок группы.
+- `DRW-07.section_view.update` — закрыт целиком
+  - Буква обозначения не задаётся: ICutLine.Text документирован как доступный только для чтения, поэтому запрос буквы отвергается CAPABILITY_UNAVAILABLE.
+- `DRW-07.section_view.delete` — закрыт целиком
+  - Удаление линии вместе с видом требует отдельного вызова: ядро их не связывает.
+- `DRW-07.section_view.save_reopen` — закрыт целиком
+  - Контур после повторного открытия по DXF не сверялся — названо, а не выдано за проверку.
+- `DRW-07.section_view.rebuild` — не закрыт
+  - Строка держит уровень implemented: разрез читается после перестроения (обозначение, ObjectCount), но высота контура 40 по выгрузке не измерена.
+- `DRW-07.section_view.geometry_validation` — не закрыт
+  - Строка держит уровень implemented: сверка контура по DXF не доведена, потому что выгрузка перед созданием разреза ломает чтение ассоциаций.
+- `DRW-07.section_view.negative_tests` — закрыт целиком
+  - Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения.
 - `VM-01.variables.read` — закрыт целиком
   - Область — ВНЕШНИЕ переменные верхнего компонента, а не редактор всех параметров модели; поле scope отвечает external/top_part.
   - Живой прогон группы VM выполнен на бинарях поставки: строка VM-01.variables.read.discover PASS и требует ДЕЙСТВИТЕЛЬНО прочитанных значений и выражений ОБЕИХ переменных описания (depth=10, full_depth=20 при выражении depth*2), а не наличия ключей с null.

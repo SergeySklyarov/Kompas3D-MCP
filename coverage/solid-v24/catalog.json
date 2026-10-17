@@ -63,7 +63,7 @@
   },
   "counters": {
    "families": 43,
-   "operations": 125,
+   "operations": 134,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 209,
    "operations_without_level": 0,
@@ -6490,7 +6490,7 @@
     "runtime": "Живой прогон группы DRW в scripts/mcp-smoke.py (--drawing-only) на бинарях: 78 строк, 78 PASS, отчёт scratch/mcp-smoke/drawing-acceptance.json. Перечитаны: список видов и их значимые поля; номиналы размеров (линейный 80.0 = эталон ширины, радиальный/диаметральный 12.5 = радиус отверстия) с допуском 0.01 мм; изменение масштаба вида (1 → 2) на существующем объекте; ячейки штампа (запись НЕ подтверждена перечитыванием ни для одного проверенного номера — названо); текст техтребований (совпал по нормализованным пробелам, IsCreated=true); выгрузка dxf/dwg (файлы — ZIP-контейнеры конвертера v24, размеры 29660/29277 байт); save→close→reopen удержал виды (поля совпали), размеры и текст техтребований."
    },
    "route": "Создание чертежа — API5 2D: GetParamStruct(35) → ksDocumentParam.Init() → type=lt_DocSheetStandart(1), regime → Document2D() → ksCreateDocument(par); открытие — ksOpenDocument(path, !visible), сохранение — ksSaveDocument(path), закрытие — ksCloseDocument(). Виды — API7: IDrawingDocument.ViewsAndLayersManager → IViews → AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] = SAFEARRAY VT_I4 типов проекций, X, Y, Scale, DX, DY) → BOOL; каждый построенный вид — IAssociationView (SourceFileName, ProjectionName, HiddenLinesVisible, CenterLinesVisible, Scale, X, Y). Размеры — API7 через IView как ISymbols2DContainer: LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать; номинал — IDimensionText.NominalValue. Основная надпись — ILayoutSheet.Stamp → IStamp.get_Text(Id).Str (запись) → IStamp.Update() → перечитать. Экспорт — IApplication.Converter → IConverter.GetFilter(docType, saveAs, out command) → Convert(inputFile, outfile, command, showParam=false); документированы DXF (FORMAT_DXF=1) и DWG (FORMAT_DWG=2); PDF справкой как маршрут НЕ документирован и не публикуется.",
-   "mcp_support": "kompas_create_drawing_views / kompas_list_drawing_views / kompas_edit_view / kompas_add_dimension / kompas_set_title_block / kompas_set_technical_demand / kompas_export_drawing",
+   "mcp_support": "kompas_create_drawing_views / kompas_list_drawing_views / kompas_edit_view / kompas_add_dimension / kompas_set_title_block / kompas_set_technical_demand / kompas_export_drawing / kompas_create_section_view / kompas_get_section_view / kompas_update_section_view / kompas_delete_section_view",
    "next_step": "Снять группу DRW в scripts/mcp-smoke.py (--drawing-only) на бинарях поставки и перевести строки с mcp_implemented на mcp_verified ТОЛЬКО по измерению. Приёмочные строки обязаны перечитывать созданное (виды и их ЗНАЧИМЫЕ поля, номиналы размеров против независимых эталонов с допусками, ячейки штампа, текст техтребований, файл экспорта), а не полагаться на успешный HRESULT.",
    "documentation_gaps_named": [
     "идентификаторы ячеек штампа (IStamp.get_Text(Id)) в справке НЕ перечислены: документированы только сигнатура и метод GetNextColumnId(Id) для перехода к следующей непустой ячейке. Поэтому идентификатор ячейки задаёт ВЫЗЫВАЮЩИЙ, а сервер перечитывает записанное и называет расхождение в unverified_aspects; карта «номер графы → Id» не объявляется как измеренная.",
@@ -6741,6 +6741,358 @@
      "limitations": [
       "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.",
       "Живого прогона не было: уровень mcp_implemented, не mcp_verified. Строка закрывается только после перечитывания текста в группе DRW."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.create.stepped",
+     "name": "Ступенчатый разрез по линии с перегибами",
+     "level": "mcp_verified",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). линия из 6 и более точек: секущие участки параллельны, переходы между ними перпендикулярны; КОМПАС совмещает секущие плоскости в одну.",
+     "mcp_support": "kompas_create_section_view (mode=stepped, trace_model либо trace_view, look left|right, x/y, scale; ответ — перечитанные параметры вида и линии)",
+     "modes": [],
+     "limitations": [
+      "Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).",
+      "Перестроение после изменения модели проверено чтением вида, но не контуром — строка rebuild держит уровень implemented.",
+      "Сечение, ломаный и местный разрезы не поддерживаются: отказ CAPABILITY_UNAVAILABLE по имени режима."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.create.simple",
+     "name": "Простой разрез по линии из двух точек",
+     "level": "mcp_verified",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). ровно две точки трассы — тот же маршрут, другой режим.",
+     "mcp_support": "kompas_create_section_view (mode=simple)",
+     "modes": [],
+     "limitations": [
+      "Контур простого разреза по DXF не сверялся: строка доказывает построение и перечитывание вида, а не геометрию контура.",
+      "Трасса из двух точек обязана пересекать тело; иначе пустой вид и откат."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.read",
+     "name": "Чтение параметров разреза по ссылке на вид",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). линия берётся как IAssociationView.BaseObject, поэтому разрез, переоткрытый с диска, читается тем же маршрутом.",
+     "mcp_support": "kompas_get_section_view (только чтение; на виде другого типа — отказ с названным типом)",
+     "modes": [],
+     "limitations": [
+      "Отказ на виде другого типа проверен строкой отрицательных проверок группы.",
+      "Габарит вида не публикуется: IView его не отдаёт."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.update",
+     "name": "Правка существующего разреза: трасса, сторона стрелок, масштаб, точка привязки",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). ICutLine.Points + IDrawingObject.Update, IView.Scale/X/Y + Update, затем IAssociationView.Rebuild; доказательство — ДО/ПОСЛЕ одного и того же вида.",
+     "mcp_support": "kompas_update_section_view (ответ несёт before и after одного объекта)",
+     "modes": [],
+     "limitations": [
+      "Буква обозначения не задаётся: ICutLine.Text документирован как доступный только для чтения, поэтому запрос буквы отвергается CAPABILITY_UNAVAILABLE.",
+      "Буква линии не правится: ICutLine.Text только для чтения, автобуква остаётся за ядром."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.delete",
+     "name": "Удаление вида-разреза и его линии",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). IDrawingObject.Delete() вида и линии раздельно (MEASURED: вид линию не уносит); подтверждение — перечитывание коллекции видов.",
+     "mcp_support": "kompas_delete_section_view (необязательный keep_cut_line оставляет линию)",
+     "modes": [],
+     "limitations": [
+      "Удаление линии вместе с видом требует отдельного вызова: ядро их не связывает.",
+      "Удаление необратимо: откат удалённого вида не предусмотрен."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.save_reopen",
+     "name": "Разрез переживает сохранение, закрытие и повторное открытие чертежа",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). save → close → open; ссылки прошлой ревизии отвергаются STALE_REFERENCE, вид находится заново по типу vt_Section.",
+     "mcp_support": "kompas_get_section_view после повторного открытия документа",
+     "modes": [],
+     "limitations": [
+      "Контур после повторного открытия по DXF не сверялся — названо, а не выдано за проверку.",
+      "Ссылка на вид привязана к ревизии документа: после переоткрытия её нужно получать заново."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.rebuild",
+     "name": "Перестроение разреза после изменения модели",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). переменная модели PlateT 32 → 40, сохранение модели, kompas_rebuild_drawing_views, затем перечитывание разреза.",
+     "mcp_support": "kompas_rebuild_drawing_views + kompas_get_section_view",
+     "modes": [],
+     "limitations": [
+      "Строка держит уровень implemented: разрез читается после перестроения (обозначение, ObjectCount), но высота контура 40 по выгрузке не измерена.",
+      "Контур после перестроения по DXF не изолирован: базовая выгрузка главного чертежа до разреза недоступна (см. ограничения строки create.stepped)."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.geometry_validation",
+     "name": "Сверка контура разреза по выгрузке чертежа",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). DXF даёт контур в координатах листа: высота равна толщине, стенки отверстий стоят на своих местах.",
+     "mcp_support": "kompas_export_drawing (dxf) + kompas_get_section_view",
+     "modes": [],
+     "limitations": [
+      "Строка держит уровень implemented: сверка контура по DXF не доведена, потому что выгрузка перед созданием разреза ломает чтение ассоциаций.",
+      "Выгрузка главного чертежа между созданием видов и чтением коллекции совпала с потерей source_path у видов, а после сохранения — с отказом WRONG_DOCUMENT_KIND на ссылках: порядок «выгрузка, затем создание разреза» требует повторного чтения коллекции после выгрузки."
+     ]
+    },
+    {
+     "id": "DRW-07.section_view.negative_tests",
+     "name": "Отказы разреза: трасса, исходный вид, режим, пустой результат",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "isymbols2dcontainer_cutlines",
+      "icutlines_add",
+      "icutline",
+      "icutline_points",
+      "icutline_arrowpos",
+      "icutline_autosorted",
+      "iviews_add",
+      "ltviewtype",
+      "iassociationview_baseobject",
+      "iassociationview_section",
+      "iassociationview_getprojectionpoint",
+      "iassociationview_rebuild",
+      "iviewdesignation_designation",
+      "iassociationview_hatchparametersfrommodel",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api7": [
+       "ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine (Points, ArrowPos, AutoSorted, Text)",
+       "IViews.Add(vt_Section=7) → IAssociationView (BaseObject = линия разреза, Section, SourceFileName, Rebuild)",
+       "IAssociationView.GetProjectionPoint(X, Y, Z, out Xv, out Yv) — координаты вида по 3D-координатам модели",
+       "IView (Scale, X, Y, ViewType, ObjectCount), IViewDesignation.Designation, IHatchParam (дополнительный интерфейс)",
+       "IDrawingObject.Update() / Delete()"
+      ]
+     },
+     "route": "документированный маршрут: ISymbols2DContainer.CutLines (контейнер вида, как у размеров) → ICutLines.Add() → ICutLine.Points (x0,y0,…,xn,yn — начальная точка, перегибы, конечная) → ArrowPos (TRUE слева по направлению ломаной, FALSE справа) → IDrawingObject.Update(); затем IViews.Add(vt_Section=7) → IAssociationView.BaseObject = линия разреза → IAssociationView.Section (MEASURED: FALSE — разрез, TRUE — сечение) → IDrawingObject.Update(); перечитывание — IView.ObjectCount, IViewDesignation.Designation, IHatchParam (дополнительный интерфейс IAssociationView), IAssociationView.GetProjectionPoint для перевода трассы из координат модели в координаты вида. Трасса в ICutLine.Points — координаты ПЛОСКОСТИ ВИДА в мм модели и от масштаба вида не зависят (измерено). недопустимая трасса и обе системы координат — INVALID_ARGUMENT до изменения; неподдерживаемый режим — CAPABILITY_UNAVAILABLE по имени; пустой разрез — GEOMETRY_FAILED с откатом созданного.",
+     "mcp_support": "kompas_create_section_view (отказы с описанием частичных изменений)",
+     "modes": [],
+     "limitations": [
+      "Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения.",
+      "Откат удаляет созданные объекты Delete(): если удаление не удалось, ответ называет оставшиеся объекты и способ их убрать."
      ]
     }
    ]

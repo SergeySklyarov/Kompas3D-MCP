@@ -12939,6 +12939,438 @@
     ],
     "note": "объём и габарит импортированного тела сверяются с исходной деталью в пределах допуска STEP-roundtrip (docs/03_ACCEPTANCE_PLAN.md §3.3: bbox 0,002 мм, объём max(0,1 мм³, 1e-5 x исходный))"
    }
+  },
+  {
+   "operation_id": "DRW-07.section_view.create.stepped",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_create_section_view (mode=stepped, trace_model либо trace_view, look left|right, x/y, scale; ответ — перечитанные параметры вида и линии)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "implemented",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "implemented"
+   },
+   "tests": [
+    "DRW-07.section_view.create.stepped"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).",
+    "Перестроение после изменения модели проверено чтением вида, но не контуром — строка rebuild держит уровень implemented."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение разрезов относится к строке read: создание перечислять нечего",
+    "edit": "правка трассы, стороны стрелок и масштаба — строка update",
+    "suppress_restore": "подавление вида-разреза в объём наряда не входит",
+    "delete_dependencies": "удаление вида и линии — строка delete"
+   },
+   "name": "Ступенчатый разрез по линии с перегибами"
+  },
+  {
+   "operation_id": "DRW-07.section_view.create.simple",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_create_section_view (mode=simple)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.create.simple"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Контур простого разреза по DXF не сверялся: строка доказывает построение и перечитывание вида, а не геометрию контура."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение разрезов — строка read",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "geometry_validation": "контур ступенчатого разреза сверяется строкой create.stepped; контур простого разреза машинно не сверялся"
+   },
+   "name": "Простой разрез по линии из двух точек"
+  },
+  {
+   "operation_id": "DRW-07.section_view.read",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_get_section_view (только чтение; на виде другого типа — отказ с названным типом)",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.read"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Отказ на виде другого типа проверен строкой отрицательных проверок группы."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "create": "создание — строка create.stepped",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "geometry_validation": "чтение не доказывает контур; контур — строка create.stepped"
+   },
+   "name": "Чтение параметров разреза по ссылке на вид"
+  },
+  {
+   "operation_id": "DRW-07.section_view.update",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_update_section_view (ответ несёт before и after одного объекта)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.update"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Буква обозначения не задаётся: ICutLine.Text документирован как доступный только для чтения, поэтому запрос буквы отвергается CAPABILITY_UNAVAILABLE."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "rebuild": "перестроение после модели — строка rebuild",
+    "save_reopen": "сохранение — строка save_reopen",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "geometry_validation": "правка доказывается перечитыванием ДО/ПОСЛЕ, контур — строка create.stepped"
+   },
+   "name": "Правка существующего разреза: трасса, сторона стрелок, масштаб, точка привязки"
+  },
+  {
+   "operation_id": "DRW-07.section_view.delete",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_delete_section_view (необязательный keep_cut_line оставляет линию)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.delete"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Удаление линии вместе с видом требует отдельного вызова: ядро их не связывает."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "save_reopen": "сохранение — строка save_reopen",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "geometry_validation": "удаление доказывается отсутствием объектов, а не контуром"
+   },
+   "name": "Удаление вида-разреза и его линии"
+  },
+  {
+   "operation_id": "DRW-07.section_view.save_reopen",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_get_section_view после повторного открытия документа",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.save_reopen"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Контур после повторного открытия по DXF не сверялся — названо, а не выдано за проверку."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "geometry_validation": "контур после переоткрытия не сверялся: сверяется перечитывание обозначения и трассы"
+   },
+   "name": "Разрез переживает сохранение, закрытие и повторное открытие чертежа"
+  },
+  {
+   "operation_id": "DRW-07.section_view.rebuild",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_rebuild_drawing_views + kompas_get_section_view",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "implemented",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "implemented"
+   },
+   "tests": [
+    "DRW-07.section_view.rebuild"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Строка держит уровень implemented: разрез читается после перестроения (обозначение, ObjectCount), но высота контура 40 по выгрузке не измерена."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "edit": "правка — строка update",
+    "save_reopen": "сохранение — строка save_reopen",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "negative_tests": "отказы перестроения в объём наряда не входят"
+   },
+   "name": "Перестроение разреза после изменения модели"
+  },
+  {
+   "operation_id": "DRW-07.section_view.geometry_validation",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_export_drawing (dxf) + kompas_get_section_view",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "implemented"
+   },
+   "tests": [
+    "DRW-07.section_view.geometry_validation"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Строка держит уровень implemented: сверка контура по DXF не доведена, потому что выгрузка перед созданием разреза ломает чтение ассоциаций."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "read": "чтение — строка read",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "save_reopen": "сохранение — строка save_reopen",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "negative_tests": "отказы — строка create.stepped"
+   },
+   "name": "Сверка контура разреза по выгрузке чертежа"
+  },
+  {
+   "operation_id": "DRW-07.section_view.negative_tests",
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_section_view.json",
+   "adapter_route": "kompas_create_section_view (отказы с описанием частичных изменений)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+   ],
+   "limitations": [
+    "Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency",
+    "dep.drawing.source_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "обнаружение — строка read",
+    "create": "создание — строка create.stepped",
+    "read": "чтение — строка read",
+    "edit": "правка — строка update",
+    "rebuild": "перестроение — строка rebuild",
+    "save_reopen": "сохранение — строка save_reopen",
+    "suppress_restore": "подавление в объём наряда не входит",
+    "delete_dependencies": "удаление — строка delete",
+    "geometry_validation": "контур — строка create.stepped"
+   },
+   "name": "Отказы разреза: трасса, исходный вид, режим, пустой результат"
   }
  ],
  "pending_families": [

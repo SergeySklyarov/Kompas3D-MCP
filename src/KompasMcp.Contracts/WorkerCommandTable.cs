@@ -227,6 +227,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.CreateSectionView, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.GetSectionView, WorkerAction.Read, 60_000);
         Cad(WorkerCommands.DeleteSectionView, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.UpdateSectionView, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.ListDrawingViews, WorkerAction.Read);
         Cad(WorkerCommands.ListDimensions, WorkerAction.Read);
         Cad(WorkerCommands.AddDimension, WorkerAction.ModelMutation, 240_000);

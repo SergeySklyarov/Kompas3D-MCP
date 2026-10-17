@@ -267,6 +267,20 @@ def main():
                   "| трасса:", read_section.get("trace_view"))
 
             drawing_rev = read.get("revision_after") or drawing_rev
+
+            changed = session.tool("kompas_update_section_view", {
+                "document_id": drawing, "expected_revision": drawing_rev, "view_ref": view_ref,
+                "look": "right", "scale": 0.5, "operation_id": str(uuid.uuid4())})
+            after = result_of(changed).get("after") or {}
+            print("=== ответ kompas_update_section_view ===")
+            print("код:", code_of(changed),
+                  "| было:", (result_of(changed).get("before") or {}).get("designation"),
+                  "| стало:", after.get("designation"),
+                  "| стрелки влево:", after.get("look_left"),
+                  "| масштаб:", after.get("scale"),
+                  "| объектов:", after.get("object_count"))
+            drawing_rev = changed.get("revision_after") or drawing_rev
+
             removed = session.tool("kompas_delete_section_view", {
                 "document_id": drawing, "expected_revision": drawing_rev, "view_ref": view_ref,
                 "operation_id": str(uuid.uuid4())})

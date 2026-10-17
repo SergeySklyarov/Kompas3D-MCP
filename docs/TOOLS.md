@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 93.
+Всего инструментов: 94.
 
 | Инструмент | Назначение | Что делает |
 |---|---|---|
@@ -74,6 +74,7 @@
 | `kompas_export_image` | Снимок модели | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
 | `kompas_create_drawing_views` | Создать стандартные виды чертежа | Строит группу стандартных ассоциативных видов модели документированным маршрутом API7: IKompasDocument2D.ViewsAndLayersManager → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24:… |
 | `kompas_create_section_view` | Создать разрез модели на чертеже | Строит ассоциативный РАЗРЕЗ по существующему ассоциативному виду документированным маршрутом API7: ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine.Points / ArrowPos → IDrawingObject.Update, затем IViews.Add(vt_Section) →… |
+| `kompas_update_section_view` | Изменить разрез чертежа | Меняет трассу существующего разреза, сторону стрелок, масштаб и точку привязки: трасса пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), геометрия - в вид (IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update… |
 | `kompas_get_section_view` | Прочитать разрез чертежа | Читает вид-разрез по ссылке: тип вида, значение Section, масштаб, точку привязки, трассу линии разреза в мм вида, сторону стрелок, букву, обозначение (например «А-А(1:1)»), файл-источник, число объектов, шаг/угол/стиль штриховки. |
 | `kompas_delete_section_view` | Удалить разрез чертежа | Удаляет вид-разрез документированным IDrawingObject.Delete() и, если не задан keep_cut_line, линию разреза - отдельным Delete(), потому что ядро вид удаляет, а линию оставляет (измерено). |
 | `kompas_list_drawing_views` | Перечень видов чертежа | Читает виды чертежа через IKompasDocument2D.ViewsAndLayersManager.Views: номер, имя, тип, масштаб, координаты точки привязки и - для ассоциативных видов - файл-источник, имя проекции, видимость скрытых и осевых линий, число объектов. |

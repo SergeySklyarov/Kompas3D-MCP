@@ -419,6 +419,7 @@ public sealed class CommandDispatcher
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
             WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
             WorkerCommands.DeleteSectionView => _sta.Run(() => DeleteSectionView(request), "drawing.delete_section_view", cancellationToken),
+            WorkerCommands.UpdateSectionView => _sta.Run(() => UpdateSectionView(request), "drawing.update_section_view", cancellationToken),
             WorkerCommands.ListDrawingViews => _sta.Run(() => ListDrawingViews(request), "drawing.list_views", cancellationToken),
             WorkerCommands.ListDimensions => _sta.Run(() => ListDimensions(request), "drawing.list_dimensions", cancellationToken),
             WorkerCommands.AddDimension => _sta.Run(() => AddDimension(request), "drawing.add_dimension", cancellationToken),
@@ -1253,6 +1254,13 @@ public sealed class CommandDispatcher
     // DRW (block drawings): the three mutating tools go through the common mutation point so the
     // envelope carries the revision AND the control copy is taken; the read goes through Tagged.
     // History: docs/decisions/drawings.md#worker
+
+    private object? UpdateSectionView(IpcFrame request)
+    {
+        var command = Argument<UpdateSectionViewCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.UpdateSectionView(command), document);
+    }
 
     private object? GetSectionView(IpcFrame request)
     {

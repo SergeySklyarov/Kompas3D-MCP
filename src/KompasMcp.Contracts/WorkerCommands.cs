@@ -236,6 +236,8 @@ public static class WorkerCommands
     public const string GetSectionView = "drawing.get_section_view";
 
     public const string DeleteSectionView = "drawing.delete_section_view";
+
+    public const string UpdateSectionView = "drawing.update_section_view";
     public const string ListDrawingViews = "drawing.list_views";
     public const string AddDimension = "drawing.add_dimension";
     public const string SetTitleBlock = "drawing.set_title_block";

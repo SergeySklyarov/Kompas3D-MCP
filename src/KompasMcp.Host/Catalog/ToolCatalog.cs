@@ -2500,6 +2500,33 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_update_section_view", "Изменить разрез чертежа",
+                "Меняет трассу существующего разреза, сторону стрелок, масштаб и точку привязки: трасса "
+                + "пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), геометрия — в вид "
+                + "(IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update (справка v24: "
+                + "icutline_points.html, icutline_arrowpos.html, iview_scale.html, idrawingobject_update.html). "
+                + "Новая трасса проверяется ТЕМ ЖЕ правилом, что при создании, до записи. Ответ — тот же "
+                + "вид ДО и ПОСЛЕ, поэтому добавление вида не может сойти за правку. НЕ ПОДДЕРЖИВАЕТСЯ: "
+                + "переключение Section (разрез/сечение) — измерено, что у построенного вида значение не "
+                + "меняется и Update отвечает false; буква — ICutLine.Text только для чтения.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("trace_view", Sch.Nullable(Sch.Arr(
+                        Sch.Num("Координата точки трассы в миллиметрах вида."),
+                        "Новая трасса в координатах ВИДА, подряд x0, y0, ... Не задано — трасса не "
+                        + "меняется."))),
+                    ("look", Sch.Nullable(Sch.Enum(
+                        "Новая сторона стрелок относительно направления трассы.", "left", "right"))),
+                    ("scale", Sch.Nullable(Sch.Num(
+                        "Новый масштаб разреза.", exclusiveMin: true, exclusiveMinValue: 0d))),
+                    ("x", Sch.Nullable(Sch.Num("Новая координата привязки по X, в миллиметрах чертежа."))),
+                    ("y", Sch.Nullable(Sch.Num("Новая координата привязки по Y, в миллиметрах чертежа.")))),
+                WorkerCommands.UpdateSectionView,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_get_section_view", "Прочитать разрез чертежа",
                 "Читает вид-разрез по ссылке: тип вида, значение Section, масштаб, точку привязки, "
                 + "трассу линии разреза в мм вида, сторону стрелок, букву, обозначение (например "

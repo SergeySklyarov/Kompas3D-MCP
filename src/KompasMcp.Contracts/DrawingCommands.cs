@@ -547,3 +547,38 @@ public sealed record DeleteSectionViewResult(
     bool CutLineDeleted,
     int RemainingViews,
     VerificationDto Verification);
+
+/// <summary>Change an existing section: its trace, the arrow side, its scale and its anchor.</summary>
+/// <remarks>DOC: the trace is written through the view's own <c>ICutLine.Points</c> and the geometry
+/// through <c>IView.Scale/X/Y</c>, both followed by <c>IDrawingObject.Update</c>.
+/// INVARIANT: the response is the SAME view re-read afterwards, so adding a view cannot pass as an edit.
+/// MEASURED: <c>Section</c> cannot be switched after the view is built — <c>Update</c> answers false and the
+/// picture stays; the value is a property of creation, not of editing.
+/// History: docs/decisions/drawings.md#section-route</remarks>
+public sealed record UpdateSectionViewCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string ViewRef { get; init; }
+
+    /// <summary>New trace in VIEW millimetres, flat <c>x0, y0, ...</c>; null leaves it alone.</summary>
+    public IReadOnlyList<double>? TraceView { get; init; }
+
+    /// <summary><c>left</c> or <c>right</c>; null leaves the arrows as they are.</summary>
+    public string? Look { get; init; }
+
+    /// <summary>New scale; null leaves it alone.</summary>
+    public double? Scale { get; init; }
+
+    public double? X { get; init; }
+
+    public double? Y { get; init; }
+}
+
+/// <summary>Result of changing a section: the same view before and after.</summary>
+public sealed record UpdateSectionViewResult(
+    SectionViewDto Before,
+    SectionViewDto After,
+    VerificationDto Verification);

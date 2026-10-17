@@ -395,6 +395,163 @@ public sealed partial class Api5Session
         }
     }
 
+    public UpdateSectionViewResult UpdateSectionView(UpdateSectionViewCommand command)
+    {
+        var document = RequireDrawing(command.DocumentId, command.ExpectedRevision);
+        if (command.TraceView is null && command.Look is null && command.Scale is null
+            && command.X is null && command.Y is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Не задано ни одно изменяемое свойство разреза: укажите trace_view, look, scale, x или y.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["view_ref"] = command.ViewRef });
+        }
+
+        if (command.Scale is double scale && scale <= 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Масштаб разреза должен быть положительным, получено {scale}.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["scale"] = scale });
+        }
+
+        var view = ResolveView(document, command.ViewRef);
+        try
+        {
+            var type = SafeViewType(() => view.ViewType);
+            if (type != "vt_Section")
+            {
+                throw new KompasContractException(
+                    ErrorCodes.InvalidArgument,
+                    $"Вид «{command.ViewRef}» имеет тип {type ?? "не прочитан"}: правка разреза к нему "
+                    + "не применима.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["view_ref"] = command.ViewRef,
+                        ["view_type"] = type,
+                    });
+            }
+
+            if (view is not IAssociationView association)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "Вид-разрез не отдал IAssociationView: линию разреза взять неоткуда.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?> { ["view_ref"] = command.ViewRef });
+            }
+
+            var line = SafeObject(() => association.BaseObject) as ICutLine
+                ?? throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "У вида-разреза нет опорной линии разреза (BaseObject = null): правка трассы "
+                    + "невозможна, остальные свойства вида правятся kompas_edit_view.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?> { ["view_ref"] = command.ViewRef });
+
+            var before = ReadSection(document, view, line, mode: null);
+
+            // INVARIANT: the new trace is checked by the same rule as the creation, BEFORE the write.
+            if (command.TraceView is { Count: > 0 } trace)
+            {
+                var mode = trace.Count == 4 ? SectionMode.Simple : SectionMode.Stepped;
+                var problems = SectionTrace.Problems(mode, trace);
+                if (problems.Count > 0)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.InvalidArgument,
+                        "Новая трасса разреза недопустима: " + string.Join("; ", problems) + ".",
+                        RetryPolicy.Never,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["trace_points"] = trace.Count / 2,
+                            ["problems"] = problems,
+                            ["partial_effects"] = false,
+                        });
+                }
+
+                try
+                {
+                    line.Points = trace.ToArray();
+                }
+                catch (COMException ex)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.GeometryFailed,
+                        $"Запись трассы бросила исключение: {ex.Message}. Разрез не изменён.",
+                        RetryPolicy.SameOperationId,
+                        hresult: ex.HResult,
+                        details: new Dictionary<string, object?> { ["stage"] = "trace" });
+                }
+            }
+
+            if (command.Look is { Length: > 0 } look)
+            {
+                var lookLeft = look.ToLowerInvariant() switch
+                {
+                    "left" => true,
+                    "right" => false,
+                    _ => throw new KompasContractException(
+                        ErrorCodes.InvalidArgument,
+                        $"Сторона стрелок '{look}' не документирована: опубликованы left и right.",
+                        RetryPolicy.Never,
+                        details: new Dictionary<string, object?> { ["look"] = look }),
+                };
+                line.ArrowPos = SectionTrace.ArrowPos(lookLeft);
+            }
+
+            var lineUpdated = ((IDrawingObject)line).Update();
+            if (command.Scale is double newScale)
+            {
+                view.Scale = newScale;
+            }
+
+            if (command.X is double newX)
+            {
+                view.X = newX;
+            }
+
+            if (command.Y is double newY)
+            {
+                view.Y = newY;
+            }
+
+            var viewUpdated = ((IDrawingObject)view).Update();
+            BumpRevision(document, "drawing.update_section_view");
+
+            var after = ReadSection(document, view, line, mode: null);
+            var checks = new List<NamedCheck>
+            {
+                new("cut_line_updated", lineUpdated, lineUpdated.ToString(), "true"),
+                new("view_updated", viewUpdated, viewUpdated.ToString(), "true"),
+                new("trace_matches_request", command.TraceView is not { Count: > 0 } wanted
+                        || (after.TraceView is not null && after.TraceView.Count == wanted.Count),
+                    (after.TraceView?.Count ?? 0).ToString(CultureInfo.InvariantCulture),
+                    (command.TraceView?.Count ?? 0).ToString(CultureInfo.InvariantCulture)),
+                new("objects_still_drawn", SectionTrace.Built(after.ObjectCount),
+                    after.ObjectCount?.ToString(CultureInfo.InvariantCulture), "> 0"),
+            };
+            var verification = new VerificationDto(
+                SectionTrace.Built(after.ObjectCount)
+                    ? VerificationLevel.StructureChecked
+                    : VerificationLevel.CallReturned,
+                checks,
+                new List<string>
+                {
+                    "section_geometry_not_checked — правка подтверждена перечитыванием трассы и числа "
+                    + "объектов, а не сверкой контура",
+                });
+            return new UpdateSectionViewResult(before, after, verification);
+        }
+        finally
+        {
+            ComApartment.Release(view);
+        }
+    }
+
     private static SectionMode ParseMode(string mode) => mode switch
     {
         "simple" => SectionMode.Simple,

@@ -61,11 +61,12 @@ public sealed partial class Api5Session
         // (ksdocument2d_rasterformatparam) + ksDocument2D.SaveAsToRasterFormat
         // (ksdocument2d_saveastorasterformat). The window projection is a 3D route and is refused by
         // name here, before COM, instead of being silently ignored on a drawing.
-        var drawingHost = document.Drawing;
+        var route = RasterDocumentRouting.Choose(
+            document.Kind, document.Drawing is not null, document.Drawing7 is not null);
         ViewProjectionSpec? requestedView = null;
         if (command.View is { Length: > 0 } requestedViewName)
         {
-            if (drawingHost is not null)
+            if (route != RasterDocumentRoute.Model3D)
             {
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
@@ -409,20 +410,21 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>One render with the given parameters: the documented route
-    /// <c>RasterFormatParam → Init → SaveAsToRasterFormat</c>, once per call.</summary>
-    /// <remarks>DOC: the pair exists on BOTH documents — <c>ksDocument3D</c> for a model and
+    /// <summary>One render with the documented route <c>RasterFormatParam → Init →
+    /// SaveAsToRasterFormat</c>, once per call.</summary>
+    /// <remarks>DOC: the pair exists on BOTH documents — <c>ksDocument3D</c> for a model,
     /// <c>ksDocument2D</c> for a drawing (<c>ksdocument2d_rasterformatparam</c>,
-    /// <c>ksdocument2d_saveastorasterformat</c>); only the handle differs, so the body is shared.
-    /// INVARIANT: the parameter object is released here, so a refusal inside the render cannot leak it;
-    /// <paramref name="returned"/> reports the KERNEL's answer, and the caller names the refusal.
+    /// <c>ksdocument2d_saveastorasterformat</c>); only the handle differs. INVARIANT: the branch is
+    /// chosen by the DOCUMENT KIND, so a drawing never reaches the 3D route; the parameter object is
+    /// released here, so a refusal cannot leak it.
     /// History: docs/decisions/adapter-core.md#image-export</remarks>
     private byte[]? RenderRaster(
         DocumentEntry document, RasterFormatSpec format, string fileName, bool bytesMode,
         int? resolution, double? scale, out bool returned)
     {
-        if (document.Drawing is { } drawing)
+        if (document.Kind == DocumentKind.Drawing)
         {
+            var drawing = RequireDrawing5(document);
             return RenderRasterOn(
                 () => drawing.RasterFormatParam(),
                 parameter => drawing.SaveAsToRasterFormat(fileName, parameter),

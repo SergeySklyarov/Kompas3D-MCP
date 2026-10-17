@@ -1569,6 +1569,40 @@ public sealed partial class Api5Session
         return document;
     }
 
+    /// <summary>The API5 2D handle of a drawing, resolving it for a drawing created through API7.</summary>
+    /// <remarks>DOC: <c>kompasobject_transferinterface.html</c> — an API7 object converts to the named
+    /// API; with <c>objNewType = 0</c> the base object of the required type is returned. This is the
+    /// SAME documented transfer the session already uses for API7 → API5 (<c>TransferTo5</c>), not a new
+    /// route. INVARIANT: a DRAWING never falls into the 3D branch — a missing handle is a named drawing
+    /// refusal here. LIMIT: the transferred handle is not cached, so each call transfers again; a
+    /// degraded transfer is then visible as a refusal rather than as a stale handle.
+    /// History: docs/decisions/adapter-core.md#image-export</remarks>
+    private ksDocument2D RequireDrawing5(DocumentEntry document)
+    {
+        if (document.Drawing is { } cached)
+        {
+            return cached;
+        }
+
+        if (document.Drawing7 is { } drawing7
+            && BridgeFor(document).TransferTo5(drawing7) is ksDocument2D transferred)
+        {
+            return transferred;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            $"Чертёж «{document.Id}» создан через API7 и не отдал 2D-дескриптор (API5): ни прямого "
+            + "ksDocument2D, ни переноса API7 → API5. Маршрут листа к нему недоступен; "
+            + "трёхмерный маршрут к чертежу не применялся.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?>
+            {
+                ["kind"] = document.Kind.ToString(),
+                ["drawing7_resolution"] = document.Drawing7Resolution ?? "never_resolved",
+            });
+    }
+
     private IDrawingDocument RequireDrawing7(DocumentEntry document)
     {
         // STAGE 0 — an API7 handle already held for this document: the NATIVE one captured at creation

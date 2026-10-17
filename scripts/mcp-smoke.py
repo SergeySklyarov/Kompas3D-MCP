@@ -7764,12 +7764,36 @@ def section_checks(client, rep, app_id, workdir):
         rep.add("DRW-07.drawing", "Чертёж для разреза", "FAIL", f"чертёж не создан: {code}")
         return
 
+    # Снимок СВЕЖЕСОЗДАННОГО чертежа ДО любого сохранения (F-01 наряда DRAWING_SNAPSHOT_FIX): ветка
+    # снимка выбирается по ВИДУ документа, поэтому чертёж без API5-ручки (создан через API7) снимается
+    # тем же маршрутом. Строка после `save_reopen` этого не держит: там ручка уже есть.
+    def fresh_snapshot(label, rev, note):
+        path = os.path.join(workdir, f"fresh-drawing-{label}.png")
+        if os.path.exists(path):
+            os.remove(path)
+        payload = {"document_id": drawing, "format": "png", "save_path": path,
+                   "return_image_content": False}
+        if rev:
+            payload["expected_revision"] = rev
+        env, shot_code = call("kompas_export_image", payload)
+        shot = result(env)
+        ok = (shot_code is None and os.path.exists(path) and os.path.getsize(path) > 0
+              and isinstance(shot.get("bytes_count"), int) and shot["bytes_count"] > 0)
+        rep.add(f"DRW-07.snapshot_fresh.{label}", note, "PASS" if ok else "FAIL",
+                f"code={shot_code} {shot.get('pixel_width')}x{shot.get('pixel_height')} "
+                f"байт={shot.get('bytes_count')} файл={os.path.exists(path)} "
+                f"ошибка={(env or {}).get('error')}")
+
+    fresh_snapshot("empty", drawing_rev, "Снимок пустого свежесозданного чертежа до сохранения")
+
     env, code = call("kompas_create_drawing_views", {
         "document_id": drawing, "expected_revision": drawing_rev,
         "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
         "x": 150.0, "y": 150.0})
     drawing_rev = (env or {}).get("revision_after") or drawing_rev
     views_ok = code is None
+    fresh_snapshot("views", drawing_rev,
+                   "Снимок свежесозданного чертежа с видами до сохранения")
 
     # Мутация требует файла на диске: без него Хост отказывает до COM (сторож работает).
     env, code = call("kompas_save_document", {

@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-16T16:30:15+02:00, часы машины +02:00",
+  "date": "2026-10-17T19:45:12+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -15,12 +15,12 @@
   "documentation_source": {
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
-   "retrieved": "2026-10-16",
-   "pages_read": 129,
-   "routes_checked": 593,
+   "retrieved": "2026-10-17",
+   "pages_read": 136,
+   "routes_checked": 618,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 589,
+    "wire": 614,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -45,8 +45,8 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 593,
-    "ok": 589,
+    "checked": 618,
+    "ok": 614,
     "failed": 4,
     "not_verified": 0
    }
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "d28f51bdfda1b7029a99f0af2500e300ac27c72e96f4f0f78945ecc030a3e958",
-   "host_dll_sha256": "9d0e7793f57e8d126c42aa3c2a247024f8a96f046cc7b0ce53b4a4481eb55d9b",
+   "host_sha256": "7cd881d883c52d9222478d06123c87bb780496941f20ae6afb66a7b8b1263a39",
+   "host_dll_sha256": "6746382608e858d5c5e7d46c3c83df1e8d63c5bdc9f5783bd6210783959fd33b",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "7f1fedc780a251f25c18900e834ba0826cb5f6a092471eceb8fd79d7fd1572ac",
-   "worker_dll_sha256": "fb645168ff6fc6aae6fb1c2e4cd54c554b9515c847260ad58b4adccdc50de4f2",
-   "adapter_sha256": "27954627c98120ec26aaf2f70a5092a233fd49e26a84eca4ac2d64d45c5e578b",
-   "source_commit": "87bb42f",
-   "source_tree_dirty": false,
-   "tools_count": 90,
-   "rows_complete_run": 1651,
+   "worker_sha256": "d5be51618d6f1b5bce68d8838374394a21593242de74c4ebff79e0df7d6d64b5",
+   "worker_dll_sha256": "2567fa8af9f9badf98c29e5d8cb151eab8a422e51b6579b78dff647be594ac94",
+   "adapter_sha256": "f2c6deabfa59a3fe3e96aaadf662eb614367e789db679a2bd0f3f7e7051539e7",
+   "source_commit": "9f32888",
+   "source_tree_dirty": true,
+   "tools_count": 94,
+   "rows_complete_run": 1678,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -88,11 +88,11 @@
    "com_snapshot_check": "снапшот COM-маршрутов больше не отдельный файл: инвентарь строится в самом аудите (`api-audit-routes.py`) и сверяется по времени правки исходников адаптера"
   },
   "completeness": {
-   "tools_on_wire": 90,
-   "schemas_on_disk": 90,
-   "tools_with_schema": 90,
-   "schemas_matching_wire_by_property_names": 90,
-   "schemas_matching_wire_by_shape": 90,
+   "tools_on_wire": 94,
+   "schemas_on_disk": 94,
+   "tools_with_schema": 94,
+   "schemas_matching_wire_by_property_names": 94,
+   "schemas_matching_wire_by_shape": 93,
    "tools_without_matrix_presence": [],
    "tools_outside_profiles": [
     {
@@ -116,10 +116,6 @@
      "reason": "состояние сервера (в том числе разрыв связи) - служебный отчёт"
     },
     {
-     "tool": "kompas_import_step",
-     "reason": "импорт STEP: каталог не заводит режима импорта, инструмент исполняется вертикальным сценарием (строки E01-E03), а не режимом профиля. Это названный пробел МОДЕЛИ покрытия, и его закрытие меняет знаменатель каталога - решение заказчика"
-    },
-    {
      "tool": "kompas_probe_units",
      "reason": "калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания измерительных вызовов; измерительный прибор приёмки, а не режим (исполняется строкой DEP.DUN.01.geometry_validation)"
     },
@@ -134,20 +130,20 @@
    ],
    "presence_classes": {
     "absent": 8,
-    "route_field": 36,
-    "route_field+schema_field": 29,
+    "route_field": 39,
+    "route_field+schema_field": 30,
     "schema_field": 17
    },
-   "matrix_rows": 172,
+   "matrix_rows": 181,
    "catalog_modes_and_variants": 209,
-   "com_routes": 603,
+   "com_routes": 628,
    "com_routes_by_assembly": {
-    "api7": 342,
-    "api5": 251,
+    "api7": 364,
+    "api5": 254,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 589,
-   "com_routes_confirmed_over_wire": 589,
+   "com_routes_confirmed_by_documentation": 614,
+   "com_routes_confirmed_over_wire": 614,
    "com_routes_confirmed_from_mirror": 0,
    "com_routes_unconfirmed": 4,
    "com_routes_confirmed_by_name": 6,
@@ -155,15 +151,15 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 9,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 168,
-   "rows_verified_without_any_linked_row": 0,
+   "rows_claiming_verified": 177,
+   "rows_verified_without_any_linked_row": 9,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 0,
-   "rows_actions_without_required_calls": 0,
-   "rows_status_lowered_by_unsupported_actions": 0,
-   "acceptance_rows": 1651,
-   "acceptance_calls_journal": 15921,
-   "acceptance_rows_with_call_window": 1651,
+   "rows_action_without_dedicated_row": 9,
+   "rows_actions_without_required_calls": 10,
+   "rows_status_lowered_by_unsupported_actions": 10,
+   "acceptance_rows": 1678,
+   "acceptance_calls_journal": 16026,
+   "acceptance_rows_with_call_window": 1678,
    "required_of_mismatches_matrix_vs_profile": 0,
    "dependency_verdict_control_proved": null
   }
@@ -190,7 +186,7 @@
   },
   {
    "name": "kompas_add_dimension",
-   "description_len": 780,
+   "description_len": 1340,
    "properties_on_wire": 10,
    "required_on_wire": [
     "document_id",
@@ -317,7 +313,7 @@
   },
   {
    "name": "kompas_capabilities",
-   "description_len": 717,
+   "description_len": 929,
    "properties_on_wire": 1,
    "required_on_wire": [],
    "additional_properties": false,
@@ -454,7 +450,7 @@
   },
   {
    "name": "kompas_connect",
-   "description_len": 887,
+   "description_len": 943,
    "properties_on_wire": 5,
    "required_on_wire": [
     "mode",
@@ -599,6 +595,50 @@
     "present": true,
     "modes": [
      "route_field"
+    ]
+   }
+  },
+  {
+   "name": "kompas_create_section_view",
+   "description_len": 1349,
+   "properties_on_wire": 15,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "base_view_ref",
+    "mode",
+    "x",
+    "y",
+    "operation_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_create_section_view.json",
+   "schema_present": true,
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "presence": {
+    "own_row": [],
+    "route_field": [
+     "DRW-07.section_view.create.stepped:adapter_route",
+     "DRW-07.section_view.create.simple:adapter_route",
+     "DRW-07.section_view.negative_tests:adapter_route"
+    ],
+    "schema_field": [
+     "DRW-07.section_view.create.stepped",
+     "DRW-07.section_view.create.simple",
+     "DRW-07.section_view.read",
+     "DRW-07.section_view.update",
+     "DRW-07.section_view.delete",
+     "DRW-07.section_view.save_reopen",
+     "DRW-07.section_view.rebuild",
+     "DRW-07.section_view.geometry_validation",
+     "DRW-07.section_view.negative_tests"
+    ],
+    "mcp_support": null,
+    "present": true,
+    "modes": [
+     "route_field",
+     "schema_field"
     ]
    }
   },
@@ -847,6 +887,34 @@
    }
   },
   {
+   "name": "kompas_delete_section_view",
+   "description_len": 343,
+   "properties_on_wire": 6,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "view_ref",
+    "operation_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_delete_section_view.json",
+   "schema_present": true,
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "presence": {
+    "own_row": [],
+    "route_field": [
+     "DRW-07.section_view.delete:adapter_route"
+    ],
+    "schema_field": [],
+    "mcp_support": null,
+    "present": true,
+    "modes": [
+     "route_field"
+    ]
+   }
+  },
+  {
    "name": "kompas_delete_sketch_constraint",
    "description_len": 1148,
    "properties_on_wire": 7,
@@ -1010,7 +1078,8 @@
      "DRW-05.export:create_route",
      "DRW-05.export:geometry_validation_route",
      "dep.drawing.export_file:create_route",
-     "dep.drawing.export_file:read_route"
+     "dep.drawing.export_file:read_route",
+     "DRW-07.section_view.geometry_validation:adapter_route"
     ],
     "schema_field": [
      "DRW-05.export"
@@ -1025,7 +1094,7 @@
   },
   {
    "name": "kompas_export_image",
-   "description_len": 2410,
+   "description_len": 2799,
    "properties_on_wire": 12,
    "required_on_wire": [
     "document_id",
@@ -1037,7 +1106,7 @@
    "schema_file": "schemas/kompas_export_image.json",
    "schema_present": true,
    "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
+   "schema_shape_matches_wire": false,
    "presence": {
     "own_row": [],
     "route_field": [
@@ -1343,6 +1412,35 @@
    }
   },
   {
+   "name": "kompas_get_section_view",
+   "description_len": 635,
+   "properties_on_wire": 3,
+   "required_on_wire": [
+    "document_id",
+    "view_ref"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_get_section_view.json",
+   "schema_present": true,
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "presence": {
+    "own_row": [],
+    "route_field": [
+     "DRW-07.section_view.read:adapter_route",
+     "DRW-07.section_view.save_reopen:adapter_route",
+     "DRW-07.section_view.rebuild:adapter_route",
+     "DRW-07.section_view.geometry_validation:adapter_route"
+    ],
+    "schema_field": [],
+    "mcp_support": null,
+    "present": true,
+    "modes": [
+     "route_field"
+    ]
+   }
+  },
+  {
    "name": "kompas_get_sketch_status",
    "description_len": 3495,
    "properties_on_wire": 2,
@@ -1373,7 +1471,7 @@
   },
   {
    "name": "kompas_get_technical_demand",
-   "description_len": 630,
+   "description_len": 838,
    "properties_on_wire": 2,
    "required_on_wire": [
     "document_id"
@@ -1479,7 +1577,7 @@
   },
   {
    "name": "kompas_import_step",
-   "description_len": 140,
+   "description_len": 916,
    "properties_on_wire": 6,
    "required_on_wire": [
     "application_id",
@@ -1639,7 +1737,7 @@
   },
   {
    "name": "kompas_list_dimensions",
-   "description_len": 732,
+   "description_len": 1498,
    "properties_on_wire": 4,
    "required_on_wire": [
     "document_id",
@@ -2334,7 +2432,8 @@
    "presence": {
     "own_row": [],
     "route_field": [
-     "DRW-01.views.create_standard:adapter_route"
+     "DRW-01.views.create_standard:adapter_route",
+     "DRW-07.section_view.rebuild:adapter_route"
     ],
     "schema_field": [],
     "mcp_support": null,
@@ -2737,7 +2836,7 @@
   },
   {
    "name": "kompas_set_technical_demand",
-   "description_len": 720,
+   "description_len": 1083,
    "properties_on_wire": 5,
    "required_on_wire": [
     "document_id",
@@ -2988,6 +3087,34 @@
      "route_field"
     ]
    }
+  },
+  {
+   "name": "kompas_update_section_view",
+   "description_len": 677,
+   "properties_on_wire": 10,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "view_ref",
+    "operation_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_update_section_view.json",
+   "schema_present": true,
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "presence": {
+    "own_row": [],
+    "route_field": [
+     "DRW-07.section_view.update:adapter_route"
+    ],
+    "schema_field": [],
+    "mcp_support": null,
+    "present": true,
+    "modes": [
+     "route_field"
+    ]
+   }
   }
  ],
  "modes": [
@@ -3094,6 +3221,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -3152,7 +3283,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 17
+    "members": 18
    },
    "actions": {
     "discover": "verified",
@@ -3308,6 +3439,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -3386,9 +3521,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 1
     }
    },
@@ -3462,6 +3597,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -3492,7 +3631,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 10
+    "members": 11
    },
    "actions": {
     "discover": "verified",
@@ -3699,6 +3838,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -3777,9 +3920,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 48,
+    "members": 49,
     "counts": {
-     "Подтверждено": 47,
+     "Подтверждено": 48,
      "не подтверждено": 1
     }
    },
@@ -3990,6 +4133,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -4060,7 +4207,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 20
+    "members": 21
    },
    "actions": {
     "discover": "verified",
@@ -4123,6 +4270,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -4169,7 +4320,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 14
+    "members": 15
    },
    "actions": {
     "discover": "verified",
@@ -4224,6 +4375,10 @@
     },
     {
      "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
      "documentation": "Подтверждено"
     },
     {
@@ -4297,7 +4452,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 20
+    "members": 21
    },
    "actions": {
     "discover": "verified",
@@ -4357,6 +4512,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -4403,7 +4562,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 14
+    "members": 15
    },
    "actions": {
     "discover": "verified",
@@ -4536,6 +4695,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -4624,6 +4787,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -4702,9 +4869,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 46,
     "counts": {
-     "Подтверждено": 43,
+     "Подтверждено": 45,
      "не подтверждено": 1
     }
    },
@@ -4858,6 +5025,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -4903,6 +5074,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -4984,9 +5159,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 36,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 35,
      "не подтверждено": 1
     }
    },
@@ -5057,6 +5232,10 @@
     },
     {
      "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
      "documentation": "Подтверждено"
     },
     {
@@ -5152,6 +5331,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -5230,9 +5413,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 47,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 46,
      "не подтверждено": 1
     }
    },
@@ -5324,6 +5507,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -5416,6 +5603,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -5494,9 +5685,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 47,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 46,
      "не подтверждено": 1
     }
    },
@@ -5681,6 +5872,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -5759,9 +5954,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 30,
+    "members": 31,
     "counts": {
-     "Подтверждено": 29,
+     "Подтверждено": 30,
      "не подтверждено": 1
     }
    },
@@ -5822,6 +6017,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -5856,7 +6055,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 11
+    "members": 12
    },
    "actions": {
     "discover": "verified",
@@ -5933,6 +6132,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -5959,7 +6162,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 9
+    "members": 10
    },
    "actions": {
     "discover": "verified",
@@ -6030,6 +6233,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -6060,7 +6267,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 10
+    "members": 11
    },
    "actions": {
     "discover": "verified",
@@ -6207,6 +6414,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -6285,9 +6496,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 26,
+    "members": 27,
     "counts": {
-     "Подтверждено": 25,
+     "Подтверждено": 26,
      "не подтверждено": 1
     }
    },
@@ -6504,6 +6715,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -6582,9 +6797,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 1
     }
    },
@@ -6646,6 +6861,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -6678,11 +6897,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -6723,6 +6942,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -6804,9 +7027,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 42,
+    "members": 44,
     "counts": {
-     "Подтверждено": 41,
+     "Подтверждено": 43,
      "не подтверждено": 1
     }
    },
@@ -6888,6 +7111,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -6934,7 +7161,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 14
+    "members": 15
    },
    "actions": {
     "discover": "verified",
@@ -7008,6 +7235,10 @@
     },
     {
      "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
      "documentation": "Подтверждено"
     },
     {
@@ -7099,6 +7330,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -7177,9 +7412,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 46,
     "counts": {
-     "Подтверждено": 43,
+     "Подтверждено": 45,
      "не подтверждено": 1
     }
    },
@@ -7375,6 +7610,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -7453,9 +7692,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 32,
      "не подтверждено": 1
     }
    },
@@ -7570,6 +7809,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -7579,6 +7822,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -7619,6 +7866,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -7700,9 +7951,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 38,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 37,
      "не подтверждено": 1
     }
    },
@@ -7764,6 +8015,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -7773,6 +8028,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -7813,6 +8072,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -7894,9 +8157,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 38,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 37,
      "не подтверждено": 1
     }
    },
@@ -7958,6 +8221,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -7967,6 +8234,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -8007,6 +8278,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -8088,9 +8363,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 38,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 37,
      "не подтверждено": 1
     }
    },
@@ -8149,6 +8424,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -8158,6 +8437,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -8198,6 +8481,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -8279,9 +8566,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 38,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 37,
      "не подтверждено": 1
     }
    },
@@ -8340,6 +8627,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -8369,6 +8660,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -8450,9 +8745,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 30,
+    "members": 32,
     "counts": {
-     "Подтверждено": 29,
+     "Подтверждено": 31,
      "не подтверждено": 1
     }
    },
@@ -8514,6 +8809,10 @@
     },
     {
      "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
      "documentation": "Подтверждено"
     },
     {
@@ -8597,6 +8896,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -8675,9 +8978,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 42,
+    "members": 44,
     "counts": {
-     "Подтверждено": 41,
+     "Подтверждено": 43,
      "не подтверждено": 1
     }
    },
@@ -8752,6 +9055,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -8768,11 +9075,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -8877,6 +9184,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -8986,9 +9297,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 61,
+    "members": 63,
     "counts": {
-     "Подтверждено": 59,
+     "Подтверждено": 61,
      "не подтверждено": 2
     }
    },
@@ -9062,6 +9373,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -9078,11 +9393,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -9187,6 +9502,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -9296,9 +9615,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 61,
+    "members": 63,
     "counts": {
-     "Подтверждено": 59,
+     "Подтверждено": 61,
      "не подтверждено": 2
     }
    },
@@ -9372,6 +9691,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -9414,7 +9737,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 13
+    "members": 14
    },
    "actions": {
     "discover": "verified",
@@ -9596,6 +9919,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -9614,7 +9941,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 7
+    "members": 8
    },
    "actions": {
     "discover": "verified",
@@ -9673,6 +10000,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -9723,7 +10054,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 15
+    "members": 16
    },
    "actions": {
     "discover": "verified",
@@ -9895,6 +10226,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -9913,7 +10248,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 7
+    "members": 8
    },
    "actions": {
     "discover": "verified",
@@ -9972,6 +10307,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -10002,7 +10341,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 10
+    "members": 11
    },
    "actions": {
     "discover": "verified",
@@ -11039,6 +11378,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -11117,9 +11460,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 46,
+    "members": 47,
     "counts": {
-     "Подтверждено": 45,
+     "Подтверждено": 46,
      "не подтверждено": 1
     }
    },
@@ -11176,6 +11519,10 @@
     },
     {
      "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
      "documentation": "Подтверждено"
     },
     {
@@ -11255,6 +11602,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -11333,9 +11684,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 43,
     "counts": {
-     "Подтверждено": 40,
+     "Подтверждено": 42,
      "не подтверждено": 1
     }
    },
@@ -11450,6 +11801,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -11459,6 +11814,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -11499,6 +11858,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -11580,9 +11943,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 38,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 37,
      "не подтверждено": 1
     }
    },
@@ -11643,6 +12006,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -11672,6 +12039,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -11753,9 +12124,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 30,
+    "members": 32,
     "counts": {
-     "Подтверждено": 29,
+     "Подтверждено": 31,
      "не подтверждено": 1
     }
    },
@@ -11821,6 +12192,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -11851,7 +12226,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 10
+    "members": 11
    },
    "actions": {
     "discover": "verified",
@@ -12313,6 +12688,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -12391,9 +12770,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 24,
+    "members": 25,
     "counts": {
-     "Подтверждено": 23,
+     "Подтверждено": 24,
      "не подтверждено": 1
     }
    },
@@ -12999,6 +13378,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -13028,6 +13411,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -13109,9 +13496,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 30,
+    "members": 32,
     "counts": {
-     "Подтверждено": 29,
+     "Подтверждено": 31,
      "не подтверждено": 1
     }
    },
@@ -13309,6 +13696,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -13387,9 +13778,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 23,
+    "members": 24,
     "counts": {
-     "Подтверждено": 22,
+     "Подтверждено": 23,
      "не подтверждено": 1
     }
    },
@@ -13558,6 +13949,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -13636,10 +14031,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 23,
+    "members": 24,
     "counts": {
      "не подтверждено": 2,
-     "Подтверждено": 21
+     "Подтверждено": 22
     }
    },
    "actions": {
@@ -14076,6 +14471,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -14113,6 +14512,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -14194,9 +14597,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 34,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 33,
      "не подтверждено": 1
     }
    },
@@ -14257,7 +14660,15 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ILayoutSheet.Stamp",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IText.Str",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITextLine.Str",
      "documentation": "Подтверждено"
     },
     {
@@ -14270,6 +14681,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -14351,9 +14766,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 27,
+    "members": 30,
     "counts": {
-     "Подтверждено": 26,
+     "Подтверждено": 29,
      "не подтверждено": 1
     }
    },
@@ -14705,6 +15120,10 @@
    "declared_route": "kompas_set_technical_demand: API7 IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство → IText) → IText.Str (запись) → ITechnicalDemand.Update() → перечитать текст и IsCreated (idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html) Присутствие инструмента `kompas_get_technical_demand` (наряд API_AUDIT_FOLLOWUP §5): строка техтребований чертежа - единственный их потребитель.",
    "com": [
     {
+     "member": "ITechnicalDemand.IsCreated",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntity.IsCreated",
      "documentation": "Подтверждено"
     },
@@ -14729,173 +15148,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksPart.Update",
+     "member": "ITextLine.Str",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksEntity.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IDiametralDimension.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IMateConstraint3D.Update",
-     "documentation": "не подтверждено"
-    },
-    {
-     "member": "IDrawingObject.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IPoint3D.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IPlane3D.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IAxis3D.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IChamfer.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IHole3D.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IAxis3DBy2Points.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IRotated.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IFillet.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IBoolean.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ISplitSolid.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ICut.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IBodyReposition.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ILinearPattern.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ICircularPattern.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IMirrorPattern.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IFeaturePattern.Update",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ISketch.Update",
-     "documentation": "Подтверждено"
-    }
-   ],
-   "documentation": {
-    "status": "Не подтверждено",
-    "members": 28,
-    "counts": {
-     "Подтверждено": 27,
-     "не подтверждено": 1
-    }
-   },
-   "actions": {
-    "discover": "not_applicable",
-    "create": "verified",
-    "read": "verified",
-    "edit": "verified",
-    "rebuild": "not_applicable",
-    "save_reopen": "verified",
-    "suppress_restore": "not_applicable",
-    "delete_dependencies": "not_applicable",
-    "negative_tests": "verified",
-    "geometry_validation": "not_applicable"
-   },
-   "tests": [
-    "DRW-06.technical_demand.create",
-    "DRW-06.technical_demand.negative_tests",
-    "DRW-06.technical_demand.save_reopen"
-   ]
-  },
-  {
-   "operation_id": "DRW-03.dimension.add.linear",
-   "family": "DRW",
-   "queue": "C3",
-   "kind": "profile_mode",
-   "context": "drawing",
-   "catalog_level": "mcp_verified",
-   "tools": [
-    "kompas_add_dimension"
-   ],
-   "schemas": [
-    "schemas/kompas_add_dimension.json"
-   ],
-   "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
-   "com": [
-    {
-     "member": "ksEntityCollection.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ksBodyCollection.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ILofts.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IPoints3D.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IPlanes3D.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IAxes3D.Add",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ISymbols2DContainer.DiametralDimensions",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ISymbols2DContainer.LineDimensions",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "IDimensionText.NominalValue",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ISymbols2DContainer.RadialDimensions",
+     "member": "ITechnicalDemand.Text",
      "documentation": "Подтверждено"
     },
     {
@@ -14908,6 +15165,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -14992,6 +15253,184 @@
     "members": 32,
     "counts": {
      "Подтверждено": 31,
+     "не подтверждено": 1
+    }
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-06.technical_demand.create",
+    "DRW-06.technical_demand.negative_tests",
+    "DRW-06.technical_demand.save_reopen"
+   ]
+  },
+  {
+   "operation_id": "DRW-03.dimension.add.linear",
+   "family": "DRW",
+   "queue": "C3",
+   "kind": "profile_mode",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_add_dimension"
+   ],
+   "schemas": [
+    "schemas/kompas_add_dimension.json"
+   ],
+   "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "com": [
+    {
+     "member": "ksEntityCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoints3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlanes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISymbols2DContainer.DiametralDimensions",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISymbols2DContainer.LineDimensions",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDimensionText.NominalValue",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISymbols2DContainer.RadialDimensions",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraint3D.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDrawingObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHole3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3DBy2Points.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFillet.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMirrorPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFeaturePattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Update",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "members": 34,
+    "counts": {
+     "Подтверждено": 33,
      "не подтверждено": 1
     }
    },
@@ -15042,6 +15481,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -15079,6 +15522,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -15160,9 +15607,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 34,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 33,
      "не подтверждено": 1
     }
    },
@@ -15213,6 +15660,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -15250,6 +15701,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -15331,9 +15786,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 34,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 33,
      "не подтверждено": 1
     }
    },
@@ -16024,6 +16479,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
     },
@@ -16102,9 +16561,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 46,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 45,
      "не подтверждено": 1
     }
    },
@@ -16363,11 +16822,11 @@
    "declared_route": "API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании массив заполняется объектами указанного типа, содержащимися в компоненте» (kspart_entitycollection.html); тип «o3d_sketch 5 эскиз» → ksSketchDefinition / ISketch (obj3dtype.html). Тот же набор документирован в API7 (IModelContainer::Sketchs → ISketchs, isketchs.html), но взят маршрут API5: строка обязана нести тот же ksEntity, которым адресует эскиз остальной сервер, и эта коллекция ИЗМЕРЕНА на переоткрытом документе (проба L: два эскиза с читаемыми ksSketchDefinition после save → close → reopen).",
    "com": [
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -18731,6 +19190,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IPoints3D.Add",
      "documentation": "Подтверждено"
     },
@@ -18740,6 +19203,10 @@
     },
     {
      "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.BaseObject",
      "documentation": "Подтверждено"
     },
     {
@@ -18784,6 +19251,10 @@
     },
     {
      "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
      "documentation": "Подтверждено"
     },
     {
@@ -18865,9 +19336,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 39,
     "counts": {
-     "Подтверждено": 35,
+     "Подтверждено": 38,
      "не подтверждено": 1
     }
    },
@@ -19516,13 +19987,17 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IHatchParam.Step",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksDocument3D.UpdateDocumentParam",
      "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 13
+    "members": 14
    },
    "actions": {
     "discover": "verified",
@@ -19544,6 +20019,334 @@
     "STEP.import.save_reopen",
     "STEP.import.negative_tests",
     "STEP.import.geometry_validation"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.create.stepped",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_create_section_view (mode=stepped, trace_model либо trace_view, look left|right, x/y, scale; ответ — перечитанные параметры вида и линии)",
+   "com": [
+    {
+     "member": "IView.Scale",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 1
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-07.section_view.create.stepped"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.create.simple",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_create_section_view (mode=simple)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.create.simple"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.read",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_get_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_get_section_view (только чтение; на виде другого типа — отказ с названным типом)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.read"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.update",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_update_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_update_section_view (ответ несёт before и after одного объекта)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.update"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.delete",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_delete_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_delete_section_view (необязательный keep_cut_line оставляет линию)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.delete"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.save_reopen",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_get_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_get_section_view после повторного открытия документа",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.save_reopen"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.rebuild",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_get_section_view",
+    "kompas_rebuild_drawing_views"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_rebuild_drawing_views + kompas_get_section_view",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-07.section_view.rebuild"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.geometry_validation",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view",
+    "kompas_export_drawing",
+    "kompas_get_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_export_drawing (dxf) + kompas_get_section_view",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-07.section_view.geometry_validation"
+   ]
+  },
+  {
+   "operation_id": "DRW-07.section_view.negative_tests",
+   "family": "DRW",
+   "queue": null,
+   "kind": "evidence",
+   "context": "drawing",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section_view"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section_view.json"
+   ],
+   "declared_route": "kompas_create_section_view (отказы с описанием частичных изменений)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW-07.section_view.negative_tests"
    ]
   }
  ],
@@ -19896,11 +20699,12 @@
    "family": "DRW",
    "title": "Чертежи: стандартные виды из модели, размеры, основная надпись, экспорт",
    "catalog_level": "mcp_verified",
-   "operations": 6,
+   "operations": 15,
    "operation_levels": {
-    "mcp_verified": 6
+    "mcp_verified": 8,
+    "mcp_implemented": 7
    },
-   "mcp_support": "kompas_create_drawing_views / kompas_list_drawing_views / kompas_edit_view / kompas_add_dimension / kompas_set_title_block / kompas_set_technical_demand / kompas_export_drawing"
+   "mcp_support": "kompas_create_drawing_views / kompas_list_drawing_views / kompas_edit_view / kompas_add_dimension / kompas_set_title_block / kompas_set_technical_demand / kompas_export_drawing / kompas_create_section_view / kompas_get_section_view / kompas_update_section_view / kompas_delete_section_view"
   },
   {
    "family": "VM",
@@ -20274,7 +21078,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1077",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:919",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1060",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1488"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1475"
    ],
    "receivers": [
     "bodies",
@@ -20341,12 +21145,12 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:323",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:353",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:76",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:378",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:534",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2234",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3767",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4033",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4491",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4640",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4498",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4647",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:275",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1133",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:921",
@@ -20382,14 +21186,14 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:328",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:358",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:81",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:381",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:537",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2236",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3768",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4034",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4037",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4492",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4641",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4642",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4499",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4648",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4649",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:280",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1133",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:939",
@@ -20690,7 +21494,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:578",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:736",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:869",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:197",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:252",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:656",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3827",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:133",
@@ -20698,7 +21502,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:438",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:521",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:294",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:859",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:846",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:161"
    ],
    "receivers": [
@@ -20762,7 +21566,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:823",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:837",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:947",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1284"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1271"
    ],
    "receivers": [
     "part",
@@ -20791,7 +21595,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:835",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:534",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:858"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:845"
    ],
    "receivers": [
     "part",
@@ -20907,7 +21711,7 @@
    "type": "String",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1544",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:848"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:835"
    ],
    "receivers": [
     "part",
@@ -21063,7 +21867,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SketchPlane.cs:325",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1247",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1518",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1505"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1492"
    ],
    "receivers": [
     "document.PartNow()",
@@ -21120,7 +21924,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1193",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1250",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1526",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1506"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1493"
    ],
    "receivers": [
     "array",
@@ -21280,7 +22084,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3525",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3930",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:40",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4616",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4623",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:859",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:880",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:93",
@@ -21378,7 +22182,7 @@
    "signature": "Boolean AddStandartViews(String FileName, String ProjectionName, Object ProjectionsTypes, Double X, Double Y, Double Scale, Double DX, Double DY)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:84"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:85"
    ],
    "receivers": [
     "views"
@@ -21404,8 +22208,12 @@
    "signature": "prop Double Scale",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1895",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:204"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2004",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:205",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2337",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:203",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:509",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:670"
    ],
    "receivers": [
     "view"
@@ -21431,8 +22239,11 @@
    "signature": "prop Double X",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1896",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:209"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2005",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:210",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:206",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:514",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:671"
    ],
    "receivers": [
     "view"
@@ -21458,8 +22269,11 @@
    "signature": "prop Double Y",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1897",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:214"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2006",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:215",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:207",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:519",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:672"
    ],
    "receivers": [
     "view"
@@ -21485,7 +22299,7 @@
    "signature": "Boolean RebuildDocument()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:322"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:335"
    ],
    "receivers": [
     "document2d"
@@ -21511,8 +22325,8 @@
    "signature": "prop LineDimensions LineDimensions",
    "type": "LineDimensions",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:485",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:690",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:498",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:715",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:817"
    ],
    "receivers": [
@@ -21540,8 +22354,8 @@
    "signature": "prop RadialDimensions RadialDimensions",
    "type": "RadialDimensions",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:486",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:737"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:499",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:769"
    ],
    "receivers": [
     "container"
@@ -21567,8 +22381,8 @@
    "signature": "prop DiametralDimensions DiametralDimensions",
    "type": "DiametralDimensions",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:487",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:765"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:500",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:805"
    ],
    "receivers": [
     "container"
@@ -21594,7 +22408,7 @@
    "signature": "prop Int32 Count",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:506"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:519"
    ],
    "receivers": [
     "collection"
@@ -21620,7 +22434,7 @@
    "signature": "LineDimension get_LineDimension(Object Index)",
    "type": "LineDimension",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:512"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:525"
    ],
    "receivers": [
     "collection"
@@ -21646,8 +22460,8 @@
    "signature": "prop Double X1",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2110",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:519"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2482",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:532"
    ],
    "receivers": [
     "dim"
@@ -21673,8 +22487,8 @@
    "signature": "prop Double Y1",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2110",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:520"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2482",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:533"
    ],
    "receivers": [
     "dim"
@@ -21700,8 +22514,8 @@
    "signature": "prop Double X2",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2111",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:521"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2483",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:534"
    ],
    "receivers": [
     "dim"
@@ -21727,8 +22541,8 @@
    "signature": "prop Double Y2",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2111",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:522"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2483",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:535"
    ],
    "receivers": [
     "dim"
@@ -21754,7 +22568,7 @@
    "signature": "prop DrawingObjectTypeEnum DrawingObjectType",
    "type": "DrawingObjectTypeEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:529"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:543"
    ],
    "receivers": [
     "dim"
@@ -21780,8 +22594,8 @@
    "signature": "prop Boolean Valid",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2112",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:530"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2484",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:544"
    ],
    "receivers": [
     "dim"
@@ -21807,7 +22621,7 @@
    "signature": "prop Int32 Count",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:556"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:573"
    ],
    "receivers": [
     "collection"
@@ -21833,7 +22647,7 @@
    "signature": "RadialDimension get_RadialDimension(Object Index)",
    "type": "RadialDimension",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:562"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:579"
    ],
    "receivers": [
     "collection"
@@ -21859,7 +22673,7 @@
    "signature": "prop Double Xc",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:569"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:586"
    ],
    "receivers": [
     "dim"
@@ -21885,7 +22699,7 @@
    "signature": "prop Double Yc",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:570"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:587"
    ],
    "receivers": [
     "dim"
@@ -21911,7 +22725,7 @@
    "signature": "prop DrawingObjectTypeEnum DrawingObjectType",
    "type": "DrawingObjectTypeEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:574"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:592"
    ],
    "receivers": [
     "dim"
@@ -21937,7 +22751,7 @@
    "signature": "prop Boolean Valid",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:575"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:593"
    ],
    "receivers": [
     "dim"
@@ -21963,7 +22777,7 @@
    "signature": "prop Double Radius",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:576"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:594"
    ],
    "receivers": [
     "dim"
@@ -21989,7 +22803,7 @@
    "signature": "prop Int32 Count",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:601"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:622"
    ],
    "receivers": [
     "collection"
@@ -22015,7 +22829,7 @@
    "signature": "DiametralDimension get_DiametralDimension(Object Index)",
    "type": "DiametralDimension",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:607"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:628"
    ],
    "receivers": [
     "collection"
@@ -22041,7 +22855,7 @@
    "signature": "prop Double Xc",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:614"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:635"
    ],
    "receivers": [
     "dim"
@@ -22067,7 +22881,7 @@
    "signature": "prop Double Yc",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:615"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:636"
    ],
    "receivers": [
     "dim"
@@ -22093,7 +22907,7 @@
    "signature": "prop DrawingObjectTypeEnum DrawingObjectType",
    "type": "DrawingObjectTypeEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:619"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:641"
    ],
    "receivers": [
     "dim"
@@ -22119,7 +22933,7 @@
    "signature": "prop Boolean Valid",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:620"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:642"
    ],
    "receivers": [
     "dim"
@@ -22145,7 +22959,7 @@
    "signature": "prop Double Radius",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:621"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:643"
    ],
    "receivers": [
     "dim"
@@ -22171,7 +22985,7 @@
    "signature": "Boolean Update()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:706"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:731"
    ],
    "receivers": [
     "dim"
@@ -22197,8 +23011,8 @@
    "signature": "prop String Str",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:888",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:999"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1049",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:938"
    ],
    "receivers": [
     "cell",
@@ -22214,6 +23028,115 @@
    }
   },
   {
+   "route": "ITechnicalDemand.Text",
+   "assembly": "api7",
+   "interface": "ITechnicalDemand",
+   "declared_on": "ITechnicalDemand",
+   "receiver_type": "ITechnicalDemand",
+   "inherited": false,
+   "member": "Text",
+   "kind": "property",
+   "signature": "prop Text Text",
+   "type": "Text",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1042",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1098",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1227"
+   ],
+   "receivers": [
+    "demand"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itechnicaldemand_text.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITechnicalDemand"
+   }
+  },
+  {
+   "route": "ITechnicalDemand.AutoPlacement",
+   "assembly": "api7",
+   "interface": "ITechnicalDemand",
+   "declared_on": "ITechnicalDemand",
+   "receiver_type": "ITechnicalDemand",
+   "inherited": false,
+   "member": "AutoPlacement",
+   "kind": "property",
+   "signature": "prop Boolean AutoPlacement",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1071",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2169"
+   ],
+   "receivers": [
+    "demand"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itechnicaldemand_autoplacement.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITechnicalDemand"
+   }
+  },
+  {
+   "route": "ITechnicalDemand.Update",
+   "assembly": "api7",
+   "interface": "ITechnicalDemand",
+   "declared_on": "ITechnicalDemand",
+   "receiver_type": "ITechnicalDemand",
+   "inherited": false,
+   "member": "Update",
+   "kind": "method",
+   "signature": "Boolean Update()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1078",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2203"
+   ],
+   "receivers": [
+    "demand"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itechnicaldemand_update.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITechnicalDemand"
+   }
+  },
+  {
+   "route": "ITechnicalDemand.IsCreated",
+   "assembly": "api7",
+   "interface": "ITechnicalDemand",
+   "declared_on": "ITechnicalDemand",
+   "receiver_type": "ITechnicalDemand",
+   "inherited": false,
+   "member": "IsCreated",
+   "kind": "property",
+   "signature": "prop Boolean IsCreated",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1094",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1239"
+   ],
+   "receivers": [
+    "demand"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itechnicaldemand_iscreated.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITechnicalDemand"
+   }
+  },
+  {
    "route": "IConverter.GetFilter",
    "assembly": "api7",
    "interface": "IConverter",
@@ -22225,7 +23148,7 @@
    "signature": "String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1275"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1384"
    ],
    "receivers": [
     "converter"
@@ -22251,7 +23174,7 @@
    "signature": "Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean ShowParam)",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1314"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1423"
    ],
    "receivers": [
     "converter"
@@ -22277,8 +23200,8 @@
    "signature": "Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewType)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1587",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1617",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1696",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1726",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:103",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:123",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:76"
@@ -22308,8 +23231,7 @@
    "signature": "Object ActiveDocument3D()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1600",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:255"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1709"
    ],
    "receivers": [
     "application.Application"
@@ -22335,9 +23257,9 @@
    "signature": "Object Document2D()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1612",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1084",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1142"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1721",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1071",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1129"
    ],
    "receivers": [
     "application.Application",
@@ -22364,8 +23286,8 @@
    "signature": "prop Documents Documents",
    "type": "Documents",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1653",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1693"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1762",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1802"
    ],
    "receivers": [
     "application"
@@ -22391,7 +23313,7 @@
    "signature": "prop String PathName",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1669"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1778"
    ],
    "receivers": [
     "candidate"
@@ -22417,7 +23339,7 @@
    "signature": "prop String Name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1678"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1787"
    ],
    "receivers": [
     "candidate"
@@ -22443,7 +23365,7 @@
    "signature": "prop DocumentTypeEnum DocumentType",
    "type": "DocumentTypeEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1723"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1832"
    ],
    "receivers": [
     "candidate"
@@ -22469,10 +23391,12 @@
    "signature": "prop Int32 Count",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1849",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1913",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1964",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1993",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1958",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2022",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2073",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2102",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:358",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:370",
     "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:195",
     "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:309"
    ],
@@ -22500,9 +23424,9 @@
    "signature": "IView get_View(Object Index)",
    "type": "IView",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1854",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1918",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1969",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1963",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2027",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2078",
     "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:203",
     "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:315"
    ],
@@ -22530,9 +23454,10 @@
    "signature": "prop Int32 Reference",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1888",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1921",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1976"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1997",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2030",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2085",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:646"
    ],
    "receivers": [
     "candidate",
@@ -22559,7 +23484,7 @@
    "signature": "prop Int32 Number",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1892"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2001"
    ],
    "receivers": [
     "view"
@@ -22585,7 +23510,7 @@
    "signature": "prop String Name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1893"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2002"
    ],
    "receivers": [
     "view"
@@ -22611,9 +23536,15 @@
    "signature": "prop LtViewType ViewType",
    "type": "LtViewType",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1894"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2003",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:290",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:342",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:423",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:667",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:96"
    ],
    "receivers": [
+    "baseView",
     "view"
    ],
    "documentation": {
@@ -22637,7 +23568,8 @@
    "signature": "prop String SourceFileName",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1898"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2007",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:677"
    ],
    "receivers": [
     "association"
@@ -22663,7 +23595,7 @@
    "signature": "prop String ProjectionName",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1899"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2008"
    ],
    "receivers": [
     "association"
@@ -22689,7 +23621,7 @@
    "signature": "prop Boolean HiddenLinesVisible",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1900"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2009"
    ],
    "receivers": [
     "association"
@@ -22715,7 +23647,7 @@
    "signature": "prop Boolean CenterLinesVisible",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1901"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2010"
    ],
    "receivers": [
     "association"
@@ -22741,7 +23673,8 @@
    "signature": "prop Int32 ObjectCount",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1902",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2011",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:679",
     "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:226"
    ],
    "receivers": [
@@ -22768,7 +23701,7 @@
    "signature": "prop Boolean Valid",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1977"
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2086"
    ],
    "receivers": [
     "candidate"
@@ -22780,6 +23713,220 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "IDrawingObject"
+   }
+  },
+  {
+   "route": "ILayoutSheets.Count",
+   "assembly": "api7",
+   "interface": "ILayoutSheets",
+   "declared_on": "ILayoutSheets",
+   "receiver_type": "ILayoutSheets",
+   "inherited": false,
+   "member": "Count",
+   "kind": "property",
+   "signature": "prop Int32 Count",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2114",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2214"
+   ],
+   "receivers": [
+    "sheets"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompascollection_count.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IKompasCollection"
+   }
+  },
+  {
+   "route": "ILayoutSheet.Stamp",
+   "assembly": "api7",
+   "interface": "ILayoutSheet",
+   "declared_on": "ILayoutSheet",
+   "receiver_type": "ILayoutSheet",
+   "inherited": false,
+   "member": "Stamp",
+   "kind": "property",
+   "signature": "prop _Stamp Stamp",
+   "type": "_Stamp",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2128"
+   ],
+   "receivers": [
+    "sheet"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilayoutsheet_stamp.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ILayoutSheet"
+   }
+  },
+  {
+   "route": "ITechnicalDemand.BlocksGabarits",
+   "assembly": "api7",
+   "interface": "ITechnicalDemand",
+   "declared_on": "ITechnicalDemand",
+   "receiver_type": "ITechnicalDemand",
+   "inherited": false,
+   "member": "BlocksGabarits",
+   "kind": "property",
+   "signature": "prop Object BlocksGabarits",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2170",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2202"
+   ],
+   "receivers": [
+    "demand"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itechnicaldemand_blocksgabarits.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITechnicalDemand"
+   }
+  },
+  {
+   "route": "ILayoutSheet.GetPlaceInsideFrames",
+   "assembly": "api7",
+   "interface": "ILayoutSheet",
+   "declared_on": "ILayoutSheet",
+   "receiver_type": "ILayoutSheet",
+   "inherited": false,
+   "member": "GetPlaceInsideFrames",
+   "kind": "method",
+   "signature": "Boolean GetPlaceInsideFrames(Double& Left, Double& Top, Double& Right, Double& Bottom)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2224"
+   ],
+   "receivers": [
+    "sheet"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilayoutsheet_getplaceinsideframes.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ILayoutSheet"
+   }
+  },
+  {
+   "route": "IDimensionText.AutoNominalValue",
+   "assembly": "api7",
+   "interface": "IDimensionText",
+   "declared_on": "IDimensionText",
+   "receiver_type": "IDimensionText",
+   "inherited": false,
+   "member": "AutoNominalValue",
+   "kind": "property",
+   "signature": "prop Boolean AutoNominalValue",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2311"
+   ],
+   "receivers": [
+    "text"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idimensiontext_autonominalvalue.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDimensionText"
+   }
+  },
+  {
+   "route": "IDimensionText.NominalText",
+   "assembly": "api7",
+   "interface": "IDimensionText",
+   "declared_on": "IDimensionText",
+   "receiver_type": "IDimensionText",
+   "inherited": false,
+   "member": "NominalText",
+   "kind": "property",
+   "signature": "prop TextLine NominalText",
+   "type": "TextLine",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2319",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2372"
+   ],
+   "receivers": [
+    "text"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idimensiontext_nominaltext.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDimensionText"
+   }
+  },
+  {
+   "route": "ITextLine.Str",
+   "assembly": "api7",
+   "interface": "ITextLine",
+   "declared_on": "ITextLine",
+   "receiver_type": "ITextLine",
+   "inherited": false,
+   "member": "Str",
+   "kind": "property",
+   "signature": "prop String Str",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2321",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2377"
+   ],
+   "receivers": [
+    "line"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/itextline_str.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ITextLine"
+   }
+  },
+  {
+   "route": "IDimensionText.NominalValue",
+   "assembly": "api7",
+   "interface": "IDimensionText",
+   "declared_on": "IDimensionText",
+   "receiver_type": "IDimensionText",
+   "inherited": false,
+   "member": "NominalValue",
+   "kind": "property",
+   "signature": "prop Double NominalValue",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2352",
+    "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:617",
+    "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:935"
+   ],
+   "receivers": [
+    "text"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idimensiontext_nominalvalue.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDimensionText"
    }
   },
   {
@@ -22882,12 +24029,12 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:322",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:352",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:75",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:372",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:528",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2994",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3766",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3959",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3980",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4856",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4900",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1084",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1101",
     "src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs:672",
@@ -22925,10 +24072,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:330",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:360",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:83",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:383",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:539",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4039",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4494",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4644",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4501",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4651",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:287",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:954",
     "src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs:679",
@@ -23184,8 +24331,8 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:308",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4080",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4404",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4499"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4410",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4506"
    ],
    "receivers": [
     "face"
@@ -23271,8 +24418,8 @@
    "signature": "Boolean Init()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:189",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:43",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:244",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:46",
     "src/KompasMcp.Api5Adapter/Api5Session.StlExport.cs:98"
    ],
    "receivers": [
@@ -23299,8 +24446,8 @@
    "signature": "prop Int16 format",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:192",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:44",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:247",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:47",
     "src/KompasMcp.Api5Adapter/Api5Session.StlExport.cs:99"
    ],
    "receivers": [
@@ -23327,7 +24474,7 @@
    "signature": "Object Document3D()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:184"
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:239"
    ],
    "receivers": [
     "application.Application"
@@ -23353,8 +24500,8 @@
    "signature": "Boolean Create(Boolean invisible, Boolean typeDoc)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:185",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:835"
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:240",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:822"
    ],
    "receivers": [
     "document",
@@ -23381,7 +24528,7 @@
    "signature": "Object AdditionFormatParam()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:188"
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:243"
    ],
    "receivers": [
     "target"
@@ -23407,7 +24554,7 @@
    "signature": "Boolean LoadFromAdditionFormat(String fileName, Object additionPar)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:195"
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:250"
    ],
    "receivers": [
     "target"
@@ -23433,7 +24580,7 @@
    "signature": "Boolean UpdateDocumentParam()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:198",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:253",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3833"
    ],
    "receivers": [
@@ -23444,6 +24591,63 @@
     "status": "Подтверждено",
     "source": [
      "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_updatedocumentparam.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "IKompasDocument.Close",
+   "assembly": "api7",
+   "interface": "IKompasDocument",
+   "declared_on": "IKompasDocument",
+   "receiver_type": "IKompasDocument",
+   "inherited": false,
+   "member": "Close",
+   "kind": "method",
+   "signature": "Boolean Close(DocumentCloseOptions closeOptions)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:367",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1732"
+   ],
+   "receivers": [
+    "document7",
+    "kompasDocument"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompasdocument_close.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IKompasDocument"
+   }
+  },
+  {
+   "route": "ksDocument3D.close",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "close",
+   "kind": "method",
+   "signature": "Boolean close()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:385",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1718",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:588"
+   ],
+   "receivers": [
+    "document",
+    "document.Document"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksDocument3D"
@@ -23461,9 +24665,9 @@
    "signature": "Object GetPart(Int32 type)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:227",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:845",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:912"
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:414",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:832",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:899"
    ],
    "receivers": [
     "document"
@@ -23489,9 +24693,9 @@
    "signature": "Object EdgeCollection()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:388",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:544",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4054",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4649"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4656"
    ],
    "receivers": [
     "face"
@@ -23517,9 +24721,9 @@
    "signature": "Int32 GetCount()",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:389",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:545",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4055",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4650"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4657"
    ],
    "receivers": [
     "edgeCollection",
@@ -23546,9 +24750,9 @@
    "signature": "Object GetByIndex(Int32 index)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:391",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:547",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4057",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4652"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4659"
    ],
    "receivers": [
     "edgeCollection",
@@ -23575,7 +24779,7 @@
    "signature": "Double GetLength(UInt32 bitVector)",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:409",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:565",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4228"
    ],
    "receivers": [
@@ -25251,7 +26455,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:796",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:815",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:889",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1064"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1051"
    ],
    "receivers": [
     "application",
@@ -25465,7 +26669,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3955",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1075",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1058",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1484"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1471"
    ],
    "receivers": [
     "document.PartNow()",
@@ -25497,7 +26701,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3956",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1076",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1059",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1487"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1474"
    ],
    "receivers": [
     "bodies",
@@ -25526,7 +26730,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2220",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2999",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4670",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4677",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:920"
    ],
    "receivers": [
@@ -26403,6 +27607,84 @@
    }
   },
   {
+   "route": "ksMassInertiaParam.xc",
+   "assembly": "api5",
+   "interface": "ksMassInertiaParam",
+   "declared_on": "ksMassInertiaParam",
+   "receiver_type": "ksMassInertiaParam",
+   "inherited": false,
+   "member": "xc",
+   "kind": "property",
+   "signature": "prop Double xc",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4733"
+   ],
+   "receivers": [
+    "properties"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_xc.html"
+    ],
+    "how": "групповая страница",
+    "documented_on": "ksMassInertiaParam"
+   }
+  },
+  {
+   "route": "ksMassInertiaParam.yc",
+   "assembly": "api5",
+   "interface": "ksMassInertiaParam",
+   "declared_on": "ksMassInertiaParam",
+   "receiver_type": "ksMassInertiaParam",
+   "inherited": false,
+   "member": "yc",
+   "kind": "property",
+   "signature": "prop Double yc",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4733"
+   ],
+   "receivers": [
+    "properties"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_xc.html"
+    ],
+    "how": "групповая страница",
+    "documented_on": "ksMassInertiaParam"
+   }
+  },
+  {
+   "route": "ksMassInertiaParam.zc",
+   "assembly": "api5",
+   "interface": "ksMassInertiaParam",
+   "declared_on": "ksMassInertiaParam",
+   "receiver_type": "ksMassInertiaParam",
+   "inherited": false,
+   "member": "zc",
+   "kind": "property",
+   "signature": "prop Double zc",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4733"
+   ],
+   "receivers": [
+    "properties"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_xc.html"
+    ],
+    "how": "групповая страница",
+    "documented_on": "ksMassInertiaParam"
+   }
+  },
+  {
    "route": "ksBody.CalcMassInertiaProperties",
    "assembly": "api5",
    "interface": "ksBody",
@@ -26414,7 +27696,7 @@
    "signature": "Object CalcMassInertiaProperties(UInt32 bitVector)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4712"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4756"
    ],
    "receivers": [
     "body"
@@ -26440,7 +27722,7 @@
    "signature": "prop Double jx",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4780"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4824"
    ],
    "receivers": [
     "properties"
@@ -26466,7 +27748,7 @@
    "signature": "prop Double jy",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4781"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4825"
    ],
    "receivers": [
     "properties"
@@ -26492,7 +27774,7 @@
    "signature": "prop Double jz",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4782"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4826"
    ],
    "receivers": [
     "properties"
@@ -26518,7 +27800,7 @@
    "signature": "prop Double jxy",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4783"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4827"
    ],
    "receivers": [
     "properties"
@@ -26544,7 +27826,7 @@
    "signature": "prop Double jxz",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4784"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4828"
    ],
    "receivers": [
     "properties"
@@ -26570,7 +27852,7 @@
    "signature": "prop Double jyz",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4785"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4829"
    ],
    "receivers": [
     "properties"
@@ -26596,7 +27878,7 @@
    "signature": "prop Double jx0z",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4786"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4830"
    ],
    "receivers": [
     "properties"
@@ -26622,7 +27904,7 @@
    "signature": "prop Double jy0z",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4787"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4831"
    ],
    "receivers": [
     "properties"
@@ -26648,7 +27930,7 @@
    "signature": "prop Double jx0y",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4788"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4832"
    ],
    "receivers": [
     "properties"
@@ -26674,7 +27956,7 @@
    "signature": "prop Double jx0",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4789"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4833"
    ],
    "receivers": [
     "properties"
@@ -26700,7 +27982,7 @@
    "signature": "prop Double jy0",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4790"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4834"
    ],
    "receivers": [
     "properties"
@@ -26726,7 +28008,7 @@
    "signature": "prop Double jz0",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4791"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4835"
    ],
    "receivers": [
     "properties"
@@ -26752,7 +28034,7 @@
    "signature": "Boolean GetAxisX(Double& x, Double& y, Double& z)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4831"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4875"
    ],
    "receivers": [
     "properties"
@@ -26778,7 +28060,7 @@
    "signature": "Boolean GetAxisY(Double& x, Double& y, Double& z)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4832"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4876"
    ],
    "receivers": [
     "properties"
@@ -26804,7 +28086,7 @@
    "signature": "Boolean GetAxisZ(Double& x, Double& y, Double& z)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4833"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4877"
    ],
    "receivers": [
     "properties"
@@ -26830,7 +28112,7 @@
    "signature": "Boolean IsCreated()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4880",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4924",
     "src/KompasMcp.Api5Adapter/Api5Session.Sketches.cs:102"
    ],
    "receivers": [
@@ -26857,15 +28139,41 @@
    "signature": "Object RasterFormatParam()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:407"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:434"
    ],
    "receivers": [
-    "document.Document3D"
+    "model"
    ],
    "documentation": {
     "status": "Подтверждено",
     "source": [
      "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_rasterformatparam.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "ksDocument3D.SaveAsToRasterFormat",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "SaveAsToRasterFormat",
+   "kind": "method",
+   "signature": "Boolean SaveAsToRasterFormat(String fileName, Object rasterPar)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:435"
+   ],
+   "receivers": [
+    "model"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_saveastorasterformat.html"
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksDocument3D"
@@ -26883,7 +28191,7 @@
    "signature": "Boolean Init()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:416"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:457"
    ],
    "receivers": [
     "parameter"
@@ -26909,7 +28217,7 @@
    "signature": "prop Int16 format",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:417"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:458"
    ],
    "receivers": [
     "parameter"
@@ -26935,7 +28243,7 @@
    "signature": "prop Int16 colorBPP",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:418"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:459"
    ],
    "receivers": [
     "parameter"
@@ -26961,7 +28269,7 @@
    "signature": "prop Int32 extResolution",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:421"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:462"
    ],
    "receivers": [
     "parameter"
@@ -26987,7 +28295,7 @@
    "signature": "prop Double extScale",
    "type": "Double",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:426"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:467"
    ],
    "receivers": [
     "parameter"
@@ -27013,7 +28321,7 @@
    "signature": "prop Boolean returnResultAsArrayBytes",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:431"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:472"
    ],
    "receivers": [
     "parameter"
@@ -27028,32 +28336,6 @@
    }
   },
   {
-   "route": "ksDocument3D.SaveAsToRasterFormat",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "SaveAsToRasterFormat",
-   "kind": "method",
-   "signature": "Boolean SaveAsToRasterFormat(String fileName, Object rasterPar)",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:436"
-   ],
-   "receivers": [
-    "document.Document3D"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_saveastorasterformat.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
    "route": "ksRasterFormatParam.resultArrayBytes",
    "assembly": "api5",
    "interface": "ksRasterFormatParam",
@@ -27065,7 +28347,7 @@
    "signature": "prop Object resultArrayBytes",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:532"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:573"
    ],
    "receivers": [
     "parameter"
@@ -28320,6 +29602,329 @@
    }
   },
   {
+   "route": "ICutLine.Points",
+   "assembly": "api7",
+   "interface": "ICutLine",
+   "declared_on": "ICutLine",
+   "receiver_type": "ICutLine",
+   "inherited": false,
+   "member": "Points",
+   "kind": "property",
+   "signature": "prop Object Points",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:157",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:478"
+   ],
+   "receivers": [
+    "line"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icutline_points.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICutLine"
+   }
+  },
+  {
+   "route": "ICutLine.ArrowPos",
+   "assembly": "api7",
+   "interface": "ICutLine",
+   "declared_on": "ICutLine",
+   "receiver_type": "ICutLine",
+   "inherited": false,
+   "member": "ArrowPos",
+   "kind": "property",
+   "signature": "prop Boolean ArrowPos",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:158",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:503"
+   ],
+   "receivers": [
+    "line"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icutline_arrowpos.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICutLine"
+   }
+  },
+  {
+   "route": "IViews.Add",
+   "assembly": "api7",
+   "interface": "IViews",
+   "declared_on": "IViews",
+   "receiver_type": "IViews",
+   "inherited": false,
+   "member": "Add",
+   "kind": "method",
+   "signature": "IView Add(LtViewType ViewType)",
+   "type": "IView",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:192"
+   ],
+   "receivers": [
+    "views"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iviews_add.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IViews"
+   }
+  },
+  {
+   "route": "IAssociationView.BaseObject",
+   "assembly": "api7",
+   "interface": "IAssociationView",
+   "declared_on": "IAssociationView",
+   "receiver_type": "IAssociationView",
+   "inherited": false,
+   "member": "BaseObject",
+   "kind": "property",
+   "signature": "prop IDrawingObject BaseObject",
+   "type": "IDrawingObject",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:194",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:447"
+   ],
+   "receivers": [
+    "added",
+    "association"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iassociationview_baseobject.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IAssociationView"
+   }
+  },
+  {
+   "route": "IAssociationView.Section",
+   "assembly": "api7",
+   "interface": "IAssociationView",
+   "declared_on": "IAssociationView",
+   "receiver_type": "IAssociationView",
+   "inherited": false,
+   "member": "Section",
+   "kind": "property",
+   "signature": "prop Boolean Section",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:195",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:669"
+   ],
+   "receivers": [
+    "added",
+    "association"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iassociationview_section.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IAssociationView"
+   }
+  },
+  {
+   "route": "IAssociationView.ProjectionLink",
+   "assembly": "api7",
+   "interface": "IAssociationView",
+   "declared_on": "IAssociationView",
+   "receiver_type": "IAssociationView",
+   "inherited": false,
+   "member": "ProjectionLink",
+   "kind": "property",
+   "signature": "prop Boolean ProjectionLink",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:198",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:678"
+   ],
+   "receivers": [
+    "added",
+    "association"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iassociationview_projectionlink.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IAssociationView"
+   }
+  },
+  {
+   "route": "IAssociationView.GetProjectionPoint",
+   "assembly": "api7",
+   "interface": "IAssociationView",
+   "declared_on": "IAssociationView",
+   "receiver_type": "IAssociationView",
+   "inherited": false,
+   "member": "GetProjectionPoint",
+   "kind": "method",
+   "signature": "Boolean GetProjectionPoint(Double X, Double Y, Double Z, Double& Xv, Double& Yv)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:589"
+   ],
+   "receivers": [
+    "association"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iassociationview_getprojectionpoint.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IAssociationView"
+   }
+  },
+  {
+   "route": "IViewDesignation.Designation",
+   "assembly": "api7",
+   "interface": "IViewDesignation",
+   "declared_on": "IViewDesignation",
+   "receiver_type": "IViewDesignation",
+   "inherited": false,
+   "member": "Designation",
+   "kind": "property",
+   "signature": "prop String Designation",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:676",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:690"
+   ],
+   "receivers": [
+    "designation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iviewdesignation_designation.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IViewDesignation"
+   }
+  },
+  {
+   "route": "IHatchParam.Step",
+   "assembly": "api7",
+   "interface": "IHatchParam",
+   "declared_on": "IHatchParam",
+   "receiver_type": "IHatchParam",
+   "inherited": false,
+   "member": "Step",
+   "kind": "property",
+   "signature": "prop Double Step",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:680"
+   ],
+   "receivers": [
+    "hatch"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ihatchparam_step.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IHatchParam"
+   }
+  },
+  {
+   "route": "IHatchParam.HatchAngle",
+   "assembly": "api7",
+   "interface": "IHatchParam",
+   "declared_on": "IHatchParam",
+   "receiver_type": "IHatchParam",
+   "inherited": false,
+   "member": "HatchAngle",
+   "kind": "property",
+   "signature": "prop Double HatchAngle",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:681"
+   ],
+   "receivers": [
+    "hatch"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ihatchparam_hatchangle.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IHatchParam"
+   }
+  },
+  {
+   "route": "IHatchParam.Style",
+   "assembly": "api7",
+   "interface": "IHatchParam",
+   "declared_on": "IHatchParam",
+   "receiver_type": "IHatchParam",
+   "inherited": false,
+   "member": "Style",
+   "kind": "property",
+   "signature": "prop Int32 Style",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:682"
+   ],
+   "receivers": [
+    "hatch"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ihatchparam_style.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IHatchParam"
+   }
+  },
+  {
+   "route": "IDrawingObject.Delete",
+   "assembly": "api7",
+   "interface": "IDrawingObject",
+   "declared_on": "IDrawingObject",
+   "receiver_type": "IDrawingObject",
+   "inherited": false,
+   "member": "Delete",
+   "kind": "method",
+   "signature": "Boolean Delete()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:711",
+    "src/KompasMcp.Api5Adapter/Api5Session.SketchEntities.cs:371"
+   ],
+   "receivers": [
+    "drawing",
+    "target"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idrawingobject_delete.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDrawingObject"
+   }
+  },
+  {
    "route": "ISketch.BeginEdit",
    "assembly": "api7",
    "interface": "ISketch",
@@ -28615,33 +30220,6 @@
    }
   },
   {
-   "route": "IDimensionText.NominalValue",
-   "assembly": "api7",
-   "interface": "IDimensionText",
-   "declared_on": "IDimensionText",
-   "receiver_type": "IDimensionText",
-   "inherited": false,
-   "member": "NominalValue",
-   "kind": "property",
-   "signature": "prop Double NominalValue",
-   "type": "Double",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:617",
-    "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:935"
-   ],
-   "receivers": [
-    "text"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idimensiontext_nominalvalue.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IDimensionText"
-   }
-  },
-  {
    "route": "ICircle.Radius",
    "assembly": "api7",
    "interface": "ICircle",
@@ -28746,32 +30324,6 @@
     "status": "Подтверждено",
     "source": [
      "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idrawingobject_layernumber.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IDrawingObject"
-   }
-  },
-  {
-   "route": "IDrawingObject.Delete",
-   "assembly": "api7",
-   "interface": "IDrawingObject",
-   "declared_on": "IDrawingObject",
-   "receiver_type": "IDrawingObject",
-   "inherited": false,
-   "member": "Delete",
-   "kind": "method",
-   "signature": "Boolean Delete()",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SketchEntities.cs:371"
-   ],
-   "receivers": [
-    "drawing"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idrawingobject_delete.html"
     ],
     "how": "перечень интерфейса",
     "documented_on": "IDrawingObject"
@@ -29963,7 +31515,7 @@
    "type": "Int32",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:50",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:293"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:280"
    ],
    "receivers": [
     "app",
@@ -30068,7 +31620,7 @@
    "signature": "Int32 ksGetSystemVersion(Int32& iMajor, Int32& iMinor, Int32& iRelease, Int32& iBuild)",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:338"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:325"
    ],
    "receivers": [
     "app"
@@ -30094,7 +31646,7 @@
    "signature": "Void Quit()",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:489"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:476"
    ],
    "receivers": [
     "application.Application"
@@ -30120,8 +31672,8 @@
    "signature": "Boolean SaveAs(String fileName)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1805",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:543"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1792",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:530"
    ],
    "receivers": [
     "document.Document"
@@ -30147,8 +31699,8 @@
    "signature": "Boolean ksSaveDocument(String fileName)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1812",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:550"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1799",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:537"
    ],
    "receivers": [
     "document.Drawing"
@@ -30174,8 +31726,8 @@
    "signature": "Void SaveAs(String PathName)",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1827",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:558"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1814",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:545"
    ],
    "receivers": [
     "drawing7",
@@ -30191,33 +31743,6 @@
    }
   },
   {
-   "route": "ksDocument3D.close",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "close",
-   "kind": "method",
-   "signature": "Boolean close()",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1731",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:601"
-   ],
-   "receivers": [
-    "document.Document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
    "route": "ksDocument2D.ksCloseDocument",
    "assembly": "api5",
    "interface": "ksDocument2D",
@@ -30229,8 +31754,8 @@
    "signature": "Boolean ksCloseDocument()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1735",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:607"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1722",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:594"
    ],
    "receivers": [
     "document.Drawing"
@@ -30256,7 +31781,7 @@
    "signature": "prop String marking",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:853"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:840"
    ],
    "receivers": [
     "part"
@@ -30282,7 +31807,7 @@
    "signature": "Boolean Open(String fileName, Boolean invisible)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:887"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:874"
    ],
    "receivers": [
     "document"
@@ -30308,7 +31833,7 @@
    "signature": "Boolean Init()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1075"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1062"
    ],
    "receivers": [
     "param"
@@ -30334,7 +31859,7 @@
    "signature": "prop Int16 type",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1076"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1063"
    ],
    "receivers": [
     "param"
@@ -30360,7 +31885,7 @@
    "signature": "prop Int16 regime",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1077"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1064"
    ],
    "receivers": [
     "param"
@@ -30386,7 +31911,7 @@
    "signature": "prop String comment",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1081"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1068"
    ],
    "receivers": [
     "param"
@@ -30412,7 +31937,7 @@
    "signature": "Boolean ksCreateDocument(Object par)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1097"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1084"
    ],
    "receivers": [
     "drawing"
@@ -30438,7 +31963,7 @@
    "signature": "Boolean ksOpenDocument(String nameDoc, Boolean regim)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1154"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1141"
    ],
    "receivers": [
     "drawing"
@@ -30464,7 +31989,7 @@
    "signature": "Boolean GetGabarit(Boolean full, Boolean customizable, Double& x1, Double& y1, Double& z1, Double& x2, Double& y2, Double& z2)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1458"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1445"
    ],
    "receivers": [
     "document.PartNow()"
@@ -30479,32 +32004,6 @@
    }
   },
   {
-   "route": "IKompasDocument.Close",
-   "assembly": "api7",
-   "interface": "IKompasDocument",
-   "declared_on": "IKompasDocument",
-   "receiver_type": "IKompasDocument",
-   "inherited": false,
-   "member": "Close",
-   "kind": "method",
-   "signature": "Boolean Close(DocumentCloseOptions closeOptions)",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1745"
-   ],
-   "receivers": [
-    "kompasDocument"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompasdocument_close.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IKompasDocument"
-   }
-  },
-  {
    "route": "ksDocument3D.Save",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -30516,7 +32015,7 @@
    "signature": "Boolean Save()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1804"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1791"
    ],
    "receivers": [
     "document.Document"
@@ -30542,7 +32041,7 @@
    "signature": "Void Save()",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1823"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1810"
    ],
    "receivers": [
     "kompasDocument"
@@ -36570,23 +38069,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261016-audit-receiver-00c7dd2/routes.json",
+  "source": "docs/acceptance/evidence/20261017-api-audit-312a444/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
-  "fresh": true,
-  "lag_seconds": 12163.0,
-  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
-  "reason": "свеж"
+  "fresh": false,
+  "lag_seconds": -590.4,
+  "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/KompasMcp.Api5Adapter.deps.json",
+  "reason": "измерение старше своего входа"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261016-audit-receiver-00c7dd2/wire.json",
+  "source": "docs/acceptance/evidence/20261017-api-audit-312a444/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 11660.1,
+  "lag_seconds": 2293.4,
   "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "свеж"
  },
@@ -36594,7 +38093,7 @@
   "entries": [
    {
     "member": "IsDetail",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:1188",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:1175",
     "receiver_type": "ksDocument3D",
     "declared_in_interop": [
      "Document3DClass",
@@ -36608,17 +38107,17 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 6621,
+  "total": 6845,
   "by_kind": {
-   "foreign-receiver": 6141,
-   "unknown": 383,
-   "unknown-member": 97
+   "foreign-receiver": 6363,
+   "unknown": 384,
+   "unknown-member": 98
   },
   "by_reason": {
-   "head-not-declared": 6141,
+   "head-not-declared": 6363,
    "head-type-not-established": 183,
-   "head-type-not-com": 197,
-   "member-not-on-interface": 97,
+   "head-type-not-com": 198,
+   "member-not-on-interface": 98,
    "chain-broken-on-com-type": 3
   },
   "sites": {
@@ -36841,13 +38340,13 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:124:rows.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:662:command.DimensionType.Trim()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:854:command.Cells",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:942:readBack.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1108:readings.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1640:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2125:format.Trim()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:125:rows.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:687:command.DimensionType.Trim()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:904:command.Cells",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:992:readBack.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1200:readings.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1749:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2497:format.Trim()",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:124:shapes.Where(s => !s.Cylinder)",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:130:edge",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:133:edge",
@@ -36875,11 +38374,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:530:plane",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:535:plane",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:536:plane",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:42:document.Document3D",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:52:document.Document3D",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:265:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:323:dims",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:482:needle",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:45:document.Document3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:55:document.Document3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:479:dims",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:638:needle",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:549:command.Couplings",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:623:command.Couplings",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:869:ex.GetType()",
@@ -36958,18 +38456,20 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4333:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4334:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4340:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4350:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4352:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4357:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4362:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4367:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4380:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4389:command.DensityKgPerM3",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4393:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4402:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4429:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4485:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4909:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4351:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4353:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4358:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4363:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4368:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4373:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4386:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4395:command.DensityKgPerM3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4399:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4408:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4435:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4492:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4744:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4953:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:52:anchor",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:53:anchor",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:58:anchor",
@@ -36983,13 +38483,13 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:700:command.Mode",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:887:mode.Value",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:923:mode.Value",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:182:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:195:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:201:format",
     "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:214:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:249:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:265:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:368:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:369:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:233:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:268:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:284:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:387:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:388:format",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:219:hits.Select(h => h.Type)",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:339:command.Object1",
     "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:339:command.Object1",
@@ -37023,28 +38523,27 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:697:command.SectionRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:706:command.SectionRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:706:command.SectionRefs.Distinct(StringComparer.Ordinal)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:717:command.SectionRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:730:command.Building"
+    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:717:command.SectionRefs"
    ],
    "unknown-member": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:757:IModelObject.Points3D",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:696:IDiametralDimension.X1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:697:IDiametralDimension.Y1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:698:IDiametralDimension.X2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:699:IDiametralDimension.Y2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:702:IDiametralDimension.X3",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:703:IDiametralDimension.Y3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:721:IDiametralDimension.X1",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:722:IDiametralDimension.Y1",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:723:IDiametralDimension.X2",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:724:IDiametralDimension.Y2",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:727:IDiametralDimension.X3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:728:IDiametralDimension.Y3",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:431:ksPlacement.AreaMm2",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:432:ksPlacement.Point",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:433:ksPlacement.Normal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:29:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:38:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:92:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:289:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:292:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:299:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:319:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:321:ksEdgeCollection.ToString",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:32:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:41:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:95:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:445:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:448:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:455:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:475:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:477:ksEdgeCollection.ToString",
     "src/KompasMcp.Api5Adapter/Api5Session.Features.cs:661:ksBossExtrusionDefinition.Side",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:607:ksBody.Volume",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:608:ksBody.Volume",
@@ -37085,12 +38584,13 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3647:ksCutExtrusionDefinition.Name",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3647:ksCutExtrusionDefinition.Passed",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3652:ksPlacement.Unverified",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.SurfaceType",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.Area",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.Normal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.SurfaceType",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.Area",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.Normal",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:40:ksEntity.Document",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:79:ksEntity.Sketch",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:442:ksEntity.AngleDeg",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:577:IView.ToList",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:482:IDrawingObject.Drawing",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:542:IDrawingObject.Drawing",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:557:IDrawingObject.Drawing",
@@ -37340,7 +38840,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1363:child",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1366:child",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1369:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2125:format.Trim()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2497:format.Trim()",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:130:edge",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:133:edge",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:142:edge",
@@ -37366,8 +38866,8 @@
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:530:plane",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:535:plane",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:536:plane",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:323:dims",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:482:needle",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:479:dims",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:638:needle",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1385:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1394:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1399:stored",
@@ -37423,21 +38923,21 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4333:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4334:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4340:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4350:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4393:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4429:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4485:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4909:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4351:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4399:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4435:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4492:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4953:stored",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:52:anchor",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:53:anchor",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:58:anchor",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:182:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:195:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:201:format",
     "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:214:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:249:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:265:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:368:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:369:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:233:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:268:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:284:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:387:format",
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:388:format",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:322:probe",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:976:element",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:979:element",
@@ -37464,34 +38964,34 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:180:application.Application",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:75:document",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:75:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:366:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:382:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:419:document",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:353:application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:369:application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:406:document",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:417:document",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:424:document",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:428:document",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:430:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:437:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:441:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:443:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:791:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:830:application.Application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:835:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:869:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:886:application.Application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:887:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:919:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:974:owner",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:975:owner",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1053:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1054:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1180:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1228:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1229:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1232:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1236:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1236:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1240:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1246:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1380:dims",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1618:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:778:document",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:817:application.Application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:822:application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:856:application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:873:application.Application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:874:application",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:906:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:961:owner",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:962:owner",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1040:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1041:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1167:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1215:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1216:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1219:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1223:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1223:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1227:entry",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1233:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1367:dims",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1605:child",
     "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:309:process",
     "src/KompasMcp.Api5Adapter/ViewSwap.cs:210:previous",
     "src/KompasMcp.Api5Adapter/ViewSwap.cs:220:previous",
@@ -37521,15 +39021,14 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:124:rows.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:662:command.DimensionType.Trim()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:854:command.Cells",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:942:readBack.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1108:readings.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1640:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:125:rows.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:687:command.DimensionType.Trim()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:904:command.Cells",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:992:readBack.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1200:readings.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1749:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:124:shapes.Where(s => !s.Cylinder)",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:218:shapes.Where(s => !s.Cylinder)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:265:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:549:command.Couplings",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:623:command.Couplings",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:869:ex.GetType()",
@@ -37553,13 +39052,15 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3214:entities.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3217:command.RadiusMm",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3533:entities.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4352:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4357:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4362:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4367:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4380:command.Properties",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4389:command.DensityKgPerM3",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4402:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4353:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4358:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4363:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4368:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4373:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4386:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4395:command.DensityKgPerM3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4408:command.Properties",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4744:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:115:command.Mode.ToString()",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:144:command.Mode",
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:146:command.Mode",
@@ -37676,9 +39177,9 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:69:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:92:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:155:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:727:document.Kind.ToString()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:739:application.Ownership.ToString()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:825:command.Kind",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:714:document.Kind.ToString()",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:726:application.Ownership.ToString()",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:812:command.Kind",
     "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:89:name.Name",
     "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:293:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:232:ex.GetType()",
@@ -37715,23 +39216,23 @@
    ],
    "member-not-on-interface": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:757:IModelObject.Points3D",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:696:IDiametralDimension.X1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:697:IDiametralDimension.Y1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:698:IDiametralDimension.X2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:699:IDiametralDimension.Y2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:702:IDiametralDimension.X3",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:703:IDiametralDimension.Y3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:721:IDiametralDimension.X1",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:722:IDiametralDimension.Y1",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:723:IDiametralDimension.X2",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:724:IDiametralDimension.Y2",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:727:IDiametralDimension.X3",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:728:IDiametralDimension.Y3",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:431:ksPlacement.AreaMm2",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:432:ksPlacement.Point",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:433:ksPlacement.Normal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:29:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:38:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:92:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:289:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:292:ksDocument3D.Revision",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:299:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:319:ksDocument3D.Id",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:321:ksEdgeCollection.ToString",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:32:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:41:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:95:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:445:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:448:ksDocument3D.Revision",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:455:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:475:ksDocument3D.Id",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:477:ksEdgeCollection.ToString",
     "src/KompasMcp.Api5Adapter/Api5Session.Features.cs:661:ksBossExtrusionDefinition.Side",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:607:ksBody.Volume",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:608:ksBody.Volume",
@@ -37772,12 +39273,13 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3647:ksCutExtrusionDefinition.Name",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3647:ksCutExtrusionDefinition.Passed",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3652:ksPlacement.Unverified",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.SurfaceType",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.Area",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4508:ksCutExtrusionDefinition.Normal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.SurfaceType",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.Area",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4515:ksCutExtrusionDefinition.Normal",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:40:ksEntity.Document",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:79:ksEntity.Sketch",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:442:ksEntity.AngleDeg",
+    "src/KompasMcp.Api5Adapter/Api5Session.SectionViews.cs:577:IView.ToList",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:482:IDrawingObject.Drawing",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:542:IDrawingObject.Drawing",
     "src/KompasMcp.Api5Adapter/Api5Session.SketchDimension.cs:557:IDrawingObject.Drawing",
@@ -37813,8 +39315,8 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2453:ksEntity.Index"
    ],
    "chain-broken-on-com-type": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:42:document.Document3D",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:52:document.Document3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:45:document.Document3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:55:document.Document3D",
     "src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs:112:definition.GetType()"
    ]
   },
@@ -38016,63 +39518,63 @@
     "constant": "BaseRotated",
     "value": 27,
     "documented": "o3d_baseRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2220",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2207",
     "documented_value": 27
    },
    {
     "constant": "BossRotated",
     "value": 28,
     "documented": "o3d_bossRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2223",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2210",
     "documented_value": 28
    },
    {
     "constant": "CutRotated",
     "value": 29,
     "documented": "o3d_cutRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2226",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2213",
     "documented_value": 29
    },
    {
     "constant": "Rotated3D",
     "value": 29,
     "documented": "o3d_cutRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2234",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2221",
     "documented_value": 29
    },
    {
     "constant": "HoleOperation",
     "value": 52,
     "documented": "o3d_holeOperation",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2244",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2231",
     "documented_value": 52
    },
    {
     "constant": "Hole3D",
     "value": 583,
     "documented": "o3d_Hole3D",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2251",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2238",
     "documented_value": 583
    },
    {
     "constant": "BooleanOperation",
     "value": 69,
     "documented": "o3d_aggregate",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2258",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2245",
     "documented_value": 69
    },
    {
     "constant": "SplitSolid",
     "value": 633,
     "documented": "o3d_SplitSolid",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2263",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2250",
     "documented_value": 633
    },
    {
     "constant": "CutByPlane",
     "value": 50,
     "documented": "o3d_cutByPlane",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2268",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2255",
     "documented_value": 50
    }
   ],
@@ -38081,132 +39583,132 @@
    {
     "constant": "PlaneXoy",
     "value": 1,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2204"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2191"
    },
    {
     "constant": "PlaneXoz",
     "value": 2,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2205"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2192"
    },
    {
     "constant": "PlaneYoz",
     "value": 3,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2206"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2193"
    },
    {
     "constant": "Sketch",
     "value": 5,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2207"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2194"
    },
    {
     "constant": "Edge",
     "value": 7,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2208"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2195"
    },
    {
     "constant": "Face",
     "value": 6,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2209"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2196"
    },
    {
     "constant": "PlaneOffset",
     "value": 14,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2210"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2197"
    },
    {
     "constant": "BaseExtrusion",
     "value": 24,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2211"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2198"
    },
    {
     "constant": "BossExtrusion",
     "value": 25,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2212"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2199"
    },
    {
     "constant": "CutExtrusion",
     "value": 26,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2213"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2200"
    },
    {
     "constant": "BaseLoft",
     "value": 30,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2235"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2222"
    },
    {
     "constant": "BossLoft",
     "value": 31,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2236"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2223"
    },
    {
     "constant": "CutLoft",
     "value": 32,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2237"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2224"
    },
    {
     "constant": "Fillet",
     "value": 34,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2238"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2225"
    },
    {
     "constant": "Chamfer",
     "value": 33,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2239"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2226"
    },
    {
     "constant": "BaseEvolution",
     "value": 45,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2240"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2227"
    },
    {
     "constant": "BodyRepositionFeature",
     "value": 79,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2277"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2264"
    },
    {
     "constant": "Polyline3d",
     "value": 53,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2279"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2266"
    },
    {
     "constant": "Part",
     "value": 104,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2280"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2267"
    },
    {
     "constant": "Body",
     "value": 115,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2281"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2268"
    },
    {
     "constant": "FaceCollection",
     "value": 116,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2282"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2269"
    },
    {
     "constant": "FeatureCollection",
     "value": 119,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2283"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2270"
    },
    {
     "constant": "EdgeCollection",
     "value": 121,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2284"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2271"
    },
    {
     "constant": "OperationElement",
     "value": 110,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2285"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2272"
    },
    {
     "constant": "CurveElement",
     "value": 111,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2286"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2273"
    },
    {
     "constant": "ConstructionElement",
     "value": 109,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2287"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2274"
    }
   ],
   "note": "константа без названного в её собственном doc-блоке имени o3d_* проверена быть не может: имя не выводится из числа"
@@ -38229,12 +39731,43 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/20261016-audit-receiver-00c7dd2/all-report.json",
-  "rows_claiming_verified": 168,
-  "rows_without_any_linked_row": [],
+  "source": "scratch/mcp-smoke/smoke-all-report.json",
+  "rows_claiming_verified": 177,
+  "rows_without_any_linked_row": [
+   "DRW-07.section_view.create.simple",
+   "DRW-07.section_view.create.stepped",
+   "DRW-07.section_view.delete",
+   "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
+   "DRW-07.section_view.read",
+   "DRW-07.section_view.rebuild",
+   "DRW-07.section_view.save_reopen",
+   "DRW-07.section_view.update"
+  ],
   "rows_contradicted_by_fail": [],
-  "rows_action_without_dedicated_row": [],
-  "rows_actions_without_required_calls": [],
+  "rows_action_without_dedicated_row": [
+   "DRW-07.section_view.create.simple",
+   "DRW-07.section_view.create.stepped",
+   "DRW-07.section_view.delete",
+   "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
+   "DRW-07.section_view.read",
+   "DRW-07.section_view.rebuild",
+   "DRW-07.section_view.save_reopen",
+   "DRW-07.section_view.update"
+  ],
+  "rows_actions_without_required_calls": [
+   "DRW-07.section_view.create.simple",
+   "DRW-07.section_view.create.stepped",
+   "DRW-07.section_view.delete",
+   "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
+   "DRW-07.section_view.read",
+   "DRW-07.section_view.rebuild",
+   "DRW-07.section_view.save_reopen",
+   "DRW-07.section_view.update",
+   "STEP.import"
+  ],
   "guard_control": {
    "must_refuse": {
     "row": "СИНТЕТИЧЕСКАЯ (окно журнала [1, 2])",
@@ -38359,7 +39892,7 @@
    "statement": "4 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261016-audit-receiver-00c7dd2/routes.json"
+    "docs/acceptance/evidence/20261017-api-audit-312a444/routes.json"
    ]
   },
   {
@@ -38369,7 +39902,37 @@
    "statement": "4 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261016-audit-receiver-00c7dd2/routes.json"
+    "docs/acceptance/evidence/20261017-api-audit-312a444/routes.json"
+   ]
+  },
+  {
+   "id": "F-06",
+   "class": "приписка (verified без связанной строки приёмки)",
+   "severity": "высокая",
+   "statement": "9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update",
+   "fix": "связать строку с приёмкой или понизить заявку",
+   "evidence": [
+    "scratch/mcp-smoke/smoke-all-report.json"
+   ]
+  },
+  {
+   "id": "F-07",
+   "class": "заявка не подтверждена вызовами (отказ сторожа)",
+   "severity": "средняя",
+   "statement": "10 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, STEP.import",
+   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
+   "evidence": [
+    "scratch/mcp-smoke/smoke-all-report.json"
+   ]
+  },
+  {
+   "id": "F-08",
+   "class": "пробел трассируемости (действие не названо строкой)",
+   "severity": "низкая",
+   "statement": "9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update",
+   "fix": "назвать действие в имени строки или объявить маршрут строки",
+   "evidence": [
+    "scratch/mcp-smoke/smoke-all-report.json"
    ]
   }
  ],

@@ -2,28 +2,28 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-16T16:30:15+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-17T19:45:12+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 129, маршрутов 593.
-- Измеряемая сборка: `release_build`, коммит `87bb42f`, дерево чистое; `KompasMcp.Host.dll` sha256 `9d0e7793f57e8d126c42aa3c2a247024f8a96f046cc7b0ce53b4a4481eb55d9b`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 136, маршрутов 618.
+- Измеряемая сборка: `release_build`, коммит `9f32888`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `6746382608e858d5c5e7d46c3c83df1e8d63c5bdc9f5783bd6210783959fd33b`.
 
 ## 2. Сверка полноты
 
 | Показатель | Значение |
 |---|---|
-| tools_on_wire | 90 |
-| schemas_on_disk | 90 |
-| tools_with_schema | 90 |
-| schemas_matching_wire_by_property_names | 90 |
-| schemas_matching_wire_by_shape | 90 |
-| matrix_rows | 172 |
+| tools_on_wire | 94 |
+| schemas_on_disk | 94 |
+| tools_with_schema | 94 |
+| schemas_matching_wire_by_property_names | 94 |
+| schemas_matching_wire_by_shape | 93 |
+| matrix_rows | 181 |
 | catalog_modes_and_variants | 209 |
-| com_routes | 603 |
-| com_routes_confirmed_by_documentation | 589 |
-| com_routes_confirmed_over_wire | 589 |
+| com_routes | 628 |
+| com_routes_confirmed_by_documentation | 614 |
+| com_routes_confirmed_over_wire | 614 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 4 |
 | com_routes_confirmed_by_name | 6 |
@@ -31,22 +31,22 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 9 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 168 |
-| rows_verified_without_any_linked_row | 0 |
+| rows_claiming_verified | 177 |
+| rows_verified_without_any_linked_row | 9 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 0 |
-| rows_actions_without_required_calls | 0 |
-| rows_status_lowered_by_unsupported_actions | 0 |
-| acceptance_rows | 1651 |
-| acceptance_calls_journal | 15921 |
-| acceptance_rows_with_call_window | 1651 |
+| rows_action_without_dedicated_row | 9 |
+| rows_actions_without_required_calls | 10 |
+| rows_status_lowered_by_unsupported_actions | 10 |
+| acceptance_rows | 1678 |
+| acceptance_calls_journal | 16026 |
+| acceptance_rows_with_call_window | 1678 |
 | required_of_mismatches_matrix_vs_profile | 0 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 0.
-Инструментов вне профилей по природе (названный класс): 9 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_import_step` (импорт STEP: каталог не заводит режима импорта, инструмент исполняется вертикальным сценарием (строки E01-E03), а не режимом профиля. Это названный пробел МОДЕЛИ покрытия, и его закрытие меняет знаменатель каталога - решение заказчика); `kompas_probe_units` (калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания измерительных вызовов; измерительный прибор приёмки, а не режим (исполняется строкой DEP.DUN.01.geometry_validation)); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
-Классы присутствия: {'absent': 8, 'route_field': 36, 'route_field+schema_field': 29, 'schema_field': 17}.
-COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-twins': 10}.
+Инструментов вне профилей по природе (названный класс): 8 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_probe_units` (калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания измерительных вызовов; измерительный прибор приёмки, а не режим (исполняется строкой DEP.DUN.01.geometry_validation)); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
+Классы присутствия: {'absent': 8, 'route_field': 39, 'route_field+schema_field': 30, 'schema_field': 17}.
+COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -66,6 +66,7 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `kompas_create_document` | 6 | application_id, kind, operation_id | да | да | route_field |
 | `kompas_create_drawing_views` | 12 | document_id, expected_revision, source_path, x, y, operation_id | да | да | route_field+schema_field |
 | `kompas_create_mate` | 11 | document_id, expected_revision, constraint_type, first_component_ref, first_face_index, second_component_ref, second_face_index, operation_id | да | да | route_field |
+| `kompas_create_section_view` | 15 | document_id, expected_revision, base_view_ref, mode, x, y, operation_id | да | да | route_field+schema_field |
 | `kompas_create_sketch` | 6 | document_id, expected_revision, plane, operation_id | да | да | schema_field |
 | `kompas_create_sketch_constraint` | 14 | sketch_ref, expected_revision, constraint_type, object_ref, operation_id | да | да | route_field+schema_field |
 | `kompas_create_sketch_dimension` | 10 | sketch_ref, expected_revision, object_ref, operation_id | да | да | schema_field |
@@ -74,13 +75,14 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `kompas_delete_component` | 6 | document_id, expected_revision, component_ref, operation_id | да | да | route_field |
 | `kompas_delete_feature` | 6 | feature_ref, expected_revision, operation_id | да | да | route_field+schema_field |
 | `kompas_delete_mate` | 5 | document_id, expected_revision, mate_ref, operation_id | да | да | route_field |
+| `kompas_delete_section_view` | 6 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
 | `kompas_delete_sketch_constraint` | 7 | sketch_ref, expected_revision, object_ref, operation_id | да | да | schema_field |
 | `kompas_disconnect` | 4 | application_id, close_owned_application, operation_id | да | да | нет |
 | `kompas_edit_sketch` | 6 | sketch_ref, expected_revision, mode, entities, operation_id | да | да | route_field+schema_field |
 | `kompas_edit_sketch_entity` | 7 | sketch_ref, expected_revision, address, action, operation_id | да | да | route_field |
 | `kompas_edit_view` | 8 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
 | `kompas_export_drawing` | 6 | document_id, output_path, format, operation_id | да | да | route_field+schema_field |
-| `kompas_export_image` | 12 | document_id, expected_revision, format, operation_id | да | да | route_field+schema_field |
+| `kompas_export_image` | 12 | document_id, expected_revision, format, operation_id | да | НЕТ | route_field+schema_field |
 | `kompas_export_step` | 5 | document_id, expected_revision, output_path, operation_id | да | да | route_field |
 | `kompas_export_stl` | 8 | document_id, expected_revision, target_path, binary, max_edge_length_mm, normal_angle_deg, operation_id | да | да | route_field+schema_field |
 | `kompas_extrude` | 11 | sketch_ref, expected_revision, operation, operation_id | да | да | route_field+schema_field |
@@ -90,6 +92,7 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `kompas_get_feature` | 2 | feature_ref | да | да | route_field+schema_field |
 | `kompas_get_material` | 2 | document_id | да | да | route_field+schema_field |
 | `kompas_get_pattern` | 2 | feature_ref | да | да | route_field |
+| `kompas_get_section_view` | 3 | document_id, view_ref | да | да | route_field |
 | `kompas_get_sketch_status` | 2 | sketch_ref | да | да | route_field+schema_field |
 | `kompas_get_technical_demand` | 2 | document_id | да | да | route_field |
 | `kompas_get_title_block` | 3 | document_id, cell_ids | да | да | route_field |
@@ -142,10 +145,11 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `kompas_sweep` | 7 | sketch_ref, path_ref, expected_revision, operation_id | да | да | schema_field |
 | `kompas_update_feature` | 42 | feature_ref, expected_revision, operation_id | да | да | route_field+schema_field |
 | `kompas_update_plane` | 9 | document_id, expected_revision, plane_ref, operation_id | да | да | route_field |
+| `kompas_update_section_view` | 10 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 172.
+Всего строк матрицы: 181.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -321,6 +325,15 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ASM-08.component.delete` | ASM | mcp_verified | kompas_delete_component, kompas_list_components, kompas_list_mates, kompas_open_document, kompas_rebuild, kompas_save_document | kompas_delete_component: API5 ksDocument3D.DeleteObject(ksPa | Подтверждено |
 | `SM-02.material_toward` | SM-02 | mcp_verified | kompas_extrude, kompas_get_feature, kompas_list_bodies, kompas_measure, kompas_open_document, kompas_rebuild, kompas_save_document | kompas_extrude, вход material_toward: ExtrusionSide.Directio | Подтверждено |
 | `STEP.import` | STEP | mcp_verified | kompas_import_step, kompas_list_bodies, kompas_list_documents, kompas_list_features, kompas_measure, kompas_rebuild | kompas_import_step читает файл в НОВЫЙ документ: API5 ksDocu | Подтверждено |
+| `DRW-07.section_view.create.stepped` | DRW | mcp_verified | kompas_create_section_view | kompas_create_section_view (mode=stepped, trace_model либо t | Подтверждено |
+| `DRW-07.section_view.create.simple` | DRW | mcp_verified | kompas_create_section_view | kompas_create_section_view (mode=simple) | Не подтверждено |
+| `DRW-07.section_view.read` | DRW | mcp_verified | kompas_create_section_view, kompas_get_section_view | kompas_get_section_view (только чтение; на виде другого типа | Не подтверждено |
+| `DRW-07.section_view.update` | DRW | mcp_verified | kompas_create_section_view, kompas_update_section_view | kompas_update_section_view (ответ несёт before и after одног | Не подтверждено |
+| `DRW-07.section_view.delete` | DRW | mcp_verified | kompas_create_section_view, kompas_delete_section_view | kompas_delete_section_view (необязательный keep_cut_line ост | Не подтверждено |
+| `DRW-07.section_view.save_reopen` | DRW | mcp_verified | kompas_create_section_view, kompas_get_section_view | kompas_get_section_view после повторного открытия документа | Не подтверждено |
+| `DRW-07.section_view.rebuild` | DRW | mcp_verified | kompas_create_section_view, kompas_get_section_view, kompas_rebuild_drawing_views | kompas_rebuild_drawing_views + kompas_get_section_view | Не подтверждено |
+| `DRW-07.section_view.geometry_validation` | DRW | mcp_verified | kompas_create_section_view, kompas_export_drawing, kompas_get_section_view | kompas_export_drawing (dxf) + kompas_get_section_view | Не подтверждено |
+| `DRW-07.section_view.negative_tests` | DRW | mcp_verified | kompas_create_section_view | kompas_create_section_view (отказы с описанием частичных изм | Не подтверждено |
 
 ## 5. COM-маршруты адаптера
 
@@ -370,9 +383,9 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksChamferDefinition.SetChamferParam` | api5 | method | `Boolean SetChamferParam(Boolean transfer, Double distance1, Double dis` | 2 | Подтверждено | перечень интерфейса |
 | `ksEntity.Update` | api5 | method | `Boolean Update()` | 8 | Подтверждено | перечень интерфейса |
 | `IViews.AddStandartViews` | api7 | method | `Boolean AddStandartViews(String FileName, String ProjectionName, Objec` | 1 | Подтверждено | перечень интерфейса |
-| `IView.Scale` | api7 | property | `prop Double Scale` | 2 | Подтверждено | перечень интерфейса |
-| `IView.X` | api7 | property | `prop Double X` | 2 | Подтверждено | перечень интерфейса |
-| `IView.Y` | api7 | property | `prop Double Y` | 2 | Подтверждено | перечень интерфейса |
+| `IView.Scale` | api7 | property | `prop Double Scale` | 6 | Подтверждено | перечень интерфейса |
+| `IView.X` | api7 | property | `prop Double X` | 5 | Подтверждено | перечень интерфейса |
+| `IView.Y` | api7 | property | `prop Double Y` | 5 | Подтверждено | перечень интерфейса |
 | `IKompasDocument2D1.RebuildDocument` | api7 | method | `Boolean RebuildDocument()` | 1 | Подтверждено | перечень интерфейса |
 | `ISymbols2DContainer.LineDimensions` | api7 | property | `prop LineDimensions LineDimensions` | 3 | Подтверждено | перечень интерфейса |
 | `ISymbols2DContainer.RadialDimensions` | api7 | property | `prop RadialDimensions RadialDimensions` | 2 | Подтверждено | перечень интерфейса |
@@ -401,27 +414,39 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `IDiametralDimension.Radius` | api7 | property | `prop Double Radius` | 1 | Подтверждено | перечень интерфейса |
 | `IDiametralDimension.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
 | `IText.Str` | api7 | property | `prop String Str` | 2 | Подтверждено | перечень интерфейса |
+| `ITechnicalDemand.Text` | api7 | property | `prop Text Text` | 3 | Подтверждено | перечень интерфейса |
+| `ITechnicalDemand.AutoPlacement` | api7 | property | `prop Boolean AutoPlacement` | 2 | Подтверждено | перечень интерфейса |
+| `ITechnicalDemand.Update` | api7 | method | `Boolean Update()` | 2 | Подтверждено | перечень интерфейса |
+| `ITechnicalDemand.IsCreated` | api7 | property | `prop Boolean IsCreated` | 2 | Подтверждено | перечень интерфейса |
 | `IConverter.GetFilter` | api7 | method | `String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)` | 1 | Подтверждено | перечень интерфейса |
 | `IConverter.Convert` | api7 | method | `Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean` | 1 | Подтверждено | перечень интерфейса |
 | `KompasObject.TransferInterface` | api5 | method | `Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewTyp` | 5 | Подтверждено | имя файла страницы |
-| `KompasObject.ActiveDocument3D` | api5 | method | `Object ActiveDocument3D()` | 2 | Подтверждено | перечень интерфейса |
+| `KompasObject.ActiveDocument3D` | api5 | method | `Object ActiveDocument3D()` | 1 | Подтверждено | перечень интерфейса |
 | `KompasObject.Document2D` | api5 | method | `Object Document2D()` | 3 | Подтверждено | перечень интерфейса |
 | `IApplication.Documents` | api7 | property | `prop Documents Documents` | 2 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.PathName` | api7 | property | `prop String PathName` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.DocumentType` | api7 | property | `prop DocumentTypeEnum DocumentType` | 1 | Подтверждено | перечень интерфейса |
-| `IViews.Count` | api7 | property | `prop Int32 Count` | 6 | Подтверждено | перечень интерфейса |
+| `IViews.Count` | api7 | property | `prop Int32 Count` | 8 | Подтверждено | перечень интерфейса |
 | `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 5 | Подтверждено | перечень интерфейса |
-| `IView.Reference` | api7 | property | `prop Int32 Reference` | 3 | Подтверждено | перечень интерфейса |
+| `IView.Reference` | api7 | property | `prop Int32 Reference` | 4 | Подтверждено | перечень интерфейса |
 | `IView.Number` | api7 | property | `prop Int32 Number` | 1 | Подтверждено | перечень интерфейса |
 | `IView.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
-| `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 1 | Подтверждено | перечень интерфейса |
-| `IAssociationView.SourceFileName` | api7 | property | `prop String SourceFileName` | 1 | Подтверждено | перечень интерфейса |
+| `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 6 | Подтверждено | перечень интерфейса |
+| `IAssociationView.SourceFileName` | api7 | property | `prop String SourceFileName` | 2 | Подтверждено | перечень интерфейса |
 | `IAssociationView.ProjectionName` | api7 | property | `prop String ProjectionName` | 1 | Подтверждено | перечень интерфейса |
 | `IAssociationView.HiddenLinesVisible` | api7 | property | `prop Boolean HiddenLinesVisible` | 1 | Подтверждено | перечень интерфейса |
 | `IAssociationView.CenterLinesVisible` | api7 | property | `prop Boolean CenterLinesVisible` | 1 | Подтверждено | перечень интерфейса |
-| `IView.ObjectCount` | api7 | property | `prop Int32 ObjectCount` | 2 | Подтверждено | перечень интерфейса |
+| `IView.ObjectCount` | api7 | property | `prop Int32 ObjectCount` | 3 | Подтверждено | перечень интерфейса |
 | `IView.Valid` | api7 | property | `prop Boolean Valid` | 1 | Подтверждено | перечень интерфейса |
+| `ILayoutSheets.Count` | api7 | property | `prop Int32 Count` | 2 | Подтверждено | перечень интерфейса |
+| `ILayoutSheet.Stamp` | api7 | property | `prop _Stamp Stamp` | 1 | Подтверждено | перечень интерфейса |
+| `ITechnicalDemand.BlocksGabarits` | api7 | property | `prop Object BlocksGabarits` | 2 | Подтверждено | перечень интерфейса |
+| `ILayoutSheet.GetPlaceInsideFrames` | api7 | method | `Boolean GetPlaceInsideFrames(Double& Left, Double& Top, Double& Right,` | 1 | Подтверждено | перечень интерфейса |
+| `IDimensionText.AutoNominalValue` | api7 | property | `prop Boolean AutoNominalValue` | 1 | Подтверждено | перечень интерфейса |
+| `IDimensionText.NominalText` | api7 | property | `prop TextLine NominalText` | 2 | Подтверждено | перечень интерфейса |
+| `ITextLine.Str` | api7 | property | `prop String Str` | 2 | Подтверждено | перечень интерфейса |
+| `IDimensionText.NominalValue` | api7 | property | `prop Double NominalValue` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeDefinition.GetVertex` | api5 | method | `Object GetVertex(Boolean start)` | 3 | Подтверждено | перечень интерфейса |
 | `ksVertexDefinition.GetPoint` | api5 | method | `Boolean GetPoint(Double& x, Double& y, Double& z)` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeDefinition.IsStraight` | api5 | method | `Boolean IsStraight()` | 2 | Подтверждено | перечень интерфейса |
@@ -444,6 +469,8 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksDocument3D.AdditionFormatParam` | api5 | method | `Object AdditionFormatParam()` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.LoadFromAdditionFormat` | api5 | method | `Boolean LoadFromAdditionFormat(String fileName, Object additionPar)` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.UpdateDocumentParam` | api5 | method | `Boolean UpdateDocumentParam()` | 2 | Подтверждено | перечень интерфейса |
+| `IKompasDocument.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 2 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.close` | api5 | method | `Boolean close()` | 3 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.GetPart` | api5 | method | `Object GetPart(Int32 type)` | 3 | Подтверждено | перечень интерфейса |
 | `ksFaceDefinition.EdgeCollection` | api5 | method | `Object EdgeCollection()` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeCollection.GetCount` | api5 | method | `Int32 GetCount()` | 3 | Подтверждено | перечень интерфейса |
@@ -551,6 +578,9 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksCircle3dParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 1 | Подтверждено | перечень интерфейса |
 | `ksCircle3dParam.radius` | api5 | property | `prop Double radius` | 1 | Подтверждено | перечень интерфейса |
 | `ksBody.IsSolid` | api5 | method | `Boolean IsSolid()` | 1 | Подтверждено | перечень интерфейса |
+| `ksMassInertiaParam.xc` | api5 | property | `prop Double xc` | 1 | Подтверждено | групповая страница |
+| `ksMassInertiaParam.yc` | api5 | property | `prop Double yc` | 1 | Подтверждено | групповая страница |
+| `ksMassInertiaParam.zc` | api5 | property | `prop Double zc` | 1 | Подтверждено | групповая страница |
 | `ksBody.CalcMassInertiaProperties` | api5 | method | `Object CalcMassInertiaProperties(UInt32 bitVector)` | 1 | Подтверждено | named_name_mismatch |
 | `ksMassInertiaParam.jx` | api5 | property | `prop Double jx` | 1 | Подтверждено | групповая страница |
 | `ksMassInertiaParam.jy` | api5 | property | `prop Double jy` | 1 | Подтверждено | групповая страница |
@@ -569,13 +599,13 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksMassInertiaParam.GetAxisZ` | api5 | method | `Boolean GetAxisZ(Double& x, Double& y, Double& z)` | 1 | Подтверждено | групповая страница |
 | `ksEntity.IsCreated` | api5 | method | `Boolean IsCreated()` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.RasterFormatParam` | api5 | method | `Object RasterFormatParam()` | 1 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.SaveAsToRasterFormat` | api5 | method | `Boolean SaveAsToRasterFormat(String fileName, Object rasterPar)` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.Init` | api5 | method | `Boolean Init()` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.format` | api5 | property | `prop Int16 format` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.colorBPP` | api5 | property | `prop Int16 colorBPP` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.extResolution` | api5 | property | `prop Int32 extResolution` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.extScale` | api5 | property | `prop Double extScale` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.returnResultAsArrayBytes` | api5 | property | `prop Boolean returnResultAsArrayBytes` | 1 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.SaveAsToRasterFormat` | api5 | method | `Boolean SaveAsToRasterFormat(String fileName, Object rasterPar)` | 1 | Подтверждено | перечень интерфейса |
 | `ksRasterFormatParam.resultArrayBytes` | api5 | property | `prop Object resultArrayBytes` | 1 | Подтверждено | перечень интерфейса |
 | `ksIntersectionResult.GetCount` | api5 | method | `Int32 GetCount()` | 1 | Подтверждено | перечень интерфейса |
 | `ksIntersectionResult.GetIntersectionType` | api5 | method | `Int32 GetIntersectionType(Int32 index)` | 1 | Подтверждено | перечень интерфейса |
@@ -624,6 +654,18 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `IModelContainer.FeaturePatterns` | api7 | property | `prop FeaturePatterns FeaturePatterns` | 7 | Подтверждено | перечень интерфейса |
 | `IFeaturePattern.Owner` | api7 | property | `prop IFeature7 Owner` | 9 | Подтверждено | named_name_mismatch |
 | `IRotated.Angle` | api7 | property | `prop Double Angle` | 7 | Подтверждено | перечень интерфейса |
+| `ICutLine.Points` | api7 | property | `prop Object Points` | 2 | Подтверждено | перечень интерфейса |
+| `ICutLine.ArrowPos` | api7 | property | `prop Boolean ArrowPos` | 2 | Подтверждено | перечень интерфейса |
+| `IViews.Add` | api7 | method | `IView Add(LtViewType ViewType)` | 1 | Подтверждено | перечень интерфейса |
+| `IAssociationView.BaseObject` | api7 | property | `prop IDrawingObject BaseObject` | 2 | Подтверждено | перечень интерфейса |
+| `IAssociationView.Section` | api7 | property | `prop Boolean Section` | 2 | Подтверждено | перечень интерфейса |
+| `IAssociationView.ProjectionLink` | api7 | property | `prop Boolean ProjectionLink` | 2 | Подтверждено | перечень интерфейса |
+| `IAssociationView.GetProjectionPoint` | api7 | method | `Boolean GetProjectionPoint(Double X, Double Y, Double Z, Double& Xv, D` | 1 | Подтверждено | перечень интерфейса |
+| `IViewDesignation.Designation` | api7 | property | `prop String Designation` | 2 | Подтверждено | перечень интерфейса |
+| `IHatchParam.Step` | api7 | property | `prop Double Step` | 1 | Подтверждено | перечень интерфейса |
+| `IHatchParam.HatchAngle` | api7 | property | `prop Double HatchAngle` | 1 | Подтверждено | перечень интерфейса |
+| `IHatchParam.Style` | api7 | property | `prop Int32 Style` | 1 | Подтверждено | перечень интерфейса |
+| `IDrawingObject.Delete` | api7 | method | `Boolean Delete()` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEdit` | api7 | method | `FragmentDocument BeginEdit()` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEditEx` | api7 | method | `FragmentDocument BeginEditEx(Boolean ReadOnly)` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.EndEdit` | api7 | method | `Boolean EndEdit()` | 3 | Подтверждено | перечень интерфейса |
@@ -634,12 +676,10 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ILineSegment.Y2` | api7 | property | `prop Double Y2` | 5 | Подтверждено | перечень интерфейса |
 | `ILineSegment.Length` | api7 | property | `prop Double Length` | 4 | Подтверждено | перечень интерфейса |
 | `IDrawingObject.Reference` | api7 | property | `prop Int32 Reference` | 2 | Подтверждено | перечень интерфейса |
-| `IDimensionText.NominalValue` | api7 | property | `prop Double NominalValue` | 2 | Подтверждено | перечень интерфейса |
 | `ICircle.Radius` | api7 | property | `prop Double Radius` | 3 | Подтверждено | перечень интерфейса |
 | `IArc.Radius` | api7 | property | `prop Double Radius` | 2 | Подтверждено | перечень интерфейса |
 | `IDrawingObject.Update` | api7 | method | `Boolean Update()` | 2 | Подтверждено | перечень интерфейса |
 | `IDrawingObject.LayerNumber` | api7 | property | `prop Int32 LayerNumber` | 2 | Подтверждено | перечень интерфейса |
-| `IDrawingObject.Delete` | api7 | method | `Boolean Delete()` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasAPIObject.Parent` | api7 | property | `prop IKompasAPIObject Parent` | 2 | Подтверждено | перечень интерфейса |
 | `IPlane3D.Name` | api7 | property | `prop String Name` | 6 | Подтверждено | перечень интерфейса |
 | `IPlane3D.ModelObjectType` | api7 | property | `prop ksObj3dTypeEnum ModelObjectType` | 1 | Подтверждено | перечень интерфейса |
@@ -692,7 +732,6 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksDocument3D.SaveAs` | api5 | method | `Boolean SaveAs(String fileName)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument2D.ksSaveDocument` | api5 | method | `Boolean ksSaveDocument(String fileName)` | 2 | Подтверждено | имя файла страницы |
 | `IKompasDocument.SaveAs` | api7 | method | `Void SaveAs(String PathName)` | 2 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.close` | api5 | method | `Boolean close()` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument2D.ksCloseDocument` | api5 | method | `Boolean ksCloseDocument()` | 2 | Подтверждено | имя файла страницы |
 | `ksPart.marking` | api5 | property | `prop String marking` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.Open` | api5 | method | `Boolean Open(String fileName, Boolean invisible)` | 1 | Подтверждено | перечень интерфейса |
@@ -703,7 +742,6 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 | `ksDocument2D.ksCreateDocument` | api5 | method | `Boolean ksCreateDocument(Object par)` | 1 | Подтверждено | имя файла страницы |
 | `ksDocument2D.ksOpenDocument` | api5 | method | `Boolean ksOpenDocument(String nameDoc, Boolean regim)` | 1 | Подтверждено | имя файла страницы |
 | `ksPart.GetGabarit` | api5 | method | `Boolean GetGabarit(Boolean full, Boolean customizable, Double& x1, Dou` | 1 | Подтверждено | перечень интерфейса |
-| `IKompasDocument.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.Save` | api5 | method | `Boolean Save()` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.Save` | api7 | method | `Void Save()` | 1 | Подтверждено | перечень интерфейса |
 | `ksViewProjectionCollection.refresh` | api5 | method | `Boolean refresh()` | 3 | Подтверждено | перечень интерфейса |
@@ -951,6 +989,30 @@ COM-маршрутов по сборкам: {'api7': 342, 'api5': 251, 'adapter-
 4 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count
 
 Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
+
+### F-06 - приписка (verified без связанной строки приёмки)
+
+Серьёзность: высокая.
+
+9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update
+
+Исправление: связать строку с приёмкой или понизить заявку
+
+### F-07 - заявка не подтверждена вызовами (отказ сторожа)
+
+Серьёзность: средняя.
+
+10 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, STEP.import
+
+Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
+
+### F-08 - пробел трассируемости (действие не названо строкой)
+
+Серьёзность: низкая.
+
+9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update
+
+Исправление: назвать действие в имени строки или объявить маршрут строки
 
 ## 8. Что осталось неподтверждённым
 

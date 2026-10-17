@@ -57,6 +57,8 @@ public static class Program
                                                                 ? "Проба B5 — кинематическая операция, по сечениям и оболочка: документированный маршрут, значения направления и эталоны §9"
                                                             : options.CutArea
                                                                 ? "Проба CA — область применения отсечения: назначение, чтение, сохранение при правке и переоткрытии"
+                                                            : options.SectionRoute
+                                                                ? "Проба SR — вид-разрез по линии разреза: строится ли он документированными членами, где лежит трасса и что значит Section"
                                                             : options.RepositionOrder
                                                                 ? "Проба RO — порядок и адрес признаков изменения положения с одинаковыми именами, и что читается с переоткрытого файла"
                                                             : options.SketchPlane
@@ -335,6 +337,11 @@ public static class Program
                     }
                 });
             }
+            else if (options.SectionRoute)
+            {
+                var sectionRoute = new SectionRouteProbe(report, options);
+                pump.Run(() => sectionRoute.Run());
+            }
             else if (options.RepositionOrder)
             {
                 var repositionOrder = new RepositionOrderProbe(report, options);
@@ -555,6 +562,7 @@ public static class Program
             : options.RepositionRead ? "reposition-read"
             : options.RepositionParams ? "reposition-params"
             : options.CutArea ? "cut-area"
+            : options.SectionRoute ? "section-route"
             : options.RepositionOrder ? "reposition-order"
             : options.VmOpen is not null ? "vm-open-rebuild"
             : options.VmReference is not null ? "vm-reference"
@@ -705,6 +713,11 @@ public sealed class Options
     /// names are read from the installed type library, not taken from a candidate list.</summary>
     public bool CutArea { get; private set; }
 
+    /// <summary><c>--section-route</c>: does a cut line plus a <c>vt_Section</c> view build an associative
+    /// section, in which coordinate system its trace lives, and which <c>Section</c> value means "разрез".
+    /// History: docs/decisions/drawings.md#section-route</summary>
+    public bool SectionRoute { get; private set; }
+
     /// <summary><c>--reposition-order</c>: why a feature at 180° is read as a TRANSLATION (probe RO,
     /// priority 3 of its order). The hypothesis under test is about the ORDER of the API7
     /// collection: a tree feature is matched to a collection element by ordinal number, while only the
@@ -849,6 +862,7 @@ public sealed class Options
         var repositionRead = false;
         var repositionParams = false;
         var cutArea = false;
+        var sectionRoute = false;
         var repositionOrder = false;
         var sketchPlane = false;
         string? vmReference = null;
@@ -952,6 +966,9 @@ public sealed class Options
                 case "--cut-area":
                     cutArea = true;
                     break;
+                case "--section-route":
+                    sectionRoute = true;
+                    break;
                 case "--reposition-order":
                     repositionOrder = true;
                     break;
@@ -1002,7 +1019,7 @@ public sealed class Options
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--iterations N] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--iterations N] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -1078,6 +1095,7 @@ public sealed class Options
             RepositionRead = repositionRead,
             RepositionParams = repositionParams,
             CutArea = cutArea,
+            SectionRoute = sectionRoute,
             RepositionOrder = repositionOrder,
             SketchPlane = sketchPlane,
             VmReference = vmReference,

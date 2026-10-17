@@ -483,6 +483,44 @@ RadialDimensions / DiametralDimensions). Страницы сняты по про
 проверяются без КОМПАС (`tests/Unit/KompasMcp.Unit/ViewDimensionScaleTests.cs`). Поведение адаптера
 при выносе не менялось: те же правила, те же тексты отказов.
 
+## <a id="section-route"></a>Вид-разрез по линии разреза: что измерено и что осталось недоказанным (17.10.2026, наряд `SECTION_VIEWS` шаг 0)
+
+**Что спрошено.** Справка v24 называет члены маршрута, но не называет ни системы координат трассы,
+ни значения `Section` для разреза: `DOC:` `isymbols2dcontainer_cutlines.html` (контейнер линий берётся
+у вида, как контейнер размеров), `icutlines_add.html`, `icutline_points.html` («x0, y0 (начальная
+точка), x1, y1, ... (точки перегибов), xn, yn (конечная точка)»), `icutline_arrowpos.html`,
+`icutline_autosorted.html`, `icutline_text.html`, `iviews_add.html` (`vt_Section = 7`),
+`iassociationview_baseobject.html` («Вид разрез/сечение - требуется объект Линия разреза»),
+`iassociationview_section.html`, `iassociationview_getprojectionpoint.html`,
+`iviewdesignation_designation.html`, `iassociationview.html` (`HatchParam`),
+`idrawingobject_update.html`, `idrawingobject_delete.html`. Страницы сняты 15.10.2026 в
+`reference/kompas-sdk-v24/docs-wire-20261015-sections/`.
+
+**Как измерено.** Проба SR, режим `--section-route` прибора `tools/KompasMcp.Api7Probe` (не в
+решении, не в поставке): свой невидимый сеанс КОМПАС-3D v24 (24.0.7.2919), копия плиты
+`Stress_Plate_Holes_SideFailure.m3d`, чертёж через `ksCreateDocument` (`lt_DocSheetStandart`),
+стандартные виды `AddStandartViews` (Спереди, проекции 1/3/5/7). Отчёт прогона -
+`docs/acceptance/api7/section-route.md` (PASS 8, FAIL 0, UNKNOWN 1).
+
+| Что измерено | Ответ |
+|---|---|
+| Какой вид вырождает ось Z | `GetProjectionPoint(0,0,0)` против `(0,0,32)`: 0 у ассоциативного вида `vt_Arbitrary`, 32 у двух `vt_Standart`, 26.128 у изометрии. Опорный вид выбирается измерением, а не именем проекции |
+| Система координат `GetProjectionPoint` | масштаб вида на ответ НЕ влияет: при `Scale` 1 и 0.5 одна и та же точка модели даёт одни и те же координаты вида. Это координаты ПЛОСКОСТИ ВИДА в миллиметрах модели, не листа |
+| `ICutLine.Points` | запись принимается без исключения в четырёх формах (`double[]`, `double[]` put-by-ref, `object[]`, `object[]` put-by-ref) и НЕ сохраняется: чтение после каждой даёт `null` |
+| `IDrawingObject.Update()` линии | `false`; `X1..Y2` остаются 0 |
+| `ICutLine.Text` | `^(#1~А)type=selfNumGroup;~` - автобуква приходит шаблоном, до построения вида |
+| `IViews.Add(7)` + `BaseObject` + `Section` | объект типа 7 создаётся, `BaseObject` и `Section` (оба значения) принимаются, `Update()` даёт `false`, коллекция видов остаётся 5 из 5, `ObjectCount` 0, `Designation` пусто, `HatchParam` null - при ЛЮБОМ значении `Section` |
+| `Delete()` вида | `true`, коллекция 5 -> 4, линий в контейнере остаётся 2: линия с видом НЕ удаляется |
+
+**Что из этого следует.** Через `IDispatch` документированный маршрут разрез на этой установке не
+строит: геометрия линии не сохраняется, `Update()` отказывает, вид-разрез в коллекцию не попадает.
+Противоречие справки о значении `Section` этим измерением НЕ снято - оба значения дают пустой вид.
+
+**LIMIT: причина отказа не установлена.** Не исключено, что запись `Points` требует типизированного
+вызова по vtable, а не `IDispatch` (в общем процессе такие записи уже наблюдались как молча
+неприменённые). Пока это не проверено отдельным опытом, считать маршрут недокументированно
+неработающим НЕЛЬЗЯ, и продукт по нему не пишется. Это и есть стоп-точка шага 0 наряда.
+
 ## <a id="stale-rows"></a>Две устаревшие строки приёмки, обесцененные этим блоком (06.10.2026)
 
 **Что произошло.** Две строки приёмки опирались на посылку «создание чертежа не реализовано» и после

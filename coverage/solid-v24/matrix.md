@@ -147,16 +147,16 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 352
-- **строк_полностью_закрыто:** 160
+- **строк_полностью_закрыто:** 161
 - **строк_с_каким_либо_прогрессом:** 177
 - **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
 - **операций:** 134
 - **режимов_и_вариантов:** 209
 - **применимых_действий:** 2901
-- **действий_verified:** 1056
-- **покрытие_действий:** 36.4%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1056, 'not_applicable': 619, 'implemented': 4}
+- **действий_verified:** 1058
+- **покрытие_действий:** 36.5%
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1058, 'not_applicable': 619, 'implemented': 2}
 - **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -696,7 +696,7 @@
 | `DRW-07.section_view.update` | DRW | later | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.section_view.update |
 | `DRW-07.section_view.delete` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | OK | OK | н/п | DRW-07.section_view.delete |
 | `DRW-07.section_view.save_reopen` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.save_reopen |
-| `DRW-07.section_view.rebuild` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | код | н/п | н/п | н/п | н/п | код | DRW-07.section_view.rebuild |
+| `DRW-07.section_view.rebuild` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | OK | н/п | н/п | н/п | н/п | OK | DRW-07.section_view.rebuild |
 | `DRW-07.section_view.geometry_validation` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | DRW-07.section_view.geometry_validation |
 | `DRW-07.section_view.negative_tests` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.section_view.negative_tests |
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
@@ -1211,8 +1211,8 @@
   - Удаление линии вместе с видом требует отдельного вызова: ядро их не связывает.
 - `DRW-07.section_view.save_reopen` — закрыт целиком
   - Контур после повторного открытия по DXF не сверялся — названо, а не выдано за проверку.
-- `DRW-07.section_view.rebuild` — не закрыт
-  - Строка держит уровень implemented: разрез читается после перестроения (обозначение, ObjectCount), но высота контура 40 по выгрузке не измерена.
+- `DRW-07.section_view.rebuild` — закрыт целиком
+  - Контур после перестроения сверен по выгрузке DXF при толщине 40: кромки на всю новую толщину, перегибы на месте, стенки трёх отверстий. Толщина прибора ведома переменной PlateT: без привязки параметра глубины к переменной изменение модели не меняет плиту.
 - `DRW-07.section_view.geometry_validation` — закрыт целиком
   - Контур сверен на плите 120 x 80 x 32 с тремя отверстиями §0: кромки, толщина, перегибы 45/75, стенки Ø14/Ø24/Ø8/Ø10 и конус зенковки. Не сверены форма стрелок и размыкание линии сечения - они остаются за снимком PNG.
 - `DRW-07.section_view.negative_tests` — закрыт целиком

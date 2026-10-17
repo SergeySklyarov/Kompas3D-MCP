@@ -7532,6 +7532,29 @@ def section_checks(client, rep, app_id, workdir):
     def ref_id(value):
         return value.get("id") if isinstance(value, dict) else value
 
+    def dxf_entities(path):
+        """Сущности выгрузки DXF парами «код группы / значение»: [{"type", "values"}].
+
+        DOC: DXF - текстовый формат, где перед каждым значением идёт его код группы, а сущность
+        начинается кодом 0 с её типом. Разбор нужен, чтобы координаты читались как есть.
+        """
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        entities, current = [], None
+        for i in range(len(lines) - 1):
+            if not lines[i].strip().lstrip("-").isdigit():
+                continue
+            code, value = int(lines[i].strip()), lines[i + 1].strip()
+            if code == 0:
+                if current is not None:
+                    entities.append(current)
+                current = {"type": value, "values": []}
+            elif current is not None:
+                current["values"].append((code, value))
+        if current is not None:
+            entities.append(current)
+        return entities
+
     def dxf_parse(path):
         """Отрезки, окружности и число HATCH текстовой выгрузки DXF в координатах листа (мм).
 
@@ -7541,23 +7564,7 @@ def section_checks(client, rep, app_id, workdir):
         считается по типу. Никакой внешней библиотеки: прибор не должен тянуть зависимость ради
         двух десятков строк.
         """
-        pairs = []
-        with open(path, "r", encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
-        for i in range(len(lines) - 1):
-            code = lines[i].strip()
-            if code.lstrip("-").isdigit():
-                pairs.append((int(code), lines[i + 1].strip()))
-        entities, current = [], None
-        for code, value in pairs:
-            if code == 0:
-                if current is not None:
-                    entities.append(current)
-                current = {"type": value, "values": []}
-            elif current is not None:
-                current["values"].append((code, value))
-        if current is not None:
-            entities.append(current)
+        entities = dxf_entities(path)
 
         def first(entity, code):
             for c, v in entity["values"]:
@@ -7675,6 +7682,31 @@ def section_checks(client, rep, app_id, workdir):
         "depth_mm": plate_h, "direction": "positive"})
     rev = (env or {}).get("revision_after") or rev
     body_ok = code is None
+    extrude_ref = ref_id(result(env).get("feature_ref"))
+
+    # ТОЛЩИНА ВЕДОМА ПЕРЕМЕННОЙ (пункт 4.5): `set_variable PlateT 40` меняет плиту только тогда,
+    # когда глубина выдавливания привязана к переменной. Глубина задана числом, поэтому переменная
+    # создаётся, а параметр глубины привязывается к ней. Параметр ищется ПО ЗНАЧЕНИЮ толщины: имя
+    # даёт ядро, и «первое попавшееся» было бы угадыванием.
+    env, code = call("kompas_create_variable", {
+        "document_id": part, "expected_revision": rev, "name": "PlateT", "value": plate_h,
+        "note": "толщина плиты прибора"})
+    rev = (env or {}).get("revision_after") or rev
+    depth_param = None
+    if extrude_ref:
+        env, _c = call("kompas_list_feature_parameters", {
+            "document_id": part, "feature_ref": extrude_ref})
+        for row in (result(env).get("parameters") or result(env).get("rows") or []):
+            if (isinstance(row, dict) and isinstance(row.get("name"), str)
+                    and isinstance(row.get("value"), (int, float))
+                    and abs(row["value"] - plate_h) < 1e-6):
+                depth_param = row["name"]
+                break
+    env, thickness_bind = call("kompas_bind_parameter", {
+        "document_id": part, "expected_revision": rev, "feature_ref": extrude_ref,
+        "parameter_name": depth_param, "expression": "PlateT"}) if depth_param \
+        else (None, "NO_DEPTH_PARAMETER")
+    rev = (env or {}).get("revision_after") or rev
 
     # Три отверстия §0 (пункт 4.1). Стенки отверстий в контуре разреза сверяются только тогда, когда
     # они есть в плите: без них «геометрия трёх отверстий» доказывала бы прямоугольник.
@@ -7721,7 +7753,8 @@ def section_checks(client, rep, app_id, workdir):
 
     rep.add("DRW-07.setup", "Плита 120 x 80 x 32 и её файл на диске",
             "PASS" if body_ok and saved_model else "FAIL",
-            f"тело={body_ok} файл={saved_model} code={code}")
+            f"тело={body_ok} файл={saved_model} code={code} "
+            f"толщина_привязана={thickness_bind} параметр={depth_param!r}")
 
     env, code = call("kompas_create_document", {
         "application_id": app_id, "kind": "drawing", "name": "SectionPlate"})
@@ -7897,6 +7930,94 @@ def section_checks(client, rep, app_id, workdir):
         rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
                 "NAMED", "простой разрез не построен - переоткрывать нечего")
 
+    # ========= МАСШТАБЫ 1:1 И 1:2: РАЗМЕРЫ ТОЛЩИНЫ И Ø24 НА РАЗРЕЗЕ (пункт 4.3 наряда) =========
+    # MEASURED (docs/decisions/drawings.md#drawing-dimensions-scale): точки размера задаются в мм
+    # ВИДА, а число диаметрального ядро выводит из ЛИСТОВОГО радиуса, поэтому сервер пишет
+    # Radius = радиус модели x масштаб вида, а число - документированным IDimensionText. Размеры
+    # ставятся на разрезе КАЖДОГО масштаба своим чертежом: проверяется маршрут создания, а не
+    # пересчёт уже поставленного размера (смену масштаба вид переживает отдельной строкой).
+    if simple_view and drawing:
+        def near(a, b, tol=0.01):
+            return isinstance(a, (int, float)) and abs(a - b) <= tol
+
+        dims_state = {}
+        for label, factor in (("1:1", 1.0), ("1:2", 0.5)):
+            env, code = call("kompas_create_document", {
+                "application_id": app_id, "kind": "drawing", "name": f"SectionDims{label}"})
+            dims_doc = result(env).get("document_id") or (env or {}).get("document_id")
+            dims_rev = (env or {}).get("revision_after") or 1
+            state = {"section": None, "read": None, "steps": {}}
+            dims_state[label] = state
+            if not dims_doc:
+                state["steps"]["document"] = code
+                continue
+            env, code = call("kompas_create_drawing_views", {
+                "document_id": dims_doc, "expected_revision": dims_rev,
+                "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+                "x": 150.0, "y": 150.0})
+            dims_rev = (env or {}).get("revision_after") or dims_rev
+            env, _c = call("kompas_list_drawing_views", {"document_id": dims_doc})
+            dims_candidates = [r for r in (result(env).get("views") or []) if r.get("view_ref")]
+            for candidate in sorted(dims_candidates, key=lambda r: r.get("object_count") or 0,
+                                    reverse=True):
+                env, code = call("kompas_create_section_view", {
+                    "document_id": dims_doc, "expected_revision": dims_rev,
+                    "base_view_ref": candidate.get("view_ref"), "mode": "simple",
+                    "trace_model": [-10.0, 30.0, 130.0, 30.0], "look": "left",
+                    "x": 150.0, "y": 20.0, "scale": factor})
+                state["steps"]["section"] = code or "ok"
+                if code is None:
+                    state["section"] = (result(env).get("section") or {}).get("view_ref")
+                    dims_rev = (env or {}).get("revision_after") or dims_rev
+                    break
+            if not state["section"]:
+                continue
+            # Толщина меряется по кромке, где нет отверстий (x = 5), Ø24 - по цековке первого
+            # отверстия (центр x = 30 на ближней грани, радиус модели 12).
+            env, state["steps"]["linear"] = call("kompas_add_dimension", {
+                "document_id": dims_doc, "expected_revision": dims_rev,
+                "view_ref": state["section"], "dimension_type": "linear",
+                "point1": [5.0, 0.0, 0.0], "point2": [5.0, plate_h, 0.0],
+                "position": [-8.0, plate_h / 2.0, 0.0]})
+            dims_rev = (env or {}).get("revision_after") or dims_rev
+            env, state["steps"]["diametral"] = call("kompas_add_dimension", {
+                "document_id": dims_doc, "expected_revision": dims_rev,
+                "view_ref": state["section"], "dimension_type": "diametral",
+                "point1": [30.0, 0.0, 0.0], "value_mm": 12.0, "position": [30.0, -15.0, 0.0]})
+            env, _c = call("kompas_list_dimensions", {
+                "document_id": dims_doc, "view_ref": state["section"]})
+            rows = result(env).get("dimensions") or []
+            state["read"] = {"linear": next((r for r in rows if r.get("kind") == "linear"), None),
+                             "diametral": next((r for r in rows if r.get("kind") == "diametral"),
+                                               None)}
+            call("kompas_close_document", {"document_id": dims_doc, "dirty_policy": "discard"})
+
+        def reading(label, kind, name):
+            rows = (dims_state.get(label) or {}).get("read") or {}
+            return (rows.get(kind) or {}).get(name)
+
+        # ЧИСЛО обязано быть натуральным в обоих масштабах, ГЕОМЕТРИЯ (листовой радиус) - следовать
+        # масштабу: это два разных поля одного размера, и совпадение одного не доказывает другого.
+        numbers_ok = all(near(reading(label, "linear", "nominal_mm"), plate_h)
+                         and near(reading(label, "diametral", "nominal_mm"), 24.0)
+                         for label in ("1:1", "1:2"))
+        sheet_ok = (near(reading("1:1", "diametral", "value_mm"), 12.0)
+                    and near(reading("1:2", "diametral", "value_mm"), 6.0))
+        steps = {label: (dims_state.get(label) or {}).get("steps") for label in dims_state}
+        rep.add("DRW-07.dimensions.scale",
+                "Размеры 32 и 24 на разрезе читаются натуральными в 1:1 и в 1:2, а геометрия "
+                "диаметрального размера (листовой радиус) следует масштабу вида",
+                "PASS" if numbers_ok and sheet_ok else "FAIL",
+                f"1:1 число(32)={reading('1:1', 'linear', 'nominal_mm')} "
+                f"число(24)={reading('1:1', 'diametral', 'nominal_mm')} "
+                f"листовой_радиус={reading('1:1', 'diametral', 'value_mm')}; "
+                f"1:2 число(32)={reading('1:2', 'linear', 'nominal_mm')} "
+                f"число(24)={reading('1:2', 'diametral', 'nominal_mm')} "
+                f"листовой_радиус={reading('1:2', 'diametral', 'value_mm')} шаги={steps}")
+    else:
+        rep.add("DRW-07.dimensions.scale", "Размеры 32 и 24 на разрезе в 1:1 и 1:2",
+                "NAMED", "разрез не построен - ставить размеры не на что")
+
     # ========= КОНТУР ПО ВЫГРУЗКЕ: два отдельных чертежа (пункты 4.1 и 4.5 наряда) =========
     # Контур - это РАЗНОСТЬ выгрузок «виды с разрезом» и «те же виды без разреза». Выгрузка DXF
     # отменяет чтение коллекции видов ТОГО ЖЕ документа (измерено), поэтому на каждом чертеже она -
@@ -8057,6 +8178,7 @@ def section_checks(client, rep, app_id, workdir):
     # Перестроение: модель меняется, вид перестраивается, разрез читается заново.
     if simple_view and drawing:
         env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
         fresh = [row for row in (result(env).get("views") or [])
                  if row.get("view_type") == "vt_Section"]
         env, _code = call("kompas_open_document", {
@@ -8067,15 +8189,20 @@ def section_checks(client, rep, app_id, workdir):
             "document_id": model, "name": "PlateT", "expression": "40",
             "expected_revision": model_rev}) if model else (None, "NO_MODEL")
         model_rev = (env or {}).get("revision_after") or model_rev
-        rebuilt_code = code
+        rebuilt_code, main_reason, main_details = code, None, {}
         if model and code is None:
             env, code = call("kompas_save_document", {
                 "document_id": model, "expected_revision": model_rev, "target_path": part_path})
             model_rev = (env or {}).get("revision_after") or model_rev
             env, code = call("kompas_rebuild_drawing_views", {
-                "document_id": drawing, "view_ref": fresh[0].get("view_ref")}) if fresh \
-                else (None, "NO_VIEW")
+                "document_id": drawing, "view_ref": fresh[0].get("view_ref"),
+                "expected_revision": drawing_rev}) if fresh else (None, "NO_VIEW")
             rebuilt_code = code
+            # Отказ называется текстом и полями, а не одним кодом: STALE_REFERENCE приходит из двух
+            # разных мест (ссылка без адреса и адрес, которого нет в коллекции), и различает их текст.
+            main_error = ((env or {}).get("error") or {}) if code else {}
+            main_reason = main_error.get("message")
+            main_details = main_error.get("details") or {}
 
         if fresh:
             env, code = call("kompas_get_section_view", {
@@ -8086,7 +8213,8 @@ def section_checks(client, rep, app_id, workdir):
             # КОНТУР ПОСЛЕ ПЕРЕСТРОЕНИЯ меряется на отдельном чертеже: его разрез строится по той
             # же трассе и перестраивается тем же вызовом, но выгрузка не мешает ссылкам основной
             # группы. Строка «вид читается» доказательством высоты контура не является.
-            contour_rebuilt = None
+            contour_rebuilt, contour_rebuild_code = None, None
+            rebuild_reason, rebuild_details = None, {}
             if contour_doc and contour_state.get("section"):
                 # Выгрузка DXF закрыла чтение коллекции видов этого чертежа, поэтому перестроение
                 # начинается с переоткрытия файла: ссылка вида берётся из свежего списка.
@@ -8102,7 +8230,14 @@ def section_checks(client, rep, app_id, workdir):
                 if contour_sections:
                     env, contour_rebuild_code = call("kompas_rebuild_drawing_views", {
                         "document_id": contour_doc,
-                        "view_ref": contour_sections[0].get("view_ref")})
+                        "view_ref": contour_sections[0].get("view_ref"),
+                        "expected_revision": contour_rev})
+                    # Причина отказа называется, а не только его код: STALE_REFERENCE приходит из двух
+                    # разных мест (ссылка без адреса и адрес, которого нет в коллекции), и различает их
+                    # только текст. Без него следующий запуск гадает.
+                    rebuild_error = ((env or {}).get("error") or {}) if contour_rebuild_code else {}
+                    rebuild_reason = rebuild_error.get("message")
+                    rebuild_details = rebuild_error.get("details") or {}
                     contour_rev = (env or {}).get("revision_after") or contour_rev
                     rebuilt_segments, _rc, rebuilt_hatches, contour_rev, rebuilt_export = \
                         dxf_snapshot(contour_doc, contour_rev,
@@ -8120,6 +8255,9 @@ def section_checks(client, rep, app_id, workdir):
                     "толщину, перегибы на месте",
                     "PASS" if survived and rebuilt_ok else "NAMED",
                     f"переменная={code if model else 'нет модели'} rebuild={rebuilt_code} "
+                    f"причина={main_reason!r} details={main_details} "
+                    f"контур_rebuild={contour_rebuild_code} контур_причина={rebuild_reason!r} "
+                    f"контур_details={rebuild_details} "
                     f"объектов={after_rebuild.get('object_count')} "
                     f"обозначение={after_rebuild.get('designation')!r} "
                     f"контур40={(contour_rebuilt or {}).get('detail')} "

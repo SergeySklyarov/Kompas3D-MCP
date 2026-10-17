@@ -7,8 +7,7 @@ namespace KompasMcp.Api5Adapter.Com;
 /// <remarks>DOC: https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects - closing the
 /// last handle of a job with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE terminates its processes; "Creating
 /// Jobs" documents AssignProcessToJobObject for an ALREADY RUNNING process, which a COM launch is.
-/// MEASURED: the launched instance's parent is <c>svchost.exe</c>, so a tree kill never reaches it; in
-/// this job it ends ~0.3 s after the last handle closes.
+/// MEASURED: the launched instance's parent is <c>svchost.exe</c>, so a tree kill never reaches it.
 /// LIMIT: the handle is never closed while the process lives and is not a SafeHandle (a finalizer would
 /// end a healthy instance); the OS closes it at exit, which is when the job fires.
 /// History: docs/decisions/host.md#client-shutdown</remarks>

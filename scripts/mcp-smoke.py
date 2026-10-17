@@ -7515,8 +7515,9 @@ def section_checks(client, rep, app_id, workdir):
     обозначение, трасса, сторона стрелок, масштаб, число объектов. Строка `succeeded` без
     перечитывания доказательством не считается.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Контур разреза по выгрузке DXF не сверяется (пункт 4.1 наряда), снимок PNG не
-    снимается (пункт 4.6): обе строки называются отдельно, чтобы отсутствие не читалось как успех.
+    ЧЕГО ЗДЕСЬ НЕТ. Контур разреза по выгрузке DXF не сверяется (пункт 4.1 наряда) и размеры на
+    разрезе не проставляются (пункт 4.3): обе строки называются отдельно, чтобы отсутствие не
+    читалось как успех. Снимок ЧЕРТЕЖА (пункт 4.6) снимается - строка `DRW-07.snapshot`.
     """
     def call(tool, args, timeout=300):
         payload = dict(args)
@@ -7530,6 +7531,119 @@ def section_checks(client, rep, app_id, workdir):
 
     def ref_id(value):
         return value.get("id") if isinstance(value, dict) else value
+
+    def dxf_parse(path):
+        """Отрезки, окружности и число HATCH текстовой выгрузки DXF в координатах листа (мм).
+
+        ЗАЧЕМ СВОЙ РАЗБОР. `dxf_entity_counts` считает типы сущностей и годится для «выгрузка не
+        пуста», но контур разреза — это КООРДИНАТЫ. Пары «код группы / значение» читаются как есть:
+        LINE — 10/20 и 11/21 (начало и конец), CIRCLE/ARC — 10/20 и 40 (центр и радиус), HATCH
+        считается по типу. Никакой внешней библиотеки: прибор не должен тянуть зависимость ради
+        двух десятков строк.
+        """
+        pairs = []
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        for i in range(len(lines) - 1):
+            code = lines[i].strip()
+            if code.lstrip("-").isdigit():
+                pairs.append((int(code), lines[i + 1].strip()))
+        entities, current = [], None
+        for code, value in pairs:
+            if code == 0:
+                if current is not None:
+                    entities.append(current)
+                current = {"type": value, "values": []}
+            elif current is not None:
+                current["values"].append((code, value))
+        if current is not None:
+            entities.append(current)
+
+        def first(entity, code):
+            for c, v in entity["values"]:
+                if c == code:
+                    return float(v)
+            return None
+
+        segments, circles, hatches = [], [], 0
+        for entity in entities:
+            kind = entity["type"]
+            if kind == "LINE":
+                x0, y0 = first(entity, 10), first(entity, 20)
+                x1, y1 = first(entity, 11), first(entity, 21)
+                if None not in (x0, y0, x1, y1):
+                    segments.append((x0, y0, x1, y1))
+            elif kind in ("CIRCLE", "ARC"):
+                x0, y0, r = first(entity, 10), first(entity, 20), first(entity, 40)
+                if None not in (x0, y0, r):
+                    circles.append((x0, y0, r))
+            elif kind == "HATCH":
+                hatches += 1
+        return segments, circles, hatches
+
+    def dxf_snapshot(doc, rev, path, save_to=None):
+        """Сохранить чертёж, выгрузить DXF и разобрать его: (отрезки, окружности, HATCH, ревизия, код).
+
+        INVARIANT: конвертер читает ФАЙЛ на диске, а не состояние документа в памяти, поэтому перед
+        выгрузкой документ сохраняется — иначе разрез, построенный после последнего сохранения, в
+        выгрузку не попадёт и «контур» окажется контуром чужого состояния.
+        """
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": rev, "target_path": save_to or drawing_path})
+        rev = (env or {}).get("revision_after") or rev
+        if code:
+            return None, None, 0, rev, f"save:{code}"
+        if os.path.isfile(path):
+            os.remove(path)
+        env, code = call("kompas_export_drawing", {
+            "document_id": doc, "output_path": path, "format": "dxf"})
+        if code or not os.path.isfile(path):
+            return None, None, 0, rev, f"export:{code or 'нет файла'}"
+        segments, circles, hatches = dxf_parse(path)
+        return segments, circles, hatches, rev, None
+
+    def geometry_added(before, after):
+        """Отрезки, которых в ПРЕЖНЕЙ выгрузке не было, — геометрия, добавленная разрезом.
+
+        ЗАЧЕМ РАЗНОСТЬ. Окно на листе, где стоит разрез, пришлось бы угадывать по координатам
+        привязки: габарит вида `IView` не публикует. Разность двух выгрузок даёт контур разреза без
+        догадки о его границах. LIMIT: отрезок, точно совпавший с уже существующим, в разность не
+        попадает — контур разреза от этого не теряется, потому что он лежит в своей области листа.
+        """
+        def key(segment):
+            return tuple(round(value, 3) for value in segment)
+
+        left = {}
+        for segment in before or []:
+            left[key(segment)] = left.get(key(segment), 0) + 1
+        added = []
+        for segment in after or []:
+            k = key(segment)
+            if left.get(k):
+                left[k] -= 1
+            else:
+                added.append(k)
+        return added
+
+    def verticals(segments, origin_x, origin_y, tol=0.5):
+        """Вертикальные отрезки в координатах ОТ НАЧАЛА контура: (x, y_низ, y_верх)."""
+        found = []
+        for x0, y0, x1, y1 in segments:
+            if abs(x0 - x1) <= tol and abs(y1 - y0) > tol:
+                found.append((round(x0 - origin_x, 2),
+                              round(min(y0, y1) - origin_y, 2),
+                              round(max(y0, y1) - origin_y, 2)))
+        return found
+
+    def horizontals(segments, origin_x, origin_y, tol=0.5):
+        """Горизонтальные отрезки в координатах от начала контура: (y, x_мин, x_макс)."""
+        found = []
+        for x0, y0, x1, y1 in segments:
+            if abs(y0 - y1) <= tol and abs(x1 - x0) > tol:
+                found.append((round(y0 - origin_y, 2),
+                              round(min(x0, x1) - origin_x, 2),
+                              round(max(x0, x1) - origin_x, 2)))
+        return found
 
     plate_w, plate_d, plate_h = 120.0, 80.0, 32.0
     part_path = os.path.join(workdir, "section-plate.m3d")
@@ -7731,6 +7845,136 @@ def section_checks(client, rep, app_id, workdir):
         rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
                 "NAMED", "простой разрез не построен - переоткрывать нечего")
 
+    # ========= КОНТУР ПО ВЫГРУЗКЕ: два отдельных чертежа (пункты 4.1 и 4.5 наряда) =========
+    # Контур - это РАЗНОСТЬ выгрузок «виды с разрезом» и «те же виды без разреза». Выгрузка DXF
+    # отменяет чтение коллекции видов ТОГО ЖЕ документа (измерено), поэтому на каждом чертеже она -
+    # ПОСЛЕДНЯЯ операция, а ссылки на виды берутся ДО неё.
+    contour_state = {}
+
+    def measure_contour(added, thickness, expect_holes=False):
+        """Сверка контура с геометрией плиты §0 при заданной толщине: (итог, подробности).
+
+        ЭТАЛОН СЧИТАЕТСЯ ИЗ ГЕОМЕТРИИ, а не читается из ответа сервера: кромки плиты - 0 и 120 по X
+        на всю толщину, Ø14 сквозное (стенки 23 и 37 на всю толщину), цековка Ø24 x 6 (стенки 18 и
+        42 от верха вниз на 6 и плоское дно между ними), Ø8 глубиной 10 с плоским дном (стенки 56 и
+        64 и дно на глубине 10). Толщина входит параметром: та же сверка годится и до, и после
+        изменения модели.
+
+        НАЧАЛО КОНТУРА берётся по САМОЙ ВЫСОКОЙ вертикали (боковая кромка плиты во всю толщину): в
+        разность попадают ещё линия сечения, обозначение и штриховка, а кромки разбиты отверстиями
+        на короткие отрезки, поэтому ни габарит всей разности, ни «длинные горизонтали» началом не
+        являются.
+        """
+        tall = [w for w in verticals(added, 0.0, 0.0) if w[2] - w[1] >= thickness * 0.9]
+        if not tall:
+            return False, {"высоких_вертикалей": 0, "отрезков": len(added)}
+        origin_x = min(w[0] for w in tall)
+        origin_y = min(w[1] for w in tall)
+        walls = [w for w in verticals(added, origin_x, origin_y)
+                 if -1.0 <= w[0] <= plate_w + 1.0 and -1.0 <= w[1] and w[2] <= thickness + 1.0]
+        flats = horizontals(added, origin_x, origin_y)
+
+        def wall_at(x_expected, low_expected, high_expected, tol=0.6):
+            return any(abs(x - x_expected) <= tol and abs(low - low_expected) <= tol
+                       and abs(high - high_expected) <= tol for x, low, high in walls)
+
+        def flat_at(y_expected, x_low, x_high, tol=0.6):
+            return any(abs(y - y_expected) <= tol and abs(low - x_low) <= tol
+                       and abs(high - x_high) <= tol for y, low, high in flats)
+
+        # Верхняя кромка разбита перегибами трассы на куски, поэтому проверяется её ПРИСУТСТВИЕ на
+        # высоте толщины, а не один отрезок во всю ширину.
+        extent_ok = (wall_at(0.0, 0.0, thickness) and wall_at(plate_w, 0.0, thickness)
+                     and any(abs(y - thickness) <= 0.6 for y, _low, _high in flats))
+        # Стенки отверстий проверяются ТОЛЬКО когда они в плите есть: прибор строит плиту без
+        # отверстий, и требовать их от контура значило бы выдать отсутствие за отказ продукта.
+        hole_14 = counterbore = blind_8 = None
+        if expect_holes:
+            hole_14 = wall_at(23.0, 0.0, thickness) and wall_at(37.0, 0.0, thickness)
+            counterbore = (wall_at(18.0, thickness - 6.0, thickness)
+                           and wall_at(42.0, thickness - 6.0, thickness)
+                           and flat_at(thickness - 6.0, 18.0, 42.0))
+            blind_8 = (wall_at(56.0, thickness - 10.0, thickness)
+                       and wall_at(64.0, thickness - 10.0, thickness)
+                       and flat_at(thickness - 10.0, 56.0, 64.0))
+        # Перегибы трассы (45 и 75) видны как разрывы верхней кромки: ступенчатость подтверждается
+        # геометрией, а не числом объектов вида.
+        steps_ok = (any(abs(y) <= 0.6 and abs(low - 45.0) <= 0.6 and abs(high - 75.0) <= 0.6
+                        for y, low, high in flats))
+        detail = {"начало": (origin_x, origin_y), "толщина": thickness,
+                  "кромки_и_верх": extent_ok, "перегибы_45_75": steps_ok,
+                  "Ø14_сквозное": hole_14, "цековка_Ø24x6": counterbore,
+                  "Ø8x10_плоское_дно": blind_8,
+                  "отрезков": len(added), "высоких": len(tall),
+                  "вертикалей": len(walls), "горизонталей": len(flats),
+                  "стенки": sorted({w[0] for w in walls})}
+        outline_ok = extent_ok and steps_ok
+        if not expect_holes:
+            return outline_ok, detail
+        return outline_ok and hole_14 and counterbore and blind_8, detail
+
+
+    contour_path = os.path.join(workdir, "section-contour.cdw")
+    base_path = os.path.join(workdir, "section-base.cdw")
+
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "SectionBase"})
+    base_doc = result(env).get("document_id") or (env or {}).get("document_id")
+    base_rev = (env or {}).get("revision_after") or 1
+    base_segments, base_hatches, base_code = None, 0, "NO_BASELINE"
+    if base_doc:
+        env, code = call("kompas_create_drawing_views", {
+            "document_id": base_doc, "expected_revision": base_rev,
+            "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+            "x": 150.0, "y": 150.0})
+        base_rev = (env or {}).get("revision_after") or base_rev
+        base_segments, _bc, base_hatches, base_rev, base_code = dxf_snapshot(
+            base_doc, base_rev, os.path.join(workdir, "section-base.dxf"), save_to=base_path)
+
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "SectionContour"})
+    contour_doc = result(env).get("document_id") or (env or {}).get("document_id")
+    contour_rev = (env or {}).get("revision_after") or 1
+    contour_ok_32 = None
+    if contour_doc:
+        env, code = call("kompas_create_drawing_views", {
+            "document_id": contour_doc, "expected_revision": contour_rev,
+            "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+            "x": 150.0, "y": 150.0})
+        contour_rev = (env or {}).get("revision_after") or contour_rev
+        # Кандидаты берутся ДО выгрузки и без опоры на `source_path`: неассоциативный вид отвергает
+        # сам адаптер, а коды отказов называются в строке. Перебор - от самого содержательного вида.
+        env, _c = call("kompas_list_drawing_views", {"document_id": contour_doc})
+        candidates = [r for r in (result(env).get("views") or []) if r.get("view_ref")]
+        contour_attempts = []
+        for candidate in sorted(candidates, key=lambda r: r.get("object_count") or 0, reverse=True):
+            env, code = call("kompas_create_section_view", {
+                "document_id": contour_doc, "expected_revision": contour_rev,
+                "base_view_ref": candidate.get("view_ref"), "mode": "stepped",
+                "trace_model": trace, "look": "left", "x": 150.0, "y": 60.0})
+            contour_attempts.append(code or "ok")
+            if code is None:
+                contour_state["section"] = result(env).get("section") or {}
+                contour_rev = (env or {}).get("revision_after") or contour_rev
+                break
+        stepped_segments, _sc, stepped_hatches, contour_rev, stepped_code = dxf_snapshot(
+            contour_doc, contour_rev, os.path.join(workdir, "section-contour-stepped.dxf"),
+            save_to=contour_path)
+        contour_added = geometry_added(base_segments, stepped_segments)
+        contour_ok_32, contour_detail_32 = measure_contour(contour_added, plate_h)
+        contour_state.update({
+            "detail": contour_detail_32, "ok": contour_ok_32, "code": stepped_code,
+            "hatch": (base_hatches, stepped_hatches), "base": base_code,
+            "attempts": contour_attempts, "candidates": len(candidates),
+            "created": bool(contour_state.get("section"))})
+        rep.add("DRW-07.export.contour",
+                "Контур ступенчатого разреза по выгрузке DXF отдельного чертежа: кромки 120 на всю "
+                "толщину, перегибы трассы на 45 и 75",
+                "PASS" if contour_ok_32 and stepped_hatches > (base_hatches or 0) else "FAIL",
+                f"база={base_code} выгрузка={stepped_code} {contour_detail_32} "
+                f"штриховка={base_hatches}->{stepped_hatches} "
+                f"кандидатов={len(candidates)} попытки={contour_attempts}")
+
     # Перестроение: модель меняется, вид перестраивается, разрез читается заново.
     if simple_view and drawing:
         env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
@@ -7760,19 +8004,97 @@ def section_checks(client, rep, app_id, workdir):
             after_rebuild = result(env).get("section") or {}
             survived = (code is None and (after_rebuild.get("object_count") or 0) > 0
                         and after_rebuild.get("view_type") == "vt_Section")
-            # NAMED, not PASS: the section DOES read back after the model change, but the proof the
-            # order asks for is the CONTOUR at the new height (item 4.5), and that needs the DXF route
-            # (item 3.7). A row that passes on "still readable" would claim the contour without it.
+            # КОНТУР ПОСЛЕ ПЕРЕСТРОЕНИЯ меряется на отдельном чертеже: его разрез строится по той
+            # же трассе и перестраивается тем же вызовом, но выгрузка не мешает ссылкам основной
+            # группы. Строка «вид читается» доказательством высоты контура не является.
+            contour_rebuilt = None
+            if contour_doc and contour_state.get("section"):
+                # Выгрузка DXF закрыла чтение коллекции видов этого чертежа, поэтому перестроение
+                # начинается с переоткрытия файла: ссылка вида берётся из свежего списка.
+                env, _c = call("kompas_close_document", {
+                    "document_id": contour_doc, "dirty_policy": "save"})
+                env, _c = call("kompas_open_document", {
+                    "application_id": app_id, "path": contour_path, "access": "edit"})
+                contour_doc = result(env).get("document_id") or (env or {}).get("document_id")
+                contour_rev = (env or {}).get("revision_after") or 1
+                env, _c = call("kompas_list_drawing_views", {"document_id": contour_doc})
+                contour_sections = [r for r in (result(env).get("views") or [])
+                                    if r.get("view_type") == "vt_Section"]
+                if contour_sections:
+                    env, contour_rebuild_code = call("kompas_rebuild_drawing_views", {
+                        "document_id": contour_doc,
+                        "view_ref": contour_sections[0].get("view_ref")})
+                    contour_rev = (env or {}).get("revision_after") or contour_rev
+                    rebuilt_segments, _rc, rebuilt_hatches, contour_rev, rebuilt_export = \
+                        dxf_snapshot(contour_doc, contour_rev,
+                                     os.path.join(workdir, "section-contour-rebuilt.dxf"),
+                                     save_to=contour_path)
+                    rebuilt_added = geometry_added(base_segments, rebuilt_segments)
+                    contour_ok_40, contour_detail_40 = measure_contour(rebuilt_added, 40.0)
+                    contour_rebuilt = {"ok": contour_ok_40, "detail": contour_detail_40,
+                                       "code": contour_rebuild_code, "export": rebuilt_export,
+                                       "hatch": rebuilt_hatches}
+                    contour_state["rebuilt"] = contour_rebuilt
+            rebuilt_ok = bool(contour_rebuilt and contour_rebuilt["ok"])
             rep.add("DRW-07.rebuild",
-                    "Разрез после изменения модели и перестроения видов",
-                    "NAMED",
+                    "Разрез после изменения модели: контур по DXF 120 x 40, кромки на всю новую "
+                    "толщину, перегибы на месте",
+                    "PASS" if survived and rebuilt_ok else "NAMED",
                     f"переменная={code if model else 'нет модели'} rebuild={rebuilt_code} "
                     f"объектов={after_rebuild.get('object_count')} "
-                    f"обозначение={after_rebuild.get('designation')!r}; высота контура 40 по выгрузке "
-                    f"НЕ сверялась - нужен §3.7 (выгрузка чертежа)")
+                    f"обозначение={after_rebuild.get('designation')!r} "
+                    f"контур40={(contour_rebuilt or {}).get('detail')} "
+                    f"выгрузка={(contour_rebuilt or {}).get('export')}")
         else:
             rep.add("DRW-07.rebuild", "Разрез переживает изменение модели и перестроение видов",
                     "NAMED", "вида-разреза после переоткрытия нет - перестраивать нечего")
+
+    # Снимок ЧЕРТЕЖА (пункты 3.7 и 4.6 наряда): тот же документированный маршрут растра, но на
+    # ksDocument2D. Строка держит две вещи, которых не видно по возврату инструмента: файл реально
+    # появился с сигнатурой PNG, и габарит на листе пропорционален масштабу (1:2 вдвое меньше 1:1).
+    if drawing:
+        env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+        snapshot_rev = (env or {}).get("revision_after")
+        shots = {}
+        for label, factor in (("1:1", 1.0), ("1:2", 0.5)):
+            path = os.path.join(workdir, f"section-{label.replace(':', '-')}.png")
+            payload = {"document_id": drawing, "format": "png", "scale": factor,
+                       "save_path": path, "return_image_content": False}
+            if snapshot_rev:
+                payload["expected_revision"] = snapshot_rev
+            env, code = call("kompas_export_image", payload)
+            shot = result(env)
+            shots[label] = (code, shot, path)
+        (code11, shot11, path11), (code12, shot12, path12) = shots["1:1"], shots["1:2"]
+        w11, h11 = shot11.get("pixel_width"), shot11.get("pixel_height")
+        w12, h12 = shot12.get("pixel_width"), shot12.get("pixel_height")
+        files_ok = (code11 is None and code12 is None
+                    and os.path.exists(path11) and os.path.getsize(path11) > 0
+                    and os.path.exists(path12) and os.path.getsize(path12) > 0)
+        # Габарит 1:2 сверяется с 1:1, а не с абсолютным числом: база растра зависит от листа.
+        halves = (isinstance(w11, int) and isinstance(w12, int) and isinstance(h11, int)
+                  and isinstance(h12, int)
+                  and abs(w12 - w11 / 2) <= max(2, w11 * 0.02)
+                  and abs(h12 - h11 / 2) <= max(2, h11 * 0.02))
+        rep.add("DRW-07.snapshot",
+                "Снимок чертежа с разрезом: PNG в 1:1 и 1:2, габарит пропорционален масштабу",
+                "PASS" if files_ok and halves else "FAIL",
+                f"1:1 code={code11} {w11}x{h11} байт={shot11.get('bytes_count')}; "
+                f"1:2 code={code12} {w12}x{h12} байт={shot12.get('bytes_count')}; "
+                f"файлы={os.path.exists(path11)}/{os.path.exists(path12)} вдвое={halves}")
+
+        # Снимок не должен ломать чтение видов того же чертежа: выгрузка DXF его ломает (измерено
+        # ранее), и это единственный способ отличить одно от другого.
+        env, code = call("kompas_list_drawing_views", {"document_id": drawing})
+        after_shot = [row for row in (result(env).get("views") or [])
+                      if row.get("view_type") == "vt_Section"]
+        rep.add("DRW-07.snapshot_reads_back",
+                "После снимка виды того же чертежа читаются: снимок не отменяет ссылки",
+                "PASS" if code is None and after_shot else "NAMED",
+                f"code={code} видов-разрезов={len(after_shot)}")
+    else:
+        rep.add("DRW-07.snapshot", "Снимок чертежа с разрезом",
+                "NAMED", "чертёж не открыт - снимать нечего")
 
     # Отрицательные строки: отказ приходит ДО изменения документа, и это видно по ревизии.
     base_view = associative[0].get("view_ref") if associative else None
@@ -7804,11 +8126,30 @@ def section_checks(client, rep, app_id, workdir):
         rep.add(cid, description, "PASS" if code in expected else "FAIL",
                 f"code={code} ожидалось={expected}")
 
+    # ========= ИТОГ КОНТУРА (пункты 4.1 и 4.5 наряда) =========
+    # Строка НЕ закрывается на «вид читается»: контур ступенчатого разреза сверен по выгрузке DXF
+    # на отдельном чертеже, а его перестроение — той же сверкой при толщине 40.
+    contour_detail = contour_state.get("detail") or {}
+    contour_ok = bool(contour_state.get("ok"))
+    base_hatch, stepped_hatch = contour_state.get("hatch") or (0, 0)
+    hatch_ok = (stepped_hatch or 0) > (base_hatch or 0)
     rep.add("DRW-07.geometry_validation",
-            "Контур разреза по выгрузке DXF и снимок PNG",
+            "Контур ступенчатого разреза по выгрузке DXF: кромки 120 x 32 на всю толщину, перегибы "
+            "трассы на месте, штриховка в области материала",
+            "PASS" if (contour_ok and hatch_ok) else "FAIL",
+            f"{contour_detail} штриховка={base_hatch}->{stepped_hatch} "
+            f"выгрузка={contour_state.get('code')} база={contour_state.get('base')}")
+    # Пункт 4.1 наряда требует ещё и ГЕОМЕТРИЮ ТРЁХ ОТВЕРСТИЙ. Прибор строит плиту без отверстий
+    # (kompas_hole в этой группе не вызывается), поэтому их стенки в контуре не сверены, и строка
+    # называет это, а не выдаёт прямоугольник за подтверждённый разрез с отверстиями.
+    rep.add("DRW-07.geometry_validation.holes",
+            "Стенки трёх отверстий в контуре разреза (Ø14 сквозное, цековка Ø24 x 6, Ø8 x 10)",
             "NAMED",
-            "не проверяется в этой редакции группы: строка 4.1 наряда (сверка контура по DXF) и 4.6 "
-            "(снимки) впереди; отсутствие названо, а не выдано за успех")
+            "плита прибора без отверстий: сверены только кромки, толщина и перегибы; чтобы закрыть "
+            "пункт 4.1, прибор должен строить плиту с тремя отверстиями (kompas_hole) и сверять "
+            "стенки 18/23/37/42/56/64")
+    # ЧЕГО ЗДЕСЬ НЕТ (названо, а не выдано за успех): форма стрелок и разомкнутая линия сечения по
+    # ГОСТ 2.303 машинно не сверяются — они остаются за снимком PNG (пункт 4.6, §3.7 наряда).
 
 def drawing_checks(client, rep, app_id, workdir):
     """DRW.* — чертёжный блок через MCP (блок DRW, профиль `drawings-minimal-v1`).

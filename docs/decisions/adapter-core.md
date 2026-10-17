@@ -1,4 +1,4 @@
-# Ядро адаптера API5 - решения и измерения
+﻿# Ядро адаптера API5 - решения и измерения
 
 Модуль: `src/KompasMcp.Api5Adapter/` (`Api5Session*.cs`, `NativeMethods.cs`, `Com/`, `Sta/`). Здесь -
 история правок, вынесенная из кода. Действующие правила остались в коде под метками `INVARIANT:` /
@@ -515,6 +515,15 @@ to a separate order and named as a remainder), does not silently downscale, and 
 without bytes. The snapshot is the server window's current view; camera state is not captured and is named
 unverified in the response.
 
+DRAWING (order `SECTION_VIEWS_DEVELOPER_PROMPT.md` §3.7, 17.10.2026). The same pair exists on the 2D
+document: `ksDocument2D.RasterFormatParam()` (`ksdocument2d_rasterformatparam.html`) →
+`ksRasterFormatParam` → `ksDocument2D.SaveAsToRasterFormat(fileName, rasterPar)`
+(`ksdocument2d_saveastorasterformat.html`). MEASURED on a drawing with a stepped section: a PNG at scale
+1 is 2035×1798 px (53675 bytes), at scale 0.5 - 1018×900 px (22657 bytes), so the sheet raster scales with
+`extScale` like the model one. The window projection (`ksViewProjectionCollection`) is a 3D route and is
+refused by name for a drawing instead of being ignored. The snapshot does NOT break the view collection of
+the drawing it took: `IKompasDocument2D.ViewsAndLayersManager.Views` still reads the section right after it
+(unlike `kompas_export_drawing`, which leaves that collection empty until the file is reopened).
 
 ## <a id="readonly-save-guard"></a>Запись в файл документа, открытого read-only (review 05.10.2026)
 

@@ -8,7 +8,7 @@ using KompasMcp.Domain.Imaging;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Raster snapshot of the model via the documented API5 route (order §4).</summary>
+/// <summary>Raster snapshot of a model or a drawing via the documented API5 route (order §4).</summary>
 /// <remarks>MEASURED: the two modes are mutually exclusive — a non-empty name writes the file with
 /// <c>resultArrayBytes</c> null, an empty name gives <c>resultArrayBytes</c> and no file on disk, so
 /// "return an image" and "write a file" are DIFFERENT route calls; with both wanted the render runs
@@ -57,9 +57,28 @@ public sealed partial class Api5Session
                 });
         }
 
+        // The drawing takes the SAME documented pair on its own handle: ksDocument2D.RasterFormatParam
+        // (ksdocument2d_rasterformatparam) + ksDocument2D.SaveAsToRasterFormat
+        // (ksdocument2d_saveastorasterformat). The window projection is a 3D route and is refused by
+        // name here, before COM, instead of being silently ignored on a drawing.
+        var drawingHost = document.Drawing;
         ViewProjectionSpec? requestedView = null;
         if (command.View is { Length: > 0 } requestedViewName)
         {
+            if (drawingHost is not null)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.InvalidArgument,
+                    "view задан для чертежа: проекция окна (ksViewProjectionCollection) - маршрут "
+                    + "трёхмерного документа, к чертежу не применима. Снимите снимок без view.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["view"] = requestedViewName,
+                        ["document_kind"] = document.Kind.ToString(),
+                    });
+            }
+
             if (!ViewProjections.TryResolve(requestedViewName, out var resolved))
             {
                 throw new KompasContractException(
@@ -392,19 +411,41 @@ public sealed partial class Api5Session
 
     /// <summary>One render with the given parameters: the documented route
     /// <c>RasterFormatParam → Init → SaveAsToRasterFormat</c>, once per call.</summary>
-    /// <remarks>INVARIANT: the parameter object is released here, so a refusal inside the render cannot
-    /// leak it. INVARIANT: the two routes are mutually exclusive — an empty file name with
-    /// <c>returnResultAsArrayBytes</c> gives bytes and no file, a non-empty name gives the file.
-    /// <paramref name="returned"/> reports the KERNEL's answer, not success: the caller names the refusal.
+    /// <remarks>DOC: the pair exists on BOTH documents — <c>ksDocument3D</c> for a model and
+    /// <c>ksDocument2D</c> for a drawing (<c>ksdocument2d_rasterformatparam</c>,
+    /// <c>ksdocument2d_saveastorasterformat</c>); only the handle differs, so the body is shared.
+    /// INVARIANT: the parameter object is released here, so a refusal inside the render cannot leak it;
+    /// <paramref name="returned"/> reports the KERNEL's answer, and the caller names the refusal.
     /// History: docs/decisions/adapter-core.md#image-export</remarks>
     private byte[]? RenderRaster(
         DocumentEntry document, RasterFormatSpec format, string fileName, bool bytesMode,
         int? resolution, double? scale, out bool returned)
     {
+        if (document.Drawing is { } drawing)
+        {
+            return RenderRasterOn(
+                () => drawing.RasterFormatParam(),
+                parameter => drawing.SaveAsToRasterFormat(fileName, parameter),
+                format, fileName, bytesMode, resolution, scale, out returned);
+        }
+
+        var model = document.Document3D;
+        return RenderRasterOn(
+            () => model.RasterFormatParam(),
+            parameter => model.SaveAsToRasterFormat(fileName, parameter),
+            format, fileName, bytesMode, resolution, scale, out returned);
+    }
+
+    /// <summary>The shared body: parameter object in, kernel's answer out.</summary>
+    private static byte[]? RenderRasterOn(
+        Func<object> openParameter, Func<ksRasterFormatParam, bool> save,
+        RasterFormatSpec format, string fileName, bool bytesMode,
+        int? resolution, double? scale, out bool returned)
+    {
         ksRasterFormatParam? parameter = null;
         try
         {
-            parameter = (ksRasterFormatParam)document.Document3D.RasterFormatParam();
+            parameter = (ksRasterFormatParam)openParameter();
             if (parameter is null)
             {
                 throw new KompasContractException(
@@ -433,7 +474,7 @@ public sealed partial class Api5Session
 
             try
             {
-                returned = document.Document3D.SaveAsToRasterFormat(fileName, parameter);
+                returned = save(parameter);
             }
             catch (COMException ex)
             {

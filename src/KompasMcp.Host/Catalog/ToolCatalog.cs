@@ -2309,9 +2309,14 @@ public static class ToolCatalog
                 WorkerCommands.ImportStep,
                 requiresDocument: false),
 
-            Mutation("kompas_export_image", "Снимок модели",
+            Mutation("kompas_export_image", "Снимок модели или чертежа",
                 "Растровый снимок документированным маршрутом API5: "
                 + "ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. "
+                + "ЧЕРТЁЖ снимается тем же маршрутом на своём указателе: ksDocument2D.RasterFormatParam → "
+                + "ksRasterFormatParam → ksDocument2D.SaveAsToRasterFormat "
+                + "(ksdocument2d_rasterformatparam, ksdocument2d_saveastorasterformat); параметры "
+                + "снимка те же. Проекция окна (view, keep_view) - маршрут трёхмерного документа: для "
+                + "чертежа view отвергается INVALID_ARGUMENT до обращения к КОМПАС, а не игнорируется. "
                 + "Картинка возвращается image-блоком и/или файлом; габарит читается ИЗ ЗАГОЛОВКА "
                 + "файла, а не берётся из запроса. Два режима маршрута взаимно исключающие и это "
                 + "измерено: с непустым именем файла ядро пишет файл и оставляет массив байт "

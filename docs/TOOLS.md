@@ -71,7 +71,7 @@
 | `kompas_export_step` | Экспорт STEP | Экспорт нативным конвертером. |
 | `kompas_export_stl` | Экспорт STL | Сохранение модели в файл STL документированным маршрутом ksDocument3D.SaveAsToAdditionFormat с параметрами IAdditionFormatParam (format_STL=6). |
 | `kompas_import_step` | Импорт STEP | Чтение STEP. |
-| `kompas_export_image` | Снимок модели | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
+| `kompas_export_image` | Снимок модели или чертежа | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
 | `kompas_create_drawing_views` | Создать стандартные виды чертежа | Строит группу стандартных ассоциативных видов модели документированным маршрутом API7: IKompasDocument2D.ViewsAndLayersManager → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24:… |
 | `kompas_create_section_view` | Создать разрез модели на чертеже | Строит ассоциативный РАЗРЕЗ по существующему ассоциативному виду документированным маршрутом API7: ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine.Points / ArrowPos → IDrawingObject.Update, затем IViews.Add(vt_Section) →… |
 | `kompas_update_section_view` | Изменить разрез чертежа | Меняет трассу существующего разреза, сторону стрелок, масштаб и точку привязки: трасса пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), геометрия - в вид (IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update… |

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using Kompas6Constants;
 using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
@@ -59,6 +60,8 @@ internal sealed class SectionRouteProbe
             PickBaseView();
             MeasureProjectionSystem();
             CreateCutLineAndSection();
+            TypedRoute();
+            SectionValueMeaning();
             SteppedSection();
             FailureStates();
         }
@@ -431,6 +434,10 @@ internal sealed class SectionRouteProbe
                 ? names.Select(n => n.Name)
                 : Array.Empty<string>()));
 
+        // The last way a write can land is the typed vtable call, which the IDispatch puts above do not
+        // use. The wrapper's own declaration is read, then the setter is invoked through the interface.
+        TypedPointsWrite(cutLine, trace.ToArray(), step);
+
         step.Observe("запись ArrowPos(true): " + TrySet(cutLine, "ArrowPos", true));
         step.Observe("Update линии: " + TryCall(cutLine, "Update"));
         step.Observe("Points после записи: " + DescribeArray(SafeObject(() => Late.Get(cutLine, "Points"))));
@@ -494,62 +501,244 @@ internal sealed class SectionRouteProbe
         }
     }
 
-    // ════════════════════════════════════════════════════ ступенчатый ══
-
-    private void SteppedSection()
+    /// <summary>Designation and hatch of a section view, read through the interfaces the help names.</summary>
+    private void ReadSectionTyped(IView view, string label)
     {
-        var step = _report.Begin("SR.5", "Ступенчатый разрез по линии с перегибами",
-            "Строит ли КОМПАС ступенчатый разрез по трассе из шести точек (секущие плоскости совмещены)?");
-
-        var trace = new List<double>();
-        if (_baseView is not IAssociationView association)
+        var step = _report.Steps[^1];
+        var designation = view as IViewDesignation;
+        step.Observe(label + ": обозначение = «"
+            + (designation is null ? "нет интерфейса" : Api5.Raw(SafeObject(() => designation.Designation)))
+            + "», объектов " + Api5.Raw(SafeObject(() => view.ObjectCount)));
+        var hatch = view as IHatchParam;
+        step.Observe(label + ": штриховка " + Api5.RuntimeName(hatch));
+        if (hatch is not null)
         {
-            step.Fail("опорного вида нет");
+            step.Observe(label + ": шаг " + Api5.Raw(SafeObject(() => hatch.Step))
+                + ", угол " + Api5.Raw(SafeObject(() => hatch.HatchAngle))
+                + ", стиль " + Api5.Raw(SafeObject(() => hatch.Style)));
+        }
+    }
+
+    /// <summary>The whole route through typed interfaces, with no IDispatch in between: the container,
+    /// the line, its trace and the view are taken from the interfaces the help names.</summary>
+    private void TypedRoute()
+    {
+        var step = _report.Begin("SR.4b", "Тот же маршрут только типизированными интерфейсами",
+            "Появляется ли разрез, если контейнер, линия, трасса и вид взяты по vtable, а не через IDispatch?");
+
+        if (_baseView is not IAssociationView association || _baseView is not ISymbols2DContainer symbols)
+        {
+            step.Fail("опорный вид не отдал ISymbols2DContainer");
             return;
         }
 
+        ICutLines lines;
+        try
+        {
+            lines = symbols.CutLines;
+        }
+        catch (Exception ex)
+        {
+            step.Fail("типизированный CutLines: " + Describe(ex));
+            return;
+        }
+
+        step.Observe("ICutLines получен: " + Api5.RuntimeName(lines)
+            + ", линий в нём: " + Api5.Raw(SafeObject(() => lines.Count)));
+
+        ICutLine line;
+        try
+        {
+            line = lines.Add();
+        }
+        catch (Exception ex)
+        {
+            step.Fail("типизированный Add: " + Describe(ex));
+            return;
+        }
+
+        step.Observe("линия создана типизированно: " + Api5.RuntimeName(line));
+
+        var points = new List<double>();
         for (var index = 0; index < SteppedTrace.GetLength(0); index++)
         {
             association.GetProjectionPoint(
                 SteppedTrace[index, 0], SteppedTrace[index, 1], PlateT, out var xv, out var yv);
-            trace.Add(xv);
-            trace.Add(yv);
+            points.Add(xv);
+            points.Add(yv);
         }
 
-        step.Observe("точек в трассе: " + (trace.Count / 2) + " (перегибов: " + ((trace.Count / 2) - 2) + ")");
-
-        object? container = SafeObject(() => Late.Get(_baseView, "CutLines"));
-        if (container is null)
+        try
         {
-            step.Fail("CutLines недоступен");
+            line.Points = points.ToArray();
+            step.Observe("запись Points типизированно: выполнена");
+        }
+        catch (Exception ex)
+        {
+            step.Observe("запись Points типизированно: " + Describe(ex));
+        }
+
+        step.Observe("Points типизированным чтением: " + DescribeArray(SafeObject(() => line.Points)));
+
+        try
+        {
+            line.ArrowPos = true;
+        }
+        catch (Exception ex)
+        {
+            step.Observe("ArrowPos: " + Describe(ex));
+        }
+
+        step.Observe("Update линии: " + SafeObject(() => ((IDrawingObject)line).Update()));
+        step.Observe("Points после Update: " + DescribeArray(SafeObject(() => line.Points)));
+
+        var before = SafeInt(() => _views.Count) ?? 0;
+        IView view;
+        try
+        {
+            view = _views.Add(LtViewType.vt_Section);
+        }
+        catch (Exception ex)
+        {
+            step.Fail("типизированный IViews.Add(7): " + Describe(ex));
             return;
         }
 
-        var cutLine = SafeObject(() => Late.Call(container, "Add"));
-        if (cutLine is null)
+        step.Observe("видов до/после Add: " + before + " / " + SafeInt(() => _views.Count));
+
+        try
         {
-            step.Fail("вторая линия не создана");
+            var added = (IAssociationView)view;
+            added.BaseObject = line;
+            added.Section = true;
+            step.Observe("BaseObject и Section записаны типизированно");
+        }
+        catch (Exception ex)
+        {
+            step.Observe("BaseObject/Section: " + Describe(ex));
+        }
+
+        step.Observe("Update вида: " + SafeObject(() => ((IDrawingObject)view).Update()));
+        step.Observe("видов после Update: " + SafeInt(() => _views.Count));
+        step.Observe("объектов в новом виде: " + Api5.Raw(SafeObject(() => view.ObjectCount)));
+        step.Observe("тип нового вида: " + Api5.Raw(SafeObject(() => view.ViewType)));
+        step.Observe("объектов в опорном виде: " + Api5.Raw(SafeObject(() => _baseView.ObjectCount)));
+        ReadSectionTyped(view, "Section=TRUE");
+
+        // The help contradicts itself on this value (API7 page does not decode it, API5 page says
+        // TRUE = сечение). The section is rebuilt with the other value and the picture is compared.
+        if (view is IAssociationView flipped)
+        {
+            try
+            {
+                flipped.Section = false;
+                step.Observe("Section=FALSE: записано");
+            }
+            catch (Exception ex)
+            {
+                step.Observe("Section=FALSE: " + Describe(ex));
+            }
+
+            step.Observe("Update после смены Section: " + SafeObject(() => ((IDrawingObject)view).Update()));
+            ReadSectionTyped(view, "Section=FALSE");
+            flipped.Section = true;
+            ((IDrawingObject)view).Update();
+            step.Observe("Section восстановлен TRUE, объектов: " + Api5.Raw(SafeObject(() => view.ObjectCount)));
+        }
+
+        step.Pass("типизированный маршрут пройден, ответы записаны");
+    }
+
+    // ════════════════════════════════════════════════════ ступенчатый ══
+
+    private void SteppedSection()
+    {
+        var step = _report.Begin("SR.5", "Ступенчатый разрез и удаление вида",
+            "Строит ли КОМПАС ступенчатый разрез по трассе из шести точек и уходит ли линия вместе с видом?");
+
+        if (_baseView is not IAssociationView association || _baseView is not ISymbols2DContainer symbols)
+        {
+            step.Fail("опорный вид не отдал нужные интерфейсы");
             return;
         }
 
-        step.Observe("Points: " + TrySet(cutLine, "Points", trace.ToArray()));
-        step.Observe("ArrowPos(true): " + TrySet(cutLine, "ArrowPos", true));
-        step.Observe("Update линии: " + TryCall(cutLine, "Update"));
+        var points = new List<double>();
+        for (var index = 0; index < SteppedTrace.GetLength(0); index++)
+        {
+            association.GetProjectionPoint(
+                SteppedTrace[index, 0], SteppedTrace[index, 1], PlateT, out var xv, out var yv);
+            points.Add(xv);
+            points.Add(yv);
+        }
+
+        step.Observe("точек в трассе: " + (points.Count / 2) + " (перегибов: " + ((points.Count / 2) - 2) + ")");
+
+        var lines = symbols.CutLines;
+        var line = lines.Add();
+        line.Points = points.ToArray();
+        line.ArrowPos = true;
+        step.Observe("линия и трасса записаны, Update = " + SafeObject(() => ((IDrawingObject)line).Update()));
+        step.Observe("Points перечитаны: " + DescribeArray(SafeObject(() => line.Points)));
 
         var viewsBefore = SafeInt(() => _views.Count) ?? 0;
-        var view = SafeObject(() => Late.Call(_views, "Add", 7));
-        if (view is null)
+        var linesBefore = SafeInt(() => lines.Count);
+        var view = _views.Add(LtViewType.vt_Section);
+        var added = (IAssociationView)view;
+        added.BaseObject = line;
+        added.Section = true;
+        step.Observe("вид добавлен, Update = " + SafeObject(() => ((IDrawingObject)view).Update()));
+        step.Observe("видов до/после: " + viewsBefore + " / " + SafeInt(() => _views.Count));
+        ReadSectionTyped(view, "ступенчатый");
+
+        // Measurement 5 of the order: does the line leave the document together with its view?
+        var viewsWithView = SafeInt(() => _views.Count) ?? 0;
+        step.Observe("Delete вида: " + SafeObject(() => ((IDrawingObject)view).Delete()));
+        step.Observe("видов было/стало: " + viewsWithView + " / " + SafeInt(() => _views.Count));
+        step.Observe("линий было/стало: " + linesBefore + " / " + SafeInt(() => lines.Count));
+
+        step.Pass("ступенчатый разрез построен, удаление измерено");
+    }
+
+    /// <summary>A FRESH view with the other <c>Section</c> value: the value that was set at build time is
+    /// the only one the kernel honours, so the meaning is read from two views, not from one edited twice.</summary>
+    private void SectionValueMeaning()
+    {
+        var step = _report.Begin("SR.4c", "Значение Section: разрез против сечения",
+            "Что строит Section=FALSE на НОВОМ виде, если TRUE даёт вид с обозначением «Б-Б(1:1)»?");
+
+        if (_baseView is not IAssociationView association || _baseView is not ISymbols2DContainer symbols)
         {
-            step.Fail("вид под ступенчатый разрез не создан");
+            step.Fail("опорный вид не отдал нужные интерфейсы");
             return;
         }
 
-        step.Observe("BaseObject: " + TrySet(view, "BaseObject", cutLine, putRef: true));
-        step.Observe("Section=TRUE: " + TrySet(view, "Section", true));
-        step.Observe("Update: " + TryCall(view, "Update"));
-        step.Observe("видов до/после: " + viewsBefore + " / " + SafeInt(() => _views.Count));
-        ReadSection(view, "ступенчатый");
-        step.Pass("ступенчатый разрез построен по линии с перегибами");
+        var points = new List<double>();
+        for (var index = 0; index < SteppedTrace.GetLength(0); index++)
+        {
+            association.GetProjectionPoint(
+                SteppedTrace[index, 0], SteppedTrace[index, 1], PlateT, out var xv, out var yv);
+            points.Add(xv);
+            points.Add(yv);
+        }
+
+        var line = symbols.CutLines.Add();
+        line.Points = points.ToArray();
+        ((IDrawingObject)line).Update();
+
+        var view = _views.Add(LtViewType.vt_Section);
+        var added = (IAssociationView)view;
+        added.BaseObject = line;
+        added.Section = false;
+        step.Observe("Section=FALSE на новом виде, Update = " + SafeObject(() => ((IDrawingObject)view).Update()));
+        step.Observe("видов стало: " + SafeInt(() => _views.Count));
+        ReadSectionTyped(view, "новый вид Section=FALSE");
+
+        // The trace is asked back through the same interface the product would read it with.
+        step.Observe("Points линии: " + DescribeArray(SafeObject(() => line.Points)));
+        step.Observe("стрелки: " + Api5.Raw(SafeObject(() => line.ArrowPos))
+            + ", автобуква: " + Api5.Raw(SafeObject(() => line.AutoSorted)));
+
+        step.Pass("значение Section прочитано на двух видах");
     }
 
     // ══════════════════════════════════════════════════════════ отказы ══
@@ -589,6 +778,54 @@ internal sealed class SectionRouteProbe
     }
 
     // ═════════════════════════════════════════════════════════ помощники ══
+
+    /// <summary>Writes <c>Points</c> through the typed interface and reads it back; reports the declared
+    /// setter shape so a mismatch is named rather than guessed.</summary>
+    private static void TypedPointsWrite(object cutLine, double[] points, ProbeStep step)
+    {
+        var typed = cutLine as ICutLine;
+        step.Observe("приведение к ICutLine: " + (typed is null ? "нет" : "да"));
+        if (typed is null)
+        {
+            return;
+        }
+
+        var setters = typeof(ICutLine).GetMethods()
+            .Where(m => m.Name is "set_Points" or "Points" && m.GetParameters().Length == 1)
+            .ToList();
+        step.Observe("объявленные сеттеры Points: " + (setters.Count == 0
+            ? "нет"
+            : string.Join(" | ", setters.Select(m => m.Name + "("
+                + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)) + ")"))));
+
+        foreach (var setter in setters)
+        {
+            var parameter = setter.GetParameters()[0];
+            object argument = parameter.ParameterType == typeof(double[])
+                ? points
+                : new object[] { points };
+            var arguments = new[] { argument };
+            try
+            {
+                setter.Invoke(typed, arguments);
+                step.Observe("типизированная запись " + setter.Name + ": выполнена");
+            }
+            catch (Exception ex)
+            {
+                step.Observe("типизированная запись " + setter.Name + ": " + Describe(ex));
+                continue;
+            }
+
+            step.Observe("Points после типизированной записи (типизированное чтение): "
+                + DescribeArray(SafeObject(() => typed.Points)));
+            step.Observe("Points после типизированной записи (IDispatch): "
+                + DescribeArray(SafeObject(() => Late.Get(cutLine, "Points"))));
+        }
+
+        step.Observe("типизированный Update: " + SafeObject(() => ((IDrawingObject)typed).Update()));
+        step.Observe("Points после типизированного Update: "
+            + DescribeArray(SafeObject(() => Late.Get(cutLine, "Points"))));
+    }
 
     private static string TrySet(object target, string name, object? value, bool putRef = false)
     {

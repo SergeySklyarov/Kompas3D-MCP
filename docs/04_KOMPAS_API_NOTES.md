@@ -6713,3 +6713,41 @@ IKompasDocument2D → IFragmentDocument`.
 `BOOL SaveAs(BSTR fileName)`), запись подтверждается чтением пути документа. Проверено строками
 `STEP.import.discover`, `STEP.import.negative_tests`, `STEP.import.save_reopen`; решение —
 `docs/decisions/adapter-core.md#import-step-contract`.
+
+## §4.89. Вид-разрез по линии разреза: маршрут есть, но ТОЛЬКО типизированный; `Section = FALSE` - разрез (живое измерение 17.10.2026, наряд `SECTION_VIEWS`)
+
+**Что проверялось.** Документированный маршрут разреза: линия разреза на ассоциативном виде
+(`ISymbols2DContainer.CutLines` -> `ICutLines.Add` -> `ICutLine.Points` / `ArrowPos` ->
+`IDrawingObject.Update`), затем вид `IViews.Add(vt_Section)` с `IAssociationView.BaseObject = линия`,
+`Section`, масштабом и точкой привязки, снова `Update`. Страницы: `isymbols2dcontainer_cutlines.html`,
+`icutlines_add.html`, `icutline_points.html`, `icutline_arrowpos.html`, `iviews_add.html`,
+`iassociationview_baseobject.html`, `iassociationview_section.html`, `iviewdesignation_designation.html`,
+`iassociationview.html`.
+
+**Главное измерение.** Через `IDispatch` эти же документированные члены ПРИНИМАЮТ запись и НЕ применяют
+её: `ICutLine.Points` записан четырьмя способами (`double[]`, `double[]` put-by-ref, `object[]`,
+`object[]` put-by-ref) и прочитан обратно `null` в каждом; `IDrawingObject.Update()` линии и вида
+отвечает `false`; вид в коллекцию не попадает. Типизированная запись (`line.Points = …`,
+`((IDrawingObject)line).Update()`) сохраняется и отвечает `true`, вид появляется в коллекции, несёт
+27 объектов, обозначение и штриховку. Это тот же класс отказа, что описан в
+`docs/decisions/adapter-api7.md#bridge`: маршрут API7 пишется по vtable, `IDispatch` для записи не
+годится.
+
+**Противоречие `Section` снято измерением.** Страница API7 значения не расшифровывает; страница API5
+`ksassociationviewparam_section.html` говорит «TRUE - сечение, FALSE - разрез». Измерено на двух
+СВЕЖИХ видах с одной трассой: `Section = true` даёт 27 объектов (обозначение «Б-Б(1:1)»),
+`Section = false` - 37 объектов (обозначение «В-В(1:1)»). Разрез показывает то, что за плоскостью,
+поэтому объектов больше: **FALSE - разрез, TRUE - сечение**, как и пишет страница API5.
+
+**Что ещё измерено.** `Section` у построенного вида не переключается: запись и `Update` возвращают
+`false`, картинка и обозначение не меняются - значение задаётся до первого `Update`. Буква и масштаб
+приходят в обозначение сами («А-А(1:1)»). Штриховка читается через ДОПОЛНИТЕЛЬНЫЙ интерфейс
+`IHatchParam` (иерархия `IView -> IAssociationView -> IHatchParam`), а не свойством
+`IAssociationView.HatchParam`: шаг 3, угол 45, стиль 0. `Delete()` вида линию разреза НЕ уносит -
+коллекция видов уменьшается, а линий остаётся столько же. `ICutLine.Text` - только чтение, поэтому
+своя буква клиентом не задаётся. `IAssociationView.ProjectionLink` - ПРИЗНАК (bool), а не имя
+проекции.
+
+**Где записано.** `docs/decisions/drawings.md#section-route` (правило трассы, отказы, откат),
+прибор `tools/KompasMcp.Api7Probe --section-route` (отчёт `docs/acceptance/api7/section-route.md`),
+живая проба `scripts/probe-section-view.py`, группа приёмки `--section-only` (`DRW-07.*`).

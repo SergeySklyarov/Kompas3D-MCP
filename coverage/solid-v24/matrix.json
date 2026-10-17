@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -12965,7 +12965,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).",
@@ -13011,7 +13012,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Контур простого разреза по DXF не сверялся: строка доказывает построение и перечитывание вида, а не геометрию контура."
@@ -13058,7 +13060,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Отказ на виде другого типа проверен строкой отрицательных проверок группы."
@@ -13105,7 +13108,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Буква обозначения не задаётся: ICutLine.Text документирован как доступный только для чтения, поэтому запрос буквы отвергается CAPABILITY_UNAVAILABLE."
@@ -13153,7 +13157,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Удаление линии вместе с видом требует отдельного вызова: ядро их не связывает."
@@ -13201,7 +13206,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Контур после повторного открытия по DXF не сверялся — названо, а не выдано за проверку."
@@ -13249,7 +13255,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Строка держит уровень implemented: разрез читается после перестроения (обозначение, ObjectCount), но высота контура 40 по выгрузке не измерена."
@@ -13297,7 +13304,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Контур сверен на плите 120 x 80 x 32 с тремя отверстиями §0: кромки, толщина, перегибы 45/75, стенки Ø14/Ø24/Ø8/Ø10 и конус зенковки. Не сверены форма стрелок и размыкание линии сечения - они остаются за снимком PNG."
@@ -13347,7 +13355,8 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
+    "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json",
+    "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
    ],
    "limitations": [
     "Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения. ИЗМЕРЕНО: разрез (Section = FALSE) показывает материал за секущей плоскостью, поэтому трасса мимо тела даёт не пустой вид, а построенный - этот путь отката таким сценарием не достигается."

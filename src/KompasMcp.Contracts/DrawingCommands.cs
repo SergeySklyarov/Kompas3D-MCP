@@ -505,3 +505,45 @@ public sealed record SectionViewDto
 public sealed record CreateSectionViewResult(
     SectionViewDto Section,
     VerificationDto Verification);
+
+/// <summary>Read one section view back from the drawing.</summary>
+/// <remarks>DOC: the same members the creation reads — <c>IView</c>, <c>IAssociationView</c>,
+/// <c>IViewDesignation</c>, <c>IHatchParam</c> and the base <c>ICutLine</c> of the view.
+/// INVARIANT: a view of another type is refused with its type named, not read as a section.
+/// History: docs/decisions/drawings.md#section-route</remarks>
+public sealed record GetSectionViewCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Reference to the section view (from <c>kompas_list_drawing_views</c> or creation).</summary>
+    public required string ViewRef { get; init; }
+}
+
+/// <summary>Answer to reading one section view.</summary>
+public sealed record GetSectionViewResult(
+    SectionViewDto Section,
+    VerificationDto Verification);
+
+/// <summary>Delete a section view and, unless told otherwise, the cut line it was built from.</summary>
+/// <remarks>MEASURED: <c>IDrawingObject.Delete()</c> removes the view alone — the cut line stays in the
+/// document's cut-line container, so it is deleted separately here.
+/// History: docs/decisions/drawings.md#section-route</remarks>
+public sealed record DeleteSectionViewCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string ViewRef { get; init; }
+
+    /// <summary>Keep the cut line in the drawing instead of deleting it with the view; null means
+    /// "delete it with the view", the measured default of the kernel.</summary>
+    public bool? KeepCutLine { get; init; }
+}
+
+/// <summary>Answer to deleting a section view: what is left of it, re-read from the document.</summary>
+public sealed record DeleteSectionViewResult(
+    bool ViewDeleted,
+    bool CutLineDeleted,
+    int RemainingViews,
+    VerificationDto Verification);

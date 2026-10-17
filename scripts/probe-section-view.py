@@ -253,6 +253,32 @@ def main():
         for note in verification.get("unverified_aspects") or []:
             print("  не проверено:", note)
 
+        if code_of(created) is None:
+            view_ref = section.get("view_ref")
+            read = session.tool("kompas_get_section_view", {
+                "document_id": drawing, "view_ref": view_ref})
+            read_section = result_of(read).get("section") or {}
+            print("\n=== ответ kompas_get_section_view ===")
+            print("код:", code_of(read),
+                  "| обозначение:", read_section.get("designation"),
+                  "| Section:", read_section.get("section"),
+                  "| режим:", read_section.get("mode"),
+                  "| объектов:", read_section.get("object_count"),
+                  "| трасса:", read_section.get("trace_view"))
+
+            drawing_rev = read.get("revision_after") or drawing_rev
+            removed = session.tool("kompas_delete_section_view", {
+                "document_id": drawing, "expected_revision": drawing_rev, "view_ref": view_ref,
+                "operation_id": str(uuid.uuid4())})
+            removed_result = result_of(removed)
+            print("=== ответ kompas_delete_section_view ===")
+            if code_of(removed) is not None:
+                print("ошибка:", json.dumps((removed or {}).get("error"), ensure_ascii=False)[:800])
+            print("код:", code_of(removed),
+                  "| вид удалён:", removed_result.get("view_deleted"),
+                  "| линия удалена:", removed_result.get("cut_line_deleted"),
+                  "| видов осталось:", removed_result.get("remaining_views"))
+
         if code_of(created) is None and (section.get("object_count") or 0) > 0:
             print("\nИТОГ: разрез построен и перечитан")
             return 0

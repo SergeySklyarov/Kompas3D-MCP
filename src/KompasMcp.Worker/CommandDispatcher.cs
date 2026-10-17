@@ -417,6 +417,8 @@ public sealed class CommandDispatcher
             WorkerCommands.DeleteMate => _sta.Run(() => DeleteMate(request), "mate.delete", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
+            WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
+            WorkerCommands.DeleteSectionView => _sta.Run(() => DeleteSectionView(request), "drawing.delete_section_view", cancellationToken),
             WorkerCommands.ListDrawingViews => _sta.Run(() => ListDrawingViews(request), "drawing.list_views", cancellationToken),
             WorkerCommands.ListDimensions => _sta.Run(() => ListDimensions(request), "drawing.list_dimensions", cancellationToken),
             WorkerCommands.AddDimension => _sta.Run(() => AddDimension(request), "drawing.add_dimension", cancellationToken),
@@ -1251,6 +1253,20 @@ public sealed class CommandDispatcher
     // DRW (block drawings): the three mutating tools go through the common mutation point so the
     // envelope carries the revision AND the control copy is taken; the read goes through Tagged.
     // History: docs/decisions/drawings.md#worker
+
+    private object? GetSectionView(IpcFrame request)
+    {
+        var command = Argument<GetSectionViewCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.GetSectionView(command));
+    }
+
+    private object? DeleteSectionView(IpcFrame request)
+    {
+        var command = Argument<DeleteSectionViewCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.DeleteSectionView(command), document);
+    }
 
     private object? CreateSectionView(IpcFrame request)
     {

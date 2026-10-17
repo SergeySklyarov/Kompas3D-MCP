@@ -232,6 +232,10 @@ public static class WorkerCommands
     public const string CreateDrawingViews = "drawing.create_views";
 
     public const string CreateSectionView = "drawing.create_section_view";
+
+    public const string GetSectionView = "drawing.get_section_view";
+
+    public const string DeleteSectionView = "drawing.delete_section_view";
     public const string ListDrawingViews = "drawing.list_views";
     public const string AddDimension = "drawing.add_dimension";
     public const string SetTitleBlock = "drawing.set_title_block";

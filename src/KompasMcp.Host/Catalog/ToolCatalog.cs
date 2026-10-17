@@ -2500,6 +2500,37 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            ReadOnly("kompas_get_section_view", "Прочитать разрез чертежа",
+                "Читает вид-разрез по ссылке: тип вида, значение Section, масштаб, точку привязки, "
+                + "трассу линии разреза в мм вида, сторону стрелок, букву, обозначение (например "
+                + "«А-А(1:1)»), файл-источник, число объектов, шаг/угол/стиль штриховки. Линия берётся "
+                + "как СОБСТВЕННЫЙ опорный объект вида (IAssociationView.BaseObject), поэтому разрез, "
+                + "переоткрытый с диска, читается тем же маршрутом, что и только что созданный. "
+                + "Вид другого типа отвергается INVALID_ARGUMENT с названным типом: чужой вид разрезом "
+                + "не считается. Режим (simple/stepped) ВЫВОДИТСЯ из числа точек трассы: ядро его не "
+                + "хранит, и это названо, а не выдано за прочитанное. Только чтение.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("view_ref", Sch.Ref("#/$defs/reference"))),
+                WorkerCommands.GetSectionView,
+                requiresDocument: true),
+
+            Mutation("kompas_delete_section_view", "Удалить разрез чертежа",
+                "Удаляет вид-разрез документированным IDrawingObject.Delete() и, если не задан "
+                + "keep_cut_line, линию разреза — отдельным Delete(), потому что ядро вид удаляет, а "
+                + "линию оставляет (измерено). Ответ называет, что именно удалено: вид, линия, сколько "
+                + "видов осталось. Вид другого типа отвергается INVALID_ARGUMENT с названным типом до "
+                + "любого удаления.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("keep_cut_line", Sch.Nullable(Sch.Bool(
+                        "Оставить линию разреза в чертеже. Не задано — удаляется вместе с видом.")))),
+                WorkerCommands.DeleteSectionView,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_list_drawing_views", "Перечень видов чертежа",
                 "Читает виды чертежа через IKompasDocument2D.ViewsAndLayersManager.Views: номер, имя, "
                 + "тип, масштаб, координаты точки привязки и — для ассоциативных видов — файл-источник, "

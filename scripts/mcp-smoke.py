@@ -7671,6 +7671,64 @@ def section_checks(client, rep, app_id, workdir):
                 "PASS" if deleted else "FAIL",
                 f"code={code} вид={removed.get('view_deleted')} линия={removed.get('cut_line_deleted')} "
                 f"осталось={removed.get('remaining_views')}")
+        # Deleting bumps the revision too: the next write must use the fresh one, not the pre-delete one.
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+
+    # Простой разрез: трасса из ДВУХ точек - тот же маршрут, другой режим.
+    simple_view = None
+    if associative:
+        env, code = call("kompas_create_section_view", {
+            "document_id": drawing, "expected_revision": drawing_rev,
+            "base_view_ref": associative[0].get("view_ref"), "mode": "simple",
+            "trace_model": [-10.0, 30.0, 130.0, 30.0], "look": "left", "x": 150.0, "y": 20.0})
+        simple_section = result(env).get("section") or {}
+        simple_view = simple_section.get("view_ref")
+        rep.add("DRW-07.create.simple",
+                "Простой разрез по трассе из двух точек построен и перечитан",
+                "PASS" if code is None and (simple_section.get("object_count") or 0) > 0 else "FAIL",
+                f"code={code} обозначение={simple_section.get('designation')!r} "
+                f"объектов={simple_section.get('object_count')} режим={simple_section.get('mode')}")
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+
+    if simple_view:
+        # Переоткрытие: параметры разреза должны пережить save -> close -> reopen.
+        env, _code = call("kompas_get_section_view", {"document_id": drawing, "view_ref": simple_view})
+        before_close = result(env).get("section") or {}
+        env, code = call("kompas_save_document", {
+            "document_id": drawing, "expected_revision": drawing_rev, "target_path": drawing_path})
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+        saved = code is None
+        env, code = call("kompas_close_document", {
+            "document_id": drawing, "dirty_policy": "save"})
+        env, code = call("kompas_open_document", {
+            "application_id": app_id, "path": drawing_path, "access": "edit"})
+        drawing = result(env).get("document_id") or (env or {}).get("document_id")
+        drawing_rev = (env or {}).get("revision_after") or 1
+        if drawing:
+            # A reference is bound to the document revision, so after reopen the view is found AGAIN by
+            # type: reusing the old ref is refused STALE_REFERENCE, which is the guard working.
+            env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+            fresh = [row for row in (result(env).get("views") or [])
+                     if row.get("view_type") == "vt_Section"]
+            env, code = call("kompas_get_section_view", {
+                "document_id": drawing,
+                "view_ref": fresh[0].get("view_ref") if fresh else simple_view})
+            reopened = result(env).get("section") or {}
+            same = (code is None
+                    and reopened.get("designation") == before_close.get("designation")
+                    and reopened.get("trace_view") == before_close.get("trace_view"))
+            rep.add("DRW-07.save_reopen",
+                    "Разрез переживает save -> close -> reopen: обозначение и трасса совпадают",
+                    "PASS" if saved and same else "FAIL",
+                    f"saved={saved} code={code} свежих_видов={len(fresh)} "
+                    f"обозначение={reopened.get('designation')!r} "
+                    f"трасса={reopened.get('trace_view')} совпало={same}")
+        else:
+            rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
+                    "FAIL", f"чертёж не переоткрылся: {code}")
+    else:
+        rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
+                "NAMED", "простой разрез не построен - переоткрывать нечего")
 
     # Отрицательные строки: отказ приходит ДО изменения документа, и это видно по ревизии.
     base_view = associative[0].get("view_ref") if associative else None

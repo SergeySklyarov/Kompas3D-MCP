@@ -313,7 +313,7 @@ public sealed partial class Api5Session
         }
 
         var points = new List<double>(model.Count);
-        for (var index = 0; index + 2 < model.Count; index += 2)
+        for (var index = 0; index + 1 < model.Count; index += 2)
         {
             association.GetProjectionPoint(model[index], model[index + 1], 0d, out var xv, out var yv);
             points.Add(xv);

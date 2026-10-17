@@ -147,16 +147,16 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 352
-- **строк_полностью_закрыто:** 161
+- **строк_полностью_закрыто:** 162
 - **строк_с_каким_либо_прогрессом:** 177
 - **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
 - **операций:** 134
 - **режимов_и_вариантов:** 209
 - **применимых_действий:** 2901
-- **действий_verified:** 1058
+- **действий_verified:** 1060
 - **покрытие_действий:** 36.5%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1058, 'not_applicable': 619, 'implemented': 2}
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1060, 'not_applicable': 619}
 - **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -690,7 +690,7 @@
 | `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-04.title_block.set.create, DRW-04.title_block.set.negative_tests, DRW-04.title_block.set.save_reopen |
 | `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
 | `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
-| `DRW-07.section_view.create.stepped` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | код | OK | н/п | н/п | OK | код | DRW-07.section_view.create.stepped |
+| `DRW-07.section_view.create.stepped` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | DRW-07.section_view.create.stepped |
 | `DRW-07.section_view.create.simple` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.create.simple |
 | `DRW-07.section_view.read` | DRW | later | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.section_view.read |
 | `DRW-07.section_view.update` | DRW | later | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.section_view.update |
@@ -1198,9 +1198,9 @@
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
   - Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.
   - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
-- `DRW-07.section_view.create.stepped` — не закрыт
-  - Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).
-  - Перестроение после изменения модели проверено чтением вида, но не контуром — строка rebuild держит уровень implemented.
+- `DRW-07.section_view.create.stepped` — закрыт целиком
+  - Контур ступенчатого разреза сверен по выгрузке DXF на плите §0 с тремя отверстиями: кромки, толщина, перегибы 45/75, стенки Ø14/Ø24/Ø8/Ø10 и конус зенковки; после перестроения при толщине 40 контур сверен заново.
+  - Не сверены форма стрелок и размыкание линии сечения - они остаются за снимком PNG.
 - `DRW-07.section_view.create.simple` — закрыт целиком
   - Контур простого разреза по DXF не сверялся: строка доказывает построение и перечитывание вида, а не геометрию контура.
 - `DRW-07.section_view.read` — закрыт целиком

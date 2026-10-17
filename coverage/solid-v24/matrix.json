@@ -12953,12 +12953,12 @@
         "create": "verified",
         "read": "verified",
         "edit": "not_applicable",
-        "rebuild": "implemented",
+        "rebuild": "verified",
         "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
-        "geometry_validation": "implemented"
+        "geometry_validation": "verified"
       },
       "tests": [
         "DRW-07.section_view.create.stepped"
@@ -12969,8 +12969,8 @@
         "docs/acceptance/evidence/20261017-section-views-04bea47/section-acceptance.json"
       ],
       "limitations": [
-        "Контур разреза по выгрузке DXF не сверен: строка geometry_validation остаётся implemented, доказательство — перечитывание вида (обозначение, трасса, ObjectCount).",
-        "Перестроение после изменения модели проверено чтением вида, но не контуром — строка rebuild держит уровень implemented."
+        "Контур ступенчатого разреза сверен по выгрузке DXF на плите §0 с тремя отверстиями: кромки, толщина, перегибы 45/75, стенки Ø14/Ø24/Ø8/Ø10 и конус зенковки; после перестроения при толщине 40 контур сверен заново.",
+        "Не сверены форма стрелок и размыкание линии сечения - они остаются за снимком PNG."
       ],
       "depends_on": [
         "dep.drawing.document_lifecycle",

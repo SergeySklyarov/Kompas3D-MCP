@@ -7676,6 +7676,44 @@ def section_checks(client, rep, app_id, workdir):
     rev = (env or {}).get("revision_after") or rev
     body_ok = code is None
 
+    # Три отверстия §0 (пункт 4.1). Стенки отверстий в контуре разреза сверяются только тогда, когда
+    # они есть в плите: без них «геометрия трёх отверстий» доказывала бы прямоугольник.
+    # MEASURED: у грани с нормалью +Z кадр смещений совпадает с кадром детали, поэтому центры
+    # задаются координатами модели; после каждого отверстия грань перечитывается — ссылка мертва.
+    hole_codes = []
+    for mode, diameter, (hx, hy), extra in (
+            ("through_counterbore", 14.0, (30.0, 30.0),
+             {"counterbore_diameter_mm": 24.0, "counterbore_depth_mm": 6.0}),
+            ("blind_flat", 8.0, (60.0, 60.0), {"depth_mm": 10.0}),
+            ("through_countersink", 10.0, (90.0, 50.0),
+             {"countersink_diameter_mm": 22.0, "countersink_angle_deg": 90.0})):
+        env, _c = call("kompas_list_bodies", {"document_id": part})
+        bodies = result(env) or [{}]
+        env, _c = call("kompas_read_topology", {
+            "document_id": part, "body_ref": bodies[0].get("body_ref"), "include": "faces"})
+        top, best = None, -1.0
+        for face in result(env).get("faces") or []:
+            normal = face.get("normal_at_center") or []
+            area = face.get("area_mm2") or 0.0
+            if (face.get("surface_type") == "plane" and len(normal) >= 3
+                    and abs(normal[2] - 1.0) <= 1e-6 and area > best):
+                top, best = face.get("face_ref"), area
+        if not top:
+            hole_codes.append((mode, "верхняя грань не найдена"))
+            continue
+        payload = {"face_ref": top, "expected_revision": rev, "mode": mode,
+                   "diameter_mm": diameter, "offset_x_mm": hx, "offset_y_mm": hy}
+        payload.update(extra)
+        env, code = call("kompas_hole", payload)
+        rev = (env or {}).get("revision_after") or rev
+        hole_codes.append((mode, code))
+
+    rep.add("DRW-07.setup_holes",
+            "Три отверстия §0 в плите: Ø14 с цековкой Ø24 x 6, Ø8 x 10 с плоским дном, "
+            "Ø10 с зенковкой Ø22 (90°)",
+            "PASS" if all(code is None for _m, code in hole_codes) else "FAIL",
+            f"коды={hole_codes}")
+
     env, code = call("kompas_save_document", {
         "document_id": part, "expected_revision": rev, "target_path": part_path})
     rev = (env or {}).get("revision_after") or rev
@@ -7829,15 +7867,29 @@ def section_checks(client, rep, app_id, workdir):
                 "document_id": drawing,
                 "view_ref": fresh[0].get("view_ref") if fresh else simple_view})
             reopened = result(env).get("section") or {}
-            same = (code is None
-                    and reopened.get("designation") == before_close.get("designation")
-                    and reopened.get("trace_view") == before_close.get("trace_view"))
+
+            def norm(value):
+                if isinstance(value, float):
+                    return round(value, 2)
+                if isinstance(value, list):
+                    return [norm(item) for item in value]
+                return value
+
+            # Пункт 4.4 наряда: после переоткрытия сверяется ВЕСЬ набор параметров, а не только
+            # обозначение с трассой - иначе «сохранилось» доказывалось бы одной строкой.
+            fields = ("mode", "section", "scale", "x", "y", "trace_view", "look_left", "letter",
+                      "designation", "hatch_step", "hatch_angle", "hatch_style")
+            differing = [name for name in fields
+                         if norm(reopened.get(name)) != norm(before_close.get(name))]
+            same = code is None and not differing
             rep.add("DRW-07.save_reopen",
-                    "Разрез переживает save -> close -> reopen: обозначение и трасса совпадают",
+                    "Разрез переживает save -> close -> reopen: трасса, сторона стрелок, буква, "
+                    "масштаб, положение, Section и штриховка совпадают",
                     "PASS" if saved and same else "FAIL",
                     f"saved={saved} code={code} свежих_видов={len(fresh)} "
-                    f"обозначение={reopened.get('designation')!r} "
-                    f"трасса={reopened.get('trace_view')} совпало={same}")
+                    f"расхождения={differing} обозначение={reopened.get('designation')!r} "
+                    f"трасса={reopened.get('trace_view')} масштаб={reopened.get('scale')} "
+                    f"положение=({reopened.get('x')}, {reopened.get('y')})")
         else:
             rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
                     "FAIL", f"чертёж не переоткрылся: {code}")
@@ -7865,7 +7917,10 @@ def section_checks(client, rep, app_id, workdir):
         на короткие отрезки, поэтому ни габарит всей разности, ни «длинные горизонтали» началом не
         являются.
         """
-        tall = [w for w in verticals(added, 0.0, 0.0) if w[2] - w[1] >= thickness * 0.9]
+        # Начало контура - по кромке плиты: её вертикали ровно в толщину. Осевые линии отверстий
+        # выходят за контур на 2 мм и выше толщины, поэтому «самая высокая вертикаль» началом не
+        # является (измерено: оси Ø14 и Ø10 давали 36 вместо 32 и сдвигали начало).
+        tall = [w for w in verticals(added, 0.0, 0.0) if abs((w[2] - w[1]) - thickness) <= 0.5]
         if not tall:
             return False, {"высоких_вертикалей": 0, "отрезков": len(added)}
         origin_x = min(w[0] for w in tall)
@@ -7879,8 +7934,20 @@ def section_checks(client, rep, app_id, workdir):
                        and abs(high - high_expected) <= tol for x, low, high in walls)
 
         def flat_at(y_expected, x_low, x_high, tol=0.6):
-            return any(abs(y - y_expected) <= tol and abs(low - x_low) <= tol
-                       and abs(high - x_high) <= tol for y, low, high in flats)
+            """Горизонталь на высоте y перекрывает [x_low, x_high] - кусками, а не одним отрезком.
+
+            MEASURED: кромка и дно разбиты стенками отверстий на куски (дно цековки - на три), поэтому
+            требование одного отрезка во всю ширину отвергало верный контур.
+            """
+            covered = [(low, high) for y, low, high in flats
+                       if abs(y - y_expected) <= tol and high > low]
+            x = x_low
+            while x < x_high - tol:
+                step = [high for low, high in covered if low - tol <= x <= high + tol]
+                if not step:
+                    return False
+                x = max(step)
+            return True
 
         # Верхняя кромка разбита перегибами трассы на куски, поэтому проверяется её ПРИСУТСТВИЕ на
         # высоте толщины, а не один отрезок во всю ширину.
@@ -7888,30 +7955,42 @@ def section_checks(client, rep, app_id, workdir):
                      and any(abs(y - thickness) <= 0.6 for y, _low, _high in flats))
         # Стенки отверстий проверяются ТОЛЬКО когда они в плите есть: прибор строит плиту без
         # отверстий, и требовать их от контура значило бы выдать отсутствие за отказ продукта.
-        hole_14 = counterbore = blind_8 = None
+        hole_14 = counterbore = blind_8 = hole_10 = cone = None
         if expect_holes:
-            hole_14 = wall_at(23.0, 0.0, thickness) and wall_at(37.0, 0.0, thickness)
-            counterbore = (wall_at(18.0, thickness - 6.0, thickness)
-                           and wall_at(42.0, thickness - 6.0, thickness)
-                           and flat_at(thickness - 6.0, 18.0, 42.0))
-            blind_8 = (wall_at(56.0, thickness - 10.0, thickness)
-                       and wall_at(64.0, thickness - 10.0, thickness)
-                       and flat_at(thickness - 10.0, 56.0, 64.0))
-        # Перегибы трассы (45 и 75) видны как разрывы верхней кромки: ступенчатость подтверждается
-        # геометрией, а не числом объектов вида.
-        steps_ok = (any(abs(y) <= 0.6 and abs(low - 45.0) <= 0.6 and abs(high - 75.0) <= 0.6
-                        for y, low, high in flats))
+            # MEASURED: на разрезе ближняя грань плиты (z = толщина) лежит внизу изображения, поэтому
+            # глубина отсчитывается от y = 0, а не от верхней кромки. Пилот Ø14 и Ø10 идёт от глубины
+            # цековки/зенковки (6) до дальней грани, цековка и зенковка открываются на ближней грани.
+            hole_14 = wall_at(23.0, 6.0, thickness) and wall_at(37.0, 6.0, thickness)
+            counterbore = (wall_at(18.0, 0.0, 6.0) and wall_at(42.0, 0.0, 6.0)
+                           and flat_at(6.0, 18.0, 42.0))
+            blind_8 = (wall_at(56.0, 0.0, 10.0) and wall_at(64.0, 0.0, 10.0)
+                       and flat_at(10.0, 56.0, 64.0))
+            hole_10 = wall_at(85.0, 6.0, thickness) and wall_at(95.0, 6.0, thickness)
+            # Зенковка Ø22 глубиной 6 - КОНУС: стенки наклонные, вертикалями не проверяются. Ищутся
+            # два наклонных отрезка, начинающихся у устья 79 и 101 на ближней грани (y = 0).
+            slanted = [(x0 - origin_x, y0 - origin_y, x1 - origin_x, y1 - origin_y)
+                       for x0, y0, x1, y1 in added
+                       if abs(x1 - x0) > 0.5 and abs(y1 - y0) > 0.5]
+            cone = (any(abs(max(a, c) - 101.0) <= 0.8 and abs(min(b, d)) <= 0.8
+                        for a, b, c, d in slanted)
+                    and any(abs(min(a, c) - 79.0) <= 0.8 and abs(min(b, d)) <= 0.8
+                            for a, b, c, d in slanted))
+        # Перегибы трассы (45 и 75) видны как РАЗРЫВЫ ближней кромки: ступенчатость подтверждается
+        # геометрией, а не числом объектов вида. Отверстия тоже рвут кромку, но в других местах.
+        steps_ok = (any(abs(y) <= 0.6 and abs(high - 45.0) <= 0.6 for y, _l, high in flats)
+                    and any(abs(y) <= 0.6 and abs(low - 75.0) <= 0.6 for y, low, _h in flats))
         detail = {"начало": (origin_x, origin_y), "толщина": thickness,
                   "кромки_и_верх": extent_ok, "перегибы_45_75": steps_ok,
                   "Ø14_сквозное": hole_14, "цековка_Ø24x6": counterbore,
-                  "Ø8x10_плоское_дно": blind_8,
+                  "Ø8x10_плоское_дно": blind_8, "Ø10_сквозное": hole_10,
+                  "зенковка_Ø22x90": cone,
                   "отрезков": len(added), "высоких": len(tall),
                   "вертикалей": len(walls), "горизонталей": len(flats),
                   "стенки": sorted({w[0] for w in walls})}
         outline_ok = extent_ok and steps_ok
         if not expect_holes:
             return outline_ok, detail
-        return outline_ok and hole_14 and counterbore and blind_8, detail
+        return (outline_ok and hole_14 and counterbore and blind_8 and hole_10 and cone), detail
 
 
     contour_path = os.path.join(workdir, "section-contour.cdw")
@@ -7961,7 +8040,7 @@ def section_checks(client, rep, app_id, workdir):
             contour_doc, contour_rev, os.path.join(workdir, "section-contour-stepped.dxf"),
             save_to=contour_path)
         contour_added = geometry_added(base_segments, stepped_segments)
-        contour_ok_32, contour_detail_32 = measure_contour(contour_added, plate_h)
+        contour_ok_32, contour_detail_32 = measure_contour(contour_added, plate_h, True)
         contour_state.update({
             "detail": contour_detail_32, "ok": contour_ok_32, "code": stepped_code,
             "hatch": (base_hatches, stepped_hatches), "base": base_code,
@@ -8030,7 +8109,7 @@ def section_checks(client, rep, app_id, workdir):
                                      os.path.join(workdir, "section-contour-rebuilt.dxf"),
                                      save_to=contour_path)
                     rebuilt_added = geometry_added(base_segments, rebuilt_segments)
-                    contour_ok_40, contour_detail_40 = measure_contour(rebuilt_added, 40.0)
+                    contour_ok_40, contour_detail_40 = measure_contour(rebuilt_added, 40.0, True)
                     contour_rebuilt = {"ok": contour_ok_40, "detail": contour_detail_40,
                                        "code": contour_rebuild_code, "export": rebuilt_export,
                                        "hatch": rebuilt_hatches}
@@ -8126,6 +8205,51 @@ def section_checks(client, rep, app_id, workdir):
         rep.add(cid, description, "PASS" if code in expected else "FAIL",
                 f"code={code} ожидалось={expected}")
 
+    # Пункт 4.7 наряда: трасса мимо тела. Ядро строит ПУСТОЙ вид, сервер откатывает созданное и
+    # называет это в ответе; строка проверяет откат перечитыванием коллекции, а не словом `succeeded`.
+    env, _c = call("kompas_list_drawing_views", {"document_id": drawing})
+    views_now = result(env).get("views") or []
+    views_before_miss = len(views_now)
+    # Ссылка опорного вида привязана к ревизии: после переоткрытия прежняя мертва (STALE_REFERENCE),
+    # поэтому опорный вид берётся из СВЕЖЕГО списка. Берётся АССОЦИАТИВНЫЙ вид (`source_path`): вид
+    # листа `vt_System` отвергается до COM, и строка мерила бы не тот отказ.
+    miss_base = next((row.get("view_ref") for row in views_now
+                      if row.get("view_ref") and row.get("source_path")
+                      and row.get("view_type") != "vt_Section"), base_view)
+    miss_payload = {"document_id": drawing, "base_view_ref": miss_base, "mode": "simple",
+                    "trace_model": [-10.0, 300.0, 130.0, 300.0], "look": "left",
+                    "x": 150.0, "y": 20.0}
+    if (env or {}).get("revision_after"):
+        miss_payload["expected_revision"] = (env or {}).get("revision_after")
+    env, code = call("kompas_create_section_view", miss_payload)
+    miss_error = (env or {}).get("error") or {}
+    miss_details = (miss_error.get("details") or {}) if isinstance(miss_error, dict) else {}
+    miss_partial = (env or {}).get("partial_effects")
+    env, _c = call("kompas_list_drawing_views", {"document_id": drawing})
+    views_after_miss = len(result(env).get("views") or [])
+    rolled = (code == "GEOMETRY_FAILED" and miss_details.get("rolled_back") is True
+              and miss_partial is False and views_after_miss == views_before_miss)
+    miss_text = miss_error.get("message") if isinstance(miss_error, dict) else None
+    if code is None:
+        # MEASURED: разрез (Section = FALSE) показывает материал ЗА секущей плоскостью, поэтому трасса
+        # мимо тела даёт не пустой вид, а полную проекцию: отказ «ObjectCount = 0» этим сценарием не
+        # достигается. Строка называет измеренное, а не выдаёт недостигнутый откат за проверенный.
+        made = result(env).get("section") or {}
+        rep.add("DRW-07.negative_tests.trace_misses_body",
+                "Трасса мимо тела: разрез показывает материал за плоскостью, пустого вида нет",
+                "NAMED",
+                f"code={code} объектов={made.get('object_count')} "
+                f"обозначение={made.get('designation')!r} видов {views_before_miss}->"
+                f"{views_after_miss}: путь отката по пустому результату этим сценарием не достигается")
+    else:
+        rep.add("DRW-07.negative_tests.trace_misses_body",
+                "Трасса мимо тела: отказ GEOMETRY_FAILED с откатом - новых видов и линий не осталось",
+                "PASS" if rolled else "FAIL",
+                f"code={code} stage={miss_details.get('stage')} "
+                f"rolled_back={miss_details.get('rolled_back')} "
+                f"partial_effects={miss_partial} объектов={miss_details.get('object_count')} "
+                f"видов {views_before_miss}->{views_after_miss} текст={miss_text!r}")
+
     # ========= ИТОГ КОНТУРА (пункты 4.1 и 4.5 наряда) =========
     # Строка НЕ закрывается на «вид читается»: контур ступенчатого разреза сверен по выгрузке DXF
     # на отдельном чертеже, а его перестроение — той же сверкой при толщине 40.
@@ -8135,19 +8259,24 @@ def section_checks(client, rep, app_id, workdir):
     hatch_ok = (stepped_hatch or 0) > (base_hatch or 0)
     rep.add("DRW-07.geometry_validation",
             "Контур ступенчатого разреза по выгрузке DXF: кромки 120 x 32 на всю толщину, перегибы "
-            "трассы на месте, штриховка в области материала",
+            "трассы на месте, стенки трёх отверстий, штриховка в области материала",
             "PASS" if (contour_ok and hatch_ok) else "FAIL",
             f"{contour_detail} штриховка={base_hatch}->{stepped_hatch} "
             f"выгрузка={contour_state.get('code')} база={contour_state.get('base')}")
-    # Пункт 4.1 наряда требует ещё и ГЕОМЕТРИЮ ТРЁХ ОТВЕРСТИЙ. Прибор строит плиту без отверстий
-    # (kompas_hole в этой группе не вызывается), поэтому их стенки в контуре не сверены, и строка
-    # называет это, а не выдаёт прямоугольник за подтверждённый разрез с отверстиями.
+    # Пункт 4.1 наряда требует ещё и ГЕОМЕТРИЮ ТРЁХ ОТВЕРСТИЙ. Плита прибора строится с ними
+    # (`DRW-07.setup_holes`), поэтому стенки сверяются по той же выгрузке, а не называются.
     rep.add("DRW-07.geometry_validation.holes",
-            "Стенки трёх отверстий в контуре разреза (Ø14 сквозное, цековка Ø24 x 6, Ø8 x 10)",
-            "NAMED",
-            "плита прибора без отверстий: сверены только кромки, толщина и перегибы; чтобы закрыть "
-            "пункт 4.1, прибор должен строить плиту с тремя отверстиями (kompas_hole) и сверять "
-            "стенки 18/23/37/42/56/64")
+            "Стенки трёх отверстий в контуре разреза: Ø14 сквозное и цековка Ø24 x 6, Ø8 x 10 с "
+            "плоским дном, Ø10 сквозное с зенковкой Ø22 (90°)",
+            "PASS" if all(contour_detail.get(key) for key in
+                          ("Ø14_сквозное", "цековка_Ø24x6", "Ø8x10_плоское_дно",
+                           "Ø10_сквозное", "зенковка_Ø22x90")) else "FAIL",
+            f"Ø14={contour_detail.get('Ø14_сквозное')} "
+            f"цековка={contour_detail.get('цековка_Ø24x6')} "
+            f"Ø8={contour_detail.get('Ø8x10_плоское_дно')} "
+            f"Ø10={contour_detail.get('Ø10_сквозное')} "
+            f"зенковка={contour_detail.get('зенковка_Ø22x90')} "
+            f"стенки={contour_detail.get('стенки')}")
     # ЧЕГО ЗДЕСЬ НЕТ (названо, а не выдано за успех): форма стрелок и разомкнутая линия сечения по
     # ГОСТ 2.303 машинно не сверяются — они остаются за снимком PNG (пункт 4.6, §3.7 наряда).
 

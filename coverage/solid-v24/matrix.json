@@ -13290,7 +13290,7 @@
     "suppress_restore": "not_applicable",
     "delete_dependencies": "not_applicable",
     "negative_tests": "not_applicable",
-    "geometry_validation": "implemented"
+    "geometry_validation": "verified"
    },
    "tests": [
     "DRW-07.section_view.geometry_validation"
@@ -13300,7 +13300,7 @@
     "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
    ],
    "limitations": [
-    "Строка держит уровень implemented: сверка контура по DXF не доведена, потому что выгрузка перед созданием разреза ломает чтение ассоциаций."
+    "Контур сверен на плите 120 x 80 x 32 с тремя отверстиями §0: кромки, толщина, перегибы 45/75, стенки Ø14/Ø24/Ø8/Ø10 и конус зенковки. Не сверены форма стрелок и размыкание линии сечения - они остаются за снимком PNG."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -13350,7 +13350,7 @@
     "docs/acceptance/evidence/20261017-section-views-5db3bb6/section-acceptance.json"
    ],
    "limitations": [
-    "Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения."
+    "Путь «откат после пустого результата» проверен чтением коллекций, а не падением ядра посреди построения. ИЗМЕРЕНО: разрез (Section = FALSE) показывает материал за секущей плоскостью, поэтому трасса мимо тела даёт не пустой вид, а построенный - этот путь отката таким сценарием не достигается."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",

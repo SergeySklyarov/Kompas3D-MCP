@@ -7730,6 +7730,49 @@ def section_checks(client, rep, app_id, workdir):
         rep.add("DRW-07.save_reopen", "Разрез переживает save -> close -> reopen",
                 "NAMED", "простой разрез не построен - переоткрывать нечего")
 
+    # Перестроение: модель меняется, вид перестраивается, разрез читается заново.
+    if simple_view and drawing:
+        env, _code = call("kompas_list_drawing_views", {"document_id": drawing})
+        fresh = [row for row in (result(env).get("views") or [])
+                 if row.get("view_type") == "vt_Section"]
+        env, _code = call("kompas_open_document", {
+            "application_id": app_id, "path": part_path, "access": "edit"})
+        model = result(env).get("document_id") or (env or {}).get("document_id")
+        model_rev = (env or {}).get("revision_after") or 1
+        env, code = call("kompas_set_variable", {
+            "document_id": model, "name": "PlateT", "expression": "40",
+            "expected_revision": model_rev}) if model else (None, "NO_MODEL")
+        model_rev = (env or {}).get("revision_after") or model_rev
+        rebuilt_code = code
+        if model and code is None:
+            env, code = call("kompas_save_document", {
+                "document_id": model, "expected_revision": model_rev, "target_path": part_path})
+            model_rev = (env or {}).get("revision_after") or model_rev
+            env, code = call("kompas_rebuild_drawing_views", {
+                "document_id": drawing, "view_ref": fresh[0].get("view_ref")}) if fresh \
+                else (None, "NO_VIEW")
+            rebuilt_code = code
+
+        if fresh:
+            env, code = call("kompas_get_section_view", {
+                "document_id": drawing, "view_ref": fresh[0].get("view_ref")})
+            after_rebuild = result(env).get("section") or {}
+            survived = (code is None and (after_rebuild.get("object_count") or 0) > 0
+                        and after_rebuild.get("view_type") == "vt_Section")
+            # NAMED, not PASS: the section DOES read back after the model change, but the proof the
+            # order asks for is the CONTOUR at the new height (item 4.5), and that needs the DXF route
+            # (item 3.7). A row that passes on "still readable" would claim the contour without it.
+            rep.add("DRW-07.rebuild",
+                    "Разрез после изменения модели и перестроения видов",
+                    "NAMED",
+                    f"переменная={code if model else 'нет модели'} rebuild={rebuilt_code} "
+                    f"объектов={after_rebuild.get('object_count')} "
+                    f"обозначение={after_rebuild.get('designation')!r}; высота контура 40 по выгрузке "
+                    f"НЕ сверялась - нужен §3.7 (выгрузка чертежа)")
+        else:
+            rep.add("DRW-07.rebuild", "Разрез переживает изменение модели и перестроение видов",
+                    "NAMED", "вида-разреза после переоткрытия нет - перестраивать нечего")
+
     # Отрицательные строки: отказ приходит ДО изменения документа, и это видно по ревизии.
     base_view = associative[0].get("view_ref") if associative else None
     env, _code = call("kompas_list_drawing_views", {"document_id": drawing})

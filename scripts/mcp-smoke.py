@@ -45248,6 +45248,39 @@ def shutdown_checks(host, config, workdir, rep):
             pass
         force_stop(pid)
 
+    # ═══════════ SD.10: снятие дерева процессов Хоста не оставляет живой экземпляр ═══════════
+    # Способ (в) отчёта DEBT_CLIENT_SHUTDOWN: родитель запущенного экземпляра - svchost.exe, поэтому
+    # дерево Хоста до него не доходит и Worker не успевает снять копию. Держит это объект задания
+    # (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE), который Worker создаёт на запуск.
+    probe = open_host("sd10")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.10", "sd10: снятие дерева процессов Хоста - сеанс не поднят", "FAIL",
+                    "launch: %s" % code)
+        else:
+            client_path = _os.path.join(workdir, "sd-sd10-client.m3d")
+            _doc, problem = build_saved_part(probe, app, client_path, "SD-sd10")
+            if problem:
+                rep.add("SD.10", "sd10: снятие дерева процессов Хоста - постановка не построена",
+                        "FAIL", problem)
+            else:
+                _subprocess.run(["taskkill", "/PID", str(probe.p.pid), "/T", "/F"],
+                                capture_output=True, text=True)
+                gone = wait_gone(pid, 45)
+                rep.add("SD.10",
+                        "sd10: снятие дерева процессов Хоста (taskkill /T /F) - собственный KOMPAS "
+                        "завершён, живой сирота не остался",
+                        "PASS" if gone else "FAIL",
+                        "ушёл=%s пид=%s" % (gone, pid))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
+        force_stop(pid)
+
     # ═══════════ SD.08: после группы не осталось процессов ЭТОГО прогона ═══════════
     remaining_kompas = sorted(p for p in started_kompas if alive(p))
     live_hosts = pids_of("KompasMcp.Host.exe") or set()

@@ -7,6 +7,7 @@ using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Api5Adapter.Sta;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Applications;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Com;
@@ -42,6 +43,12 @@ public sealed class CommandDispatcher
     private long _handled;
     private long _failed;
     private long _timedOut;
+
+    /// <summary>Job objects holding the instances this server launched, one per launch.</summary>
+    /// <remarks>INVARIANT: the reference is held for the life of the process on purpose — the OS closing
+    /// these handles at exit is what terminates an instance whose Worker died before its own shutdown.
+    /// History: docs/decisions/host.md#client-shutdown</remarks>
+    private readonly List<OwnedProcessJob> _ownedJobs = new();
 
     /// <summary>Set when a command's outcome could not be observed; the Host must restart us.</summary>
     public bool NeedsReconciliation { get; private set; }
@@ -789,7 +796,43 @@ public sealed class CommandDispatcher
 
         // A launched KOMPAS needs up to a minute on a cold start; report what it actually took.
         var openDocuments = _session.Documents.Count(d => d.ApplicationId == application.Id);
-        return application.ToDto(openDocuments);
+        var dto = application.ToDto(openDocuments);
+        var warning = GuardOwnedInstance(application);
+        if (warning is null)
+        {
+            return dto;
+        }
+
+        var node = KompJson.ToNode(dto)?.AsObject() ?? new JsonObject();
+        node["warnings"] = new JsonArray(warning);
+        return node;
+    }
+
+    /// <summary>Puts a launched instance under a kill-on-close job; names the refusal instead of hiding it.</summary>
+    /// <remarks>INVARIANT: an attached instance is never guarded — it is the user's process.
+    /// MEASURED: a tree kill of the Host never reaches a launched instance (its parent is <c>svchost.exe</c>),
+    /// so the job is the only thing that ends it; the normal shutdown path is untouched and still takes the
+    /// rescue copy before <c>Quit()</c>. History: docs/decisions/host.md#client-shutdown</remarks>
+    private string? GuardOwnedInstance(ApplicationEntry application)
+    {
+        if (!OwnedInstanceGuard.ShouldGuard(application.Ownership))
+        {
+            return null;
+        }
+
+        var job = OwnedProcessJob.TryCreate(application.ProcessId, out var failure);
+        if (job is null)
+        {
+            _log.Write("warn", "owned instance job object failed", new
+            {
+                process_id = application.ProcessId,
+                reason = failure,
+            });
+            return failure;
+        }
+
+        _ownedJobs.Add(job);
+        return null;
     }
 
     private object? Disconnect(IpcFrame request)

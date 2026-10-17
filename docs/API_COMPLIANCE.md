@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-17T19:45:12+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-17T20:53:30+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 136, маршрутов 618.
-- Измеряемая сборка: `release_build`, коммит `9f32888`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `6746382608e858d5c5e7d46c3c83df1e8d63c5bdc9f5783bd6210783959fd33b`.
+- Измеряемая сборка: `release_build`, коммит `20ed4dd`, дерево чистое; `KompasMcp.Host.dll` sha256 `6bae7bc243d127a7b501b0c05ce5f6c23156c38d314c31bfba57a7e323868732`.
 
 ## 2. Сверка полноты
 
@@ -18,7 +18,7 @@
 | schemas_on_disk | 94 |
 | tools_with_schema | 94 |
 | schemas_matching_wire_by_property_names | 94 |
-| schemas_matching_wire_by_shape | 93 |
+| schemas_matching_wire_by_shape | 94 |
 | matrix_rows | 181 |
 | catalog_modes_and_variants | 209 |
 | com_routes | 628 |
@@ -82,7 +82,7 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-
 | `kompas_edit_sketch_entity` | 7 | sketch_ref, expected_revision, address, action, operation_id | да | да | route_field |
 | `kompas_edit_view` | 8 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
 | `kompas_export_drawing` | 6 | document_id, output_path, format, operation_id | да | да | route_field+schema_field |
-| `kompas_export_image` | 12 | document_id, expected_revision, format, operation_id | да | НЕТ | route_field+schema_field |
+| `kompas_export_image` | 12 | document_id, expected_revision, format, operation_id | да | да | route_field+schema_field |
 | `kompas_export_step` | 5 | document_id, expected_revision, output_path, operation_id | да | да | route_field |
 | `kompas_export_stl` | 8 | document_id, expected_revision, target_path, binary, max_edge_length_mm, normal_angle_deg, operation_id | да | да | route_field+schema_field |
 | `kompas_extrude` | 11 | sketch_ref, expected_revision, operation, operation_id | да | да | route_field+schema_field |

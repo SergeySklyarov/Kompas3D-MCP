@@ -525,6 +525,19 @@ refused by name for a drawing instead of being ignored. The snapshot does NOT br
 the drawing it took: `IKompasDocument2D.ViewsAndLayersManager.Views` still reads the section right after it
 (unlike `kompas_export_drawing`, which leaves that collection empty until the file is reopened).
 
+DRAWING WITHOUT AN API5 HANDLE (order `DRAWING_SNAPSHOT_FIX` §1, 17.10.2026). A drawing created through the
+documented API7 route `IDocuments.Add` holds a native `IDrawingDocument` and NO `ksDocument2D`, so a branch
+chosen by "is `DocumentEntry.Drawing` non-null" sent the snapshot into `Document3D` and refused it as
+`WRONG_DOCUMENT_KIND` about a 3D route; the same drawing worked after `save → close → open`, because the
+reopen route holds the API5 handle. The branch is now chosen by `DocumentKind`
+(`KompasMcp.Domain.Imaging.RasterDocumentRouting`, pure and unit-tested), and the missing 2D handle is
+obtained by the documented API7 → API5 transfer `KompasObject.TransferInterface(obj, ksAPI5Auto, 0)`
+(`kompasobject_transferinterface.html`; note 6: `objNewType = 0` returns the base object of the required
+type) - the same route the session already uses for API7 → API5. MEASURED on a fresh empty drawing through
+`scripts/probe-drawing-snapshot.py`: 725×1024 px, 18713 bytes, before any save. LIMIT: a drawing that yields
+neither handle is refused as a DRAWING (`CAPABILITY_UNAVAILABLE` naming the missing 2D descriptor), never
+as a 3D document; the transferred handle is not cached, so each call transfers again.
+
 ## <a id="readonly-save-guard"></a>Запись в файл документа, открытого read-only (review 05.10.2026)
 
 ACCESS IS REMEMBERED BECAUSE IT DECIDES THE OUTCOME OF A LATER WRITE. A document opened `read_only` must

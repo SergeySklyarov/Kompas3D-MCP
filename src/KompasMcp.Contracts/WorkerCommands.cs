@@ -230,6 +230,8 @@ public static class WorkerCommands
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →
     // DRW-06, drawing.edit_view → the view edit action of DRW-01.
     public const string CreateDrawingViews = "drawing.create_views";
+
+    public const string CreateSectionView = "drawing.create_section_view";
     public const string ListDrawingViews = "drawing.list_views";
     public const string AddDimension = "drawing.add_dimension";
     public const string SetTitleBlock = "drawing.set_title_block";

@@ -2445,6 +2445,61 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_create_section_view", "Создать разрез модели на чертеже",
+                "Строит ассоциативный РАЗРЕЗ по существующему ассоциативному виду документированным "
+                + "маршрутом API7: ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine.Points / "
+                + "ArrowPos → IDrawingObject.Update, затем IViews.Add(vt_Section) → "
+                + "IAssociationView.BaseObject = линия, Section = FALSE (разрез), масштаб и точка "
+                + "привязки, снова Update (справка v24: isymbols2dcontainer_cutlines.html, "
+                + "icutlines_add.html, icutline_points.html, icutline_arrowpos.html, iviews_add.html, "
+                + "iassociationview_baseobject.html, iassociationview_section.html). СТУПЕНЧАТЫЙ разрез "
+                + "строится по линии с перегибами: трасса из четырёх и более точек, участки чередуются "
+                + "секущими и переходными, соседние перпендикулярны, все секущие параллельны. Трасса "
+                + "задаётся РОВНО в одной системе: trace_model (мм модели, переводятся проекцией "
+                + "опорного вида) либо trace_view (мм вида). Сторона стрелок — словом look (left/right) "
+                + "или вектором look_vector, перпендикулярным секущим. НЕ ПОДДЕРЖИВАЕТСЯ и названо прямо: "
+                + "сечение (Section = TRUE), ломаный и местный разрезы, задание буквы (ICutLine.Text "
+                + "только для чтения — букву присваивает КОМПАС), разрезы сборок. Ответ — разрез, "
+                + "ПЕРЕЧИТАННЫЙ из чертежа: трасса, сторона стрелок, буква, обозначение, масштаб, "
+                + "точка привязки, число объектов, шаг и угол штриховки. Пустой разрез (ObjectCount = 0) "
+                + "— отказ GEOMETRY_FAILED с откатом созданного, а не успех.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("base_view_ref", Sch.Ref("#/$defs/reference")),
+                    ("mode", Sch.Enum("Режим разреза: simple — две точки, stepped — линия с перегибами.",
+                        "simple", "stepped")),
+                    ("trace_model", Sch.Nullable(Sch.Arr(
+                        Sch.Num("Координата точки трассы в миллиметрах модели."),
+                        "Точки трассы в координатах МОДЕЛИ, подряд x0, y0, x1, y1, ... Число координат "
+                        + "чётное. Переводится проекцией опорного вида. Взаимоисключимо с trace_view."))),
+                    ("trace_view", Sch.Nullable(Sch.Arr(
+                        Sch.Num("Координата точки трассы в миллиметрах вида."),
+                        "Точки трассы уже в координатах ВИДА, подряд x0, y0, ... — та система, в которой "
+                        + "линия разреза хранит трассу. Взаимоисключимо с trace_model."))),
+                    ("look", Sch.Nullable(Sch.Enum(
+                        "Сторона, куда смотрят стрелки, относительно направления трассы "
+                        + "(icutline_arrowpos.html: TRUE — слева).",
+                        "left", "right"))),
+                    ("look_vector", Sch.Nullable(Sch.Vec2(
+                        "Направление взгляда вектором в координатах вида; обязан быть перпендикулярен "
+                        + "секущим участкам. Взаимоисключимо с look."))),
+                    ("x", Sch.Num("Координата X точки привязки разреза, в миллиметрах чертежа.", defaultTo: 0d)),
+                    ("y", Sch.Num("Координата Y точки привязки разреза, в миллиметрах чертежа.", defaultTo: 0d)),
+                    ("scale", Sch.Nullable(Sch.Num(
+                        "Масштаб разреза. Не задано — умолчание КОМПАС (1:1).",
+                        exclusiveMin: true, exclusiveMinValue: 0d))),
+                    ("projection_link", Sch.Nullable(Sch.Bool(
+                        "Сохранять ли привязку к проекции (это ПРИЗНАК, а не имя проекции). "
+                        + "Не задано — как у опорного вида."))),
+                    ("letter", Sch.Nullable(Sch.Str(
+                        "Буква разреза. НЕ ПОДДЕРЖИВАЕТСЯ: ICutLine.Text только для чтения "
+                        + "(icutline_text.html), букву присваивает КОМПАС. Заданная буква — отказ "
+                        + "CAPABILITY_UNAVAILABLE, а не молчание.")))),
+                WorkerCommands.CreateSectionView,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_list_drawing_views", "Перечень видов чертежа",
                 "Читает виды чертежа через IKompasDocument2D.ViewsAndLayersManager.Views: номер, имя, "
                 + "тип, масштаб, координаты точки привязки и — для ассоциативных видов — файл-источник, "

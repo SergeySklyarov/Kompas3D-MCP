@@ -403,3 +403,105 @@ public sealed record RebuildDrawingViewsResult(
     DrawingViewRowDto ViewAfter,
     string Route,
     VerificationDto Verification);
+
+/// <summary>Create an associative SECTION view of an existing associative view's model.</summary>
+/// <remarks>DOC: the trace is a cut line of the base view (<c>isymbols2dcontainer_cutlines.html</c>,
+/// <c>icutlines_add.html</c>, <c>icutline_points.html</c>), the section itself is <c>IViews.Add</c> with
+/// <c>vt_Section</c> plus <c>IAssociationView.BaseObject</c> (<c>iviews_add.html</c>,
+/// <c>iassociationview_baseobject.html</c>). MEASURED: <c>Section = FALSE</c> builds the CUT (the picture
+/// behind the plane), <c>TRUE</c> the plain section; the value is honoured only at build time.
+/// INVARIANT: the trace is given in ONE system, model or view, never both.
+/// History: docs/decisions/drawings.md#section-route</remarks>
+public sealed record CreateSectionViewCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Reference to the associative view the cut line is drawn on.</summary>
+    public required string BaseViewRef { get; init; }
+
+    /// <summary><c>simple</c> (exactly two points) or <c>stepped</c> (four or more, alternating runs).</summary>
+    public required string Mode { get; init; }
+
+    /// <summary>Trace points in MODEL millimetres, flat <c>x0, y0, x1, y1, ...</c>. Mutually exclusive
+    /// with <see cref="TraceView"/>.</summary>
+    public IReadOnlyList<double>? TraceModel { get; init; }
+
+    /// <summary>Trace points already in VIEW millimetres, the system the cut line stores.</summary>
+    public IReadOnlyList<double>? TraceView { get; init; }
+
+    /// <summary><c>left</c> or <c>right</c>: which side of the trace the arrows look to
+    /// (<c>icutline_arrowpos.html</c>: TRUE is the left). Mutually exclusive with
+    /// <see cref="LookVector"/>.</summary>
+    public string? Look { get; init; }
+
+    /// <summary>Look direction as a vector in VIEW millimetres; it must be perpendicular to the cutting
+    /// runs, and its side is what the arrows follow.</summary>
+    public IReadOnlyList<double>? LookVector { get; init; }
+
+    /// <summary>Anchor point of the section view on the sheet, in drawing mm.</summary>
+    public double X { get; init; }
+
+    public double Y { get; init; }
+
+    /// <summary>Section view scale; null leaves the KOMPAS default (1:1).</summary>
+    public double? Scale { get; init; }
+
+    /// <summary>Whether the section keeps the projection link of its base view
+    /// (<c>iassociationview_projectionlink</c> is a FLAG, not a name); null leaves it as it is.</summary>
+    public bool? ProjectionLink { get; init; }
+
+    /// <summary>Letter of the cut line; null lets KOMPAS assign it.</summary>
+    public string? Letter { get; init; }
+}
+
+/// <summary>A section view read back from the drawing.</summary>
+public sealed record SectionViewDto
+{
+    public required string ViewRef { get; init; }
+
+    public string? CutLineRef { get; init; }
+
+    public string? ViewType { get; init; }
+
+    /// <summary><c>simple</c> or <c>stepped</c>, as the trace it was built from.</summary>
+    public string? Mode { get; init; }
+
+    /// <summary>The value the view was built with: FALSE is the cut, TRUE the plain section.</summary>
+    public bool? Section { get; init; }
+
+    public double? Scale { get; init; }
+
+    public double? X { get; init; }
+
+    public double? Y { get; init; }
+
+    /// <summary>Trace re-read from the cut line, in VIEW mm.</summary>
+    public IReadOnlyList<double>? TraceView { get; init; }
+
+    /// <summary>Whether the arrows look to the left of the trace.</summary>
+    public bool? LookLeft { get; init; }
+
+    public string? Letter { get; init; }
+
+    /// <summary>Designation as the kernel writes it, e.g. <c>Б-Б(1:1)</c>.</summary>
+    public string? Designation { get; init; }
+
+    public string? SourcePath { get; init; }
+
+    public bool? ProjectionLink { get; init; }
+
+    public int? ObjectCount { get; init; }
+
+    public double? HatchStep { get; init; }
+
+    public double? HatchAngle { get; init; }
+
+    public int? HatchStyle { get; init; }
+}
+
+/// <summary>Result of creating a section view: re-read from the drawing.</summary>
+public sealed record CreateSectionViewResult(
+    SectionViewDto Section,
+    VerificationDto Verification);

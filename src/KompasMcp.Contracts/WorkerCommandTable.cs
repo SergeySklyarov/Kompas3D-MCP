@@ -224,6 +224,7 @@ public static class WorkerCommandTable
         // Views and export go through the API7 bridge (TransferInterface + AddStandartViews or the
         // converter), which is longer than a pure API5 call; dimensions and the stamp are API7 too.
         Cad(WorkerCommands.CreateDrawingViews, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.CreateSectionView, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.ListDrawingViews, WorkerAction.Read);
         Cad(WorkerCommands.ListDimensions, WorkerAction.Read);
         Cad(WorkerCommands.AddDimension, WorkerAction.ModelMutation, 240_000);

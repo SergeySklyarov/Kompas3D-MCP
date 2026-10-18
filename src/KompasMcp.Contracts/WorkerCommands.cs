@@ -2761,6 +2761,11 @@ public sealed record ImportResultDto
     /// <summary>Step-by-step record of returns/nulls when <see cref="ImportStepCommand.TraceLifecycle"/> is
     /// set.</summary>
     public IReadOnlyList<string> Trace { get; init; } = Array.Empty<string>();
+
+    /// <summary>The read document kind against the caller's <c>desired_kind</c>: a FAILED check on a
+    /// mismatch, <c>null</c> when <c>auto</c> declared no expectation. A mismatch never refuses the
+    /// import: the document is open and named in <see cref="CreatedDocumentIds"/>.</summary>
+    public NamedCheck? DesiredKindCheck { get; init; }
 }
 
 /// <summary>Sweep: a flat closed profile is carried along a continuous path (docs/05 SM-04).</summary>

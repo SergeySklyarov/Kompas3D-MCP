@@ -4389,10 +4389,26 @@ public sealed partial class Api5Session
                 {
                     unverified.Add("mass_requires_density — плотность не передана, масса не вычисляется");
                 }
-                else if (volume is double volumeMm3)
+                else
                 {
-                    // mm³ → m³ is 1e-9; the density comes from the caller and is never guessed.
-                    mass = volumeMm3 * 1e-9d * command.DensityKgPerM3.Value;
+                    // INVARIANT: the mass is computed from the volume read FOR it, even when `volume`
+                    // was not requested; the `volume` field is still published only on request.
+                    // DOC: ksmassinertiaparam_props.html — `v` («Объём») through
+                    // ksBody::CalcMassInertiaProperties, the same route a requested volume takes.
+                    // History: docs/decisions/geometry.md#measure-mass-without-volume
+                    var volumeForMass = command.Properties.Contains(MeasurableProperty.Volume)
+                        ? volume
+                        : MeasureVolume(body, new List<string>());
+                    if (volumeForMass is double volumeMm3)
+                    {
+                        // mm³ → m³ is 1e-9; the density comes from the caller and is never guessed.
+                        mass = volumeMm3 * 1e-9d * command.DensityKgPerM3.Value;
+                    }
+                    else
+                    {
+                        unverified.Add("mass_volume_not_read — объём для расчёта массы не прочитан "
+                            + "(CalcMassInertiaProperties), mass_kg остаётся null");
+                    }
                 }
             }
         }

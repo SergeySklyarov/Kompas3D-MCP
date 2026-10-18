@@ -174,6 +174,9 @@ public sealed partial class Api5Session
             ReachedLevel = VerificationLevel.StructureChecked,
             UnverifiedAspects = unverified.ToArray(),
             Trace = trace,
+            // The kind was read by the same documented call that classified the document, so the
+            // caller's expectation is checked against a fact, not against the request itself.
+            DesiredKindCheck = ImportStepContract.DesiredKindCheck(command.DesiredKind, attempt.Kind),
         };
     }
 

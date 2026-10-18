@@ -8419,6 +8419,33 @@ def section_checks(client, rep, app_id, workdir):
                 f"kind_kept={kept} объектов={after.get('object_count')}")
         api_rev = (env or {}).get("revision_after") or api_rev
 
+        # Долг 45: правка ТОЛЬКО стороны стрелок не меняет геометрию вида, поэтому view_updated названа
+        # неприменимой (а не непройденной), а возврат IView.Update() остался прочитанным фактом в её
+        # observed. Трасса и число объектов сверяются перечитыванием.
+        env, code = call("kompas_update_section_view", {
+            "document_id": api_doc, "expected_revision": api_rev,
+            "view_ref": section_view_ref, "look": "right"})
+        look_checks = checks_of(env)
+        look_view = look_checks.get("view_updated") or {}
+        look_cut = look_checks.get("cut_line_updated") or {}
+        look_after = result(env).get("after") or {}
+        look_observed = str(look_view.get("observed") or "")
+        rep.add("DRW-07.section.look_only",
+                "Смена ТОЛЬКО стороны стрелок (look): проверка view_updated названа неприменимой, "
+                "возврат IView.Update() остался в её observed, трасса и число объектов сверены "
+                "перечитыванием",
+                "PASS" if (code is None
+                           and look_view.get("passed") is True
+                           and "неприменима" in look_observed
+                           and "Update" in look_observed
+                           and look_cut.get("passed") is True
+                           and look_after.get("object_count") == after.get("object_count")
+                           and look_after.get("trace_view") == after.get("trace_view")) else "FAIL",
+                f"code={code} view_updated={look_view} cut_line={look_cut} "
+                f"объектов={look_after.get('object_count')} (было {after.get('object_count')}) "
+                f"трасса={look_after.get('trace_view')} look_left={look_after.get('look_left')}")
+        api_rev = (env or {}).get("revision_after") or api_rev
+
         env, _c = call("kompas_list_drawing_views", {"document_id": api_doc})
         views_before_delete = len(result(env).get("views") or [])
         env, code = call("kompas_delete_section_view", {
@@ -12502,6 +12529,7 @@ def export_inertia_checks(client, rep, app_id, workdir):
             ("EI.09.inertia_units", "смена единицы мм|кг -> м|кг делит момент на 1e6"),
             ("EI.14.inertia_density_mismatch", "плотность материала != запрошенной: ответ называет обе, моменты посчитаны по материалу, масса — по запрошенной, аспект назван"),
             ("EI.15.inertia_density_equal", "плотности равны: блок называет плотность материала, аспекта расхождения нет, прежнее ожидание jz = m r^2/2"),
+            ("EI.16.mass_without_volume", "масса при плотности без запрошенного volume посчитана по объёму, прочитанному ДЛЯ неё, а поле volume в ответе не появилось"),
             ("EI.10.refusals", "отказы предусмотренными кодами без ложного успеха"),
             ("EI.11.idempotency", "идемпотентность, OPERATION_ID_CONFLICT и REVISION_CONFLICT"),
             ("EI.12.no_mutation", "kompas_measure с inertia модель не меняет"),
@@ -12829,8 +12857,8 @@ def export_inertia_checks(client, rep, app_id, workdir):
     dense_material_density = ref["mismatch_density_kg_per_m3"]
     dense_jz_material = dense_material_density * cylinder_volume * 1e-9 * radius * radius / 2.0
     dense_jz_requested = mass_kg * radius * radius / 2.0
-    # volume запрошен вместе с mass: масса считается от ПРОЧИТАННОГО объёма, а объём читается только
-    # тогда, когда запрошен (иначе mass остаётся null — это названо в отчёте как находка вне наряда).
+    # volume запрошен вместе с mass: строка проверяет и форму ответа, а масса считается от
+    # ПРОЧИТАННОГО объёма независимо от того, запрошен ли volume (строка EI.16).
     env, code = call_raw("kompas_measure", {
         "target_ref": dense_body, "properties": ["inertia", "mass", "volume"],
         "density_kg_per_m3": density})
@@ -12884,6 +12912,24 @@ def export_inertia_checks(client, rep, app_id, workdir):
             f"error={code} inertia.density_kg_per_m3={eq_inertia.get('density_kg_per_m3')} "
             f"jz={(eq_inertia.get('axial') or {}).get('jz')} (аналитика {jz_expected:.6f}) "
             f"mass_kg={eq.get('mass_kg')} (аналитика {mass_kg:.6f}) аспекты={eq_aspects}")
+
+    # ── EI.16.mass_without_volume ─────────────────────────────────────────────────────────────────
+    # Долг 37: объём читается ДЛЯ массы, даже когда volume не запрошен, поэтому масса не пуста без
+    # причины; поле volume в ответе появляется только по запросу — форма ответа не меняется.
+    env, code = call_raw("kompas_measure", {
+        "target_ref": cyl_body, "properties": ["mass"], "density_kg_per_m3": density})
+    mo = result(env)
+    mo_aspects = mo.get("unverified_aspects") or []
+    rep.add("EI.16.mass_without_volume",
+            "mass при плотности и БЕЗ запрошенного volume: mass_kg посчитан по объёму, прочитанному "
+            "для массы (совпал с аналитикой EI.14/EI.15), поле volume в ответе отсутствует, аспекта о "
+            "непрочитанном объёме нет",
+            "PASS" if (not code
+                       and rel_near(mo.get("mass_kg"), mass_kg, ref["inertia_relative"])
+                       and mo.get("volume_mm3") is None
+                       and not any("volume" in str(a) for a in mo_aspects)) else "FAIL",
+            f"error={code} mass_kg={mo.get('mass_kg')} (аналитика {mass_kg:.6f}) "
+            f"volume_mm3={mo.get('volume_mm3')} аспекты={mo_aspects}")
 
     # ── EI.10.refusals ─────────────────────────────────────────────────────────────────────────────
     outside = "D:\\ei-not-allowed-" + uuid.uuid4().hex[:8] + "\\out.stl"
@@ -14685,6 +14731,12 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
         ("STEP.import.geometry_validation",
          "объём и габарит импортированного тела совпали с исходной деталью в пределах допуска "
          "STEP-roundtrip"),
+        ("STEP.import.desired_kind",
+         "desired_kind=part сверен с ПРОЧИТАННЫМ типом документа: проверка desired_kind_matched "
+         "пройдена, observed называет прочитанное"),
+        ("STEP.import.desired_kind_mismatch",
+         "desired_kind=assembly на детали — непройденная проверка desired_kind_matched в ответе, а не "
+         "отказ: импорт succeeded, документ открыт и назван"),
     )
 
     def fail_all(reason):
@@ -14797,6 +14849,48 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
             f"тел_после_переоткрытия={len(re_bodies)} объём={re_measure.get('volume_mm3')} "
             f"ожидание={imp_volume}")
     close(re_doc)
+
+    # desired_kind сверяется с ПРОЧИТАННЫМ типом документа (документированное IsDetail), а не с
+    # запросом: совпадение — пройденная проверка, несовпадение — НЕПРОЙДЕННАЯ проверка в ответе, но не
+    # отказ импорта: документ создан, открыт и назван.
+    kind_env, kind_code = call("kompas_import_step", {
+        "application_id": app_id, "input_path": step_path, "desired_kind": "part"}, timeout=300)
+    kind_res = result(kind_env)
+    kind_check = kind_res.get("desired_kind_check") or {}
+    kind_docs = kind_res.get("created_document_ids") or []
+    kind_ok = (not kind_code and kind_check.get("passed") is True
+               and kind_check.get("observed") == "part"
+               and kind_check.get("expected") == "part"
+               and kind_res.get("created_document_kinds") == ["part"])
+    rep.add("STEP.import.desired_kind",
+            rows[7][1],
+            "PASS" if kind_ok else "FAIL",
+            f"error={kind_code} проверка={kind_check} "
+            f"kinds_в_ответе={kind_res.get('created_document_kinds')} {emsg(kind_env)}")
+    for doc in kind_docs:
+        close(doc)
+
+    mismatch_env, mismatch_code = call("kompas_import_step", {
+        "application_id": app_id, "input_path": step_path, "desired_kind": "assembly"}, timeout=300)
+    mismatch_res = result(mismatch_env)
+    mismatch_check = mismatch_res.get("desired_kind_check") or {}
+    mismatch_docs = mismatch_res.get("created_document_ids") or []
+    listed_now = {d.get("id") for d in documents()}
+    mismatch_ok = (not mismatch_code
+                   and (mismatch_env or {}).get("status") == "succeeded"
+                   and mismatch_check.get("passed") is False
+                   and mismatch_check.get("observed") == "part"
+                   and mismatch_check.get("expected") == "assembly"
+                   and bool(mismatch_docs)
+                   and all(doc in listed_now for doc in mismatch_docs))
+    rep.add("STEP.import.desired_kind_mismatch",
+            rows[8][1],
+            "PASS" if mismatch_ok else "FAIL",
+            f"error={mismatch_code} status={(mismatch_env or {}).get('status')} "
+            f"проверка={mismatch_check} созданные={mismatch_docs} "
+            f"в_списке_документов={[doc in listed_now for doc in mismatch_docs]}")
+    for doc in mismatch_docs:
+        close(doc)
 
     miss_env, miss_code = call("kompas_import_step", {
         "application_id": app_id, "input_path": _os.path.join(workdir, "no-such-file.step"),

@@ -644,9 +644,7 @@ public static class ToolCatalog
                 + "маршрутом API5 НЕ читается (у ksFaceDefinition его нет) — габарит берите у ТЕЛА "
                 + "(kompas_list_bodies); volume, mass и inertia к грани не "
                 + "применимы. РЕБРО: ни одно из запрошенных свойств не читается, и каждое названо "
-                + "отдельно. Запрос bbox у грани БЕЗ surface_area обрабатывается той же ветвью грани, "
-                + "а не уходит в «не измеряется» целиком.",
-                Sch.Props(
+                + "отдельно. Запрос bbox у грани БЕЗ surface_area идёт той же ветвью грани.",                Sch.Props(
                     ("target_ref", Sch.Ref("#/$defs/reference")),
                     ("properties", Sch.Arr(Sch.Enum("Свойство", "bbox", "volume", "surface_area", "mass", "centroid", "inertia"), "Запрашиваемые свойства.", 1, 6)),
                     ("density_kg_per_m3", Sch.Nullable(Sch.Positive("Плотность материала", "кг/м³"))),
@@ -2292,19 +2290,21 @@ public static class ToolCatalog
                 + "компонентов. Успехом считается только подтверждённая геометрия. "
                 + "created_document_ids несёт ИДЕНТИФИКАТОРЫ ДОКУМЕНТОВ ХОСТА — те же значения, "
                 + "которые выдаёт kompas_list_documents, и они принимаются инструментами, "
-                + "адресующими документ (смена смысла поля относительно 0.8.0: раньше там был "
-                + "указатель COM, непригодный для адресации). "
+                + "адресующими документ (относительно 0.8.0: раньше указатель COM, непригодный для "
+                + "адресации). "
                 + "target_path ПРИМЕНЯЕТСЯ: импортированный документ сохраняется по этому пути "
                 + "документированным маршрутом ksDocument3D.SaveAs, запись подтверждается чтением "
                 + "пути документа; отказ сохранения — отказ импорта с partial_effects=true. "
                 + "Неудачный импорт НЕ ОСТАВЛЯЕТ зарегистрированных документов: то, что открыл "
                 + "неудачный маршрут, закрывается и снимается с регистрации до следующей попытки; "
                 + "если закрыть не удалось, документ оставлен и назван (partial_effects=true и "
-                + "details.documents_left_open), чтобы ответ не лгал.",
+                + "details.documents_left_open), чтобы ответ не лгал. desired_kind сверяется с "
+                + "прочитанным типом (ksdocument3d_isdetail.html): несовпадение — непройденная проверка "
+                + "desired_kind_matched, а не отказ; auto — без ожидания.",
                 Sch.Props(
                     ("application_id", Sch.Ref("#/$defs/application_id")),
                     ("input_path", Sch.Ref("#/$defs/path")),
-                    ("desired_kind", Sch.Enum("auto — определить по результату; part/assembly — ожидание, влияющее только на проверку.", "auto", "part", "assembly")),
+                    ("desired_kind", Sch.Enum("auto — ожидания нет; part/assembly — ожидание, сверяемое с прочитанным типом (desired_kind_matched).", "auto", "part", "assembly")),
                     ("target_path", Sch.Nullable(Sch.Ref("#/$defs/output_path")))),
                 WorkerCommands.ImportStep,
                 requiresDocument: false),
@@ -2523,15 +2523,17 @@ public static class ToolCatalog
                 + "привязки: трасса пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), "
                 + "геометрия — в вид (IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update "
                 + "(справка v24: icutline_points.html, icutline_arrowpos.html, iview_scale.html, "
-                + "idrawingobject_update.html). Новая трасса проверяется ТЕМ ЖЕ правилом, что при "
+                + "idrawingobject_update.html). view_updated — только для правок геометрии (trace_view, "
+                + "scale, x, y); при правке только look она названа неприменимой, а возврат Update() "
+                + "остаётся в observed. Новая трасса проверяется ТЕМ ЖЕ правилом, что при "
                 + "создании, до записи. Ответ — тот же вид ДО и ПОСЛЕ, поэтому добавление вида не может "
                 + "сойти за правку. НЕ ПОДДЕРЖИВАЕТСЯ и названо прямо: смена вида изображения — поле kind "
                 + "принимает только тот вид, который у вида уже есть; запрос другого вида — отказ "
                 + "CAPABILITY_UNAVAILABLE с подсказкой удалить вид и построить заново (измерено: у "
                 + "построенного вида Section не переключается, Update отвечает false); буква — "
-                + "ICutLine.Text только для чтения. После правки габарит вида сверяется с местом внутри "
-                + "рамок листа: views_within_sheet с числами, при выходе за рамку — предупреждение "
-                + "view_outside_sheet с именем вида (вид не переносится).",
+                + "ICutLine.Text только для чтения. Габарит вида после правки сверяется с листом: "
+                + "views_within_sheet, при выходе за рамку — предупреждение view_outside_sheet с именем "
+                + "вида (вид не переносится).",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

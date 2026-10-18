@@ -62,6 +62,23 @@ public class JsonSchemaValidatorTests
         Assert.Equal("$/depth_mm", violation.Path);
     }
 
+    /// <summary>With more than one required field the message must name the missing one: a client that
+    /// reads only the text must not guess which field it forgot.</summary>
+    [Fact]
+    public void MissingRequired_NamesTheFieldInTheMessage()
+    {
+        var schema = Sch.Obj("args", new[] { "document_id", "target_path" }, Sch.Props(
+            ("document_id", Sch.Str("ссылка")),
+            ("target_path", Sch.Str("путь"))));
+
+        var violations = JsonSchemaValidator.Validate(schema, new JsonObject { ["document_id"] = "doc:1" });
+
+        var violation = Assert.Single(violations);
+        Assert.Equal("required", violation.Keyword);
+        Assert.Contains("target_path", violation.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("document_id", violation.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void WrongType_IsReportedInsteadOfThrowing()
     {

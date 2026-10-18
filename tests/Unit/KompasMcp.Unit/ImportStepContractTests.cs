@@ -1,3 +1,4 @@
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Documents;
 using Xunit;
 
@@ -84,5 +85,40 @@ public class ImportStepContractTests
             removed: new[] { "zzzz" });
 
         Assert.Equal(new[] { "aaaa", "cccc" }, left);
+    }
+
+    /// <summary>The caller's expectation is checked against the READ kind: a part imported as a part
+    /// passes, and the check carries both numbers so the answer is not a bare boolean.</summary>
+    [Fact]
+    public void DesiredKindCheck_PassesWhenTheReadKindMatches()
+    {
+        var check = ImportStepContract.DesiredKindCheck("part", DocumentKind.Part);
+
+        Assert.NotNull(check);
+        Assert.True(check.Passed);
+        Assert.Equal("part", check.Observed);
+        Assert.Equal("part", check.Expected);
+    }
+
+    /// <summary>A mismatch is a FAILED check, not a refusal: the imported document exists, and the check
+    /// names what was read instead of the expectation alone.</summary>
+    [Fact]
+    public void DesiredKindCheck_FailsWhenTheReadKindDiffers()
+    {
+        var check = ImportStepContract.DesiredKindCheck("assembly", DocumentKind.Part);
+
+        Assert.NotNull(check);
+        Assert.False(check.Passed);
+        Assert.Equal("part", check.Observed);
+        Assert.Equal("assembly", check.Expected);
+    }
+
+    /// <summary><c>auto</c> declares no expectation, so no check is published — an unperformed check
+    /// must not be reported as a passed one.</summary>
+    [Fact]
+    public void DesiredKindCheck_IsAbsentForAuto()
+    {
+        Assert.Null(ImportStepContract.DesiredKindCheck("auto", DocumentKind.Part));
+        Assert.Null(ImportStepContract.DesiredKindCheck(null, DocumentKind.Part));
     }
 }

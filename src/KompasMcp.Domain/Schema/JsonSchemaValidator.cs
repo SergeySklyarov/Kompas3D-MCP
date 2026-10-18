@@ -209,7 +209,10 @@ public static class JsonSchemaValidator
                 var key = ReadString(name) ?? string.Empty;
                 if (!value.ContainsKey(key))
                 {
-                    errors.Add(new SchemaViolation($"{path}/{key}", "required", "Обязательное поле отсутствует."));
+                    // The message names the field: a refusal that says only "a required field is missing"
+                    // makes the client guess which of several required fields it forgot.
+                    errors.Add(new SchemaViolation($"{path}/{key}", "required",
+                        $"Обязательное поле `{key}` отсутствует."));
                 }
             }
         }

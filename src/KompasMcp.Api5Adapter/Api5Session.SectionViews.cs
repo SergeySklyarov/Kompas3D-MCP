@@ -602,7 +602,16 @@ public sealed partial class Api5Session
             var checks = new List<NamedCheck>
             {
                 new("cut_line_updated", lineUpdated, lineUpdated.ToString(), "true"),
-                new("view_updated", viewUpdated, viewUpdated.ToString(), "true"),
+                // INVARIANT: view_updated applies to edits that change the view's GEOMETRY (trace_view,
+                // scale, x, y). A look-only edit rebuilds no picture, so Update() answering false there
+                // is a read fact, not a failed edit, and it stays in this check's observed text.
+                // History: docs/decisions/drawings.md#section-view-look-only
+                ChangesViewGeometry(command)
+                    ? new NamedCheck("view_updated", viewUpdated, viewUpdated.ToString(), "true")
+                    : new NamedCheck("view_updated", true,
+                        Observed: "неприменима: правка меняет только свойства линии разреза (look), "
+                            + $"геометрию вида не трогает; IView.Update() вернул {viewUpdated}",
+                        Expected: "—"),
                 new("trace_matches_request", command.TraceView is not { Count: > 0 } wanted
                         || (after.TraceView is not null && after.TraceView.Count == wanted.Count),
                     (after.TraceView?.Count ?? 0).ToString(CultureInfo.InvariantCulture),
@@ -642,6 +651,13 @@ public sealed partial class Api5Session
             ComApartment.Release(view);
         }
     }
+
+    /// <summary>Request fields whose write changes the view's geometry — the only edits the
+    /// <c>view_updated</c> check applies to. <c>look</c> writes the cut line's arrow side alone, and
+    /// <c>kind</c> is refused before any write.</summary>
+    private static bool ChangesViewGeometry(UpdateSectionViewCommand command) =>
+        command.TraceView is { Count: > 0 } || command.Scale is not null
+        || command.X is not null || command.Y is not null;
 
     private static SectionMode ParseMode(string mode) => mode switch
     {

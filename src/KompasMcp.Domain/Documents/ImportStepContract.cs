@@ -1,3 +1,5 @@
+using KompasMcp.Contracts;
+
 namespace KompasMcp.Domain.Documents;
 
 /// <summary>The contract of <c>kompas_import_step</c>: which documents the answer names, and what a
@@ -37,5 +39,22 @@ public static class ImportStepContract
             .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <summary>The read document kind checked against the caller's <c>desired_kind</c>. <c>auto</c>
+    /// declares no expectation, so no check is published; a mismatch is a FAILED check, never a refusal
+    /// — the imported document exists, stays open and is named.</summary>
+    /// <remarks>DOC: <c>ksdocument3d_isdetail.html</c> — «Является ли документ деталью» is the documented
+    /// read of the kind. History: docs/decisions/adapter-core.md#import-step-desired-kind</remarks>
+    public static NamedCheck? DesiredKindCheck(string? desiredKind, DocumentKind readKind)
+    {
+        if (string.IsNullOrEmpty(desiredKind) || desiredKind == "auto")
+        {
+            return null;
+        }
+
+        var observed = readKind.ToString().ToLowerInvariant();
+        return new NamedCheck("desired_kind_matched", string.Equals(desiredKind, observed, StringComparison.Ordinal),
+            Observed: observed, Expected: desiredKind);
     }
 }

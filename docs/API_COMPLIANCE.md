@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-17T20:53:30+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-18T14:49:22+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 136, маршрутов 618.
-- Измеряемая сборка: `release_build`, коммит `20ed4dd`, дерево чистое; `KompasMcp.Host.dll` sha256 `6bae7bc243d127a7b501b0c05ce5f6c23156c38d314c31bfba57a7e323868732`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 138, маршрутов 622.
+- Измеряемая сборка: `release_build`, коммит `0d884a0`, дерево чистое; `KompasMcp.Host.dll` sha256 `0cc6b2ffd1847f82045ad8557af713e1ce6186493d7b6e60b0443fb0afeb31ab`.
 
 ## 2. Сверка полноты
 
@@ -21,9 +21,9 @@
 | schemas_matching_wire_by_shape | 94 |
 | matrix_rows | 181 |
 | catalog_modes_and_variants | 209 |
-| com_routes | 628 |
-| com_routes_confirmed_by_documentation | 614 |
-| com_routes_confirmed_over_wire | 614 |
+| com_routes | 632 |
+| com_routes_confirmed_by_documentation | 618 |
+| com_routes_confirmed_over_wire | 618 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 4 |
 | com_routes_confirmed_by_name | 6 |
@@ -37,16 +37,16 @@
 | rows_action_without_dedicated_row | 9 |
 | rows_actions_without_required_calls | 10 |
 | rows_status_lowered_by_unsupported_actions | 10 |
-| acceptance_rows | 1678 |
-| acceptance_calls_journal | 16026 |
-| acceptance_rows_with_call_window | 1678 |
+| acceptance_rows | 1691 |
+| acceptance_calls_journal | 16051 |
+| acceptance_rows_with_call_window | 1691 |
 | required_of_mismatches_matrix_vs_profile | 0 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 0.
 Инструментов вне профилей по природе (названный класс): 8 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_probe_units` (калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания измерительных вызовов; измерительный прибор приёмки, а не режим (исполняется строкой DEP.DUN.01.geometry_validation)); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 8, 'route_field': 39, 'route_field+schema_field': 30, 'schema_field': 17}.
-COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-twins': 10}.
+COM-маршрутов по сборкам: {'api7': 364, 'api5': 258, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -66,7 +66,7 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-
 | `kompas_create_document` | 6 | application_id, kind, operation_id | да | да | route_field |
 | `kompas_create_drawing_views` | 12 | document_id, expected_revision, source_path, x, y, operation_id | да | да | route_field+schema_field |
 | `kompas_create_mate` | 11 | document_id, expected_revision, constraint_type, first_component_ref, first_face_index, second_component_ref, second_face_index, operation_id | да | да | route_field |
-| `kompas_create_section_view` | 15 | document_id, expected_revision, base_view_ref, mode, x, y, operation_id | да | да | route_field+schema_field |
+| `kompas_create_section_view` | 16 | document_id, expected_revision, base_view_ref, mode, x, y, operation_id | да | да | route_field+schema_field |
 | `kompas_create_sketch` | 6 | document_id, expected_revision, plane, operation_id | да | да | schema_field |
 | `kompas_create_sketch_constraint` | 14 | sketch_ref, expected_revision, constraint_type, object_ref, operation_id | да | да | route_field+schema_field |
 | `kompas_create_sketch_dimension` | 10 | sketch_ref, expected_revision, object_ref, operation_id | да | да | schema_field |
@@ -145,7 +145,7 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-
 | `kompas_sweep` | 7 | sketch_ref, path_ref, expected_revision, operation_id | да | да | schema_field |
 | `kompas_update_feature` | 42 | feature_ref, expected_revision, operation_id | да | да | route_field+schema_field |
 | `kompas_update_plane` | 9 | document_id, expected_revision, plane_ref, operation_id | да | да | route_field |
-| `kompas_update_section_view` | 10 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
+| `kompas_update_section_view` | 11 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
 
 ## 4. Режимы и варианты каталога
 
@@ -430,14 +430,19 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-
 | `IViews.Count` | api7 | property | `prop Int32 Count` | 8 | Подтверждено | перечень интерфейса |
 | `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 5 | Подтверждено | перечень интерфейса |
 | `IView.Reference` | api7 | property | `prop Int32 Reference` | 4 | Подтверждено | перечень интерфейса |
-| `IView.Number` | api7 | property | `prop Int32 Number` | 1 | Подтверждено | перечень интерфейса |
-| `IView.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
 | `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 6 | Подтверждено | перечень интерфейса |
+| `IView.Number` | api7 | property | `prop Int32 Number` | 5 | Подтверждено | перечень интерфейса |
+| `IView.Name` | api7 | property | `prop String Name` | 4 | Подтверждено | перечень интерфейса |
 | `IAssociationView.SourceFileName` | api7 | property | `prop String SourceFileName` | 2 | Подтверждено | перечень интерфейса |
 | `IAssociationView.ProjectionName` | api7 | property | `prop String ProjectionName` | 1 | Подтверждено | перечень интерфейса |
 | `IAssociationView.HiddenLinesVisible` | api7 | property | `prop Boolean HiddenLinesVisible` | 1 | Подтверждено | перечень интерфейса |
 | `IAssociationView.CenterLinesVisible` | api7 | property | `prop Boolean CenterLinesVisible` | 1 | Подтверждено | перечень интерфейса |
 | `IView.ObjectCount` | api7 | property | `prop Int32 ObjectCount` | 3 | Подтверждено | перечень интерфейса |
+| `IAssociationView.Section` | api7 | property | `prop Boolean Section` | 3 | Подтверждено | перечень интерфейса |
+| `ksRectParam.GetpBot` | api5 | method | `Object GetpBot()` | 1 | Подтверждено | перечень интерфейса |
+| `ksRectParam.GetpTop` | api5 | method | `Object GetpTop()` | 1 | Подтверждено | перечень интерфейса |
+| `ksMathPointParam.x` | api5 | property | `prop Double x` | 1 | Подтверждено | групповая страница |
+| `ksMathPointParam.y` | api5 | property | `prop Double y` | 1 | Подтверждено | групповая страница |
 | `IView.Valid` | api7 | property | `prop Boolean Valid` | 1 | Подтверждено | перечень интерфейса |
 | `ILayoutSheets.Count` | api7 | property | `prop Int32 Count` | 2 | Подтверждено | перечень интерфейса |
 | `ILayoutSheet.Stamp` | api7 | property | `prop _Stamp Stamp` | 1 | Подтверждено | перечень интерфейса |
@@ -658,7 +663,6 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 254, 'adapter-
 | `ICutLine.ArrowPos` | api7 | property | `prop Boolean ArrowPos` | 2 | Подтверждено | перечень интерфейса |
 | `IViews.Add` | api7 | method | `IView Add(LtViewType ViewType)` | 1 | Подтверждено | перечень интерфейса |
 | `IAssociationView.BaseObject` | api7 | property | `prop IDrawingObject BaseObject` | 2 | Подтверждено | перечень интерфейса |
-| `IAssociationView.Section` | api7 | property | `prop Boolean Section` | 2 | Подтверждено | перечень интерфейса |
 | `IAssociationView.ProjectionLink` | api7 | property | `prop Boolean ProjectionLink` | 2 | Подтверждено | перечень интерфейса |
 | `IAssociationView.GetProjectionPoint` | api7 | method | `Boolean GetProjectionPoint(Double X, Double Y, Double Z, Double& Xv, D` | 1 | Подтверждено | перечень интерфейса |
 | `IViewDesignation.Designation` | api7 | property | `prop String Designation` | 2 | Подтверждено | перечень интерфейса |

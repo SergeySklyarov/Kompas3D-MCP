@@ -39,6 +39,7 @@ for stream in (sys.stdout, sys.stderr):
 # foreign installation under the name of the delivered product.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kompas_install  # noqa: E402
+from run_reports import FULL_RUN_REPORT  # noqa: E402
 
 
 def find_root(start):
@@ -130,17 +131,16 @@ def default_reports_dir():
 
 
 def report_path(name):
-    """Путь к отчёту группы и его имя файла — или `(None, None)`, если отчёта нет.
+    """Path and file name of a group report, or `(None, None)` when the report is absent.
 
-    Два соглашения об именах живут рядом: поставка 18.09.2026 (B2) называла отчёты `<группа>.json`,
-    поставка B3 — `<группа>-acceptance.json`, а полный прогон — `smoke-report.json`. Паспорт обязан
-    читать обе: иначе он молча пропускает девять групп из десяти и объявляет приёмку по одной, что
-    выглядит как PASS с шестью строками вместо тысячи. Измерено 18.09.2026 на первом прогоне
-    паспорта B3.
+    INVARIANT: the full-run name is the constant the writer uses, never a literal copy here.
+    MEASURED: the passport looked for `full.json`/`smoke-report.json` while `--all` wrote
+    `smoke-all-report.json`, so a delivery bypassed the gap with a hard link, and a passport without
+    one counted a partial set. History: docs/decisions/releases.md#full-run-report-name
     """
     candidates = (name + ".json", name + "-acceptance.json")
     if name == "full":
-        candidates = ("full.json", "smoke-report.json")
+        candidates = (FULL_RUN_REPORT,)
     for candidate in candidates:
         path = os.path.join(REPORTS, candidate)
         if os.path.exists(path):
@@ -285,7 +285,7 @@ def self_test_client_gate():
                  "rows": [{"id": "A01", "verdict": "PASS"}]}
         acceptance = {"verdict": "FAIL", **hashes,
                       "rows": [{"id": "C01", "verdict": "FAIL"}]}
-        for name, doc in (("package-check.json", package), ("full.json", full),
+        for name, doc in (("package-check.json", package), (FULL_RUN_REPORT, full),
                           ("client-entry-check.json", entry),
                           ("client-acceptance.json", acceptance)):
             with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
@@ -347,6 +347,28 @@ def self_test_client_gate():
                                 f"{got['fully_ready']!r}, ожидание PASS / True — итог не следует за "
                                 f"клиентской приёмкой (причина уровня: "
                                 f"{got['client_acceptance'].get('reason')!r})")
+            elif not str((got.get("full_run") or {}).get("report") or "").endswith(FULL_RUN_REPORT):
+                failures.append(f"плечо (б): паспорт PASS, но отчёт полного прогона назван "
+                                f"{(got.get('full_run') or {}).get('report')!r} вместо "
+                                f"{FULL_RUN_REPORT!r} — имя отчёта снова не из одного источника")
+
+        # Плечо (в): всё пройдено, а отчёта полного прогона нет. Меняется РОВНО один вход, и
+        # итог обязан отказать, назвав отсутствие: сумма групповых прогонов полным не является.
+        os.remove(os.path.join(work, FULL_RUN_REPORT))
+        nofull_out = os.path.join(tmp, "out-nofull")
+        passport, output = run(nofull_out)
+        if passport is None:
+            failures.append("плечо (в): генератор не записал паспорт\n" + output)
+        else:
+            got = passport["acceptance"]
+            reason = (got.get("full_run") or {}).get("reason")
+            if got["verdict"] != "FAIL" or got["fully_ready"] is not False:
+                failures.append(f"плечо (в): итог {got['verdict']!r} / fully_ready "
+                                f"{got['fully_ready']!r} без отчёта полного прогона, ожидание "
+                                f"FAIL / False — паспорт объявляет готовность по неполному набору")
+            elif not reason:
+                failures.append("плечо (в): итог FAIL, но отсутствие отчёта полного прогона не "
+                                "названо — читатель не увидит, чего не хватает")
 
     if failures:
         print("КОНТРОЛЬ ВЕРДИКТА НЕ ПРОЙДЕН:")
@@ -354,7 +376,8 @@ def self_test_client_gate():
             print("  -", line)
         return 1
     print("контроль вердикта по клиентской приёмке пройден: на синтетическом наборе итог FAIL "
-          "(уровень client_acceptance FAIL, entry PASS), с пройденной клиентской приёмкой — PASS")
+          "(уровень client_acceptance FAIL, entry PASS), с пройденной клиентской приёмкой — PASS, "
+          "без отчёта полного прогона — FAIL с названной причиной")
     return 0
 
 
@@ -988,8 +1011,11 @@ def main():
         "client_entry_report": entry.get("report"),
     }
     client_acceptance_block = client_acceptance(package)
+    # INVARIANT: the delivery verdict comes from the full run only. Group runs are published beside
+    # it, and their sum is not a full run, so an absent report is a NAMED refusal, not a PASS.
+    full_run = None if complete is None else {"report": complete["report"], "rows": complete["rows"]}
     acceptance_levels = levels.summarize_levels(dict(total_counts), scope, transport,
-                                                client_acceptance_block)
+                                                client_acceptance_block, full_run)
     acceptance_levels["mandatory_scope"]["profile_revision"] = scope.get("profile_revision")
     if scope["problems"]:
         acceptance_levels["mandatory_scope"]["problems"] = scope["problems"]
@@ -1065,6 +1091,9 @@ def main():
             # Четвёртый уровень: он входит в `fully_ready`, поэтому печатается рядом с тремя — иначе
             # читатель увидел бы FAIL, не видя, от какого уровня он пришёл.
             "client_acceptance": acceptance_levels["client_acceptance"],
+            # The full run is published as a level of its own: the verdict rests on it, and an
+            # absent report is named here rather than replaced by the sum of the group runs.
+            "full_run": acceptance_levels["full_run"],
             "fully_ready": acceptance_levels["fully_ready"],
             "verdict": acceptance_levels["verdict"],
             "verdict_rule": acceptance_levels["verdict_rule"],

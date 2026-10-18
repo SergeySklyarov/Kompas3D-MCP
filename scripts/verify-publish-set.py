@@ -41,6 +41,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # ── Пороги вывода ────────────────────────────────────────────────────────────
@@ -132,10 +133,35 @@ UNC_RX = re.compile(r"(?<![\w\\:])\\\\([A-Za-z0-9_.\-]+)\\([A-Za-z0-9_.$\-]+)")
 # mcp-config.md:13), `\\fileserver\share` — фикстура модульного теста.
 UNC_ALLOW = ("\\\\server\\share", "\\\\fileserver\\share")
 
-# Учётная запись — имя личного профиля ЭТОЙ машины, взятое из среды, а не вписанное в
-# прибор: на другой машине проверка обязана искать другое имя, а не молчать.
+# The account name is taken from the environment, not written into the instrument: on another
+# machine the check must search another name rather than stay silent.
 ACCOUNT = (os.environ.get("USERNAME") or Path.home().name or "").strip()
-ACCOUNT_RX = re.compile(rf"\b{re.escape(ACCOUNT)}\b", re.I) if ACCOUNT else None
+
+# ASSUMPTION: the well-known built-in local accounts of Windows are not personal identifiers. The
+# list is the documented default names of the built-in SIDs (500 Administrator, 501 Guest,
+# 503 DefaultAccount, 504 WDAGUtilityAccount) plus the localized forms this machine can carry. It is
+# explicit on purpose: a name that is NOT listed here must still be searched for.
+BUILTIN_ACCOUNTS = frozenset({
+    "administrator", "администратор", "guest", "гость",
+    "defaultaccount", "default", "wdagutilityaccount",
+})
+
+
+def personal_account_rx(account: str) -> re.Pattern[str] | None:
+    """Pattern for the account name as a personal identifier, or `None` when it is a built-in one.
+
+    INVARIANT: a built-in name is not searched for, and the caller NAMES the skip in the report.
+    MEASURED: the word `Administrator` matched the UAC field `AdministratorToken`, so the check was
+    red in every release and the habit of a red check hid a real leak. The personal-name list below
+    is not weakened by this. History: docs/decisions/releases.md#builtin-account
+    """
+    account = (account or "").strip()
+    if not account or account.lower() in BUILTIN_ACCOUNTS:
+        return None
+    return re.compile(rf"\b{re.escape(account)}\b", re.I)
+
+
+ACCOUNT_RX = personal_account_rx(ACCOUNT)
 
 # Имена участников наряда в латинской и кириллической записи. Список объявлен ЯВНО, и
 # вот измеренная причина: из среды берётся только имя профиля, а документы наряда
@@ -320,10 +346,143 @@ def sln_projects(text: str) -> list[str]:
     ]
 
 
+# ── Schemas: content against what the built Host emits ───────────────────────────────────────────
+def first_diff_path(left: object, right: object, path: str = "") -> str | None:
+    """First path where two parsed JSON values differ, or `None` when they are equal."""
+    if type(left) is not type(right):
+        return path or "."
+    if isinstance(left, dict):
+        for key in sorted(set(left) | set(right)):
+            if key not in left or key not in right:
+                return f"{path}.{key}" if path else key
+            found = first_diff_path(left[key], right[key], f"{path}.{key}" if path else key)
+            if found:
+                return found
+        return None
+    if isinstance(left, list):
+        if len(left) != len(right):
+            return f"{path}[{min(len(left), len(right))}]"
+        for index, (a, b) in enumerate(zip(left, right)):
+            found = first_diff_path(a, b, f"{path}[{index}]")
+            if found:
+                return found
+        return None
+    return None if left == right else (path or ".")
+
+
+def schema_content_diff(committed: dict[str, object], emitted: dict[str, object]) -> list[str]:
+    """Every file whose committed content differs from the schema the built Host emits.
+
+    INVARIANT: NORMALIZED JSON is compared - key order and line endings are not content, so a
+    re-emitted file that differs in formatting alone is not a finding.
+    MEASURED: an instrument that only counted files left a stale `kompas_hole` description in
+    `schemas/` while the catalog said otherwise, and the reader takes the contract from the folder.
+    History: docs/decisions/releases.md#schemas-content
+    """
+    problems: list[str] = []
+    for name in sorted(set(committed) | set(emitted)):
+        if name not in emitted:
+            problems.append(f"schemas/{name}.json  ← в наборе есть, а Host такой схемы не выдаёт")
+        elif name not in committed:
+            problems.append(f"schemas/{name}.json  ← Host выдаёт схему, а в наборе её нет")
+        else:
+            where = first_diff_path(committed[name], emitted[name])
+            if where:
+                problems.append(
+                    f"schemas/{name}.json  ← первое расхождение в `{where}`: закоммиченная "
+                    f"редакция не совпадает с выдачей Host — перевыпустить `--emit-schemas`")
+    return problems
+
+
+def find_built_host(root: Path) -> tuple[Path | None, str]:
+    """Newest built Host and the configuration it came from, or `(None, причина)`.
+
+    Several builds may lie side by side, so the choice is NAMED in the report rather than assumed:
+    the schema content depends on the build, and a check that hides which build it read measures
+    nothing.
+    """
+    pattern = root / "src" / "KompasMcp.Host" / "bin" / "x64"
+    candidates = sorted(pattern.glob("*/*/KompasMcp.Host.exe"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)
+    if not candidates:
+        return None, "собранного Host нет"
+    chosen = candidates[0]
+    return chosen, f"{chosen.parent.parent.name}/{chosen.parent.name}"
+
+
+def emit_schemas(host: Path, root: Path, out_dir: Path) -> str | None:
+    """Run the built Host to write its schemas; a NAMED refusal, or `None` when it succeeded."""
+    config = root / "config" / "kompas-mcp.example.json"
+    try:
+        res = subprocess.run([str(host), "--config", str(config), "--emit-schemas", str(out_dir)],
+                             cwd=str(root), capture_output=True, text=True, encoding="utf-8",
+                             timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"выгрузка схем не запустилась: {exc}"
+    if res.returncode != 0:
+        return (f"выгрузка схем отказала (код {res.returncode}): "
+                f"{(res.stderr or '').strip()[:200]}")
+    return None
+
+
+def self_test() -> int:
+    """Both sides of every rule added here: a good input passes, a broken one is NAMED.
+
+    A check that always answers «чисто» passes any negative control while measuring nothing, so the
+    clean case is checked first and each broken case names what it broke. History:
+    docs/decisions/releases.md#schemas-content
+    """
+    failures: list[str] = []
+
+    def schema(description: str) -> dict:
+        return {"type": "object",
+                "properties": {"x": {"type": "number", "description": description}}}
+
+    base = {"kompas_x": schema("описание")}
+    if schema_content_diff(base, json.loads(json.dumps(base))):
+        failures.append("совпадение названо расхождением")
+    changed = json.loads(json.dumps(base))
+    changed["kompas_x"]["properties"]["x"]["description"] = "другое описание"
+    problems = schema_content_diff(base, changed)
+    if len(problems) != 1 or "kompas_x.json" not in problems[0] or "description" not in problems[0]:
+        failures.append(f"изменённое описание не названо файлом и путём: {problems}")
+    extra = dict(base, kompas_extra=schema("описание"))
+    problems = schema_content_diff(extra, base)
+    if not any("kompas_extra.json" in p and "не выдаёт" in p for p in problems):
+        failures.append(f"лишний файл набора не назван: {problems}")
+    problems = schema_content_diff(base, extra)
+    if not any("kompas_extra.json" in p and "Host выдаёт" in p for p in problems):
+        failures.append(f"недостающий файл набора не назван: {problems}")
+
+    builtin_rx = personal_account_rx("Administrator")
+    if builtin_rx is not None:
+        failures.append("встроенное имя Administrator снова ищется как личный идентификатор, и "
+                        "поле AdministratorToken даёт ложный FAIL")
+    personal_rx = personal_account_rx("ivan.petrov")
+    if personal_rx is None or not personal_rx.search("owner: ivan.petrov"):
+        failures.append("личное имя учётной записи больше не находится — проверка 5f ослаблена")
+    if not PERSONAL_NAME_RX.search(_spelled("Сер", "гей")):
+        failures.append("кириллическая форма личного имени больше не находится")
+
+    if failures:
+        print("САМОПРОВЕРКА НЕ ПРОЙДЕНА:")
+        for line in failures:
+            print("  -", line)
+        return 1
+    print("самопроверка пройдена: схемы — совпадение чисто, изменённое описание, лишний и "
+          "недостающий файл названы; 5f — встроенное имя пропущено, личное и кириллическая "
+          "форма найдены")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Страж набора публикации KompasMCP")
     ap.add_argument("--verbose", action="store_true", help="показать все находки")
+    ap.add_argument("--self-test", action="store_true",
+                    help="самопроверка прибора: годный вход проходит, испорченный назван")
     args = ap.parse_args()
+    if args.self_test:
+        return self_test()
 
     root = Path(
         subprocess.run(
@@ -536,9 +695,16 @@ def main() -> int:
     acct += scan(PERSONAL_NAME_RX)
     acct = sorted(set(acct))
     fail += acct
-    report("5f. Имя участника наряда в содержимом", "FAIL", acct,
-           f"учётная запись «{ACCOUNT or '—'}» берётся из среды этой машины, а кириллические "
-           "формы имени — из объявленного списка: без него половина класса молчала")
+    account_note = (
+        f"поиск по имени учётной записи ПРОПУЩЕН: «{ACCOUNT}» — встроенное имя Windows "
+        f"(Administrator/Администратор и прочие из перечня BUILTIN_ACCOUNTS), а не личный "
+        f"идентификатор; совпадение с полем `AdministratorToken` — технический термин. "
+        f"Кириллические формы имени ищутся по объявленному списку: без него половина класса молчала"
+        if ACCOUNT_RX is None and ACCOUNT else
+        f"учётная запись «{ACCOUNT or '—'}» берётся из среды этой машины; кириллические формы "
+        f"имени — из объявленного списка: без него половина класса молчала"
+    )
+    report("5f. Имя участника наряда в содержимом", "FAIL", acct, account_note)
 
     keys = scan(LICENSE_KEY_RX)
     review += keys
@@ -972,6 +1138,40 @@ def main() -> int:
            "`schemas/` — ВЫГРУЗКА, а не вход: Host проверяет аргументы по схемам, встроенным "
            "в ToolCatalog, поэтому расхождение папки с реестром ни сборка, ни тесты, ни приёмка "
            "не показывают; а читатель берёт контракт именно из папки")
+
+    # 13a. CONTENT of the schemas against what the BUILT Host emits. Check 13 counts files; a stale
+    #      description in an existing file is invisible to counting, and the public reader takes the
+    #      contract from `schemas/`. Host not built is NAMED, never a silent PASS.
+    content_issues: list[str] = []
+    host_exe, host_note = find_built_host(root)
+    if host_exe is None:
+        content_issues.append(
+            f"{host_note}: `dotnet build KompasMcp.sln -c Release` — без собранного Host содержимое "
+            f"схем сверить не с чем, и это НЕ PASS")
+    else:
+        committed_schemas: dict[str, object] = {}
+        for rel in files:
+            if rel.startswith("schemas/") and rel.endswith(".json"):
+                try:
+                    committed_schemas[rel[len("schemas/"):-len(".json")]] = json.loads(content(rel) or "")
+                except json.JSONDecodeError as exc:
+                    content_issues.append(f"{rel}  ← не разбирается как JSON: {exc}")
+        with tempfile.TemporaryDirectory(prefix="schemas-emitted-") as tmp:
+            refusal = emit_schemas(host_exe, root, Path(tmp))
+            if refusal:
+                content_issues.append(refusal)
+            else:
+                emitted_schemas: dict[str, object] = {}
+                for path in sorted(Path(tmp).glob("*.json")):
+                    try:
+                        emitted_schemas[path.stem] = json.loads(path.read_text(encoding="utf-8-sig"))
+                    except json.JSONDecodeError as exc:
+                        content_issues.append(f"выдача схем: {path.name} не разбирается: {exc}")
+                content_issues += schema_content_diff(committed_schemas, emitted_schemas)
+    fail += content_issues
+    report("13a. Содержимое схем против выдачи собранного Host", "FAIL", content_issues,
+           f"сверка НОРМАЛИЗОВАННОГО JSON с выгрузкой `--emit-schemas` (сборка: {host_note}): "
+           f"порядок ключей и переводы строк содержимым не считаются")
 
     # 14. ОБЪЯВЛЕННЫЕ списки инструментов против набора схем поставки.
     #     Класс заведён по измеренному случаю, а не по предположению: 23.09.2026

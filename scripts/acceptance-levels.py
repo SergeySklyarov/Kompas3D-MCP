@@ -325,7 +325,7 @@ def client_acceptance_gate(block):
     return "FAIL", f"клиентская приёмка: status={status!r}, verdict={verdict!r}"
 
 
-def summarize_levels(counts, scope, transport, client_acceptance=None):
+def summarize_levels(counts, scope, transport, client_acceptance=None, full_run=None):
     """Четыре независимых вердикта и производный общий, который не может быть PASS, если хоть один
     уровень не пройден. `counts` — счётчики вердиктов строк ({'PASS': n, 'FAIL': n, 'N/A': n});
     `client_acceptance` — блок отчёта клиентской приёмки (`{'status':…, 'verdict':…}`) либо строка
@@ -334,6 +334,10 @@ def summarize_levels(counts, scope, transport, client_acceptance=None):
     Умолчание `None` НЕ значит «без гейта»: это состояние «клиентская приёмка не передана», и оно
     даёт FAIL. Так исключён тихий пропуск — потребитель, забывший передать блок, увидит отказ, а не
     «PASS по трём уровням».
+
+    `full_run` — отчёт полного прогона `--all` (`{'report':…, 'rows':…}`) либо `None`, если отчёта
+    нет. `None` здесь тоже НЕ «без гейта»: вердикт приёмки выводится из полного прогона, а сумма
+    групповых прогонов полным прогоном не является.
     """
     fail = counts.get("FAIL", 0)
     passed = counts.get("PASS", 0)
@@ -345,8 +349,9 @@ def summarize_levels(counts, scope, transport, client_acceptance=None):
     scope_verdict = scope["verdict"]
     gate_verdict, gate_reason = client_acceptance_gate(client_acceptance)
     gate_applies = gate_verdict is not None
+    full_run_verdict = "PASS" if full_run else "FAIL"
     fully_ready = (transport_verdict == "PASS" and functional == "PASS"
-                   and scope_verdict == "COMPLETE"
+                   and scope_verdict == "COMPLETE" and full_run_verdict == "PASS"
                    and (not gate_applies or gate_verdict == "PASS"))
     return {
         "transport_and_delivery": dict(
@@ -458,6 +463,16 @@ def summarize_levels(counts, scope, transport, client_acceptance=None):
         },
         "fully_ready": fully_ready,
         "verdict": "PASS" if fully_ready else "FAIL",
+        # The full run is published as its own level, not folded into the row counts: a reader must
+        # see whether the verdict rests on the full run or on a partial set.
+        "full_run": {
+            "verdict": full_run_verdict,
+            "subject": "отчёт полного прогона `--all`: из него выводится вердикт приёмки",
+            "report": (full_run or {}).get("report"),
+            "rows": (full_run or {}).get("rows"),
+            "reason": None if full_run else (
+                "отчёта полного прогона в отчётах нет: вердикт по групповым прогонам неполон"),
+        },
         "verdict_rule": VERDICT_RULE,
     }
 
@@ -511,29 +526,36 @@ def self_test():
     client_ok = {"status": "run", "verdict": "PASS"}
     client_fail = {"status": "run", "verdict": "FAIL"}
     client_absent = {"status": "not_run", "verdict": None}
-    # (имя, счётчики строк, объём, транспорт, клиентская приёмка, ожидаемый вердикт, виновник)
+    full_ok = {"report": "scratch/mcp-smoke/runs/test/smoke-all-report.json", "rows": 178}
+    # (имя, счётчики строк, объём, транспорт, клиентская приёмка, полный прогон, ожидаемый вердикт,
+    #  виновник)
     cases = [
         ("пройдено всё (положительный набор)",
-         clean_rows, closed, transport_ok, client_ok, "PASS", None),
+         clean_rows, closed, transport_ok, client_ok, full_ok, "PASS", None),
         ("один обязательный FAIL в строках при закрытом объёме",
-         {"PASS": 178, "FAIL": 1, "N/A": 6}, closed, transport_ok, client_ok, "FAIL",
+         {"PASS": 178, "FAIL": 1, "N/A": 6}, closed, transport_ok, client_ok, full_ok, "FAIL",
          "functional_acceptance"),
         ("незакрытое положительное создание + N/A-зависимые действия",
-         {"PASS": 6, "N/A": 6}, opened, transport_ok, client_ok, "FAIL", "mandatory_scope"),
+         {"PASS": 6, "N/A": 6}, opened, transport_ok, client_ok, full_ok, "FAIL", "mandatory_scope"),
         ("инструменты клиенту не видны (транспорт)",
-         clean_rows, closed, transport_bad, client_ok, "FAIL", "transport_and_delivery"),
+         clean_rows, closed, transport_bad, client_ok, full_ok, "FAIL", "transport_and_delivery"),
         ("три уровня пройдены, клиентская приёмка FAIL — состояние сеанса 2",
-         clean_rows, closed, transport_ok, client_fail, "FAIL", "client_acceptance"),
+         clean_rows, closed, transport_ok, client_fail, full_ok, "FAIL", "client_acceptance"),
         ("три уровня пройдены, клиентская приёмка not_run",
-         clean_rows, closed, transport_ok, client_absent, "FAIL", "client_acceptance"),
+         clean_rows, closed, transport_ok, client_absent, full_ok, "FAIL", "client_acceptance"),
         ("клиентская приёмка не передана в правило",
-         clean_rows, closed, transport_ok, None, "FAIL", "client_acceptance"),
+         clean_rows, closed, transport_ok, None, full_ok, "FAIL", "client_acceptance"),
         ("объём закрыт по открытым строкам, но прибор назвал расхождение (R5 06.10.2026)",
-         clean_rows, closed_with_problems, transport_ok, client_ok, "FAIL", "mandatory_scope"),
+         clean_rows, closed_with_problems, transport_ok, client_ok, full_ok, "FAIL",
+         "mandatory_scope"),
+        # The state the passport was in before the name came from one source: every level passes,
+        # the full run is simply absent, and the verdict was PASS over a partial set.
+        ("три уровня пройдены, отчёта полного прогона нет",
+         clean_rows, closed, transport_ok, client_ok, None, "FAIL", "full_run"),
     ]
     failures = []
-    for name, counts, scope, transport, client, expected, blamed in cases:
-        got = summarize_levels(counts, scope, transport, client)
+    for name, counts, scope, transport, client, full_run, expected, blamed in cases:
+        got = summarize_levels(counts, scope, transport, client, full_run)
         if got["verdict"] != expected:
             failures.append(f"{name}: вердикт {got['verdict']!r}, ожидание {expected!r}")
         if got["fully_ready"] is not (expected == "PASS"):

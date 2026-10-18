@@ -53,6 +53,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kompas_install  # noqa: E402
 from localconfig import isolate_config, local_config  # noqa: E402
+from run_reports import FULL_RUN_REPORT  # noqa: E402
 
 
 class McpError(Exception):
@@ -718,7 +719,7 @@ ALL_GROUPS_EXTRA = (
 # «редкое состояние длинного сеанса» против «редкой постановки»), поэтому подряд она запускается.
 ALL_GROUPS_EXCLUDED = ()
 
-ALL_GROUP = ("all", "smoke-all-report.json",
+ALL_GROUP = ("all", FULL_RUN_REPORT,
              "Приёмка: вертикальный сценарий плюс все группы вне него (режим --all)")
 
 

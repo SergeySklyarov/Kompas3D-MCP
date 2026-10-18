@@ -41635,6 +41635,14 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
             close(doc)
         return rec
 
+    # Описание берётся из `tools/list` поставки, а не помнится списком: строка держит обещанное клиенту.
+    limit_named = False
+    for tool in (client.call("tools/list", {}) or {}).get("tools", []):
+        if tool.get("name") == "kompas_set_feature_suppressed":
+            text = tool.get("description") or ""
+            limit_named = "ПОСЛЕ СОХРАНЕНИЯ И ПЕРЕОТКРЫТИЯ" in text and "НЕЛЬЗЯ" in text
+            break
+
     for name in SUPPRESS_REPEAT_SETUPS:
         rec = save_reopen_cycle(name, "SR-save-reopen-%s" % name)
         sup = (rec.get("state_suppressed") or {}).get("volume_total")
@@ -41671,6 +41679,21 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
              % (fs_before.get("excluded"), fs_before.get("is_valid"), fs_sup.get("excluded"),
                 fs_sup.get("is_valid"), fs_sup.get("object_error")),
              details={"before": fs_before, "suppressed": fs_sup})
+
+        # Долг 36: справка описывает выдачу в коллекциях ТОЛЬКО для объектов после указателя дерева
+        # (DOC: ksdocument3d_enablerollbackfeaturesincollections.html), маршрута для подавленных
+        # признаков нет. Ограничение названо в описании инструмента, и ответ после переоткрытия обязан
+        # отказать, а не объявить успех: строка держит и описание, и честность ответа.
+        refusal_ok = rec.get("restore_with_old_ref_code") in ("STALE_REFERENCE", "REVISION_CONFLICT",
+                                                              "INVALID_ARGUMENT")
+        emit("SR.%s.limitation_named" % name,
+             "постановка %s: описание инструмента называет ограничение (сохранённое подавление после "
+             "переоткрытия не снимается), а ответ после переоткрытия отказывает, не объявляя успех" % name,
+             "PASS" if limit_named and refusal_ok and near(reo, sup) else "FAIL",
+             "описание называет ограничение=%s; отказ по старой ссылке=%s; объём подан=%s переоткрыт=%s"
+             % (limit_named, rec.get("restore_with_old_ref_code"), sup, reo),
+             details={"description_names_limit": limit_named,
+                      "restore_with_old_ref_code": rec.get("restore_with_old_ref_code")})
 
     # ── Контроль в СВЕЖЕМ сеансе ──────────────────────────────────────────────────────────────────
     call("kompas_disconnect", {"application_id": app_id, "close_owned_application": True})

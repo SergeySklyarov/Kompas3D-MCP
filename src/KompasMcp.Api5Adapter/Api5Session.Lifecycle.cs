@@ -294,7 +294,9 @@ public partial class Api5Session
         {
             unverified.Add("hidden_from_list_features — подавленный признак не показывается " +
                            "kompas_list_features (он исчезает из EntityCollection(110)); это " +
-                           "измеренное ограничение контракта, а не потеря признака");
+                           "измеренное ограничение контракта, а не потеря признака. Сохранённое " +
+                           "подавление снять после переоткрытия нечем: прежняя ссылка мертва, " +
+                           "а свежую взять негде");
         }
 
         return new SuppressFeatureResult(

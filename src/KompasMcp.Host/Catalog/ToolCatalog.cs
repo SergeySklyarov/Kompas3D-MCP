@@ -644,7 +644,8 @@ public static class ToolCatalog
                 + "маршрутом API5 НЕ читается (у ksFaceDefinition его нет) — габарит берите у ТЕЛА "
                 + "(kompas_list_bodies); volume, mass и inertia к грани не "
                 + "применимы. РЕБРО: ни одно из запрошенных свойств не читается, и каждое названо "
-                + "отдельно. Запрос bbox у грани БЕЗ surface_area идёт той же ветвью грани.",                Sch.Props(
+                + "отдельно. Запрос bbox у грани БЕЗ surface_area идёт той же ветвью грани.",
+                Sch.Props(
                     ("target_ref", Sch.Ref("#/$defs/reference")),
                     ("properties", Sch.Arr(Sch.Enum("Свойство", "bbox", "volume", "surface_area", "mass", "centroid", "inertia"), "Запрашиваемые свойства.", 1, 6)),
                     ("density_kg_per_m3", Sch.Nullable(Sch.Positive("Плотность материала", "кг/м³"))),

@@ -241,8 +241,9 @@ public sealed partial class Api5Session
             var rolledBack = TryDelete(view) && TryDelete(line);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                (sectionValue ? "Сечение" : "Разрез") + " построен пустым (ObjectCount = 0): трасса не "
-                + "пересекает тело либо опорный вид " + "не связан с моделью. " + (rolledBack
+                (sectionValue ? "Сечение" : "Разрез")
+                + " построен пустым (ObjectCount = 0): трасса не пересекает тело либо опорный вид не связан с моделью. "
+                + (rolledBack
                     ? "Созданные объекты удалены, документ не изменён."
                     : "Удалить созданные объекты не удалось - проверьте вид и линию в чертеже вручную."),
                 RetryPolicy.SameOperationId,

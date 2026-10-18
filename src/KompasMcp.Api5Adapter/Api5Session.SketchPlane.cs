@@ -49,10 +49,11 @@ public sealed partial class Api5Session
     /// <summary>The support a request resolved to: the MODEL OBJECT handed to <c>SetPlane</c> plus, for a
     /// named base plane only, which of the three it was.</summary>
     /// <remarks>INVARIANT: <see cref="BasePlane"/> is filled ONLY for a named base plane. A reference
-    /// support must NOT be remembered as a base: the sketch frame of an offset or tilted plane is not one
-    /// of the three standard frames, and remembering XY for it would make the coordinate derivation of
-    /// <c>kompas_edit_sketch</c> work along the wrong axis — the very defect this type closes.
-    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    /// support must NOT be remembered as a base: the memory names the AXES to
+    /// <c>TargetBodyGuard.ProfileMayAffectBody</c> and to <c>BoxDirection</c>, and an offset or tilted
+    /// plane is not one of the three standard frames — a remembered XY would name the wrong ones. The
+    /// frame is read back from the model instead (<see cref="ResolveSketchPlaneBase"/>).
+    /// TEST: TargetBodyGuardTests. History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
     private readonly record struct SketchSupport(ksEntity Entity, PlaneBase? BasePlane);
 
     public SetSketchPlaneResult SetSketchPlane(SetSketchPlaneCommand command)
@@ -99,10 +100,10 @@ public sealed partial class Api5Session
         BumpRevision(document, "sketch.set_plane");
 
         // The remembered support is refreshed HERE, with the SAME rule as at creation: a named base
-        // plane is remembered, a reference support is NOT (its frame is not one of the three standard
-        // frames, so a remembered XY would send the coordinate derivation of kompas_edit_sketch along
-        // the wrong axis). The declared hint is refreshed for the same reason it exists — a refused
-        // extrusion has to say where the profile lay.
+        // plane is remembered, a reference support is NOT — its frame is not one of the three standard
+        // frames, and the memory names the axes to the target-body guard and to BoxDirection. The
+        // declared hint is refreshed for the same reason it exists — a refused extrusion has to say
+        // where the profile lay.
         if (support.BasePlane is PlaneBase basePlane)
         {
             _sketchPlaneBase[command.SketchRef] = basePlane;

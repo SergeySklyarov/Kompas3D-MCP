@@ -135,10 +135,19 @@ public sealed partial class Api5Session
         unverified.Add(
             "view_geometry_not_checked — сервер не сверяет проекцию с исходной моделью: вид подтверждён "
             + "фактом присутствия, не совпадением геометрии");
-        if (rows.Any(row => row.GabaritMin is null))
+        // The system view («0») is the sheet's own frame, not a view the client asked for: it is left out
+        // of the measurement rather than reported as an unread gabarit on every call.
+        var placement = CheckViewsWithinSheet(
+            document,
+            rows.Where(row => row.Number != 0)
+                .Select(row => (ViewLabel(row.Name, row.Number), RowGabarit(row)))
+                .ToList());
+        if (placement.Check is not null)
         {
-            unverified.Add("view_gabarit_not_read — справка не даёт маршрута габарита вида (IView его не имеет)");
+            checks.Add(placement.Check);
         }
+
+        unverified.AddRange(placement.Notes);
 
         var verification = new VerificationDto(
             created.Count > 0 ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
@@ -286,6 +295,17 @@ public sealed partial class Api5Session
                 + "в мм ЛИСТА и при смене масштаба ядром не пересчитывается, поэтому геометрия этих "
                 + "размеров расходится с масштабированной проекцией; размеры надо поставить заново");
         }
+
+        // A moved or rescaled view can leave the sheet: the same rule as the creation runs after the edit.
+        var placement = CheckViewsWithinSheet(
+            document,
+            new[] { (ViewLabel(after.Name, after.Number), RowGabarit(after)) });
+        if (placement.Check is not null)
+        {
+            checks.Add(placement.Check);
+        }
+
+        unverified.AddRange(placement.Notes);
 
         var verification = new VerificationDto(
             allMatched ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
@@ -439,10 +459,11 @@ public sealed partial class Api5Session
 
         var rows = ReadViewRows(document, views);
         var notes = new List<string>();
-        if (rows.Any(row => row.GabaritMin is null))
-        {
-            notes.Add("view_gabarit_not_read — IView не публикует габарит; справка маршрута не даёт");
-        }
+        notes.AddRange(CheckViewsWithinSheet(
+            document,
+            rows.Where(row => row.Number != 0)
+                .Select(row => (ViewLabel(row.Name, row.Number), RowGabarit(row)))
+                .ToList()).Notes);
 
         return new ListDrawingViewsResult(rows, "IKompasDocument2D.ViewsAndLayersManager.Views", notes);
     }
@@ -2029,6 +2050,7 @@ public sealed partial class Api5Session
     {
         var association = view as IAssociationView;
         var address = SafeInt(() => view.Reference);
+        var gabarit = ReadViewGabarit(document, view);
         return new DrawingViewRowDto
         {
             ViewRef = References.Register("view", document.Id, document.Revision, address).Id,
@@ -2043,11 +2065,148 @@ public sealed partial class Api5Session
             HiddenLinesVisible = association is null ? null : SafeBool(() => association.HiddenLinesVisible),
             CenterLinesVisible = association is null ? null : SafeBool(() => association.CenterLinesVisible),
             ObjectCount = SafeInt(() => view.ObjectCount),
-            // IView publishes no gabarit: the field stays null and the note names it (LIMIT).
-            GabaritMin = null,
-            GabaritMax = null,
+            GabaritMin = gabarit is { Count: 4 } ? new[] { gabarit[0], gabarit[1] } : null,
+            GabaritMax = gabarit is { Count: 4 } ? new[] { gabarit[2], gabarit[3] } : null,
         };
     }
+
+    /// <summary>Read one view's gabarit rectangle in SHEET mm through the documented API5 chain.</summary>
+    /// <remarks>DOC: <c>iview_number.html</c> — <c>IView.Number</c> is «Номер вида», «0» reserved for the
+    /// system view; <c>ksdocument2d_ksgetviewreference.html</c> — <c>ksGetViewReference(number)</c> gives
+    /// «указатель на вид», 0 on failure; <c>ksdocument2d_ksgetobjgabaritrect.html</c> —
+    /// <c>ksGetObjGabaritRect(p, param)</c> fills <c>ksRectParam</c> «в координатах листа»;
+    /// <c>ksrectparam.html</c> — that block comes from <c>KompasObject.GetParamStruct</c>;
+    /// <c>ksrectparam_getpbot.html</c>/<c>_getptop.html</c> — its two corners are <c>ksMathPointParam</c>.
+    /// MEASURED: the rectangle covers a view's dimensions and the section designation (a dimension 60 mm
+    /// aside widened it), so one reading per view is enough — no second measurement of the inscriptions.
+    /// INVARIANT: <c>null</c> means «не прочитан» and the caller names it; it is never «внутри листа».
+    /// History: docs/decisions/drawings.md#view-sheet-placement</remarks>
+    private IReadOnlyList<double>? ReadViewGabarit(DocumentEntry document, IView view)
+    {
+        var number = SafeInt(() => view.Number);
+        if (number is null or <= 0)
+        {
+            // «0» is the system view, and a view the kernel has not numbered has no documented pointer.
+            return null;
+        }
+
+        try
+        {
+            var editor = RequireDrawing5(document);
+            var pointer = editor.ksGetViewReference(number.Value);
+            if (pointer == 0)
+            {
+                return null;
+            }
+
+            if (RequireApplication(document.ApplicationId).Application
+                    .GetParamStruct(KompasStructTypes.RectParam) is not ksRectParam rect)
+            {
+                return null;
+            }
+
+            if (editor.ksGetObjGabaritRect(pointer, rect) == 0)
+            {
+                return null;
+            }
+
+            var bottom = rect.GetpBot() as ksMathPointParam;
+            var top = rect.GetpTop() as ksMathPointParam;
+            try
+            {
+                // The pair is returned as {x0, y0, x1, y1}: DemandBlockPlacement reads the pairs in
+                // either order, so a kernel that swaps the corners still compares correctly.
+                return bottom is null || top is null
+                    ? null
+                    : new[] { bottom.x, bottom.y, top.x, top.y };
+            }
+            finally
+            {
+                ComApartment.Release(bottom);
+                ComApartment.Release(top);
+            }
+        }
+        catch (Exception ex) when (ex is COMException or KompasContractException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Named check «views inside the sheet's frames» over already-read view gabarits.</summary>
+    /// <remarks>DOC: <c>ilayoutsheet_getplaceinsideframes.html</c> — <c>GetPlaceInsideFrames</c> is
+    /// «свободное место внутри рамок». INVARIANT: the comparison is the SAME rule as the
+    /// technical-requirements block (<c>DemandBlockPlacement</c>), not a second copy of it. A gabarit that
+    /// was not read is a named gap, never «outside» and never a silent success. A view outside the frames
+    /// is a WARNING: the view exists and the client decides where to move it.
+    /// History: docs/decisions/drawings.md#view-sheet-placement</remarks>
+    private (NamedCheck? Check, List<string> Notes) CheckViewsWithinSheet(
+        DocumentEntry document, IReadOnlyList<(string Label, IReadOnlyList<double>? Gabarit)> views)
+    {
+        var notes = new List<string>();
+        var frames = ReadSheetFrames(document);
+        if (frames is not { Count: 4 })
+        {
+            notes.Add("views_within_sheet_not_measured — свободное место листа (GetPlaceInsideFrames) "
+                + "не прочитано");
+            return (null, notes);
+        }
+
+        var measured = 0;
+        var outside = new List<string>();
+        var observed = new List<string>();
+        var unread = new List<string>();
+        foreach (var (label, gabarit) in views)
+        {
+            if (gabarit is not { Count: 4 })
+            {
+                unread.Add(label);
+                continue;
+            }
+
+            measured++;
+            observed.Add(label + " " + DemandBlockPlacement.Describe(gabarit, frames, "вид"));
+            if (DemandBlockPlacement.WithinSheet(gabarit, frames) == false)
+            {
+                outside.Add(label);
+            }
+        }
+
+        if (measured == 0)
+        {
+            notes.Add("views_within_sheet_not_measured — габарит видов не прочитан "
+                + "(ksGetObjGabaritRect): " + string.Join(", ", unread));
+            return (null, notes);
+        }
+
+        if (unread.Count > 0)
+        {
+            notes.Add("view_gabarit_not_read — габарит не прочитан для вида: " + string.Join(", ", unread));
+        }
+
+        if (outside.Count > 0)
+        {
+            notes.Add("view_outside_sheet — вид за рамкой листа: " + string.Join(", ", outside)
+                + ". Вид создан; куда его сдвинуть, решает клиент.");
+        }
+
+        return (new NamedCheck(
+            "views_within_sheet",
+            outside.Count == 0,
+            string.Join("; ", observed),
+            "все виды внутри рамок листа"), notes);
+    }
+
+    /// <summary>Name of a view for a client-facing message: the kernel's name, else its number.</summary>
+    private static string ViewLabel(string? name, int? number) =>
+        string.IsNullOrWhiteSpace(name)
+            ? "вид №" + (number?.ToString(CultureInfo.InvariantCulture) ?? "?")
+            : "вид «" + name + "»";
+
+    /// <summary>The row's four gabarit numbers as corner pairs, or <c>null</c> when it was not read.</summary>
+    private static IReadOnlyList<double>? RowGabarit(DrawingViewRowDto row) =>
+        row.GabaritMin is { Count: 2 } min && row.GabaritMax is { Count: 2 } max
+            ? new[] { min[0], min[1], max[0], max[1] }
+            : null;
 
     /// <summary>Identifiers of the views currently in the collection, for a before/after comparison.</summary>
     private static List<string> ReadViewRefs(DocumentEntry document, IViews views)

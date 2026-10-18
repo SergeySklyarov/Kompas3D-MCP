@@ -7613,7 +7613,7 @@ def section_checks(client, rep, app_id, workdir):
         """Отрезки, которых в ПРЕЖНЕЙ выгрузке не было, — геометрия, добавленная разрезом.
 
         ЗАЧЕМ РАЗНОСТЬ. Окно на листе, где стоит разрез, пришлось бы угадывать по координатам
-        привязки: габарит вида `IView` не публикует. Разность двух выгрузок даёт контур разреза без
+        привязки и габариту вида. Разность двух выгрузок даёт контур разреза без
         догадки о его границах. LIMIT: отрезок, точно совпавший с уже существующим, в разность не
         попадает — контур разреза от этого не теряется, потому что он лежит в своей области листа.
         """
@@ -7834,6 +7834,46 @@ def section_checks(client, rep, app_id, workdir):
             f"{section.get('hatch_angle')}",
             {"section": section})
 
+    # ── Пункт 1A наряда DRAWING_SNAPSHOT_FIX: виды и разрез не выходят за лист ────────────────
+    # Габарит вида читается документированным маршрутом (IView.Number -> ksGetViewReference ->
+    # ksGetObjGabaritRect) и сверяется с GetPlaceInsideFrames ТЕМ ЖЕ правилом, что блок технических
+    # требований (DemandBlockPlacement): проверка views_within_sheet называет числа, вид за рамкой -
+    # предупреждение view_outside_sheet с именем вида, а не молчаливый успех и не отказ.
+    def verification_of(env):
+        return (env or {}).get("verification") or {}
+
+    def checks_of(env):
+        return {c.get("name"): c for c in (verification_of(env).get("checks") or [])}
+
+    # Вид, нарочно поставленный за рамку: предупреждение с именем вида, а не отказ. Положение
+    # возвращается на место - следующие строки снимают и выгружают этот же чертёж.
+    outside_target = next((row for row in associative
+                           if row.get("number") != 0 and row.get("name")), None)
+    if outside_target is None:
+        rep.add("DRW-07.view_outside_sheet", "Вид за рамкой листа назван предупреждением",
+                "NAMED", "ассоциативных видов с именем нет - двигать нечего")
+    else:
+        home_x, home_y = outside_target.get("x"), outside_target.get("y")
+        env, move_code = call("kompas_edit_view", {
+            "document_id": drawing, "expected_revision": drawing_rev,
+            "view_ref": outside_target.get("view_ref"), "x": -400.0, "y": -400.0})
+        moved_within = checks_of(env).get("views_within_sheet") or {}
+        outside_note = next((note for note in unverified_of(env)
+                             if "view_outside_sheet" in note), "")
+        drawing_rev = (env or {}).get("revision_after") or drawing_rev
+        rep.add("DRW-07.view_outside_sheet",
+                "Вид, поставленный за рамку листа, назван предупреждением view_outside_sheet с его "
+                "именем (вид создан, а не отказ)",
+                "PASS" if move_code is None and moved_within.get("passed") is False
+                and outside_target["name"] in outside_note else "FAIL",
+                "code={} проверка={} числа={!r} предупреждение={!r}".format(
+                    move_code, moved_within.get("passed"), moved_within.get("observed"), outside_note))
+        if home_x is not None and home_y is not None:
+            env, _back = call("kompas_edit_view", {
+                "document_id": drawing, "expected_revision": drawing_rev,
+                "view_ref": outside_target.get("view_ref"), "x": home_x, "y": home_y})
+            drawing_rev = (env or {}).get("revision_after") or drawing_rev
+
     view_ref = section.get("view_ref")
     if not view_ref:
         rep.add("DRW-07.read", "Чтение разреза", "NAMED", "разрез не построен — читать нечего")
@@ -7978,8 +8018,10 @@ def section_checks(client, rep, app_id, workdir):
             env, code = call("kompas_create_drawing_views", {
                 "document_id": dims_doc, "expected_revision": dims_rev,
                 "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
-                "x": 150.0, "y": 150.0})
+                "x": 40.0, "y": 120.0, "scale": 0.5})
             dims_rev = (env or {}).get("revision_after") or dims_rev
+            views_within = (checks_of(env).get("views_within_sheet") or {})
+            views_notes = unverified_of(env)
             env, _c = call("kompas_list_drawing_views", {"document_id": dims_doc})
             dims_candidates = [r for r in (result(env).get("views") or []) if r.get("view_ref")]
             for candidate in sorted(dims_candidates, key=lambda r: r.get("object_count") or 0,
@@ -7988,10 +8030,11 @@ def section_checks(client, rep, app_id, workdir):
                     "document_id": dims_doc, "expected_revision": dims_rev,
                     "base_view_ref": candidate.get("view_ref"), "mode": "simple",
                     "trace_model": [-10.0, 30.0, 130.0, 30.0], "look": "left",
-                    "x": 150.0, "y": 20.0, "scale": factor})
+                    "x": 150.0, "y": 210.0, "scale": factor})
                 state["steps"]["section"] = code or "ok"
                 if code is None:
                     state["section"] = (result(env).get("section") or {}).get("view_ref")
+                    state["within"] = checks_of(env).get("views_within_sheet") or {}
                     dims_rev = (env or {}).get("revision_after") or dims_rev
                     break
             if not state["section"]:
@@ -8014,6 +8057,31 @@ def section_checks(client, rep, app_id, workdir):
             state["read"] = {"linear": next((r for r in rows if r.get("kind") == "linear"), None),
                              "diametral": next((r for r in rows if r.get("kind") == "diametral"),
                                                None)}
+
+            # Пункт 1A наряда: чертёж пластины (виды + разрез + размеры) умещается в лист, поэтому
+            # габарит каждого вида обязан быть прочитан И признан лежащим внутри рамок. Числа - в
+            # подробностях строки, а не «PASS по факту вызова».
+            env, _c = call("kompas_list_drawing_views", {"document_id": dims_doc})
+            dims_rows = result(env).get("views") or []
+            dims_client = [row for row in dims_rows if row.get("number") != 0]
+            dims_measured = [row for row in dims_client
+                             if isinstance(row.get("gabarit_min"), list)
+                             and isinstance(row.get("gabarit_max"), list)]
+            section_within = state.get("within") or {}
+            outside_notes = [note for note in unverified_of(env) if "view_outside_sheet" in note]
+            rep.add("DRW-07.views_within_sheet",
+                    "Габарит видов прочитан (ksGetObjGabaritRect) и сверен с местом внутри рамок "
+                    "листа: чертёж пластины с видами, разрезом и размерами",
+                    "PASS" if views_within.get("passed") is True and dims_client
+                    and len(dims_measured) == len(dims_client) and not outside_notes else "FAIL",
+                    "виды={} разрез={} числа={!r} габарит_прочитан_у={}/{} за_рамкой={} "
+                    "предупреждение={}".format(
+                        views_within.get("passed"), section_within.get("passed"),
+                        section_within.get("observed"), len(dims_measured), len(dims_client),
+                        [row.get("name") for row in dims_client
+                         if row.get("gabarit_min") is None],
+                        outside_notes))
+
             call("kompas_close_document", {"document_id": dims_doc, "dirty_policy": "discard"})
 
         def reading(label, kind, name):
@@ -8472,8 +8540,9 @@ def drawing_checks(client, rep, app_id, workdir):
         переиспользовали `view_ref` прошлой ревизии у радиального и диаметрального размера —
         ссылка, которую строка ниже сама объявляла устаревшей).
 
-    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (шаг заказчика) и Trust не трогаются вовсе. Габарит вида не
-    читается: `IView` его не публикует, и строка это НАЗЫВАЕТ, а не оставляет пустым «как нулём».
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (шаг заказчика) и Trust не трогаются вовсе. Габарит вида
+    читается цепочкой `IView.Number` -> `ksGetViewReference` -> `ksGetObjGabaritRect`, а сверка с
+    рамками листа - строки `views_within_sheet` и `view_outside_sheet` группы разреза.
     Ассоциативность РАЗМЕРА к геометрии модели не подтверждается: справка документирует точки вида,
     а не привязку размера к топологии; строка называет это ограничение.
     """
@@ -8734,9 +8803,12 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if (len(assoc) < len(views_after)) else "FAIL",
             f"всего={len(views_after)} ассоциативных={len(assoc)} "
             f"(источники={[v.get('source_path') for v in views_after]})")
-    rep.add("DRW-02.views.list.read.gabarit_named",
-            "габарит вида НАЗВАН непрочитанным (IView не публикует), а не выдан за нуль",
-            "PASS" if views_after and all(v.get("gabarit_min") is None for v in views_after) else "FAIL",
+    rep.add("DRW-02.views.list.read.gabarit_read",
+            "габарит вида ПРОЧИТАН (ksGetObjGabaritRect по указателю ksGetViewReference), у системного "
+            "вида назван непрочитанным, а не выдан за нуль",
+            "PASS" if views_after and any(isinstance(v.get("gabarit_min"), list) for v in views_after)
+            and all(v.get("gabarit_min") is not None for v in views_after if v.get("number") != 0)
+            else "FAIL",
             f"gabarit_min={[v.get('gabarit_min') for v in views_after]}")
 
     # ── DRW-01.edit: изменение СУЩЕСТВУЮЩЕГО вида через документированный маршрут IView.Scale ──────
@@ -9626,7 +9698,8 @@ def drawing_checks(client, rep, app_id, workdir):
                 "PASS" if model_rebuild_ok else "FAIL", model_rebuild_line)
 
     # ========= ГЕОМЕТРИЧЕСКИЙ КОНТРОЛЬ =========
-    # У вида нет габарита (IView его не публикует). Объём источника измерен ВЫШЕ, ПОКА МОДЕЛЬ НЕ БЫЛА
+    # Габарит вида читается отдельной цепочкой (см. decisions#view-sheet-placement), здесь он не нужен.
+    # Объём источника измерен ВЫШЕ, ПОКА МОДЕЛЬ НЕ БЫЛА
     # ИЗМЕНЕНА (см. блок REBUILD); это факт ОБ ИСТОЧНИКЕ и он НЕ выдаётся за доказательство номинала
     # размера или обновления вида — у тех строк свои эталоны.
     # Линейный размер — единственный, чей номинал НЕЗАВИСИМ от записи: его значение сервер выводит из

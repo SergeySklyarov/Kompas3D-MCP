@@ -2165,6 +2165,11 @@ public static class KompasStructTypes
     /// <summary><c>StructType2DEnum.ko_BezierPointParam</c> — one node of a Bezier curve
     /// (<c>ksdocument2d_ksbezierpoint.html</c>): MEASURED 17.</summary>
     public const short BezierPointParam = 17;
+
+    /// <summary><c>StructType2DEnum.ko_RectParam</c> — the <c>ksRectParam</c> block of
+    /// <c>ksDocument2D.ksGetObjGabaritRect</c>: DOC <c>structtype2denum.html</c> lists
+    /// «ko_RectParam 15 ksRectParam».</summary>
+    public const short RectParam = 15;
 }
 
 /// <summary>Dynamic-array selectors for <c>KompasObject.GetDynamicArray(Int32)</c>, from the help page

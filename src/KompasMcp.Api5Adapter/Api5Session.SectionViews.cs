@@ -273,6 +273,17 @@ public sealed partial class Api5Session
             unverified.Add("hatch_not_read — параметры штриховки не прочитаны (IHatchParam)");
         }
 
+        var placement = CheckViewsWithinSheet(
+            document,
+            new[] { (ViewLabel(SafeString(() => view.Name), SafeInt(() => view.Number)),
+                ReadViewGabarit(document, view)) });
+        if (placement.Check is not null)
+        {
+            checks.Add(placement.Check);
+        }
+
+        unverified.AddRange(placement.Notes);
+
         var verification = new VerificationDto(
             VerificationLevel.StructureChecked,
             checks,
@@ -311,12 +322,27 @@ public sealed partial class Api5Session
                 new("objects_drawn", SectionTrace.Built(section.ObjectCount),
                     section.ObjectCount?.ToString(CultureInfo.InvariantCulture), "> 0"),
             };
+            var placement = CheckViewsWithinSheet(
+                document,
+                new[] { (ViewLabel(SafeString(() => view.Name), SafeInt(() => view.Number)),
+                    ReadViewGabarit(document, view)) });
+            if (placement.Check is not null)
+            {
+                checks.Add(placement.Check);
+            }
+
+            var unverified = new List<string>
+            {
+                "section_geometry_not_checked — контур разреза по выгрузке не сверяется",
+            };
+            unverified.AddRange(placement.Notes);
+
             var verification = new VerificationDto(
                 section.TraceView is { Count: > 0 }
                     ? VerificationLevel.StructureChecked
                     : VerificationLevel.CallReturned,
                 checks,
-                new List<string> { "section_geometry_not_checked — контур разреза по выгрузке не сверяется" });
+                unverified);
             return new GetSectionViewResult(section, verification);
         }
         finally
@@ -534,16 +560,30 @@ public sealed partial class Api5Session
                 new("objects_still_drawn", SectionTrace.Built(after.ObjectCount),
                     after.ObjectCount?.ToString(CultureInfo.InvariantCulture), "> 0"),
             };
+
+            // A moved or rescaled section can leave the sheet, so the same rule runs after the edit.
+            var placement = CheckViewsWithinSheet(
+                document,
+                new[] { (ViewLabel(SafeString(() => view.Name), SafeInt(() => view.Number)),
+                    ReadViewGabarit(document, view)) });
+            if (placement.Check is not null)
+            {
+                checks.Add(placement.Check);
+            }
+
+            var unverified = new List<string>
+            {
+                "section_geometry_not_checked — правка подтверждена перечитыванием трассы и числа "
+                + "объектов, а не сверкой контура",
+            };
+            unverified.AddRange(placement.Notes);
+
             var verification = new VerificationDto(
                 SectionTrace.Built(after.ObjectCount)
                     ? VerificationLevel.StructureChecked
                     : VerificationLevel.CallReturned,
                 checks,
-                new List<string>
-                {
-                    "section_geometry_not_checked — правка подтверждена перечитыванием трассы и числа "
-                    + "объектов, а не сверкой контура",
-                });
+                unverified);
             return new UpdateSectionViewResult(before, after, verification);
         }
         finally

@@ -37,8 +37,10 @@ public static class DemandBlockPlacement
             && blockTop <= frameTop + ToleranceMm;
     }
 
-    /// <summary>The block's and the sheet's bounds as one line for the client, in sheet mm.</summary>
-    public static string Describe(IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
+    /// <summary>The bounds as one line for the client, in sheet mm; <paramref name="what"/> names what
+    /// was measured («блок» for the technical-requirements block, «вид» for a drawing view).</summary>
+    public static string Describe(
+        IReadOnlyList<double> gabarits, IReadOnlyList<double> frames, string what = "блок")
     {
         var (blockLeft, blockRight) = Span(gabarits[0], gabarits[2]);
         var (blockBottom, blockTop) = Span(gabarits[1], gabarits[3]);
@@ -47,9 +49,9 @@ public static class DemandBlockPlacement
 
         return string.Format(
             CultureInfo.InvariantCulture,
-            "блок x[{0:F1}..{1:F1}] y[{2:F1}..{3:F1}], лист x[{4:F1}..{5:F1}] y[{6:F1}..{7:F1}]",
+            "{8} x[{0:F1}..{1:F1}] y[{2:F1}..{3:F1}], лист x[{4:F1}..{5:F1}] y[{6:F1}..{7:F1}]",
             blockLeft, blockRight, blockBottom, blockTop,
-            frameLeft, frameRight, frameBottom, frameTop);
+            frameLeft, frameRight, frameBottom, frameTop, what);
     }
 
     /// <summary>The four numbers that move the block into the free area's top-left corner, keeping the

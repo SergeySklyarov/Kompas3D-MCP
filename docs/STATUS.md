@@ -38,9 +38,11 @@
   **Проверки.** Тесты Debug - 21/21 по трём таблицам (выбор ветки снимка, сверка с рамками по четырём
   сторонам, блок требований); группа `--drawing-only` - PASS 83 / FAIL 0; группа `--section-only` -
   PASS 48 / NAMED 1 / FAIL 0 (строки `DRW-07.views_within_sheet` и `DRW-07.view_outside_sheet`);
-  стражи `lint-dashes` / `check-evidence-links` / `long-comment-blocks` - 0.
-  **Открыто.** Зачётный `--all` на Release чистого коммита запущен отдельно от сеанса; его итог
-  снимается следующим запуском.
+  стражи `lint-dashes` / `check-evidence-links` / `long-comment-blocks` - 0; зачётный `--all` на
+  ЧИСТОМ `b2aa35a` (`source_tree_dirty=false`) - **PASS 1677 / NAMED 6 / FAIL 0**, код 0, 32 минуты
+  (`scratch/mcp-smoke/runs/20261018-095656-all-b2aa35a`); состав строк совпал с прогоном на `506fc84`
+  плюс три новые строки габарита вида.
+  **Открыто.** Приёмка техлида.
 
 - **Разрезы модели на чертеже: простой и ступенчатый (`SECTION_VIEWS`, 17.10.2026, исполнен, ждёт
   приёмки).**

@@ -2455,32 +2455,38 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
-            Mutation("kompas_create_section_view", "Создать разрез модели на чертеже",
-                "Строит ассоциативный РАЗРЕЗ по существующему ассоциативному виду документированным "
-                + "маршрутом API7: ISymbols2DContainer.CutLines → ICutLines.Add() → ICutLine.Points / "
-                + "ArrowPos → IDrawingObject.Update, затем IViews.Add(vt_Section) → "
-                + "IAssociationView.BaseObject = линия, Section = FALSE (разрез), масштаб и точка "
-                + "привязки, снова Update (справка v24: isymbols2dcontainer_cutlines.html, "
-                + "icutlines_add.html, icutline_points.html, icutline_arrowpos.html, iviews_add.html, "
-                + "iassociationview_baseobject.html, iassociationview_section.html). СТУПЕНЧАТЫЙ разрез "
-                + "строится по линии с перегибами: трасса из четырёх и более точек, участки чередуются "
-                + "секущими и переходными, соседние перпендикулярны, все секущие параллельны. Трасса "
-                + "задаётся РОВНО в одной системе: trace_model (мм модели, переводятся проекцией "
-                + "опорного вида) либо trace_view (мм вида). Сторона стрелок — словом look (left/right) "
-                + "или вектором look_vector, перпендикулярным секущим. НЕ ПОДДЕРЖИВАЕТСЯ и названо прямо: "
-                + "сечение (Section = TRUE), ломаный и местный разрезы, задание буквы (ICutLine.Text "
-                + "только для чтения — букву присваивает КОМПАС), разрезы сборок. Ответ — разрез, "
-                + "ПЕРЕЧИТАННЫЙ из чертежа: трасса, сторона стрелок, буква, обозначение, масштаб, "
-                + "точка привязки, число объектов, шаг и угол штриховки. Пустой разрез (ObjectCount = 0) "
-                + "— отказ GEOMETRY_FAILED с откатом созданного, а не успех. Габарит разреза читается "
-                + "и сверяется с местом внутри рамок листа: views_within_sheet с числами, при выходе за "
-                + "рамку — предупреждение view_outside_sheet с именем вида (вид не переносится).",
+            Mutation("kompas_create_section_view", "Создать разрез или сечение модели на чертеже",
+                "Строит ассоциативный РАЗРЕЗ или СЕЧЕНИЕ по существующему ассоциативному виду "
+                + "документированным маршрутом API7: ISymbols2DContainer.CutLines → ICutLines.Add() → "
+                + "ICutLine.Points / ArrowPos → IDrawingObject.Update, затем IViews.Add(vt_Section) → "
+                + "IAssociationView.BaseObject = линия, Section по полю kind (cut — разрез, FALSE; "
+                + "section — сечение, TRUE), масштаб и точка привязки, снова Update (справка v24: "
+                + "isymbols2dcontainer_cutlines.html, icutlines_add.html, icutline_points.html, "
+                + "icutline_arrowpos.html, iviews_add.html, iassociationview_baseobject.html, "
+                + "iassociationview_section.html). Значение Section пишется ДО первого Update: после "
+                + "постройки оно не переключается (измерено). СТУПЕНЧАТАЯ трасса строится по линии с "
+                + "перегибами: трасса из четырёх и более точек, участки чередуются секущими и "
+                + "переходными, соседние перпендикулярны, все секущие параллельны. Трасса задаётся РОВНО "
+                + "в одной системе: trace_model (мм модели, переводятся проекцией опорного вида) либо "
+                + "trace_view (мм вида). Сторона стрелок — словом look (left/right) или вектором "
+                + "look_vector, перпендикулярным секущим. НЕ ПОДДЕРЖИВАЕТСЯ и названо прямо: ломаный и "
+                + "местный разрезы, задание буквы (ICutLine.Text только для чтения — букву присваивает "
+                + "КОМПАС), разрезы сборок. Ответ — вид, ПЕРЕЧИТАННЫЙ из чертежа: вид изображения "
+                + "(kind), значение Section, трасса, сторона стрелок, буква, обозначение, масштаб, точка "
+                + "привязки, число объектов, шаг и угол штриховки. Пустой вид (ObjectCount = 0) — отказ "
+                + "GEOMETRY_FAILED с откатом созданного, а не успех. Габарит вида читается и сверяется с "
+                + "местом внутри рамок листа: views_within_sheet с числами, при выходе за рамку — "
+                + "предупреждение view_outside_sheet с именем вида (вид не переносится).",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("base_view_ref", Sch.Ref("#/$defs/reference")),
                     ("mode", Sch.Enum("Режим разреза: simple — две точки, stepped — линия с перегибами.",
                         "simple", "stepped")),
+                    ("kind", Sch.Nullable(Sch.Enum(
+                        "Вид изображения: cut — разрез (по умолчанию), section — сечение. Пишется в "
+                        + "Section до первой постройки вида; после неё не переключается.",
+                        "cut", "section"))),
                     ("trace_model", Sch.Nullable(Sch.Arr(
                         Sch.Num("Координата точки трассы в миллиметрах модели."),
                         "Точки трассы в координатах МОДЕЛИ, подряд x0, y0, x1, y1, ... Число координат "
@@ -2512,22 +2518,28 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
-            Mutation("kompas_update_section_view", "Изменить разрез чертежа",
-                "Меняет трассу существующего разреза, сторону стрелок, масштаб и точку привязки: трасса "
-                + "пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), геометрия — в вид "
-                + "(IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update (справка v24: "
-                + "icutline_points.html, icutline_arrowpos.html, iview_scale.html, idrawingobject_update.html). "
-                + "Новая трасса проверяется ТЕМ ЖЕ правилом, что при создании, до записи. Ответ — тот же "
-                + "вид ДО и ПОСЛЕ, поэтому добавление вида не может сойти за правку. НЕ ПОДДЕРЖИВАЕТСЯ: "
-                + "переключение Section (разрез/сечение) — измерено, что у построенного вида значение не "
-                + "меняется и Update отвечает false; буква — ICutLine.Text только для чтения. После "
-                + "правки габарит разреза сверяется с местом внутри рамок листа: views_within_sheet с "
-                + "числами, при выходе за рамку — предупреждение view_outside_sheet с именем вида "
-                + "(вид не переносится).",
+            Mutation("kompas_update_section_view", "Изменить разрез или сечение чертежа",
+                "Меняет трассу существующего разреза или сечения, сторону стрелок, масштаб и точку "
+                + "привязки: трасса пишется в опорную линию вида (ICutLine.Points, ICutLine.ArrowPos), "
+                + "геометрия — в вид (IView.Scale/X/Y), каждая запись завершается IDrawingObject.Update "
+                + "(справка v24: icutline_points.html, icutline_arrowpos.html, iview_scale.html, "
+                + "idrawingobject_update.html). Новая трасса проверяется ТЕМ ЖЕ правилом, что при "
+                + "создании, до записи. Ответ — тот же вид ДО и ПОСЛЕ, поэтому добавление вида не может "
+                + "сойти за правку. НЕ ПОДДЕРЖИВАЕТСЯ и названо прямо: смена вида изображения — поле kind "
+                + "принимает только тот вид, который у вида уже есть; запрос другого вида — отказ "
+                + "CAPABILITY_UNAVAILABLE с подсказкой удалить вид и построить заново (измерено: у "
+                + "построенного вида Section не переключается, Update отвечает false); буква — "
+                + "ICutLine.Text только для чтения. После правки габарит вида сверяется с местом внутри "
+                + "рамок листа: views_within_sheet с числами, при выходе за рамку — предупреждение "
+                + "view_outside_sheet с именем вида (вид не переносится).",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("kind", Sch.Nullable(Sch.Enum(
+                        "Вид изображения, который у вида уже есть: cut или section. Другой вид — отказ "
+                        + "CAPABILITY_UNAVAILABLE: удалите вид и постройте заново.",
+                        "cut", "section"))),
                     ("trace_view", Sch.Nullable(Sch.Arr(
                         Sch.Num("Координата точки трассы в миллиметрах вида."),
                         "Новая трасса в координатах ВИДА, подряд x0, y0, ... Не задано — трасса не "
@@ -2542,8 +2554,9 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
-            ReadOnly("kompas_get_section_view", "Прочитать разрез чертежа",
-                "Читает вид-разрез по ссылке: тип вида, значение Section, масштаб, точку привязки, "
+            ReadOnly("kompas_get_section_view", "Прочитать разрез или сечение чертежа",
+                "Читает вид-разрез по ссылке: тип вида, вид изображения (kind: cut — разрез, section — "
+                + "сечение, по прочитанному Section), значение Section, масштаб, точку привязки, "
                 + "трассу линии разреза в мм вида, сторону стрелок, букву, обозначение (например "
                 + "«А-А(1:1)»), файл-источник, число объектов, шаг/угол/стиль штриховки. Линия берётся "
                 + "как СОБСТВЕННЫЙ опорный объект вида (IAssociationView.BaseObject), поэтому разрез, "
@@ -2559,12 +2572,12 @@ public static class ToolCatalog
                 WorkerCommands.GetSectionView,
                 requiresDocument: true),
 
-            Mutation("kompas_delete_section_view", "Удалить разрез чертежа",
+            Mutation("kompas_delete_section_view", "Удалить разрез или сечение чертежа",
                 "Удаляет вид-разрез документированным IDrawingObject.Delete() и, если не задан "
                 + "keep_cut_line, линию разреза — отдельным Delete(), потому что ядро вид удаляет, а "
                 + "линию оставляет (измерено). Ответ называет, что именно удалено: вид, линия, сколько "
                 + "видов осталось. Вид другого типа отвергается INVALID_ARGUMENT с названным типом до "
-                + "любого удаления.",
+                + "любого удаления. Сечение удаляется тем же маршрутом, что разрез.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -2583,7 +2596,9 @@ public static class ToolCatalog
                 + "справка v24: iview_number.html, ksdocument2d_ksgetviewreference.html, "
                 + "ksdocument2d_ksgetobjgabaritrect.html) и отдаётся полями gabarit_min/gabarit_max в мм "
                 + "листа; вид за рамкой назван предупреждением view_outside_sheet с его именем, а "
-                + "непрочитанный габарит — пометкой, а не нулём. Только чтение.",
+                + "непрочитанный габарит — пометкой, а не нулём. У вида-разреза называется вид "
+                + "изображения (kind: cut — разрез, section — сечение) по прочитанному Section. Только "
+                + "чтение.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.ListDrawingViews,
                 requiresDocument: true),

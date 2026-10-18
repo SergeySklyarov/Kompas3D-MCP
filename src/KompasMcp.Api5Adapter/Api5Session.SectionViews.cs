@@ -19,12 +19,25 @@ namespace KompasMcp.Api5Adapter;
 /// History: docs/decisions/drawings.md#section-route</remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>The documented cut: the picture behind the cutting plane, which is what a client asks for.</summary>
-    private const bool CutIsSection = false;
-
     public CreateSectionViewResult CreateSectionView(CreateSectionViewCommand command)
     {
         var document = RequireDrawing(command.DocumentId, command.ExpectedRevision);
+
+        if (!SectionKinds.Published(command.Kind))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Вид изображения '{command.Kind}' не документирован: опубликованы cut (разрез) и "
+                + "section (сечение).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["kind"] = command.Kind,
+                    ["supported_kinds"] = new[] { SectionKinds.CutWord, SectionKinds.SectionWord },
+                });
+        }
+
+        var sectionValue = SectionKinds.IsSection(command.Kind)!.Value;
 
         if (command.Letter is not null)
         {
@@ -77,7 +90,7 @@ public sealed partial class Api5Session
         var baseView = ResolveView(document, command.BaseViewRef);
         try
         {
-            return CreateSectionViewCore(document, command, mode, views, baseView);
+            return CreateSectionViewCore(document, command, mode, sectionValue, views, baseView);
         }
         finally
         {
@@ -90,6 +103,7 @@ public sealed partial class Api5Session
         DocumentEntry document,
         CreateSectionViewCommand command,
         SectionMode mode,
+        bool sectionValue,
         IViews views,
         IView baseView)
     {
@@ -192,7 +206,8 @@ public sealed partial class Api5Session
             view = views.Add(LtViewType.vt_Section);
             var added = (IAssociationView)view;
             added.BaseObject = line;
-            added.Section = CutIsSection;
+            // INVARIANT: the kind goes in BEFORE the first Update — after it the kernel ignores the write.
+            added.Section = sectionValue;
             if (command.ProjectionLink is bool linked)
             {
                 added.ProjectionLink = linked;
@@ -226,8 +241,8 @@ public sealed partial class Api5Session
             var rolledBack = TryDelete(view) && TryDelete(line);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "Разрез построен пустым (ObjectCount = 0): трасса не пересекает тело либо опорный вид "
-                + "не связан с моделью. " + (rolledBack
+                (sectionValue ? "Сечение" : "Разрез") + " построен пустым (ObjectCount = 0): трасса не "
+                + "пересекает тело либо опорный вид " + "не связан с моделью. " + (rolledBack
                     ? "Созданные объекты удалены, документ не изменён."
                     : "Удалить созданные объекты не удалось - проверьте вид и линию в чертеже вручную."),
                 RetryPolicy.SameOperationId,
@@ -254,8 +269,8 @@ public sealed partial class Api5Session
                 section.ObjectCount?.ToString(CultureInfo.InvariantCulture), "> 0"),
             new("trace_re_read", section.TraceView is { Count: > 0 },
                 (section.TraceView?.Count ?? 0).ToString(CultureInfo.InvariantCulture), "> 0"),
-            new("section_value", section.Section == CutIsSection,
-                section.Section?.ToString(), CutIsSection.ToString()),
+            new("section_value", section.Section == sectionValue,
+                section.Section?.ToString(), sectionValue.ToString()),
         };
 
         var unverified = new List<string>
@@ -425,13 +440,28 @@ public sealed partial class Api5Session
     {
         var document = RequireDrawing(command.DocumentId, command.ExpectedRevision);
         if (command.TraceView is null && command.Look is null && command.Scale is null
-            && command.X is null && command.Y is null)
+            && command.X is null && command.Y is null && command.Kind is null)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
-                "Не задано ни одно изменяемое свойство разреза: укажите trace_view, look, scale, x или y.",
+                "Не задано ни одно изменяемое свойство разреза: укажите trace_view, look, scale, x, y "
+                + "или kind.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["view_ref"] = command.ViewRef });
+        }
+
+        if (!SectionKinds.Published(command.Kind))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Вид изображения '{command.Kind}' не документирован: опубликованы cut (разрез) и "
+                + "section (сечение).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["kind"] = command.Kind,
+                    ["supported_kinds"] = new[] { SectionKinds.CutWord, SectionKinds.SectionWord },
+                });
         }
 
         if (command.Scale is double scale && scale <= 0)
@@ -479,6 +509,26 @@ public sealed partial class Api5Session
                     details: new Dictionary<string, object?> { ["view_ref"] = command.ViewRef });
 
             var before = ReadSection(document, view, line, mode: null);
+
+            // MEASURED: a built view keeps its picture — Section is honoured only at build time, and on a
+            // built view Update() answers false. Refused BEFORE any write, with the way out named.
+            if (!SectionKinds.SameKind(before.Section, command.Kind))
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"Вид «{command.ViewRef}» построен как {before.Kind}, а запрошен {command.Kind}: смена "
+                    + "вида изображения у построенного вида не поддерживается (измерено: Update отвечает "
+                    + "false, картинка не меняется). Удалите вид kompas_delete_section_view и постройте "
+                    + "заново kompas_create_section_view с нужным kind.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["view_ref"] = command.ViewRef,
+                        ["built_kind"] = before.Kind,
+                        ["requested_kind"] = command.Kind,
+                        ["partial_effects"] = false,
+                    });
+            }
 
             // INVARIANT: the new trace is checked by the same rule as the creation, BEFORE the write.
             if (command.TraceView is { Count: > 0 } trace)
@@ -559,6 +609,7 @@ public sealed partial class Api5Session
                     (command.TraceView?.Count ?? 0).ToString(CultureInfo.InvariantCulture)),
                 new("objects_still_drawn", SectionTrace.Built(after.ObjectCount),
                     after.ObjectCount?.ToString(CultureInfo.InvariantCulture), "> 0"),
+                new("kind_kept", after.Kind == before.Kind, after.Kind, before.Kind ?? "не прочитан"),
             };
 
             // A moved or rescaled section can leave the sheet, so the same rule runs after the edit.
@@ -684,6 +735,7 @@ public sealed partial class Api5Session
         var designation = view as IViewDesignation;
         var hatch = view as IHatchParam;
         var address = SafeInt(() => view.Reference);
+        var sectionValue = association is null ? (bool?)null : SafeBool(() => association.Section);
 
         // The line is the view's OWN base object when the caller did not create it in this call, so a
         // read of a section reopened from disk finds the same trace the creation wrote.
@@ -706,7 +758,8 @@ public sealed partial class Api5Session
                     SafeInt(() => cutLine.Reference)).Id,
             ViewType = SafeViewType(() => view.ViewType),
             Mode = modeText,
-            Section = association is null ? null : SafeBool(() => association.Section),
+            Section = sectionValue,
+            Kind = SectionKinds.Name(sectionValue),
             Scale = SafeDouble(() => view.Scale),
             X = SafeDouble(() => view.X),
             Y = SafeDouble(() => view.Y),

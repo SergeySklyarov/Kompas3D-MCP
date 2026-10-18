@@ -2051,12 +2051,13 @@ public sealed partial class Api5Session
         var association = view as IAssociationView;
         var address = SafeInt(() => view.Reference);
         var gabarit = ReadViewGabarit(document, view);
+        var viewType = SafeViewType(() => view.ViewType);
         return new DrawingViewRowDto
         {
             ViewRef = References.Register("view", document.Id, document.Revision, address).Id,
             Number = SafeInt(() => view.Number),
             Name = SafeString(() => view.Name),
-            ViewType = SafeViewType(() => view.ViewType),
+            ViewType = viewType,
             Scale = SafeDouble(() => view.Scale),
             X = SafeDouble(() => view.X),
             Y = SafeDouble(() => view.Y),
@@ -2065,6 +2066,10 @@ public sealed partial class Api5Session
             HiddenLinesVisible = association is null ? null : SafeBool(() => association.HiddenLinesVisible),
             CenterLinesVisible = association is null ? null : SafeBool(() => association.CenterLinesVisible),
             ObjectCount = SafeInt(() => view.ObjectCount),
+            // A section view is named by the value the document holds, not by what the server remembers.
+            Kind = viewType == "vt_Section" && association is not null
+                ? SectionKinds.Name(SafeBool(() => association.Section))
+                : null,
             GabaritMin = gabarit is { Count: 4 } ? new[] { gabarit[0], gabarit[1] } : null,
             GabaritMax = gabarit is { Count: 4 } ? new[] { gabarit[2], gabarit[3] } : null,
         };

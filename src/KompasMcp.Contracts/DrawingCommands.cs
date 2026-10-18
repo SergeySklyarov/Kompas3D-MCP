@@ -89,6 +89,10 @@ public sealed record DrawingViewRowDto
     /// <summary>Number of objects in the view (<c>IView.ObjectCount</c>).</summary>
     public int? ObjectCount { get; init; }
 
+    /// <summary>For a <c>vt_Section</c> view: <c>cut</c> or <c>section</c>, read from
+    /// <c>IAssociationView.Section</c>. Null for other views and for an unread value.</summary>
+    public string? Kind { get; init; }
+
     /// <summary>Gabarit of the view (min/max in drawing mm), when the documented route yields it.</summary>
     public IReadOnlyList<double>? GabaritMin { get; init; }
 
@@ -424,6 +428,11 @@ public sealed record CreateSectionViewCommand
     /// <summary><c>simple</c> (exactly two points) or <c>stepped</c> (four or more, alternating runs).</summary>
     public required string Mode { get; init; }
 
+    /// <summary>Which picture the view holds: <c>cut</c> (the default) or <c>section</c>. Written to
+    /// <c>IAssociationView.Section</c> before the first <c>Update</c>, which is the only moment the kernel
+    /// honours it. History: docs/decisions/drawings.md#section-kind</summary>
+    public string? Kind { get; init; }
+
     /// <summary>Trace points in MODEL millimetres, flat <c>x0, y0, x1, y1, ...</c>. Mutually exclusive
     /// with <see cref="TraceView"/>.</summary>
     public IReadOnlyList<double>? TraceModel { get; init; }
@@ -470,6 +479,10 @@ public sealed record SectionViewDto
 
     /// <summary>The value the view was built with: FALSE is the cut, TRUE the plain section.</summary>
     public bool? Section { get; init; }
+
+    /// <summary>The same value in the client's words: <c>cut</c> or <c>section</c>, read from
+    /// <see cref="Section"/>. Null when the value was not read.</summary>
+    public string? Kind { get; init; }
 
     public double? Scale { get; init; }
 
@@ -568,6 +581,11 @@ public sealed record UpdateSectionViewCommand
 
     /// <summary><c>left</c> or <c>right</c>; null leaves the arrows as they are.</summary>
     public string? Look { get; init; }
+
+    /// <summary>Kind the caller expects the view to have (<c>cut</c> or <c>section</c>). Asking for the
+    /// OTHER kind is refused: a built view keeps its picture (measured), so it must be deleted and built
+    /// again. Repeating the current kind is accepted and changes nothing.</summary>
+    public string? Kind { get; init; }
 
     /// <summary>New scale; null leaves it alone.</summary>
     public double? Scale { get; init; }

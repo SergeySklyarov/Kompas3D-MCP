@@ -234,3 +234,40 @@ public static class SectionTrace
             && ((d3 > 0d && d4 < 0d) || (d3 < 0d && d4 > 0d));
     }
 }
+
+/// <summary>Which picture a <c>vt_Section</c> view holds: the cut behind the plane, or the figure in it.</summary>
+/// <remarks>DOC: <c>ksassociationviewparam_section.html</c> — «TRUE - сечение, FALSE - разрез»;
+/// <c>iassociationview_section.html</c> — the API7 property of the same name, read and write.
+/// MEASURED: the value is honoured only when the view is first built; on a built view
+/// <c>Update()</c> answers false and the picture stays (<c>docs/decisions/drawings.md#section-route</c>).
+/// History: docs/decisions/drawings.md#section-kind</remarks>
+public static class SectionKinds
+{
+    public const string CutWord = "cut";
+
+    public const string SectionWord = "section";
+
+    /// <summary>The client's word for a kind; null means the cut, the value the kernel builds by default.</summary>
+    public static bool? IsSection(string? kind) => kind switch
+    {
+        null or CutWord => false,
+        SectionWord => true,
+        _ => null,
+    };
+
+    /// <summary>Whether a word is published at all. An unknown word is refused by name, never defaulted.</summary>
+    public static bool Published(string? kind) => kind is null or CutWord or SectionWord;
+
+    /// <summary>The client's word for a read <c>Section</c> value; null stays null, because an unread
+    /// value is not a kind.</summary>
+    public static string? Name(bool? section) => section switch
+    {
+        true => SectionWord,
+        false => CutWord,
+        _ => null,
+    };
+
+    /// <summary>Whether an edit may ask for this kind: only the one the view already has.</summary>
+    public static bool SameKind(bool? current, string? requested) =>
+        requested is null || IsSection(requested) == current;
+}

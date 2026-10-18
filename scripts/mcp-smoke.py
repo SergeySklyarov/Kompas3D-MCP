@@ -630,8 +630,8 @@ RUN_GROUPS = (
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
     ("section", "section", "section-acceptance.json",
-     "Приёмка DRW-07: разрезы модели на чертеже — простой и ступенчатый, чтение, правка, удаление "
-     "(наряд SECTION_VIEWS)"),
+     "Приёмка DRW-07: разрезы и сечения модели на чертеже — простой и ступенчатый, чтение, правка, "
+     "удаление (наряды SECTION_VIEWS и CROSS_SECTIONS)"),
     ("variables_material", "variables-material", "variables-material-acceptance.json",
      "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль "
      "variables-material-minimal-v1)"),
@@ -7515,9 +7515,11 @@ def section_checks(client, rep, app_id, workdir):
     обозначение, трасса, сторона стрелок, масштаб, число объектов. Строка `succeeded` без
     перечитывания доказательством не считается.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Контур разреза по выгрузке DXF не сверяется (пункт 4.1 наряда) и размеры на
-    разрезе не проставляются (пункт 4.3): обе строки называются отдельно, чтобы отсутствие не
-    читалось как успех. Снимок ЧЕРТЕЖА (пункт 4.6) снимается - строка `DRW-07.snapshot`.
+    ЧЕГО ЗДЕСЬ НЕТ. Размеры на СЕЧЕНИИ не проставляются (размеры проверяются на разрезе): строка
+    называется отдельно, чтобы отсутствие не читалось как успех. Снимок ЧЕРТЕЖА снимается - строка
+    `DRW-07.snapshot`. Сечение (kind = section) проверяется своим набором строк `DRW-07.section.*`:
+    Section = TRUE, меньше объектов, нет кромок за плоскостью, чтение вида изображения, отказ смены
+    вида правкой, масштаб, удаление.
     """
     def call(tool, args, timeout=300):
         payload = dict(args)
@@ -8228,6 +8230,7 @@ def section_checks(client, rep, app_id, workdir):
     contour_doc = result(env).get("document_id") or (env or {}).get("document_id")
     contour_rev = (env or {}).get("revision_after") or 1
     contour_ok_32 = None
+    contour_added = None
     if contour_doc:
         env, code = call("kompas_create_drawing_views", {
             "document_id": contour_doc, "expected_revision": contour_rev,
@@ -8266,6 +8269,152 @@ def section_checks(client, rep, app_id, workdir):
                 f"база={base_code} выгрузка={stepped_code} {contour_detail_32} "
                 f"штриховка={base_hatches}->{stepped_hatches} "
                 f"кандидатов={len(candidates)} попытки={contour_attempts}")
+
+    # ========= СЕЧЕНИЕ (Section = TRUE): ТОТ ЖЕ МАРШРУТ, ДРУГОЙ ВИД ИЗОБРАЖЕНИЯ =========
+    # MEASURED (docs/decisions/drawings.md#section-kind): вид изображения задаётся полем kind и пишется
+    # в Section ДО первой постройки вида. Сечение показывает только фигуру в плоскости, поэтому на той
+    # же трассе объектов МЕНЬШЕ, чем у разреза (27 против 37 на плите прибора), а кромок за плоскостью
+    # в выгрузке нет. Геометрия сверяется разностью выгрузок, как контур разреза выше: базовый чертёж с
+    # теми же стандартными видами и рабочий с сечением в ТОЙ ЖЕ точке листа, иначе координаты не
+    # сравнить.
+    section_path = os.path.join(workdir, "section-figure.cdw")
+    section_created, section_env, section_code = {}, None, "NO_DOC"
+    figure_doc, figure_rev, figure_added = None, 1, None
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "SectionFigure"})
+    figure_doc = result(env).get("document_id") or (env or {}).get("document_id")
+    figure_rev = (env or {}).get("revision_after") or 1
+    if figure_doc:
+        env, code = call("kompas_create_drawing_views", {
+            "document_id": figure_doc, "expected_revision": figure_rev,
+            "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+            "x": 150.0, "y": 150.0})
+        figure_rev = (env or {}).get("revision_after") or figure_rev
+        env, _c = call("kompas_list_drawing_views", {"document_id": figure_doc})
+        figure_candidates = [r for r in (result(env).get("views") or []) if r.get("view_ref")]
+        for candidate in sorted(figure_candidates, key=lambda r: r.get("object_count") or 0,
+                                reverse=True):
+            env, section_code = call("kompas_create_section_view", {
+                "document_id": figure_doc, "expected_revision": figure_rev,
+                "base_view_ref": candidate.get("view_ref"), "mode": "stepped", "kind": "section",
+                "trace_model": trace, "look": "left", "x": 150.0, "y": 60.0})
+            if section_code is None:
+                section_env = env
+                section_created = result(env).get("section") or {}
+                figure_rev = (env or {}).get("revision_after") or figure_rev
+                break
+
+    cut_objects = (contour_state.get("section") or {}).get("object_count")
+    section_objects = section_created.get("object_count")
+    rep.add("DRW-07.section.create",
+            "Ступенчатое СЕЧЕНИЕ (kind = section) построено и перечитано: Section = TRUE, вид "
+            "изображения section, объектов меньше, чем у разреза той же трассы",
+            "PASS" if section_code is None and section_created.get("section") is True
+            and section_created.get("kind") == "section" and (section_objects or 0) > 0
+            and cut_objects and section_objects < cut_objects else "FAIL",
+            f"code={section_code} kind={section_created.get('kind')} "
+            f"Section={section_created.get('section')} объектов={section_objects} "
+            f"у разреза={cut_objects} обозначение={section_created.get('designation')!r}")
+
+    value_check = (checks_of(section_env).get("section_value") or {}) if section_env else {}
+    rep.add("DRW-07.section.section_value",
+            "Проверка section_value сверяет ПРОЧИТАННОЕ Section с запрошенным TRUE, а не с константой",
+            "PASS" if value_check.get("passed") is True else "FAIL",
+            f"проверка={value_check.get('name')} прошла={value_check.get('passed')} "
+            f"прочитано={value_check.get('observed')!r} ожидалось={value_check.get('expected')!r}")
+
+    section_view_ref = section_created.get("view_ref")
+    if section_view_ref and figure_doc:
+        figure_segments, _fcirc, figure_hatches, figure_rev, figure_code = dxf_snapshot(
+            figure_doc, figure_rev, os.path.join(workdir, "section-figure.dxf"), save_to=section_path)
+        figure_added = geometry_added(base_segments, figure_segments)
+        # «Нет кромок за плоскостью» проверяется как ПОДМНОЖЕСТВО: сечение рисует ту же фигуру в
+        # плоскости, что и разрез, но без всего, что лежит за ней, поэтому его отрезки обязаны
+        # содержаться в отрезках разреза, и их обязано быть строго меньше.
+        cut_set = set(contour_added or [])
+        beyond_plane = [seg for seg in figure_added if seg not in cut_set]
+        rep.add("DRW-07.section.geometry",
+                "Геометрия сечения по разности выгрузок DXF: отрезки сечения содержатся в отрезках "
+                "разреза той же трассы и их строго меньше — кромок за плоскостью нет",
+                "PASS" if figure_added and contour_added and not beyond_plane
+                and len(figure_added) < len(contour_added) else "FAIL",
+                f"выгрузка={figure_code} отрезков_сечения={len(figure_added or [])} "
+                f"отрезков_разреза={len(contour_added or [])} за_плоскостью={len(beyond_plane)} "
+                f"пример={beyond_plane[:3]} штриховка={figure_hatches}")
+
+        env, code = call("kompas_get_section_view", {
+            "document_id": figure_doc, "view_ref": section_view_ref})
+        read = result(env).get("section") or {}
+        env, _c = call("kompas_list_drawing_views", {"document_id": figure_doc})
+        listed = [row for row in (result(env).get("views") or [])
+                  if row.get("view_ref") == section_view_ref]
+        listed_kind = listed[0].get("kind") if listed else None
+        rep.add("DRW-07.section.read",
+                "Вид изображения читается по Section: get_section_view и перечень видов называют "
+                "section, а не помнят его от создания",
+                "PASS" if code is None and read.get("kind") == "section"
+                and read.get("section") is True and listed_kind == "section" else "FAIL",
+                f"code={code} kind={read.get('kind')} Section={read.get('section')} "
+                f"перечень={listed_kind} строк={len(listed)}")
+
+        env, code = call("kompas_update_section_view", {
+            "document_id": figure_doc, "expected_revision": figure_rev,
+            "view_ref": section_view_ref, "kind": "cut"})
+        error = (env or {}).get("error") or {}
+        message = error.get("message") or ""
+        rep.add("DRW-07.section.kind_refused",
+                "Смена вида изображения правкой отвергается названным отказом с подсказкой удалить и "
+                "построить заново",
+                "PASS" if code == "CAPABILITY_UNAVAILABLE" and "постройте заново" in message else "FAIL",
+                f"code={code} текст={message[:160]!r}")
+
+        env, code = call("kompas_update_section_view", {
+            "document_id": figure_doc, "expected_revision": figure_rev,
+            "view_ref": section_view_ref, "scale": 0.5})
+        after = result(env).get("after") or {}
+        kept = (checks_of(env).get("kind_kept") or {}).get("passed")
+        rep.add("DRW-07.section.scale",
+                "Смена масштаба сечения применена к тому же виду и перечитана; вид изображения не "
+                "изменился",
+                "PASS" if code is None and abs((after.get("scale") or 0) - 0.5) < 1e-9
+                and after.get("kind") == "section" and kept is True
+                and (after.get("object_count") or 0) > 0 else "FAIL",
+                f"code={code} масштаб={after.get('scale')} kind={after.get('kind')} "
+                f"kind_kept={kept} объектов={after.get('object_count')}")
+        figure_rev = (env or {}).get("revision_after") or figure_rev
+
+        env, _c = call("kompas_list_drawing_views", {"document_id": figure_doc})
+        views_before_delete = len(result(env).get("views") or [])
+        env, code = call("kompas_delete_section_view", {
+            "document_id": figure_doc, "expected_revision": figure_rev,
+            "view_ref": section_view_ref})
+        removed = result(env)
+        rep.add("DRW-07.section.delete",
+                "Удаление сечения тем же маршрутом, что разрез: вид уходит, коллекция видов "
+                "уменьшается, линия разреза удалена вместе с видом",
+                "PASS" if code is None and removed.get("view_deleted") is True
+                and (removed.get("remaining_views") or 99) < views_before_delete
+                and removed.get("cut_line_deleted") is True else "FAIL",
+                f"code={code} вид={removed.get('view_deleted')} "
+                f"линия={removed.get('cut_line_deleted')} осталось={removed.get('remaining_views')}")
+        figure_rev = (env or {}).get("revision_after") or figure_rev
+
+        # Простая трасса сечения: тот же выбор kind, другой режим.
+        env, code = call("kompas_create_section_view", {
+            "document_id": figure_doc, "expected_revision": figure_rev,
+            "base_view_ref": figure_candidates[0].get("view_ref") if figure_candidates else None,
+            "mode": "simple", "kind": "section",
+            "trace_model": [-10.0, 30.0, 130.0, 30.0], "look": "left", "x": 150.0, "y": 20.0})
+        simple_section = result(env).get("section") or {}
+        rep.add("DRW-07.section.simple",
+                "Простое сечение по трассе из двух точек построено и перечитано",
+                "PASS" if code is None and simple_section.get("kind") == "section"
+                and simple_section.get("section") is True
+                and (simple_section.get("object_count") or 0) > 0 else "FAIL",
+                f"code={code} kind={simple_section.get('kind')} "
+                f"Section={simple_section.get('section')} "
+                f"объектов={simple_section.get('object_count')} "
+                f"обозначение={simple_section.get('designation')!r}")
 
     # Перестроение: модель меняется, вид перестраивается, разрез читается заново.
     if simple_view and drawing:

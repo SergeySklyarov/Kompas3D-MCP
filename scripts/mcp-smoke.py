@@ -8342,13 +8342,49 @@ def section_checks(client, rep, app_id, workdir):
                 f"отрезков_разреза={len(contour_added or [])} за_плоскостью={len(beyond_plane)} "
                 f"пример={beyond_plane[:3]} штриховка={figure_hatches}")
 
-        env, code = call("kompas_get_section_view", {
-            "document_id": figure_doc, "view_ref": section_view_ref})
-        read = result(env).get("section") or {}
-        env, _c = call("kompas_list_drawing_views", {"document_id": figure_doc})
+    else:
+        rep.add("DRW-07.section.geometry",
+                "Геометрия сечения по разности выгрузок DXF",
+                "NAMED", "сечение не построено - сверять нечего")
+
+    # Выгрузка DXF отменяет чтение коллекции видов ТОГО ЖЕ документа (docs/decisions/drawings.md,
+    # раздел про контур разреза), поэтому на своём чертеже она - последняя операция. Остальные строки
+    # идут на ВТОРОМ чертеже с теми же стандартными видами: выгрузки на нём нет.
+    env, code = call("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "SectionApi"})
+    api_doc = result(env).get("document_id") or (env or {}).get("document_id")
+    api_rev = (env or {}).get("revision_after") or 1
+    api_section, api_code, api_rows = {}, "NO_DOC", []
+    if api_doc:
+        env, code = call("kompas_create_drawing_views", {
+            "document_id": api_doc, "expected_revision": api_rev,
+            "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
+            "x": 150.0, "y": 150.0})
+        api_rev = (env or {}).get("revision_after") or api_rev
+        env, _c = call("kompas_list_drawing_views", {"document_id": api_doc})
+        api_rows = [row for row in (result(env).get("views") or []) if row.get("view_ref")]
+        api_bases = [row for row in api_rows if row.get("source_path")]
+        for candidate in sorted(api_rows, key=lambda r: r.get("object_count") or 0, reverse=True):
+            env, api_code = call("kompas_create_section_view", {
+                "document_id": api_doc, "expected_revision": api_rev,
+                "base_view_ref": candidate.get("view_ref"), "mode": "stepped", "kind": "section",
+                "trace_model": trace, "look": "left", "x": 150.0, "y": 60.0})
+            if api_code is None:
+                api_section = result(env).get("section") or {}
+                api_rev = (env or {}).get("revision_after") or api_rev
+                break
+
+    section_view_ref = api_section.get("view_ref")
+    if section_view_ref:
+        env, _c = call("kompas_list_drawing_views", {"document_id": api_doc})
+        # Ссылка при каждом чтении выдаётся заново, поэтому строка ищется по ТИПУ вида, а не по
+        # равенству строк ссылок: на этом чертеже вид-разрез один.
         listed = [row for row in (result(env).get("views") or [])
-                  if row.get("view_ref") == section_view_ref]
+                  if row.get("view_type") == "vt_Section"]
         listed_kind = listed[0].get("kind") if listed else None
+        env, code = call("kompas_get_section_view", {
+            "document_id": api_doc, "view_ref": section_view_ref})
+        read = result(env).get("section") or {}
         rep.add("DRW-07.section.read",
                 "Вид изображения читается по Section: get_section_view и перечень видов называют "
                 "section, а не помнят его от создания",
@@ -8358,7 +8394,7 @@ def section_checks(client, rep, app_id, workdir):
                 f"перечень={listed_kind} строк={len(listed)}")
 
         env, code = call("kompas_update_section_view", {
-            "document_id": figure_doc, "expected_revision": figure_rev,
+            "document_id": api_doc, "expected_revision": api_rev,
             "view_ref": section_view_ref, "kind": "cut"})
         error = (env or {}).get("error") or {}
         message = error.get("message") or ""
@@ -8369,7 +8405,7 @@ def section_checks(client, rep, app_id, workdir):
                 f"code={code} текст={message[:160]!r}")
 
         env, code = call("kompas_update_section_view", {
-            "document_id": figure_doc, "expected_revision": figure_rev,
+            "document_id": api_doc, "expected_revision": api_rev,
             "view_ref": section_view_ref, "scale": 0.5})
         after = result(env).get("after") or {}
         kept = (checks_of(env).get("kind_kept") or {}).get("passed")
@@ -8381,12 +8417,12 @@ def section_checks(client, rep, app_id, workdir):
                 and (after.get("object_count") or 0) > 0 else "FAIL",
                 f"code={code} масштаб={after.get('scale')} kind={after.get('kind')} "
                 f"kind_kept={kept} объектов={after.get('object_count')}")
-        figure_rev = (env or {}).get("revision_after") or figure_rev
+        api_rev = (env or {}).get("revision_after") or api_rev
 
-        env, _c = call("kompas_list_drawing_views", {"document_id": figure_doc})
+        env, _c = call("kompas_list_drawing_views", {"document_id": api_doc})
         views_before_delete = len(result(env).get("views") or [])
         env, code = call("kompas_delete_section_view", {
-            "document_id": figure_doc, "expected_revision": figure_rev,
+            "document_id": api_doc, "expected_revision": api_rev,
             "view_ref": section_view_ref})
         removed = result(env)
         rep.add("DRW-07.section.delete",
@@ -8397,12 +8433,12 @@ def section_checks(client, rep, app_id, workdir):
                 and removed.get("cut_line_deleted") is True else "FAIL",
                 f"code={code} вид={removed.get('view_deleted')} "
                 f"линия={removed.get('cut_line_deleted')} осталось={removed.get('remaining_views')}")
-        figure_rev = (env or {}).get("revision_after") or figure_rev
+        api_rev = (env or {}).get("revision_after") or api_rev
 
         # Простая трасса сечения: тот же выбор kind, другой режим.
         env, code = call("kompas_create_section_view", {
-            "document_id": figure_doc, "expected_revision": figure_rev,
-            "base_view_ref": figure_candidates[0].get("view_ref") if figure_candidates else None,
+            "document_id": api_doc, "expected_revision": api_rev,
+            "base_view_ref": api_bases[0].get("view_ref") if api_bases else None,
             "mode": "simple", "kind": "section",
             "trace_model": [-10.0, 30.0, 130.0, 30.0], "look": "left", "x": 150.0, "y": 20.0})
         simple_section = result(env).get("section") or {}

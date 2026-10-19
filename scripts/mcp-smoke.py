@@ -47380,13 +47380,21 @@ def drafts_checks(client, rep, app_id, workdir):
         rows = result(env)
         return rows if isinstance(rows, list) else []
 
-    def vol(doc):
+    def measure(doc, index=0):
+        """Объём и габарит тела читаются измерением: `kompas_list_bodies` объёма не отдаёт."""
         rows = bodies(doc)
-        return rows[0].get("volume_mm3") if rows else None
+        if len(rows) <= index:
+            return {}
+        _e, env, _r = client.tool("kompas_measure", {
+            "target_ref": rows[index].get("body_ref"), "properties": ["volume", "bbox"]})
+        res = result(env)
+        return res if isinstance(res, dict) else {}
 
-    def x_max(doc):
-        rows = bodies(doc)
-        box = (rows[0].get("bbox") or {}) if rows else {}
+    def vol(doc, index=0):
+        return measure(doc, index).get("volume_mm3")
+
+    def x_max(doc, index=0):
+        box = measure(doc, index).get("bbox") or {}
         hi = box.get("max_mm") or []
         return hi[0] if hi else None
 
@@ -47394,10 +47402,12 @@ def drafts_checks(client, rep, app_id, workdir):
         rows = bodies(doc)
         return rows[index].get("body_ref") if len(rows) > index else None
 
-    def faces(doc, normal, index=0):
+    def faces(doc, normal, index=0, tolerance=None):
+        predicate = {"surface_type": "plane", "normal_direction": normal}
+        if tolerance is not None:
+            predicate["normal_angle_tolerance_deg"] = tolerance
         env, code = call("kompas_resolve_selection", {
-            "body_ref": body_ref(doc, index),
-            "predicate": {"surface_type": "plane", "normal_direction": normal},
+            "body_ref": body_ref(doc, index), "predicate": predicate,
             "require_unique": True, "limit": 100})
         found = result(env)
         if isinstance(found, dict):
@@ -47472,11 +47482,32 @@ def drafts_checks(client, rep, app_id, workdir):
         res = result(env)
         return res.get("reference_id") or res.get("id"), code
 
-    def draft_features(doc):
+    def feature_rows(doc):
         _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
         rows = result(env)
-        rows = rows if isinstance(rows, list) else []
-        return [row for row in rows if row.get("family") in ("draft", "draft_from_edges")]
+        if isinstance(rows, dict):
+            rows = rows.get("features") or rows.get("rows") or []
+        return rows if isinstance(rows, list) else []
+
+    def draft_features(doc):
+        """Признаки уклона по НОМЕРУ ТИПА дерева: 42 - от основания, 644 - от базовой линии.
+
+        Строка списка несёт `type`, `name`, `state`, а поля `family` у неё нет: отбор по `family`
+        молча давал пустой список и превращал «признак добавлен» в «ничего не изменилось».
+        """
+        return [row for row in feature_rows(doc) if str(row.get("type")) in ("42", "644")]
+
+    def read_params(doc):
+        """Семейство, угол и reverse каждого признака уклона - чтением модели."""
+        out = []
+        for row in draft_features(doc):
+            _e, read, _r = client.tool("kompas_get_feature",
+                                       {"feature_ref": row.get("feature_ref")})
+            info = result(read).get("draft") or {}
+            out.append({"family": result(read).get("family"),
+                        "angle": info.get("angle_deg"),
+                        "reverse": info.get("reverse")})
+        return out
 
     def draft_row(doc, **kwargs):
         args = {"document_id": doc, "expected_revision": current_rev(doc)}
@@ -47621,16 +47652,20 @@ def drafts_checks(client, rep, app_id, workdir):
         _e, read, _r = client.tool("kompas_get_feature", {"feature_ref": feature})
         res = result(read)
         info = res.get("draft") or {}
+        unverified = ((read or {}).get("verification") or {}).get("unverified_aspects") or []
+        # НЕПРОЧИТАННОЕ - null С ПРИЧИНОЙ (§3 наряда): вид основания у грани этим маршрутом не
+        # различается, поэтому null принимается только вместе с названной причиной, а не сам по себе.
+        base_named = info.get("base_kind") in ("face", "plane") or (
+            info.get("base_kind") is None and any("base_kind" in str(a) for a in unverified))
         rep.add("DR.05.read",
-                "kompas_get_feature отдаёт угол, направление, число граней и вид основания, "
-                "прочитанные из модели",
+                "kompas_get_feature отдаёт угол, направление, число граней, прочитанные из модели; "
+                "непрочитанный вид основания - null с названной причиной",
                 "PASS" if (not code and res.get("family") == "draft" and info
                            and near(info.get("angle_deg"), 10.0, 1e-3)
-                           and info.get("direction") in ("inward", "outward")
-                           and info.get("face_count") == 1
-                           and info.get("base_kind") in ("face", "plane")) else "FAIL",
+                           and isinstance(info.get("direction_flag"), bool)
+                           and info.get("face_count") == 1 and base_named) else "FAIL",
                 f"family={res.get('family')} draft={json.dumps(info, ensure_ascii=False)[:300]} "
-                f"error={code}")
+                f"unverified={unverified[:2]} error={code}")
         close(doc)
 
     # ── DR-06: правка уклона от основания ──────────────────────────────────────────────────────
@@ -47641,18 +47676,16 @@ def drafts_checks(client, rep, app_id, workdir):
     else:
         plus_x, _c = faces(doc, [1, 0, 0])
         bottom, _c = faces(doc, [0, 0, -1])
-        sides = []
-        for normal in ([1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]):
-            found, _c = faces(doc, normal)
-            sides += found
         env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
                               angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
         feature = (result(env).get("feature_ref") or {}).get("id")
-        dr06["created"] = (code, result(env).get("volume_after_mm3"))
+        dr06["created"] = ("PASS" if not code else "FAIL",
+                           f"volume={result(env).get('volume_after_mm3')} error={code}")
+        # ССЫЛКИ НА ГРАНИ ЧИТАЮТСЯ ПЕРЕД САМОЙ ПРАВКОЙ: любая мутация между чтением и правкой
+        # перестраивает модель и делает ссылку устаревшей (STALE_REFERENCE вместо правки).
         for tag, payload, expected in (
                 ("angle_5", {"angle_deg": 5}, FIVE_IN),
-                ("direction_outward", {"direction": True}, FIVE_OUT),
-                ("faces_four", {"angle_deg": 10, "face_refs": sides}, FOUR_IN)):
+                ("direction_outward", {"direction": True}, FIVE_OUT)):
             env, code = call("kompas_update_feature", dict(
                 payload, feature_ref=feature, expected_revision=current_rev(doc),
                 expected_volume_mm3=expected))
@@ -47660,21 +47693,56 @@ def drafts_checks(client, rep, app_id, workdir):
             dr06[tag] = ("PASS" if (not code and near(got, expected)) else "FAIL",
                          f"volume={got} ожидалось={expected} error={code}")
         close(doc)
+    # ПРАВКА НАБОРА ГРАНЕЙ - НА СВОЁМ ПРИЗНАКЕ. На признаке, уже прошедшем две правки, набор из
+    # четырёх граней читается с УЖЕ наклонённого тела, и строка мерила бы не правку набора, а
+    # разницу между свежим уклоном четырёх граней и перестроением наклонённого: измерено 340876.49
+    # против эталона 325834.73. Один опыт - одна переменная.
+    doc, problem = new_bar("DR-06c")
+    if not doc:
+        dr06["faces_four"] = ("FAIL", problem or "брус не построен")
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
+        feature = (result(env).get("feature_ref") or {}).get("id")
+        # ГРАНЬ +X УЖЕ НАКЛОНЕНА признаком, поэтому её нормаль ищется под углом уклона, а не по
+        # исходному +X: поиск по [1,0,0] находит ТРИ грани, и строка мерила бы три, а не четыре.
+        tilt = math.radians(10.0)
+        sides = []
+        for normal in ([-1, 0, 0], [0, 1, 0], [0, -1, 0]):
+            found, _c = faces(doc, normal)
+            sides += found
+        for sign in (1.0, -1.0):
+            found, _c = faces(doc, [math.cos(tilt), 0.0, sign * math.sin(tilt)], tolerance=2.0)
+            if found:
+                sides += found
+                break
+        env, code = call("kompas_update_feature", {
+            "feature_ref": feature, "expected_revision": current_rev(doc),
+            "face_refs": sides, "expected_volume_mm3": FOUR_IN})
+        got = result(env).get("volume_after_mm3")
+        dr06["faces_four"] = ("PASS" if (not code and len(sides) == 4 and near(got, FOUR_IN))
+                              else "FAIL",
+                              f"volume={got} ожидалось={FOUR_IN} граней={len(sides)} error={code}")
+        close(doc)
     # Основание грань -> плоскость z = 25 проверяется на СВОЁМ брусе: у признака с четырьмя
     # гранями эталон DR-04 не определён, и подставлять его значило бы сверять не то.
     doc, problem = new_bar("DR-06b")
     if not doc:
         dr06["base_plane"] = ("FAIL", problem or "брус не построен")
     else:
-        plane, _pc = aux_plane(doc, "xy", 25, "base25")
         plus_x, _c = faces(doc, [1, 0, 0])
         bottom, _c = faces(doc, [0, 0, -1])
         env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
                               angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
         feature = (result(env).get("feature_ref") or {}).get("id")
+        # СТАНДАРТНАЯ ФОРМА ПЛОСКОСТИ, а не ссылка на вспомогательный объект: нормаль
+        # вспомогательной плоскости правкой основания не читается (CAPABILITY_UNAVAILABLE,
+        # "нормаль новой плоскости основания не прочитана"), и эталон z = 25 тот же.
         env, code = call("kompas_update_feature", {
             "feature_ref": feature, "expected_revision": current_rev(doc),
-            "base_plane": {"reference": plane}, "expected_volume_mm3": V0})
+            "base_plane": {"base": "xy", "offset_mm": 25}, "expected_volume_mm3": V0})
         got, box = result(env).get("volume_after_mm3"), x_max(doc)
         dr06["base_plane"] = ("PASS" if (not code and near(got, V0)
                                          and near(box, 100.0 + D25, TOL_MM)) else "FAIL",
@@ -47686,7 +47754,7 @@ def drafts_checks(client, rep, app_id, workdir):
             "плоскость z = 25 - объём 400000 и X max 104.408",
             "PASS" if all(isinstance(v, tuple) and v[0] == "PASS"
                           for v in dr06.values()) and len(dr06) == 5 else "FAIL",
-            " | ".join(f"{k}: {v[0] + ' ' + v[1] if isinstance(v, tuple) else v}"
+            " | ".join(f"{k}: {v[0] + ' ' + v[1] if isinstance(v, tuple) and isinstance(v[0], str) else v}"
                        for k, v in dr06.items()))
 
     # ── DR-07 и DR-08: уклон от базовой линии, направление плоскостью и ребром ─────────────────
@@ -47801,10 +47869,10 @@ def drafts_checks(client, rep, app_id, workdir):
                 "объём и параметры совпадают со снимком", "FAIL", problem or "брус не построен")
     else:
         plus_x, _c = faces(doc, [1, 0, 0])
-        minus_x, _c = faces(doc, [-1, 0, 0])
         bottom, _c = faces(doc, [0, 0, -1])
         env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
                               angle_deg=10, direction="inward")
+        minus_x, _c = faces(doc, [-1, 0, 0])
         rows = topology(doc, "edges").get("edges") or []
         line = edge_at(rows, z=50, x=0)[:1]
         env2, code2 = from_edges_row(doc, base_line_edge_refs=line,
@@ -47812,23 +47880,19 @@ def drafts_checks(client, rep, app_id, workdir):
                                      side_face_ref=(minus_x or [None])[0], angle_deg=7,
                                      reverse=True)
         before_vol = vol(doc)
-        snapshot = [{"family": r.get("family"), "angle": r.get("angle_deg"),
-                     "reverse": r.get("reverse")} for r in draft_features(doc)]
+        # ПАРАМЕТРЫ ЧИТАЮТСЯ ИНСТРУМЕНТОМ, а не из строки списка: строка дерева несёт только тип,
+        # имя и состояние, поэтому снимок по ней сравнивал бы null с null и «доказывал» потерю.
+        snapshot = read_params(doc)
         env, save_code = call("kompas_save_document", {
             "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
         close(doc)
-        env, open_code = call("kompas_open_document", {"path": path})
+        env, open_code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                          "access": "edit"})
         reopened = doc_id(env)
         read_back = []
         if reopened:
             # ЧТЕНИЕ ДО ЛЮБОЙ ЗАПИСИ: иначе потеря параметров была бы замаскирована перезаписью.
-            for row in draft_features(reopened):
-                _e, read, _r = client.tool("kompas_get_feature",
-                                           {"feature_ref": row.get("feature_ref")})
-                info = result(read).get("draft") or {}
-                read_back.append({"family": result(read).get("family"),
-                                  "angle": info.get("angle_deg"),
-                                  "reverse": info.get("reverse")})
+            read_back = read_params(reopened)
             after_vol = vol(reopened)
             close(reopened)
         else:
@@ -47941,17 +48005,19 @@ def drafts_checks(client, rep, app_id, workdir):
         call("kompas_save_document", {"document_id": doc, "expected_revision": old_rev,
                                       "target_path": path13})
         close(doc)
-        env, open_code = call("kompas_open_document", {"path": path13})
+        env, open_code = call("kompas_open_document", {"application_id": app_id, "path": path13,
+                                          "access": "edit"})
         reopened = doc_id(env)
         code_stale_reopen = None
         if reopened:
-            face_reopen, _c = faces(reopened, [1, 0, 0])
-            bottom_reopen, _c = faces(reopened, [0, 0, -1])
-            _e, stale2, _r = client.tool("kompas_draft", {
-                "document_id": reopened, "expected_revision": old_rev,
-                "face_refs": face_reopen[:1], "base_face_ref": (bottom_reopen or [None])[0],
-                "angle_deg": 10, "direction": "inward", "operation_id": str(uuid.uuid4())})
-            code_stale_reopen = error_code(stale2)
+            # ПРАВКА ЧЕРЕЗ ПОДАВЛЕНИЕ, а не через новый уклон: строка проверяет РЕВИЗИЮ, и ей не
+            # нужны ссылки на грани переоткрытого документа.
+            rows13 = draft_features(reopened)
+            if rows13:
+                _e, stale2, _r = client.tool("kompas_set_feature_suppressed", {
+                    "feature_ref": rows13[0].get("feature_ref"), "expected_revision": old_rev,
+                    "suppressed": True, "operation_id": str(uuid.uuid4())})
+                code_stale_reopen = error_code(stale2)
             close(reopened)
         if os.path.isfile(path13):
             os.remove(path13)

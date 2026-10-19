@@ -4960,6 +4960,11 @@ ksNurbs/ksNurbsPoint`, `GetFragment()`; `ksPolylineParam.closed/style/GetpMathPo
 - `cut` с эскизом на нижней грани (z=0), `directionType=1` → снято 392,69908169872417 — ПО нормали;
 - `base` `directionType=0` → габарит z=[0,10]; `directionType=1` → z=[−10,0]; `dtBoth` → z=[−10,10].
 
+- **Жизненный цикл (DR.9).** Признак виден в дереве API5 элементом `type = 42` рядом с выдавливанием
+  `25`; после `SaveAs` → `close` → `Open` дерево то же, объём совпал до 1e-9, `angle` прочитан `10`,
+  `direction` - `TRUE`. Нового адреса признаку не нужно: существующие `get_feature`,
+  `update_feature`, `set_feature_suppressed`, `delete_feature`, `list_features` применимы как есть.
+
 **Следствие для контракта.** `direction: positive` в MCP — НЕ одно геометрическое направление для всех
 операций: адаптер сводит его в `dtNormal` (как и UI КОМПАС), поэтому у `cut` оно означает «против
 нормали эскиза», а у `base`/`boss` — «по нормали». Решение заказчика (09.10.2026, вариант B) —

@@ -60,6 +60,7 @@ internal sealed class DraftsProbe
             FaceBaseIncline(direction: false);
             DraftFromEdges(reverse: false);
             DraftFromEdges(reverse: true);
+            Lifecycle();
         }
         catch (Exception ex)
         {
@@ -315,6 +316,172 @@ internal sealed class DraftsProbe
         document.RebuildDocument();
         Report(step, part, updated, "базовая линия, reverse=" + (reverse ? "TRUE" : "FALSE"));
         CloseQuietly(document);
+    }
+
+    /// <summary>DR.9: the feature's own life - is it visible in the API5 feature tree, does it survive
+    /// save → close → reopen, and are its parameters readable from the reopened file?</summary>
+    /// <remarks>The tree walk is <c>EntityCollection(o3d_OperationElement)</c> by TYPE, not by name:
+    /// the name is not an identifier (measured on the chamfer family). A feature the tree does not show
+    /// cannot be read, suppressed or deleted by the existing tools, so this decides whether the adapter
+    /// may register a reference to it at all.</remarks>
+    private void Lifecycle()
+    {
+        var step = _report.Begin("DR.9", "Жизненный цикл: дерево API5, save → close → reopen",
+            "Виден ли уклон в дереве и переживает ли он переоткрытие?");
+        var document = BuildBar("DR.2", "Брус 100×80×50 выдавливанием");
+        if (document is null)
+        {
+            step.Fail("брус не построен.");
+            return;
+        }
+
+        var part = (ksPart)document.GetPart(-1);
+        var face = PlusXFace(part);
+        if (face is null || part.GetDefaultEntity(PlaneXoy) is not ksEntity basePlane)
+        {
+            step.Fail("грань +X или плоскость XOY не получены.");
+            return;
+        }
+
+        if (part.NewEntity(InclineType) is not ksEntity entity
+            || entity.GetDefinition() is not ksInclineDefinition incline
+            || incline.FaceArray() is not { } faceArray)
+        {
+            step.Fail("Определение уклона или массив граней не получены.");
+            return;
+        }
+
+        Late.Call(faceArray, "Add", face.Element);
+        incline.SetPlane(basePlane);
+        incline.angle = AngleDeg;
+        incline.direction = true;
+        if (Api5.SafeBool(entity.Create) != true)
+        {
+            step.Fail("Create() вернул false - жизненный цикл проверять не на чем.");
+            return;
+        }
+
+        document.RebuildDocument();
+        var volumeBuilt = Api5.Volume(part);
+        step.Data["volume_built"] = volumeBuilt;
+        step.Data["tree_before"] = TreeSummary(part);
+        step.Observe("дерево после создания: " + step.Data["tree_before"]);
+
+        var directory = Path.Combine(_options.WorkDir, "drafts");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "draft-lifecycle.m3d");
+        if (document.SaveAs(path) != true)
+        {
+            step.Fail("SaveAs(" + path + ") не дал true.");
+            return;
+        }
+
+        document.close();
+        var document3D = (ksDocument3D)_app.Document3D();
+        if (Api5.SafeBool(() => document3D.Open(path)) != true)
+        {
+            step.Fail("переоткрытие " + path + " не удалось.");
+            return;
+        }
+
+        // Open does not make the document active (measured in probe M): the active one is asked of the app.
+        var reopened = Api5.SafeObject(() => _app.GetType().InvokeMember("ActiveDocument",
+            System.Reflection.BindingFlags.GetProperty, null, _app, null)) as ksDocument3D ?? document3D;
+        var reopenedPart = (ksPart)reopened.GetPart(-1);
+        var volumeReopened = Api5.Volume(reopenedPart);
+        var treeAfter = TreeSummary(reopenedPart);
+        step.Data["volume_reopened"] = volumeReopened;
+        step.Data["tree_after"] = treeAfter;
+        step.Observe("дерево после переоткрытия: " + treeAfter);
+
+        var found = FindIncline(reopenedPart);
+        double? angleRead = null;
+        bool? directionRead = null;
+        if (found is not null && found.GetDefinition() is ksInclineDefinition reread)
+        {
+            angleRead = Api5.SafeDouble(() => reread.angle);
+            directionRead = Api5.SafeBool(() => reread.direction);
+        }
+
+        step.Data["angle_read"] = angleRead;
+        step.Data["direction_read"] = directionRead;
+        step.Observe("перечитано из файла: angle=" + Api5.Num(angleRead)
+            + " direction=" + Api5.Raw(directionRead));
+
+        var volumeKept = volumeBuilt is double vb && volumeReopened is double vr
+            && Math.Abs(vb - vr) <= VolumeTolerance;
+        var angleKept = angleRead is double a && Math.Abs(a - AngleDeg) <= 1e-6;
+        if (found is null)
+        {
+            step.Fail("признак type=42 не найден в дереве после переоткрытия: " + treeAfter);
+        }
+        else if (!volumeKept || !angleKept)
+        {
+            step.Fail("после переоткрытия объём " + Api5.Num(volumeReopened) + " (было "
+                + Api5.Num(volumeBuilt) + "), угол " + Api5.Num(angleRead));
+        }
+        else
+        {
+            step.Pass("дерево видит type=42, после переоткрытия объём и угол те же");
+        }
+
+        CloseQuietly(reopened);
+    }
+
+    /// <summary>The last operation element of type <c>o3d_incline</c> in the API5 tree.</summary>
+    private static ksEntity? FindIncline(ksPart part)
+    {
+        try
+        {
+            if (part.EntityCollection(Api5.OperationElement)
+                is not ksEntityCollection collection)
+            {
+                return null;
+            }
+
+            ksEntity? found = null;
+            for (var i = 0; i < (Api5.SafeInt(collection.GetCount) ?? 0); i++)
+            {
+                if (collection.GetByIndex(i) is ksEntity element && element.type == InclineType)
+                {
+                    found = element;
+                }
+            }
+
+            return found;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Types of the operation elements in the tree, in walk order.</summary>
+    private static string TreeSummary(ksPart part)
+    {
+        try
+        {
+            if (part.EntityCollection(Api5.OperationElement)
+                is not ksEntityCollection collection)
+            {
+                return "<дерево недоступно>";
+            }
+
+            var types = new List<string>();
+            for (var i = 0; i < (Api5.SafeInt(collection.GetCount) ?? 0); i++)
+            {
+                if (collection.GetByIndex(i) is ksEntity element)
+                {
+                    types.Add(element.type.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+
+            return types.Count == 0 ? "<пусто>" : string.Join(", ", types);
+        }
+        catch (Exception)
+        {
+            return "<дерево не читается>";
+        }
     }
 
     /// <summary>Volume after the mutation, the analytic pair it matches, and the verdict. The step

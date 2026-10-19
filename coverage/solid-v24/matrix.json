@@ -88,6 +88,11 @@
         "artifact": "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
         "title": "Внешние переменные и материал детали v24",
         "plan": "VARIABLES_MATERIAL_DEVELOPER_PROMPT.md"
+      },
+      "mechanical-mates-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/mechanical-mates-minimal-v1.json",
+        "title": "Механические сопряжения v24: передача (transmission)",
+        "plan": null
       }
     },
     "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -6861,6 +6866,102 @@
       "profile": "mates-minimal-v1",
       "priority": "practical_required",
       "queue": "C2",
+      "depends_on": [],
+      "kind": "profile_operation"
+    },
+    {
+      "operation_id": "MATE-07.mate.create_transmission",
+      "context": "assembly",
+      "catalog_ref": "MATE",
+      "parameters_schema": "schemas/kompas_create_mate.json",
+      "adapter_route": "kompas_create_mate, constraint_type=transmission: IPart7.MateConstraints -> IMateConstraints3D.Add(mc_Transmission) -> QueryInterface(IMate3DTransmission) -> BaseObject1/2 и RotationAxis1/2 = цилиндрические грани, MotionType1/2 = ksMMotionRotation, SetScale(Scale1, Scale2), Direction1/2 -> Update(); подтверждение - Valid и перечитывание параметров из модели",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "tests": [
+        "MM.01.discover",
+        "MM.02.transmission_1_2",
+        "MM.03.direction_and_ratio",
+        "MM.06.read",
+        "MM.07.reopen",
+        "MM.04.linear_refused",
+        "MM.05.cam_gear_refused",
+        "MM.08.delete_refused",
+        "MM.09.idempotent",
+        "MM.10.ratio_refused",
+        "MM.10.foreign_fields",
+        "MM.10.non_axis_face",
+        "MM.10.cam_faces",
+        "MM.PREP.gear"
+      ],
+      "evidence": [
+        "docs/acceptance/evidence/20261019-mech-mates-7a0dc15/mech-mates-acceptance.json",
+        "docs/acceptance/evidence/20261019-mech-mates-7a0dc15/smoke-all-mech-mates.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "limitations": [
+        "Живой прогон 19.10.2026: группа --mech-mates-only на Release-сборке 2a041e0 - 13 строк, PASS 38 / FAIL 0; зачётный --all на 7a0dc15 - группа mech_mates PASS 15 / FAIL 0, всего PASS 1708 / NAMED 6 / FAIL 0, дерево чистое.",
+        "Кинематика НЕ заявляется: поворот ведущего маршрутом размещения ведомый не двигает (0 град / 0 мм), а маршрут IComponentPositioner7 отказал и на компоненте без сопряжений, в том числе в видимом документе.",
+        "Объект сопряжения - ГРАНЬ: с конструктивными осями в BaseObject1/2 и RotationAxis1/2 то же сопряжение читается Valid=FALSE.",
+        "Удаление передачи недостижимо: RemoveMateConstraint возвращает FALSE, сопряжение остаётся в модели, продукт отвечает VERIFICATION_FAILED (MM.08 проверяет именно отказ). Действие delete_dependencies принадлежит MATE-05; для передачи и там недостижимо - техдолг 53.",
+        "Правка параметров существующей передачи не поддержана: kompas_set_mate_parameter её не принимает, коэффициенты и направления задаются только при создании - техдолг 52.",
+        "Вторая передача на той же паре компонентов не создаётся: Update()=False, Valid=False, отказ VERIFICATION_FAILED."
+      ],
+      "not_applicable_reasons": {
+        "edit": "режим создаёт передачу; правка параметров существующего сопряжения - MATE-03, передача в нём не поддержана (техдолг 52)",
+        "rebuild": "передача не меняет геометрию документа; переоткрытие строит модель заново и читает те же числа (MM.07)",
+        "suppress_restore": "подавление механических сопряжений в блок не входит",
+        "delete_dependencies": "удаление сопряжения - MATE-05; для передачи продукт отвечает отказом (MM.08), удаление вне объёма варианта (А)",
+        "geometry_validation": "передача не меняет положение компонентов (измерено: ведомый не двигается); геометрия эталона сверена строкой MM.PREP.gear (объём цилиндра 28 274,33 мм3)"
+      },
+      "catalog_level": "mcp_verified",
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_documents"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_mate"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_mates"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "profile": "mechanical-mates-minimal-v1",
+      "priority": "practical_required",
+      "queue": "G4",
       "depends_on": [],
       "kind": "profile_operation"
     },

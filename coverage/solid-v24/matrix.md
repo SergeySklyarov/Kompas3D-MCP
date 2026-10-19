@@ -99,14 +99,13 @@
 ### профиль mechanical-mates-minimal-v1 — Механические сопряжения v24: передача (transmission)
 
 - **обязательных_режимов:** 1
-- **режимов_закрыто:** 0
+- **режимов_закрыто:** 1
 - **общих_зависимостей:** 4
 - **зависимостей_закрыто:** 4
-- **профиль_закрыт:** нет
-- **готовность_процента:** 80.0%
-- **по_очередям:** G4 0/1
-- **открытые_режимы:**
-  - `MATE-07.mate.create_transmission`
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** G4 1/1
+- **открытые_режимы:** []
 - **открытые_зависимости:** []
 
 ### профиль sketch-bulk-minimal-v1 — Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24
@@ -159,19 +158,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 353
-- **строк_полностью_закрыто:** 162
-- **строк_с_каким_либо_прогрессом:** 177
+- **строк_каталога:** 354
+- **строк_полностью_закрыто:** 163
+- **строк_с_каким_либо_прогрессом:** 178
 - **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
 - **операций:** 135
 - **режимов_и_вариантов:** 210
-- **применимых_действий:** 2911
-- **действий_verified:** 1060
-- **покрытие_действий:** 36.4%
-- **распределение_статусов:** {'not_started': 1851, 'verified': 1060, 'not_applicable': 619}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 7, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 4, 'metadata_found': 48, 'не указан': 84}
+- **применимых_действий:** 2916
+- **действий_verified:** 1065
+- **покрытие_действий:** 36.5%
+- **распределение_статусов:** {'not_started': 1851, 'verified': 1065, 'not_applicable': 624}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 57, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 56, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -375,7 +374,7 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `MATE-07.mate.create_transmission` | MATE | practical_required | G4 | runtime_verified | — | — | — | — | — | — | — | — | — | — | — |
+| `MATE-07.mate.create_transmission` | MATE | practical_required | G4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MM.01.discover, MM.02.transmission_1_2, MM.03.direction_and_ratio, MM.06.read, MM.07.reopen, MM.04.linear_refused, MM.05.cam_gear_refused, MM.08.delete_refused, MM.09.idempotent, MM.10.ratio_refused, MM.10.foreign_fields, MM.10.non_axis_face, MM.10.cam_faces, MM.PREP.gear |
 
 ### Общие зависимости профиля `mechanical-mates-minimal-v1`
 
@@ -710,7 +709,7 @@
 | `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
 | `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests, MATE.05.delete_dependencies |
 | `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
-| `MATE-07.mate.create_transmission.rotation_rotation` | MATE | later | — | runtime_verified | — | — | — | — | — | — | — | — | — | — | — |
+| `MATE-07.mate.create_transmission.rotation_rotation` | MATE | later | — | mcp_verified | — | — | — | — | — | — | — | — | — | — | — |
 | `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW-01.views.create_standard.create, DRW-01.views.create_standard.edit, DRW-01.views.create_standard.geometry_validation, DRW-01.views.create_standard.negative_tests, DRW-01.views.create_standard.negative_tests.kind, DRW-01.views.create_standard.negative_tests.path, DRW-01.views.create_standard.read, DRW-01.views.create_standard.rebuild, DRW-01.views.create_standard.save_reopen, DRW-02.views.list.read, DRW-02.views.list.read.fields |
 | `DRW-02.views.list` | DRW | practical_required | C3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-02.views.list.discover, DRW-02.views.list.negative_tests, DRW-02.views.list.read, DRW-02.views.list.read.fields, DRW-02.views.list.read.gabarit_named, DRW-02.views.list.read.system_view_named, DRW-02.views.list.save_reopen |
 | `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |
@@ -779,6 +778,7 @@
 | `dep.assembly.component_address` *(вне каталога)* | ASM | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit, ASM.04.discover, ASM.04.geometry_validation, ASM.05.discover, ASM.07.geometry_validation, ASM.03.save_reopen |
 | `dep.assembly.revisions` *(вне каталога)* | ASM | dependency_of | — | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` *(вне каталога)* | ASM | dependency_of | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
+| `MATE-07.mate.create_transmission` *(вне каталога)* | MATE | practical_required | G4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MM.01.discover, MM.02.transmission_1_2, MM.03.direction_and_ratio, MM.06.read, MM.07.reopen, MM.04.linear_refused, MM.05.cam_gear_refused, MM.08.delete_refused, MM.09.idempotent, MM.10.ratio_refused, MM.10.foreign_fields, MM.10.non_axis_face, MM.10.cam_faces, MM.PREP.gear |
 | `dep.mate.object_address` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.02.discover, MATE.03.read, MATE.01.face_range |
 | `dep.mate.component_insert` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | MATE.01.create, MATE.02.read, MATE.06.geometry_validation, MATE.PREP, MATE.PREP.create |
 | `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
@@ -1416,6 +1416,13 @@
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
   - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `MATE-07.mate.create_transmission` — закрыт целиком
+  - Живой прогон 19.10.2026: группа --mech-mates-only на Release-сборке 2a041e0 - 13 строк, PASS 38 / FAIL 0; зачётный --all на 7a0dc15 - группа mech_mates PASS 15 / FAIL 0, всего PASS 1708 / NAMED 6 / FAIL 0, дерево чистое.
+  - Кинематика НЕ заявляется: поворот ведущего маршрутом размещения ведомый не двигает (0 град / 0 мм), а маршрут IComponentPositioner7 отказал и на компоненте без сопряжений, в том числе в видимом документе.
+  - Объект сопряжения - ГРАНЬ: с конструктивными осями в BaseObject1/2 и RotationAxis1/2 то же сопряжение читается Valid=FALSE.
+  - Удаление передачи недостижимо: RemoveMateConstraint возвращает FALSE, сопряжение остаётся в модели, продукт отвечает VERIFICATION_FAILED (MM.08 проверяет именно отказ). Действие delete_dependencies принадлежит MATE-05; для передачи и там недостижимо - техдолг 53.
+  - Правка параметров существующей передачи не поддержана: kompas_set_mate_parameter её не принимает, коэффициенты и направления задаются только при создании - техдолг 52.
+  - Вторая передача на той же паре компонентов не создаётся: Update()=False, Valid=False, отказ VERIFICATION_FAILED.
 - `dep.mate.object_address` — закрыт целиком
   - живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.
@@ -1522,6 +1529,12 @@
   - Число 2 у ksObjectConstraintsStateEnum означает «переопределён», а у ksConstraintsStateEnum — «недоопределён»: одно не выдаётся за другое.
 - `dep.sketch_constraints.no_silent_rewrite` — закрыт целиком
   - Измеренная дельта координат и угла публикуется в notes; сервер движение не отменяет, потому что отмена была бы второй, не запрошенной правкой.
+
+## Расхождения каталога и матрицы (не блокирующие)
+
+Уровень доказательства в каталоге и статус строки матрицы — разные вещи: проба или написанный код не делают режим закрытым в матрице.
+
+- MATE-07.mate.create_transmission.rotation_rotation: уровень каталога mcp_verified, а в матрице not_started — маршрут MCP заявлен, но строка приёмки по нему не развёрнута
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

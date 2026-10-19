@@ -2,12 +2,17 @@
  "meta": {
   "profile_id": "mechanical-mates-minimal-v1",
   "title": "Механические сопряжения v24: передача (transmission)",
-  "revision": "1.0",
+  "revision": "1.1",
   "revision_history": [
    {
     "revision": "1.0",
     "date": "19.10.2026",
     "change": "профиль заведён нарядом G4_MECHANICAL_MATES по решению заказчика: объём - вариант (А), создание и чтение параметров без заявки о кинематике"
+   },
+   {
+    "revision": "1.1",
+    "date": "19.10.2026",
+    "change": "режим закрыт живым прогоном группы --mech-mates-only и зачётным --all; required_actions приведены к применимым (правка, перестроение, удаление и геометрия к режиму создания передачи не применимы - обоснования в строке матрицы), уровень mcp_verified"
    }
   ],
   "target_build": "24.0.0.2799",
@@ -22,25 +27,21 @@
    "family": "MATE",
    "queue": "G4",
    "priority": "practical_required",
-   "current_level": "runtime_verified",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
     "read",
-    "edit",
-    "rebuild",
     "save_reopen",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "negative_tests"
    ],
-   "gap": "Живой прогон группы --mech-mates-only закрывает режим по mode_closed; передача движения ведомому компоненту в профиль не входит и не заявляется."
+   "gap": "Режим закрыт: группа --mech-mates-only на Release-сборке (13 строк, PASS 38 / FAIL 0) и зачётный --all на коммите 7a0dc15 (группа mech_mates PASS 15 / FAIL 0, всего PASS 1708 / NAMED 6 / FAIL 0). Передача движения ведомому компоненту в профиль не входит и не заявляется; правка параметров и удаление передачи продуктом не поддержаны (техдолг 52, 53)."
   }
  ],
  "common_dependencies": [
   {
    "id": "dep.mate.object_address",
-   "title": "Адресация грани компонента как объекта передачи",
+   "title": "Адресация грани компонента как объекта сопряжения",
    "required_actions": [
     "discover",
     "read",
@@ -70,7 +71,7 @@
   },
   {
    "id": "dep.mate.save_reopen",
-   "title": "Передача переживает save → close → reopen",
+   "title": "Сопряжения переживают save → close → reopen",
    "required_actions": [
     "save_reopen",
     "read"

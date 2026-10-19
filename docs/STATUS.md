@@ -14,17 +14,19 @@
 
 ## Текущее состояние
 
-- **Механическая передача в контракте, приёмка не пройдена (наряд `G4_MECHANICAL_MATES`, попытка 2,
+- **Механическая передача в контракте, режим закрыт (наряд `G4_MECHANICAL_MATES`, попытка 2,
   19.10.2026):** `kompas_create_mate` принимает `constraint_type=transmission` — создание и чтение
   параметров (`Valid`, `Scale1/2`, `Direction1/2`, `MotionType1/2`), объекты — ЦИЛИНДРИЧЕСКИЕ ГРАНИ
   компонентов; конструктивная ось даёт `Valid=FALSE` и отказом является она же. Передача движения
   ведомому компоненту НЕ заявляется: маршрут размещения связь не показал, а маршрут позиционера
   отказал и на компоненте без сопряжений, в том числе в ВИДИМОМ документе (`Prepare = 0`). `cam_gear`
   вне контракта (набор объектов не установлен), линейный режим вне объёма. Профиль
-  `mechanical-mates-minimal-v1` (режим `MATE-07…rotation_rotation`, `runtime_verified`), версия
-  `0.10.0`. Группа `--mech-mates-only` (MM-01…MM-10) написана и прогнана живьём: PASS 38 / FAIL 0
-  (удаление передачи отвергается `RemoveMateConstraint=FALSE`, вторая передача на той же паре не
-  создаётся — обе строки сверяют отказ). Открыто: зачётный `--all` на этом коммите.
+  `mechanical-mates-minimal-v1` (режим `MATE-07…rotation_rotation`) — **закрыт**, `mcp_verified`,
+  объём 103/103 режима и 64/64 зависимости, версия `0.10.0`. Группа `--mech-mates-only` (MM-01…MM-10):
+  PASS 38 / FAIL 0 живьём и **PASS 15 / FAIL 0** в зачётном `--all` на `7a0dc15` (всего PASS 1708 /
+  NAMED 6 / FAIL 0, дерево чистое). Удаление передачи отвергается `RemoveMateConstraint=FALSE`,
+  вторая передача на той же паре не создаётся, правки параметров существующей передачи в контракте
+  нет — все три названы, а не выданы за успех (техдолг 52, 53).
   `docs/decisions/mates.md#mechanical-transmission`, `docs/decisions/probes.md#mechanical-mates`,
   `docs/04_KOMPAS_API_NOTES.md` §4.91.
 - **Копирование и проецирование в эскиз (наряд `SKETCH_COPY_PROJECT_RESEARCH`, 19.10.2026, только
@@ -56,18 +58,18 @@
   прибор - `scripts/catalog-text-baseline.py`, отчёт - `CATALOG_TEXT_RESEARCH_REPORT_20261019.md`,
   предложения - `docs/acceptance/evidence/20261019-catalog-text-086f48d/`, выводы -
   `docs/decisions/host.md#catalog-text-research`.
-- **Версия:** `<Version>0.9.0</Version>` в `Directory.Build.props`; номер нигде больше не пишется.
+- **Версия:** `<Version>0.10.0</Version>` в `Directory.Build.props`; номер нигде больше не пишется.
 - **Последний выпуск:** `v0.9.0` -
   <https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.9.0>, тег на `0d884a0`, релиз не
   черновик; поставка `artifacts/publish-v0.9.0-0d884a0`, паспорт `fully_ready=true`, примечания -
   `docs/distribution/v0.9.0.md`.
 - **Инструментов:** 94, схем 94.
-- **Последний полный прогон:** **PASS 1691 / NAMED 6 / FAIL 0**, код 0, на чистом дереве `75bca67`
-  (`scratch/mcp-smoke/runs/20261018-233908-all-75bca67`); против прогона `0f661cf` (1689/6/0) ровно +2
-  строки - `SR.b4m09.limitation_named` и `SR.mania20.limitation_named`, чужие группы не тронуты.
+- **Последний полный прогон:** **PASS 1708 / NAMED 6 / FAIL 0**, код 0, на чистом дереве `7a0dc15`
+  (`scratch/mcp-smoke/runs/20261019-122717-all-7a0dc15`); против прогона `75bca67` (1691/6/0)
+  ровно +17 строк - группа `mech_mates` (15 строк, из них 2 подготовительные), чужие группы не тронуты.
 - **Клиентская приёмка 0.9.0:** 14 строк из 14 в клиенте заказчика на поставке
   `artifacts/publish-v0.9.0-0d884a0`; дефектов продукта не найдено, находки F1 и F2 разобраны.
-- **Технический долг:** открытых пунктов **10** (реестр `docs/status/TECH_DEBT.md`, строк 51, закрыто
+- **Технический долг:** открытых пунктов **12** (реестр `docs/status/TECH_DEBT.md`, строк 53, закрыто
   41); бюджет цикла 0.10 - не больше 22 открытых.
 - **Приборы выпуска (наряд `INSTRUMENT_TRUTH`, 18.10.2026):** содержимое `schemas/` сверяется с
   выдачей собранного Host (`13a`), `5f` не ищет встроенное имя учётной записи и называет пропуск,
@@ -264,6 +266,20 @@
 `SR.<постановка>.limitation_named` читает описание из `tools/list` поставки и требует, чтобы ответ после
 переоткрытия отказывал, а не объявлял успех. `docs/decisions/adapter-core.md#suppress-after-reopen`.
 Зачётный `--all` на `143218f` запущен отдельно от сеанса.
+
+**19.10.2026 - наряд `G4_MECHANICAL_MATES` сдан: передача в контракте, режим закрыт.** Коммиты
+`4a273b6` (опыт на видимом документе), `bc1c6ef` (вид `transmission`), `2a041e0` (состояние в STATUS),
+`7a0dc15` (группа `--mech-mates-only`), база `7b74687`; отчёт `G4_MECHANICAL_MATES_REPORT_20261019.md`.
+Профиль `mechanical-mates-minimal-v1` закрыт: `acceptance-levels.py` - режимов 103/103, зависимостей
+64/64, `open_total 0`, `verdict COMPLETE`, `problems` пуст; строка матрицы
+`MATE-07.mate.create_transmission` - `mcp_verified`, каталог - тот же уровень. Зачётный `--all` на
+`7a0dc15` (Release, дерево чистое): **PASS 1708 / NAMED 6 / FAIL 0**, код 0, группа `mech_mates`
+PASS 15 / FAIL 0 (`scratch/mcp-smoke/runs/20261019-122717-all-7a0dc15`). Что не выдано за успех:
+передача движения ведомому не заявляется (позиционер отказал и на несопряжённом компоненте, видимый
+документ проверен), удаление передачи отвергается (`RemoveMateConstraint=FALSE`, строка MM.08 сверяет
+именно отказ), правки параметров существующей передачи в контракте нет - техдолг 52 и 53. Кулачок
+`cam_gear` вне контракта: набор объектов, при котором `Valid=TRUE`, не установлен.
+`docs/decisions/mates.md#mechanical-transmission`, `docs/decisions/probes.md#mechanical-mates`.
 
 ## Архив журнала
 

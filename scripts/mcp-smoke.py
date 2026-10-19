@@ -9729,12 +9729,12 @@ def drawing_checks(client, rep, app_id, workdir):
         # виде БЕЗ размеров: удаление ОТДЕЛЬНОГО размера не опубликовано ни одним инструментом,
         # поэтому шаг «удалить размеры» сервер выполнить не может (названо в подробностях строк).
         def dims_fingerprint(target_ref):
-            _e, _env = call("kompas_list_dimensions", {"document_id": drw, "view_ref": target_ref})
+            _env, _code = call("kompas_list_dimensions", {"document_id": drw, "view_ref": target_ref})
             return [(r.get("kind"), r.get("value_mm"), r.get("nominal_mm"))
                     for r in (result(_env).get("dimensions") or [])]
 
         def view_row_by_number(number):
-            _e, _env = call("kompas_list_drawing_views", {"document_id": drw})
+            _env, _code = call("kompas_list_drawing_views", {"document_id": drw})
             return next((r for r in (result(_env).get("views") or [])
                          if r.get("number") == number), {})
 
@@ -9805,17 +9805,18 @@ def drawing_checks(client, rep, app_id, workdir):
                     "вид для обхода не найден")
         else:
             plain_scale = 0.75
+            plain_row = view_row_by_number(plain.get("number"))
             env, code_plain = call("kompas_edit_view", {
                 "document_id": drw, "expected_revision": current_rev(drw),
-                "view_ref": plain.get("view_ref"), "scale": plain_scale})
+                "view_ref": plain_row.get("view_ref"), "scale": plain_scale})
             plain_after = view_row_by_number(plain.get("number"))
             rep.add("DRW-08.view_scale.without_dimensions",
                     "смена масштаба вида БЕЗ размеров проходит как прежде и перечитывается новым",
                     "PASS" if (code_plain is None
                                and close_enough(plain_after.get("scale"), plain_scale, 1e-9)
-                               and close_enough(plain.get("scale"), new_scale, 1e-9)) else "FAIL",
+                               and not close_enough(plain_row.get("scale"), plain_scale, 1e-9)) else "FAIL",
                     f"error={code_plain} вид={plain.get('number')} масштаб "
-                    f"{plain.get('scale')} -> {plain_after.get('scale')} (просили {plain_scale})")
+                    f"{plain_row.get('scale')} -> {plain_after.get('scale')} (просили {plain_scale})")
             env, code_readd = call("kompas_add_dimension", {
                 "document_id": drw, "expected_revision": current_rev(drw),
                 "view_ref": plain_after.get("view_ref"), "dimension_type": "diametral",

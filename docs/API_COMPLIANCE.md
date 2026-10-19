@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-18T14:49:22+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-19T04:38:52+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 138, маршрутов 622.
-- Измеряемая сборка: `release_build`, коммит `0d884a0`, дерево чистое; `KompasMcp.Host.dll` sha256 `0cc6b2ffd1847f82045ad8557af713e1ce6186493d7b6e60b0443fb0afeb31ab`.
+- Измеряемая сборка: `release_build`, коммит `8a7beda`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `89ed4115e82a9b7abb648a247eaa5dc6c79ef633adb750c0871f7ef6e90a6554`.
 
 ## 2. Сверка полноты
 
@@ -32,14 +32,14 @@
 | object_type_constants_checked | 9 |
 | object_type_constants_mismatched | 0 |
 | rows_claiming_verified | 177 |
-| rows_verified_without_any_linked_row | 9 |
+| rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 9 |
-| rows_actions_without_required_calls | 10 |
-| rows_status_lowered_by_unsupported_actions | 10 |
-| acceptance_rows | 1691 |
-| acceptance_calls_journal | 16051 |
-| acceptance_rows_with_call_window | 1691 |
+| rows_action_without_dedicated_row | 7 |
+| rows_actions_without_required_calls | 9 |
+| rows_status_lowered_by_unsupported_actions | 9 |
+| acceptance_rows | 1697 |
+| acceptance_calls_journal | 16058 |
+| acceptance_rows_with_call_window | 1697 |
 | required_of_mismatches_matrix_vs_profile | 0 |
 | dependency_verdict_control_proved | None |
 
@@ -994,27 +994,19 @@ COM-маршрутов по сборкам: {'api7': 364, 'api5': 258, 'adapter-
 
 Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
 
-### F-06 - приписка (verified без связанной строки приёмки)
-
-Серьёзность: высокая.
-
-9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update
-
-Исправление: связать строку с приёмкой или понизить заявку
-
-### F-07 - заявка не подтверждена вызовами (отказ сторожа)
+### F-06 - заявка не подтверждена вызовами (отказ сторожа)
 
 Серьёзность: средняя.
 
-10 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, STEP.import
+9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, STEP.import
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
-### F-08 - пробел трассируемости (действие не названо строкой)
+### F-07 - пробел трассируемости (действие не названо строкой)
 
 Серьёзность: низкая.
 
-9 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.negative_tests, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update
+7 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

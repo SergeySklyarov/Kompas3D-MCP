@@ -2155,22 +2155,22 @@
    "id": "SM-12",
    "title": "Уклоны (от основания и от базовой линии)",
    "classification": "solid",
-   "level": "metadata_found",
+   "level": "mcp_verified",
    "evidence": {
     "user_docs": "cm_make_draft.html («Уклон от основания»: Основание, Грани, Угол, Сменить направление) + cm_draft_from_edges.html («Уклон от базовой линии»: Базовая линия, Базовое направление/Построить вектор, Сторона, Угол, Сменить направление) + fy1465242.html/fy1191643.html",
     "sdk_docs": "imodelcontainer_inclines.html, imodelcontainer_draftsfromedges.html, idraftfromedges.html (v22)",
     "metadata_api5": "kApi5.tlb: ksInclineDefinition{angle, direction, FaceArray, Get/SetPlane}; o3d_incline=42 «Операция 'уклон'»; для «от базовой линии» интерфейсов в kApi5.tlb нет",
     "metadata_api7": "kAPI7.tlb: IIncline/IInclines; IDraftFromEdges (iid 485C8D37: DirectionObject, Vector3D, BaseLine, SideFace, Angle, Reverse)/IDraftsFromEdges; o3d_DraftFromEdges=644",
-    "runtime": "не проверялось"
+    "runtime": "измерено 19-20.10.2026 на build 24.0.0.2799: оба семейства создаются, читаются, правятся, подавляются и удаляются; единица угла - градусы"
    },
    "route": "от основания — API5 NewEntity(42) или API7 Inclines.Add; от базовой линии — API7 DraftsFromEdges.Add (API5-маршрут неизвестен, OQ-A9 расширенно)",
-   "mcp_support": "none",
-   "next_step": "проба: уклон боковой грани бруска 10° — контрольный объём трапеции; отдельная проба draft-from-edge на ребре-базе",
+   "mcp_support": "kompas_draft / kompas_draft_from_edges / kompas_get_feature / kompas_update_feature / kompas_set_feature_suppressed / kompas_delete_feature / kompas_list_features",
+   "next_step": "Живой прогон пройден: группа --drafts-only на бинарях поставки. Следующее: зачётный --all и клиентская приёмка по слову заказчика. Правка основания грань -> плоскость отвергается CAPABILITY_UNAVAILABLE (нормаль новой плоскости не читается) - ждёт решения техлида.",
    "operations": [
     {
      "id": "SM-12.incline",
      "name": "Уклон от основания",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "source_user_docs": "cm_make_draft.html",
      "source_sdk": "imodelcontainer_inclines.html",
      "api5": {
@@ -2219,19 +2219,19 @@
       {
        "id": "SM-12.incline.mode_faces_group",
        "name": "группы уклоняемых граней",
-       "level": "metadata_found",
+       "level": "mcp_verified",
        "field": "Faces/SetFaces-массив"
       },
       {
        "id": "SM-12.incline.mode_base_face_or_plane",
        "name": "основание — плоскость или грань",
-       "level": "documented",
+       "level": "mcp_implemented",
        "doc": "cm_make_draft.html «Основание»; в TLB поле называется Plane — совместимость грани как основания проверяется (OQ-A11)"
       },
       {
        "id": "SM-12.incline.mode_direction",
        "name": "смена направления (стороны)",
-       "level": "metadata_found",
+       "level": "mcp_verified",
        "field": "Direction"
       }
      ],
@@ -2246,13 +2246,13 @@
       "verified_actions": []
      },
      "composition_vs_native": "уклон внутри выдавливания (draft angle у SM-02) — другое семейство с другой ассоциативностью; не смешивать",
-     "mcp_support": "none",
+     "mcp_support": "kompas_draft / kompas_draft_from_edges / kompas_get_feature / kompas_update_feature / kompas_set_feature_suppressed / kompas_delete_feature / kompas_list_features",
      "next_step": "проба единиц Angle"
     },
     {
      "id": "SM-12.draft_from_edges",
      "name": "Уклон от базовой линии",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "source_user_docs": "cm_draft_from_edges.html",
      "source_sdk": "idraftfromedges.html (v22)",
      "api5": {
@@ -2299,7 +2299,7 @@
       {
        "id": "SM-12.draft_from_edges.mode_dir_by_object",
        "name": "базовое направление по объекту",
-       "level": "metadata_found",
+       "level": "mcp_verified",
        "field": "DirectionObject"
       },
       {
@@ -2311,7 +2311,7 @@
       {
        "id": "SM-12.draft_from_edges.mode_side",
        "name": "сторона уклона",
-       "level": "metadata_found",
+       "level": "mcp_verified",
        "field": "SideFace + Reverse"
       }
      ],
@@ -2326,7 +2326,7 @@
       "verified_actions": []
      },
      "composition_vs_native": "docs/05 SM-12 требует держать отдельно от «уклона от основания» — отдельные признаки и коллекции",
-     "mcp_support": "none",
+     "mcp_support": "kompas_draft / kompas_draft_from_edges / kompas_get_feature / kompas_update_feature / kompas_set_feature_suppressed / kompas_delete_feature / kompas_list_features",
      "next_step": "проба: наклон стенки по базовому ребру + эталонный объём"
     }
    ],

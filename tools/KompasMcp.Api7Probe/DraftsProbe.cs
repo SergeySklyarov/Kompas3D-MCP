@@ -62,6 +62,7 @@ internal sealed class DraftsProbe
             DraftFromEdges(reverse: true);
             Lifecycle();
             SuppressRestoreDelete();
+            OffsetPlaneBase();
         }
         catch (Exception ex)
         {
@@ -427,6 +428,89 @@ internal sealed class DraftsProbe
         }
 
         CloseQuietly(reopened);
+    }
+
+    /// <summary>DR.11: the base is an auxiliary plane in the MIDDLE of the body (z = 25) — DR-04 of the
+    /// order, where the two wedges compensate and the volume must stay V0.</summary>
+    /// <remarks>The offset plane is created by the API5 route (<c>o3d_planeOffset</c> → base plane →
+    /// <c>offset</c> → <c>direction</c> → <c>Create</c>) because MEASURED: an API7 <c>IPlane3D</c> is
+    /// refused by <c>SetPlane</c> while this <c>ksEntity</c> is accepted.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    private void OffsetPlaneBase()
+    {
+        var step = _report.Begin("DR.11", "Основание - вспомогательная плоскость z = 25",
+            "Клинья компенсируются: объём остаётся V0?");
+        var document = BuildBar("DR.2", "Брус 100×80×50 выдавливанием");
+        if (document is null)
+        {
+            step.Fail("брус не построен.");
+            return;
+        }
+
+        var part = (ksPart)document.GetPart(-1);
+        var face = PlusXFace(part);
+        if (face is null || part.GetDefaultEntity(PlaneXoy) is not ksEntity xoy)
+        {
+            step.Fail("грань +X или плоскость XOY не получены.");
+            return;
+        }
+
+        if (part.NewEntity(Api5.PlaneOffset) is not ksEntity offsetEntity
+            || offsetEntity.GetDefinition() is not ksPlaneOffsetDefinition offsetDefinition)
+        {
+            step.Fail("Смещённая плоскость не создана.");
+            return;
+        }
+
+        offsetDefinition.SetPlane(xoy);
+        offsetDefinition.offset = BarZ / 2d;
+        offsetDefinition.direction = true;
+        if (Api5.SafeBool(offsetEntity.Create) != true)
+        {
+            step.Fail("Create() смещённой плоскости вернул false.");
+            return;
+        }
+
+        if (part.NewEntity(InclineType) is not ksEntity entity
+            || entity.GetDefinition() is not ksInclineDefinition incline
+            || incline.FaceArray() is not { } faceArray)
+        {
+            step.Fail("Определение уклона или массив граней не получены.");
+            return;
+        }
+
+        Late.Call(faceArray, "Add", face.Element);
+        var accepted = Api5.SafeBool(() => incline.SetPlane(offsetEntity));
+        step.Data["set_plane_offset"] = accepted;
+        incline.angle = AngleDeg;
+        // The offset plane's normal points the same way as XOY (into the body), so "inward" is TRUE.
+        incline.direction = true;
+        var created = Api5.SafeBool(entity.Create);
+        step.Data["create"] = created;
+        document.RebuildDocument();
+        var volume = Api5.Volume(part);
+        step.Data["volume_after"] = volume;
+        step.Observe("объём при основании посередине тела: " + Api5.Num(volume)
+            + " (эталон DR-04: 400000)");
+
+        if (accepted != true)
+        {
+            step.Fail("SetPlane(смещённая плоскость) вернул " + Api5.Raw(accepted));
+        }
+        else if (created != true)
+        {
+            step.Fail("Create() вернул " + Api5.Raw(created) + "; объём " + Api5.Num(volume));
+        }
+        else if (volume is double v && Math.Abs(v - VolumeV0) <= VolumeTolerance)
+        {
+            step.Pass("объём остался V0 - клинья компенсировались, как в DR-04");
+        }
+        else
+        {
+            step.Fail("объём " + Api5.Num(volume) + " вместо 400000");
+        }
+
+        CloseQuietly(document);
     }
 
     /// <summary>DR.10: suppression, restoration and deletion of the draft feature - the three lifecycle

@@ -1089,6 +1089,11 @@ facesBefore, facesAfter, declaredMismatch)`: она отвечает «отка�
 (`V0`, в дереве нет `type = 42`). Значит существующие `get_feature`, `update_feature`,
 `set_feature_suppressed`, `delete_feature`, `list_features` применимы без нового адреса.
 
-**Чем подтверждено.** `tools/KompasMcp.Api7Probe --drafts` (шаги DR.3-DR.9), отчёт
+**Основание-плоскость.** Для основания-плоскости принимается объект API5 `ksEntity`; API7 `IPlane3D`
+ядро в `SetPlane` отвергает, поэтому адаптер создаёт смещённую плоскость своим API5-маршрутом
+(`docs/decisions/adapter-sketch.md#sketch-plane-reference`). Основание посередине тела (`z = 25`) даёт
+объём `V0` - клинья компенсируются, это и есть исключение DR-04, где подтверждением служит габарит.
+
+**Чем подтверждено.** `tools/KompasMcp.Api7Probe --drafts` (шаги DR.3-DR.11), отчёт
 `docs/acceptance/api7/drafts.{json,md}`; разбор - `docs/04_KOMPAS_API_NOTES.md` §4.92,
 `docs/decisions/probes.md#drafts`.

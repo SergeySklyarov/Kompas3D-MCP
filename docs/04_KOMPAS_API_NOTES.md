@@ -4970,6 +4970,12 @@ ksNurbs/ksNurbsPoint`, `GetFragment()`; `ksPolylineParam.closed/style/GetpMathPo
   `type = 42`. Три операции, которыми уже пользуются `set_feature_suppressed` и `delete_feature`,
   действуют на уклон без новых маршрутов.
 
+- **Основание посередине тела (DR.11).** Смещённая плоскость `z = 25`, созданная маршрутом API5
+  (`o3d_planeOffset` → `SetPlane(XOY)` → `offset = 25` → `direction = true` → `Create`), принимается
+  `SetPlane` и даёт объём `400000` - клинья компенсируются, как и предсказывает DR-04 наряда. Для
+  основания-плоскости принимается объект API5 `ksEntity`: API7 `IPlane3D` ядро в `SetPlane` отвергает
+  (измерено ранее, `docs/decisions/adapter-sketch.md#sketch-plane-reference`).
+
 **Следствие для контракта.** `direction: positive` в MCP — НЕ одно геометрическое направление для всех
 операций: адаптер сводит его в `dtNormal` (как и UI КОМПАС), поэтому у `cut` оно означает «против
 нормали эскиза», а у `base`/`boss` — «по нормали». Решение заказчика (09.10.2026, вариант B) —

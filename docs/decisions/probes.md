@@ -950,3 +950,51 @@ Length=100` → `Y1=-20 Y2=-20` → обратно `Y1=-10 Y2=-10`; проекц
 `ksEntity::Update`, `ksDocument3D::DeleteObject`, `IsCreated`, `RebuildDocument`, сам
 `ksBaseExtrusionDefinition`; отрицательный контроль 404); разбор - `docs/04_KOMPAS_API_NOTES.md`
 §4.90.
+
+## <a id="mechanical-mates"></a>Механические сопряжения: создание и чтение достижимы, кинематика через документированные маршруты перемещения — нет (наряд `G4_MECHANICAL_MATES`, этап 0, 19.10.2026)
+
+**Правило.** «Механическая передача» создаётся маршрутом `IPart7.MateConstraints` →
+`IMateConstraints3D.Add(mc_Transmission)` → `QI(IMate3DTransmission)`; её объекты — `BaseObject1/2` и
+`RotationAxis1/2` — задаются ГРАНЯМИ компонентов (`IModelObject`), параметры — `MotionType1/2`
+(`ksMMotionRotation = 2`), `SetScale(Scale1, Scale2)`, `Direction1/2`, затем `Update()`. Сопряжение
+переживает перестроение и читается обратно (`Scale1 = 1`, `Scale2 = 2`, `MotionType1/2 = 2`,
+`Direction1/2 = TRUE`, `Valid = TRUE`, сопряжений 0 → 1).
+
+**Почему гранями, а не осями.** Конструктивная ось, построенная документированным
+`IAuxiliaryGeomContainer.Axes3D.Add(o3d_axisConeFace)` → `IAxis3DByConeface.Face` (она нужна
+`IComponentPositioner7.InitAxis`, который принимает «конструктивную ось или прямолинейное ребро»),
+в тех же полях даёт `Valid = FALSE` при тех же перечитанных параметрах. Значит `BaseObject1/2` и
+`RotationAxis1/2` сопряжения принимают грань, а не ось; это измерено, а не выбрано по вкусу.
+
+**Связь НЕ передаётся через маршрут перемещения.** Поворот ведущего компонента на 30° документированным
+маршрутом размещения (`ksPart.GetPlacement` → `InitByMatrix3D` → `SetPlacement` → `UpdatePlacement` →
+`RebuildDocument`) ведомый компонент не двигает: 0° и 0 мм. При этом солвер ВОЗВРАЩАЕТ сам ведущий
+компонент в прежнее положение (измерено 0,0003° вместо 30°) — сопряжение живое и ход не пропускает, но
+передачи движения ведомому через этот маршрут нет. Это и есть ответ на вопрос этапа 0: наблюдать связь
+«повернул ведущий — поехал ведомый» документированным маршрутом размещения нельзя.
+
+**Маршрут позиционера в этом приборе не работает, поэтому его отказ ничего не доказывает.**
+`IComponentPositioner7` (`IKompasDocument3D1.ComponentPositioner` → `Prepare(pnRotate)` → `InitAxis` →
+`RotateComponent` → `Finish`) отвечает `Prepare = 0`, `InitAxis = FALSE`, `RotateComponent = FALSE` даже
+на НЕСОПРЯЖЁННОМ компоненте в контрольной сборке (ось по ребру построена, `Update() = TRUE`). Без
+этого контроля отказ позиционера на сопряжённых компонентах был бы принят за ответ продукта; с ним он
+называет предел прибора.
+
+**Кулачок - толкатель создаётся, но не подтверждается.** `Add(mc_CamGear)` → `QI(IMate3DCamGear)`,
+`CamFaces` (массив из трёх граней) записывается и читается (3), `FollowerFace`, `RotationAxis`,
+`Trajectory` читаются, `Update() = TRUE`, сопряжений 1 → 2, но `Valid = FALSE`. Подстановка
+конструктивной оси вместо грани в `RotationAxis` даёт `RotationAxis = FALSE` при чтении. Значит набор
+объектов кулачкового сопряжения этим прибором не установлен, и «создано» про него сказать нельзя.
+
+**Предел.** `Update()` не документирован ни для `IMate3DTransmission` (`imate3dtransmission_update.html`
+- 404), ни для `IMate3DCamGear` (`imate3dcamgear_methods.html` и `_update` - 404); вызван тем же
+членом, что и у обычных сопряжений, и это названо, а не выдано за документированный порядок. Порядок
+записи свойств в справке не задан: использован принятый для обычных сопряжений
+(`BaseObject1/2` → параметры → `Update`), перебором не подбирался.
+
+**Чем подтверждено.** `tools/KompasMcp.Api7Probe --mech-mates`, отчёт
+`docs/acceptance/api7/mechanical-mates.{json,md}` (шаги G4.1-G4.9); страницы справки -
+`reference/kompas-sdk-v24/docs-wire-20261019-mates/` (25 страниц HTTP 200; 404 у
+`imateconstraint3d_props`, `imateconstraint3d_update`, `imateconstraint3d_valid`,
+`imate3dtransmission_update`, `imate3dtransmission_setdirection`, `imate3dcamgear_methods`,
+`imate3dcamgear_update`; отрицательный контроль 404); разбор - `docs/04_KOMPAS_API_NOTES.md` §4.91.

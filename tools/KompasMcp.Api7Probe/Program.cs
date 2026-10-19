@@ -55,6 +55,8 @@ public static class Program
                     ? "Проба U — граница применимости обычного объединения: условие из справки продукта, ответ ядра на разнесённые тела и контроль на контактных"
                     : options.SketchCopy
                         ? "Проба SC — копирование геометрии между эскизами и проецирование объекта в эскиз: документированные маршруты IDrawingGroup и ISketch::AddProjectionOf"
+                        : options.MechanicalMates
+                            ? "Проба G4 — механические сопряжения: передача и кулачок-толкатель документированным маршрутом API7 и наблюдаемость связи"
                                                             : options.B5
                                                                 ? "Проба B5 — кинематическая операция, по сечениям и оболочка: документированный маршрут, значения направления и эталоны §9"
                                                             : options.CutArea
@@ -229,6 +231,11 @@ public static class Program
             {
                 var sketchCopy = new SketchCopyProjectProbe(report, options);
                 pump.Run(() => sketchCopy.Run());
+            }
+            else if (options.MechanicalMates)
+            {
+                var mechanicalMates = new MechanicalMatesProbe(report, options);
+                pump.Run(() => mechanicalMates.Run());
             }
             else if (options.VerifyM3d is not null)
             {
@@ -565,6 +572,7 @@ public static class Program
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
             : options.SketchCopy ? "sketch-copy-project"
+            : options.MechanicalMates ? "mechanical-mates"
             : options.SketchPlane ? "sketch-plane"
             : options.VmDensityMci ? "vm-density-mci"
             : options.RepositionRead ? "reposition-read"
@@ -746,6 +754,12 @@ public sealed class Options
     /// <c>SKETCH_COPY_PROJECT_RESEARCH</c>). History: docs/decisions/probes.md#sketch-copy-project</summary>
     public bool SketchCopy { get; private set; }
 
+    /// <summary><c>--mech-mates</c>: are «Механическая передача» and «Кулачок - толкатель» created by the
+    /// documented API7 route, and is the LINK observable through a measured change of the driven
+    /// component's placement (order <c>G4_MECHANICAL_MATES</c>, stage 0).
+    /// History: docs/decisions/probes.md#mechanical-mates</summary>
+    public bool MechanicalMates { get; private set; }
+
     /// <summary><c>--b5</c>: calibration of the last mandatory queue's three families — sweep
     /// (SM-04), loft (SM-05), shell (SM-13). Closes OQ-A1 and OQ-A12 by measurement.
     /// History: docs/decisions/probes.md#b5</summary>
@@ -874,6 +888,7 @@ public sealed class Options
         var union = false;
         var b5 = false;
         var sketchCopy = false;
+        var mechanicalMates = false;
         var repositionRead = false;
         var repositionParams = false;
         var cutArea = false;
@@ -974,6 +989,9 @@ public sealed class Options
                     break;
                 case "--sketch-copy":
                     sketchCopy = true;
+                    break;
+                case "--mech-mates":
+                    mechanicalMates = true;
                     break;
                 case "--reposition-read":
                     repositionRead = true;
@@ -1090,6 +1108,7 @@ public sealed class Options
             KeepRunning = keep,
             CollectControls = controls,
             SketchCopy = sketchCopy,
+            MechanicalMates = mechanicalMates,
             Lifecycle = lifecycle,
             Extrusion = extrusion,
             Chamfer = chamfer,

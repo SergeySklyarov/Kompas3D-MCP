@@ -6831,3 +6831,54 @@ IKompasDocument2D → IFragmentDocument`.
 **Где записано.** `docs/decisions/probes.md#sketch-copy-project` (правило, пределы и предложение
 контракта обоих инструментов), прибор `tools/KompasMcp.Api7Probe --sketch-copy` (отчёт
 `docs/acceptance/api7/sketch-copy-project.{json,md}`).
+
+## §4.91. Механические сопряжения: маршрут создания и чтения документирован, передача движения документированным маршрутом перемещения НЕ наблюдается (справка SDK 24 по проводу + живое измерение 19.10.2026, наряд `G4_MECHANICAL_MATES`)
+
+**Что документировано.** `mateconstrainttype.html` - `mc_Transmission = 9` («Механическая передача»),
+`mc_CamGear = 10` («Кулачковый механизм. Кулачек-толкатель»); `imateconstraints3d_add.html` -
+`Add(MateConstraintType Type)` возвращает новое сопряжение; `imate3dtransmission.html` и
+`imate3dcamgear.html` называют способ получения: `IMateConstraints3D::Add` с последующим приведением
+`IMateConstraint3D` к нужному интерфейсу через `IUnknown::QueryInterface`. Члены передачи:
+`MotionType1/2` (`ksmatemotiontypeenum.html`: `ksMMotionLinear = 1`, `ksMMotionRotation = 2`),
+`RotationAxis1/2` и `Trajectory1/2` (`IModelObject`), `Direction1/2` (`BOOL`), `Scale1/2` (`double`,
+ТОЛЬКО ЧТЕНИЕ) и единственный метод `SetScale(Scale1, Scale2)`. Члены кулачка: `CamFaces` (`VARIANT`,
+«Массив SAFEARRAY граней кулачка»), `FollowerFace`, `RotationAxis`, `Trajectory` (`IModelObject`).
+`imateconstraint3d_baseobject1/2.html` - `BaseObject1/2` (`IModelObject`).
+
+**Чего в справке нет.** `imateconstraint3d_props`, `imateconstraint3d_update`, `imateconstraint3d_valid`,
+`imate3dtransmission_update`, `imate3dtransmission_setdirection`, `imate3dcamgear_methods`,
+`imate3dcamgear_update` - 404. Значит `Update()` для механических сопряжений не документирован, методов
+у кулачка нет вовсе, порядок записи свойств не задан.
+
+**Что измерено (проба G4, свой экземпляр v24, сборка из трёх компонентов).** Передача создаётся:
+`Add(mc_Transmission)` → `QI(IMate3DTransmission)` → `BaseObject1/2` и `RotationAxis1/2` = ЦИЛИНДРИЧЕСКИЕ
+ГРАНИ компонентов → `MotionType1/2 = 2` → `SetScale(1, 2)` (TRUE) → `Direction1/2 = TRUE` →
+`Update()` (TRUE) → `Valid = TRUE`, сопряжений 0 → 1; перечитано `Scale1 = 1`, `Scale2 = 2`. Если в тех
+же полях подставить КОНСТРУКТИВНЫЕ ОСИ (`Axes3D.Add(o3d_axisConeFace)`), параметры читаются так же, но
+`Valid = FALSE` - сопряжение принимает грань, а не ось.
+
+**Передача движения не наблюдается.** Поворот ведущего компонента на 30° документированным маршрутом
+размещения (`ksPart.GetPlacement` → `InitByMatrix3D` → `SetPlacement` → `UpdatePlacement` →
+`RebuildDocument`) ведомый компонент не двигает (0°, 0 мм), а сам ведущий возвращается солвером в
+прежнее положение (0,0003° вместо 30°). Сопряжение при этом живое: оно не пропускает ход, но движения
+ведомому через этот маршрут не передаёт.
+
+**Маршрут позиционера не подтверждён прибором.** `IComponentPositioner7` (`Prepare` → `InitAxis` →
+`RotateComponent` → `Finish`, `positioner_type.html`: `pnMove = 0`, `pnRotate = 1`) отвечает
+`Prepare = 0` и `RotateComponent = FALSE` даже на несопряжённом компоненте контрольной сборки, поэтому
+его отказ на сопряжённых ничего о сопряжениях не говорит. Возможная причина - невидимый документ
+пробы; это не проверялось.
+
+**Кулачок - толкатель не подтверждён.** Сопряжение добавляется (сопряжений 1 → 2), `CamFaces`,
+`FollowerFace`, `RotationAxis`, `Trajectory` читаются, `Update() = TRUE`, но `Valid = FALSE`; ось в
+`RotationAxis` не читается обратно. Набор объектов, при котором кулачковое сопряжение действительно,
+этим прибором не установлен.
+
+**Следствие для контракта.** До решения техлида `transmission` и `cam_gear` в `kompas_create_mate` не
+заявляются: создание передачи и чтение её параметров подтверждены, но кинематика - нет, а кулачковое
+сопряжение не подтверждено и в создании. Вопрос вынесен нарядом (шаг 5 `DISPATCHER.md`).
+
+**Где записано.** `docs/decisions/probes.md#mechanical-mates`; прибор
+`tools/KompasMcp.Api7Probe --mech-mates`, отчёт `docs/acceptance/api7/mechanical-mates.{json,md}`;
+страницы справки - `reference/kompas-sdk-v24/docs-wire-20261019-mates/` (25 страниц HTTP 200,
+отрицательный контроль 404).

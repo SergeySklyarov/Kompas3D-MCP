@@ -9822,7 +9822,12 @@ def drawing_checks(client, rep, app_id, workdir):
                 "view_ref": plain_after.get("view_ref"), "dimension_type": "diametral",
                 "point1": [0.0, 0.0, 0.0], "value_mm": HOLE_RADIUS_MM,
                 "position": [20.0, -20.0, 0.0]})
-            readd = result(env).get("dimension") or {}
+            # Число читается ТИПИЗИРОВАННЫМ маршрутом чтения, а не из эха установщика: DTO постановки
+            # несёт геометрию, а показанное число читается `kompas_list_dimensions`.
+            _env, _code = call("kompas_list_dimensions",
+                               {"document_id": drw, "view_ref": plain_after.get("view_ref")})
+            readd = next((r for r in (result(_env).get("dimensions") or [])
+                          if r.get("kind") == "diametral"), None) or {}
             rep.add("DRW-08.view_scale.workaround_readd",
                     "обход: после смены масштаба размер ставится в том же виде заново — число "
                     "натуральное, листовой радиус следует НОВОМУ масштабу",

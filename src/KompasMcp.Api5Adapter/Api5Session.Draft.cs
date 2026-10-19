@@ -343,8 +343,11 @@ public partial class Api5Session
         var geometryConfirmed = ConfirmDraftGeometry(
             command.ExpectedVolumeMm3, volumeBefore, volumeAfter, document, checks, unverified);
 
-        unverified.Add("side_face_default_not_named — без side_face_ref сторону выбирает система, и " +
-                       "какую грань она взяла, этим маршрутом не читается");
+        if (sideFace is null)
+        {
+            unverified.Add("side_face_default_not_named — без side_face_ref сторону выбирает система, и " +
+                           "какую грань она взяла, этим маршрутом не читается");
+        }
 
         return new DraftResult
         {

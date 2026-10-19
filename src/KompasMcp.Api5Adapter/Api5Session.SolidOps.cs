@@ -1937,6 +1937,10 @@ public sealed partial class Api5Session
         // branch reads it. Declaring it a "common expectation" would mean accepting it on reposition and
         // boolean operations and silently not applying it — the same class of defect as keep_side (P5).
         new("expected_volume_delta_mm3", new[] { HoleFamily }, c => c.ExpectedVolumeDeltaMm3),
+        // The draft's base (SM-12): two forms of one thing, and both belong to the draft family only —
+        // a B3 feature must reject them rather than accept and ignore.
+        new("base_face_ref", new[] { DraftFamily }, c => c.BaseFaceRef),
+        new("base_plane", new[] { DraftFamily }, c => c.BasePlane),
     };
 
     /// <summary>Whether the caller declared an analytical geometry expectation — volume and/or bounding box.</summary>

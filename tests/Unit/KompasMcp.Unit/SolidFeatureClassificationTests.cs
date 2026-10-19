@@ -59,6 +59,9 @@ public sealed class SolidFeatureClassificationTests
         ["countersink_diameter_mm"] = ["hole"],
         ["countersink_angle_deg"] = ["hole"],
         ["expected_volume_delta_mm3"] = ["hole"],
+        // The draft's base (SM-12): two forms of one thing, owned by the draft family alone.
+        ["base_face_ref"] = ["draft"],
+        ["base_plane"] = ["draft"],
     };
 
     /// <summary>Fields not belonging to the B3 families: extrusion, chamfer, fillet, rotation and the B5
@@ -100,12 +103,13 @@ public sealed class SolidFeatureClassificationTests
     {
         var source = AdapterSource();
 
-        // The family constants live in DIFFERENT adapter files, so all three are scanned for constants; the
-        // table itself is parsed ONLY from SolidOps.cs.
+        // The family constants live in DIFFERENT adapter files, so all of them are scanned for constants;
+        // the table itself is parsed ONLY from SolidOps.cs.
         var constants = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var fileName in new[]
                  {
                      "Api5Session.SolidOps.cs", "Api5Session.PatternEdit.cs", "Api5Session.Hole.cs",
+                     "Api5Session.DraftEdit.cs",
                  })
         {
             foreach (Match match in Regex.Matches(
@@ -230,9 +234,9 @@ public sealed class SolidFeatureClassificationTests
             $"в ведомствах названы поля, которых в {nameof(UpdateFeatureCommand)} нет: "
             + string.Join(", ", phantom));
 
-        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 40
-        // with the six native-hole edit fields.
-        Assert.Equal(40, properties.Count);
+        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 42
+        // with the six native-hole edit fields and the draft's two base forms.
+        Assert.Equal(42, properties.Count);
     }
 
     [Fact]

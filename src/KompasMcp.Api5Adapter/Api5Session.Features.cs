@@ -375,7 +375,8 @@ public partial class Api5Session
         if (command.DepthMm is null && command.EndCondition is null && command.SketchRef is null
             && !chamferRequested && !filletRequested && !rotationRequested && !repositionRequested
             && !splitRequested && !cutRequested && !booleanRequested && !patternRequested
-            && !sweepRequested && !loftRequested && !shellRequested && !holeRequested)
+            && !sweepRequested && !loftRequested && !shellRequested && !holeRequested
+            && command.BaseFaceRef is null && command.BasePlane is null)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
@@ -422,6 +423,15 @@ public partial class Api5Session
         }
 
         var definition = entity.GetDefinition();
+
+        // A draft (SM-12) is selected by its OWN definition, not by the fields: angle_deg, direction and
+        // face_refs are shared with the chamfer and shell families, and only the feature can say whose
+        // they are. The branch stands before the chamfer one for that reason.
+        if (definition is ksInclineDefinition)
+        {
+            return UpdateDraftFeature(
+                document, entity, command, volumeBefore, featuresBefore, stateBefore);
+        }
 
         if (definition is ksChamferDefinition)
         {

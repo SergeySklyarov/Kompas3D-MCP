@@ -1847,6 +1847,14 @@ public sealed record UpdateFeatureCommand
     /// <summary>New chamfer side (API5 transfer / API7 Direction).</summary>
     public bool? Direction { get; init; }
 
+    /// <summary>New base of a draft (family=<c>draft</c>) as a flat face of the body — the counterpart of
+    /// <see cref="BasePlane"/>; exactly one of the two.</summary>
+    public string? BaseFaceRef { get; init; }
+
+    /// <summary>New base of a draft (family=<c>draft</c>) as a plane in the project's own <c>plane</c>
+    /// form. The side is carried across the edit: the product flag is recomputed from the new base.</summary>
+    public PlaneRefDto? BasePlane { get; init; }
+
     /// <summary>New ROTATION angle (family=<c>rotation</c>), degrees. A separate field, not the shared <see
     /// cref="AngleDeg"/> (the chamfer angle): a call with <see cref="AngleDeg"/> on a rotation feature is rejected with
     /// INVALID_ARGUMENT pointing at this field.</summary> <remarks>MEASURED: changing the angle on ONE feature gave a

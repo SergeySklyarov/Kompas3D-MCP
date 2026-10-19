@@ -164,4 +164,23 @@ public static class DraftRules
     /// <summary>The contract side for a product flag and a base orientation — the read-back direction.</summary>
     public static string? ContractDirection(bool productFlag, bool baseNormalPointsOutOfBody) =>
         productFlag == baseNormalPointsOutOfBody ? DraftDirection.Outward : DraftDirection.Inward;
+
+    /// <summary>Point and normal of a standard plane NAMED BY THE REQUEST, with no model read.</summary>
+    /// <remarks>INVARIANT: the normal is the coordinate axis the plane belongs to and the point is the
+    /// offset along it, so the side is known before the plane entity exists — the entity created inside
+    /// the same call is not yet visible to API7. MEASURED: the product offsets along the plane's own
+    /// normal for XY, XZ and YZ alike (adapter-core.md#plane-offset-sign); the axes are the right-handed
+    /// system KOMPAS uses. A wrong axis flips the side, and the volume check refuses it.</remarks>
+    public static (double[] Point, double[] Normal) StandardPlanePlacement(
+        PlaneBase plane, double offsetMm)
+    {
+        var normal = plane switch
+        {
+            PlaneBase.Xy => new[] { 0d, 0d, 1d },
+            PlaneBase.Xz => new[] { 0d, 1d, 0d },
+            PlaneBase.Yz => new[] { 1d, 0d, 0d },
+            _ => throw new ArgumentOutOfRangeException(nameof(plane), plane, "unknown standard plane"),
+        };
+        return ([normal[0] * offsetMm, normal[1] * offsetMm, normal[2] * offsetMm], normal);
+    }
 }

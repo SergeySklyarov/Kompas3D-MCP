@@ -138,6 +138,10 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
+        // INVARIANT: the parameters are written before the base, the base last before Update().
+        // MEASURED: SetPlane on a BUILT feature returns TRUE and changes nothing — flag and body stay as
+        // they were, while the same call at CREATION applies; the order of the two writes changes none
+        // of it. LIMIT: the base of a built feature is not changed by this route.
         if (!WriteDraftParameters(definition, targetAngle, flag.Value))
         {
             throw new KompasContractException(
@@ -291,7 +295,7 @@ public partial class Api5Session
                     document, References.Require(planeReference, document.Id, document.Revision),
                     planeReference, new List<string>())
                 : ResolvePlaneEntity(document, plane);
-            var (point, normal) = ReadPlanePlacement(document, BridgeFor(document), planeEntity);
+            var (point, normal) = ReadPlanePlacement(document, BridgeFor(document), planeEntity, plane);
             if (point is null || normal is null)
             {
                 throw new KompasContractException(

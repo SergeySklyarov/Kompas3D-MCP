@@ -416,7 +416,7 @@ public partial class Api5Session
                 planeReference, new List<string>())
             : ResolvePlaneEntity(document, plane);
         var bridge = BridgeFor(document);
-        var (point, normal) = ReadPlanePlacement(document, bridge, entity);
+        var (point, normal) = ReadPlanePlacement(document, bridge, entity, plane);
         if (point is null || normal is null)
         {
             throw new KompasContractException(
@@ -494,18 +494,27 @@ public partial class Api5Session
         return dot < -DraftBaseSideToleranceMm;
     }
 
-    /// <summary>Point and unit normal of a plane object, read from the model.</summary>
+    /// <summary>Point and unit normal of a base plane: from the request form for a standard plane, from
+    /// the model for a reference.</summary>
+    /// <remarks>INVARIANT: a standard plane is never read back. MEASURED: the offset plane created for the
+    /// same call is not yet visible to API7, so <c>TransferTo7</c> of it gives no <c>IPlane3D</c> and the
+    /// side stayed unknown; the axis the caller named is known without the model.</remarks>
     private (double[]? Point, double[]? Normal) ReadPlanePlacement(
-        DocumentEntry document, Api7Bridge bridge, object payload)
+        DocumentEntry document, Api7Bridge bridge, object payload, PlaneRefDto plane)
     {
+        if (plane.Reference is null && plane.Base is { } standard)
+        {
+            return DraftRules.StandardPlanePlacement(standard, plane.OffsetMm);
+        }
+
         try
         {
-            if (bridge.TransferTo7(payload) is not IPlane3D plane)
+            if (bridge.TransferTo7(payload) is not IPlane3D plane7)
             {
                 return (null, null);
             }
 
-            var read = Api7AuxGeometry.ReadPlane(plane, -1);
+            var read = Api7AuxGeometry.ReadPlane(plane7, -1);
             return (read.PointMm, read.DirectionMm);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)

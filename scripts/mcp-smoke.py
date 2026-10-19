@@ -47737,12 +47737,14 @@ def drafts_checks(client, rep, app_id, workdir):
         env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
                               angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
         feature = (result(env).get("feature_ref") or {}).get("id")
-        # СТАНДАРТНАЯ ФОРМА ПЛОСКОСТИ, а не ссылка на вспомогательный объект: нормаль
-        # вспомогательной плоскости правкой основания не читается (CAPABILITY_UNAVAILABLE,
-        # "нормаль новой плоскости основания не прочитана"), и эталон z = 25 тот же.
+        # СТАНДАРТНАЯ ФОРМА ПЛОСКОСТИ и ОБЯЗАТЕЛЬНЫЙ direction: смена основания без него отвергается
+        # документированным условием продукта (прежняя ориентация этим маршрутом не читается). У правки
+        # `direction` - ФЛАГ ПРОДУКТА (bool), а не слово: `true` даёт ту же сторону, что `inward` при
+        # создании на основании z = 25 (DR-04), потому что нормаль основания смотрит в тело.
         env, code = call("kompas_update_feature", {
             "feature_ref": feature, "expected_revision": current_rev(doc),
-            "base_plane": {"base": "xy", "offset_mm": 25}, "expected_volume_mm3": V0})
+            "base_plane": {"base": "xy", "offset_mm": 25}, "direction": True,
+            "expected_volume_mm3": V0})
         got, box = result(env).get("volume_after_mm3"), x_max(doc)
         dr06["base_plane"] = ("PASS" if (not code and near(got, V0)
                                          and near(box, 100.0 + D25, TOL_MM)) else "FAIL",

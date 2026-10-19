@@ -58,4 +58,21 @@ public sealed class DraftRulesTests
     [InlineData(false, false, DraftDirection.Outward)]
     public void ReadBack_NamesTheSideTheModelReports(bool flag, bool baseOut, string expected) =>
         Assert.Equal(expected, DraftRules.ContractDirection(flag, baseOut));
+
+    // The base plane's side is known from the form alone: the axis the plane belongs to, offset along it.
+    [Fact]
+    public void StandardPlanePlacement_TakesTheAxisFromTheForm()
+    {
+        AssertPlacement(PlaneBase.Xy, 25d, [0d, 0d, 25d], [0d, 0d, 1d]);
+        AssertPlacement(PlaneBase.Xz, 0d, [0d, 0d, 0d], [0d, 1d, 0d]);
+        AssertPlacement(PlaneBase.Yz, -10d, [-10d, 0d, 0d], [1d, 0d, 0d]);
+    }
+
+    private static void AssertPlacement(
+        PlaneBase plane, double offsetMm, double[] point, double[] normal)
+    {
+        var (readPoint, readNormal) = DraftRules.StandardPlanePlacement(plane, offsetMm);
+        Assert.Equal(point, readPoint);
+        Assert.Equal(normal, readNormal);
+    }
 }

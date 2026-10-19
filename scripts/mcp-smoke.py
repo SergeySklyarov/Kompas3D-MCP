@@ -7558,14 +7558,22 @@ def section_checks(client, rep, app_id, workdir):
             entities.append(current)
         return entities
 
+    # Типы геометрии DXF, которых разбор ниже не знает. Их присутствие делает «все объекты выгрузки»
+    # неправдой, поэтому число таких объектов называется в строке приёмки, а не замалчивается.
+    unknown_geometry = ("SPLINE", "ELLIPSE", "LWPOLYLINE", "POLYLINE", "SOLID", "POINT", "3DFACE")
+
     def dxf_parse(path):
-        """Отрезки, окружности и число HATCH текстовой выгрузки DXF в координатах листа (мм).
+        """Геометрия выгрузки DXF в координатах листа (мм): отрезки, окружности, HATCH, объекты.
 
         ЗАЧЕМ СВОЙ РАЗБОР. `dxf_entity_counts` считает типы сущностей и годится для «выгрузка не
         пуста», но контур разреза — это КООРДИНАТЫ. Пары «код группы / значение» читаются как есть:
         LINE — 10/20 и 11/21 (начало и конец), CIRCLE/ARC — 10/20 и 40 (центр и радиус), HATCH
         считается по типу. Никакой внешней библиотеки: прибор не должен тянуть зависимость ради
         двух десятков строк.
+
+        `objects` — ВСЕ геометрические объекты выгрузки одной записью: проверка «нет кромок за
+        плоскостью» обязана идти по ним, а не по выборке. `unknown` — типы, которых разбор не знает:
+        строка приёмки требует, чтобы их не было, иначе «все объекты» — половина.
         """
         entities = dxf_entities(path)
 
@@ -7575,7 +7583,7 @@ def section_checks(client, rep, app_id, workdir):
                     return float(v)
             return None
 
-        segments, circles, hatches = [], [], 0
+        segments, circles, hatches, objects, unknown = [], [], 0, [], []
         for entity in entities:
             kind = entity["type"]
             if kind == "LINE":
@@ -7583,16 +7591,21 @@ def section_checks(client, rep, app_id, workdir):
                 x1, y1 = first(entity, 11), first(entity, 21)
                 if None not in (x0, y0, x1, y1):
                     segments.append((x0, y0, x1, y1))
+                    objects.append(("LINE",) + tuple(round(v, 3) for v in (x0, y0, x1, y1)))
             elif kind in ("CIRCLE", "ARC"):
                 x0, y0, r = first(entity, 10), first(entity, 20), first(entity, 40)
                 if None not in (x0, y0, r):
                     circles.append((x0, y0, r))
+                    objects.append((kind,) + tuple(round(v, 3) for v in (x0, y0, r)))
             elif kind == "HATCH":
                 hatches += 1
-        return segments, circles, hatches
+            elif kind in unknown_geometry:
+                unknown.append(kind)
+        return segments, circles, hatches, objects, unknown
 
     def dxf_snapshot(doc, rev, path, save_to=None):
-        """Сохранить чертёж, выгрузить DXF и разобрать его: (отрезки, окружности, HATCH, ревизия, код).
+        """Сохранить чертёж, выгрузить DXF и разобрать: (отрезки, окружности, HATCH, ревизия, код,
+        объекты, непрочитанные типы).
 
         INVARIANT: конвертер читает ФАЙЛ на диске, а не состояние документа в памяти, поэтому перед
         выгрузкой документ сохраняется — иначе разрез, построенный после последнего сохранения, в
@@ -7602,15 +7615,15 @@ def section_checks(client, rep, app_id, workdir):
             "document_id": doc, "expected_revision": rev, "target_path": save_to or drawing_path})
         rev = (env or {}).get("revision_after") or rev
         if code:
-            return None, None, 0, rev, f"save:{code}"
+            return None, None, 0, rev, f"save:{code}", [], []
         if os.path.isfile(path):
             os.remove(path)
         env, code = call("kompas_export_drawing", {
             "document_id": doc, "output_path": path, "format": "dxf"})
         if code or not os.path.isfile(path):
-            return None, None, 0, rev, f"export:{code or 'нет файла'}"
-        segments, circles, hatches = dxf_parse(path)
-        return segments, circles, hatches, rev, None
+            return None, None, 0, rev, f"export:{code or 'нет файла'}", [], []
+        segments, circles, hatches, objects, unknown = dxf_parse(path)
+        return segments, circles, hatches, rev, None, objects, unknown
 
     def geometry_added(before, after):
         """Отрезки, которых в ПРЕЖНЕЙ выгрузке не было, — геометрия, добавленная разрезом.
@@ -8162,6 +8175,10 @@ def section_checks(client, rep, app_id, workdir):
                 step = [high for low, high in covered if low - tol <= x <= high + tol]
                 if not step:
                     return False
+                # Отрезок, кончающийся ровно в x, шага не даёт: без этой проверки цикл не кончается, а
+                # «перекрыто» превращается в вечное ожидание. Кусок кончился - значит, не перекрыто.
+                if max(step) <= x + 1e-9:
+                    return False
                 x = max(step)
             return True
 
@@ -8223,7 +8240,7 @@ def section_checks(client, rep, app_id, workdir):
             "source_path": part_path, "projections": ["front", "top", "left", "isometric"],
             "x": 150.0, "y": 150.0})
         base_rev = (env or {}).get("revision_after") or base_rev
-        base_segments, _bc, base_hatches, base_rev, base_code = dxf_snapshot(
+        base_segments, _bc, base_hatches, base_rev, base_code, _bo, _bu = dxf_snapshot(
             base_doc, base_rev, os.path.join(workdir, "section-base.dxf"), save_to=base_path)
 
     env, code = call("kompas_create_document", {
@@ -8253,7 +8270,8 @@ def section_checks(client, rep, app_id, workdir):
                 contour_state["section"] = result(env).get("section") or {}
                 contour_rev = (env or {}).get("revision_after") or contour_rev
                 break
-        stepped_segments, _sc, stepped_hatches, contour_rev, stepped_code = dxf_snapshot(
+        (stepped_segments, _sc, stepped_hatches, contour_rev, stepped_code,
+         stepped_objects, _su) = dxf_snapshot(
             contour_doc, contour_rev, os.path.join(workdir, "section-contour-stepped.dxf"),
             save_to=contour_path)
         contour_added = geometry_added(base_segments, stepped_segments)
@@ -8325,27 +8343,42 @@ def section_checks(client, rep, app_id, workdir):
             f"прочитано={value_check.get('observed')!r} ожидалось={value_check.get('expected')!r}")
 
     section_view_ref = section_created.get("view_ref")
+    figure_detail = None
     if section_view_ref and figure_doc:
-        figure_segments, _fcirc, figure_hatches, figure_rev, figure_code = dxf_snapshot(
+        (figure_segments, _fcirc, figure_hatches, figure_rev, figure_code,
+         figure_objects, figure_unknown) = dxf_snapshot(
             figure_doc, figure_rev, os.path.join(workdir, "section-figure.dxf"), save_to=section_path)
         figure_added = geometry_added(base_segments, figure_segments)
-        # «Нет кромок за плоскостью» проверяется как ПОДМНОЖЕСТВО: сечение рисует ту же фигуру в
-        # плоскости, что и разрез, но без всего, что лежит за ней, поэтому его отрезки обязаны
-        # содержаться в отрезках разреза, и их обязано быть строго меньше.
-        cut_set = set(contour_added or [])
-        beyond_plane = [seg for seg in figure_added if seg not in cut_set]
+        # «Нет кромок за плоскостью» проверяется по ВСЕМ объектам выгрузки чертежа с сечением, а не по
+        # выборке: каждый объект (отрезок, дуга, окружность) обязан найтись в выгрузке разреза той же
+        # трассы. Выборка добавленных отрезков давала ложный успех, если кромка за плоскостью
+        # совпадала с геометрией стандартного вида и в разность не попадала.
+        cut_left = {}
+        for obj in stepped_objects or []:
+            cut_left[obj] = cut_left.get(obj, 0) + 1
+        beyond_plane = []
+        for obj in figure_objects or []:
+            if cut_left.get(obj):
+                cut_left[obj] -= 1
+            else:
+                beyond_plane.append(obj)
+        _figure_ok, figure_detail = measure_contour(figure_added, plate_h, True)
         rep.add("DRW-07.section.geometry",
-                "Геометрия сечения по разности выгрузок DXF: отрезки сечения содержатся в отрезках "
-                "разреза той же трассы и их строго меньше — кромок за плоскостью нет",
-                "PASS" if figure_added and contour_added and not beyond_plane
+                "Геометрия сечения по выгрузке DXF: ВСЕ объекты выгрузки (отрезки, дуги, окружности) "
+                "найдены в выгрузке разреза той же трассы, фигура сечения строго меньше фигуры "
+                "разреза — кромок за плоскостью нет",
+                "PASS" if figure_objects and stepped_objects and not beyond_plane
+                and not figure_unknown and figure_added and contour_added
                 and len(figure_added) < len(contour_added) else "FAIL",
-                f"выгрузка={figure_code} отрезков_сечения={len(figure_added or [])} "
-                f"отрезков_разреза={len(contour_added or [])} за_плоскостью={len(beyond_plane)} "
-                f"пример={beyond_plane[:3]} штриховка={figure_hatches}")
+                f"выгрузка={figure_code} объектов_выгрузки={len(figure_objects or [])} "
+                f"проверено={len(figure_objects or [])} за_плоскостью={len(beyond_plane)} "
+                f"непрочитанных_типов={figure_unknown} фигура_сечения={len(figure_added or [])} "
+                f"фигура_разреза={len(contour_added or [])} пример={beyond_plane[:3]} "
+                f"штриховка={figure_hatches}")
 
     else:
         rep.add("DRW-07.section.geometry",
-                "Геометрия сечения по разности выгрузок DXF",
+                "Геометрия сечения по выгрузке DXF",
                 "NAMED", "сечение не построено - сверять нечего")
 
     # Выгрузка DXF отменяет чтение коллекции видов ТОГО ЖЕ документа (docs/decisions/drawings.md,
@@ -8376,6 +8409,7 @@ def section_checks(client, rep, app_id, workdir):
                 break
 
     section_view_ref = api_section.get("view_ref")
+    straight_detail = None
     if section_view_ref:
         env, _c = call("kompas_list_drawing_views", {"document_id": api_doc})
         # Ссылка при каждом чтении выдаётся заново, поэтому строка ищется по ТИПУ вида, а не по
@@ -8405,20 +8439,42 @@ def section_checks(client, rep, app_id, workdir):
                 "PASS" if code == "CAPABILITY_UNAVAILABLE" and "постройте заново" in message else "FAIL",
                 f"code={code} текст={message[:160]!r}")
 
+        # Долг 48: масштаб проверяется на ДВУХ стандартных масштабах (1:1 при создании и 1:2 правкой), и
+        # геометрия сверяется с каждым: габарит вида на листе читается документированным маршрутом
+        # (IView.Number -> ksGetViewReference -> ksGetObjGabaritRect) до и после правки и обязан
+        # следовать масштабу. Число объектов и вид изображения за правку не меняются.
+        def section_gabarit(doc):
+            env, _c = call("kompas_list_drawing_views", {"document_id": doc})
+            row = next((r for r in (result(env).get("views") or [])
+                        if r.get("view_type") == "vt_Section"), {})
+            low, high = row.get("gabarit_min"), row.get("gabarit_max")
+            if not (isinstance(low, list) and isinstance(high, list)
+                    and len(low) >= 2 and len(high) >= 2):
+                return None
+            return (round(high[0] - low[0], 3), round(high[1] - low[1], 3))
+
+        gabarit_1to1 = section_gabarit(api_doc)
         env, code = call("kompas_update_section_view", {
             "document_id": api_doc, "expected_revision": api_rev,
             "view_ref": section_view_ref, "scale": 0.5})
         after = result(env).get("after") or {}
         kept = (checks_of(env).get("kind_kept") or {}).get("passed")
+        api_rev = (env or {}).get("revision_after") or api_rev
+        gabarit_1to2 = section_gabarit(api_doc)
+        # Половина ШИРИНЫ габарита: она равна ширине фигуры (120 -> 60). Высота габарита включает
+        # обозначение «А-А(1:1)», а его текст масштабом вида не уменьшается (измерено 48.764 -> 30.176
+        # при вдвое меньшей фигуре), поэтому высотой масштаб не сверяется - она названа в подробностях.
+        halves = (gabarit_1to1 and gabarit_1to2
+                  and abs(gabarit_1to2[0] - gabarit_1to1[0] / 2) <= max(0.5, gabarit_1to1[0] * 0.02))
         rep.add("DRW-07.section.scale",
                 "Смена масштаба сечения применена к тому же виду и перечитана; вид изображения не "
-                "изменился",
+                "изменился, а ширина вида на листе следует масштабу (1:1 -> 1:2 вдвое меньше)",
                 "PASS" if code is None and abs((after.get("scale") or 0) - 0.5) < 1e-9
                 and after.get("kind") == "section" and kept is True
-                and (after.get("object_count") or 0) > 0 else "FAIL",
+                and (after.get("object_count") or 0) > 0 and halves else "FAIL",
                 f"code={code} масштаб={after.get('scale')} kind={after.get('kind')} "
-                f"kind_kept={kept} объектов={after.get('object_count')}")
-        api_rev = (env or {}).get("revision_after") or api_rev
+                f"kind_kept={kept} объектов={after.get('object_count')} "
+                f"габарит_1:1={gabarit_1to1} габарит_1:2={gabarit_1to2} вдвое_меньше={bool(halves)}")
 
         # Долг 45: правка ТОЛЬКО стороны стрелок не меняет геометрию вида, поэтому view_updated названа
         # неприменимой (а не непройденной), а возврат IView.Update() остался прочитанным фактом в её
@@ -8479,6 +8535,77 @@ def section_checks(client, rep, app_id, workdir):
                 f"Section={simple_section.get('section')} "
                 f"объектов={simple_section.get('object_count')} "
                 f"обозначение={simple_section.get('designation')!r}")
+        api_rev = (env or {}).get("revision_after") or api_rev
+
+        # Текст отказа «построен пустым» не утверждал ни тест, ни прибор (наблюдение техлида при
+        # `COMMENT_TRUTH`). Строка строит сечение трассой, которая заведомо не пересекает тело, и
+        # сверяет ответ ПОБУКВЕННО с литералами в коде: расхождение ловится и в поведении, и в тексте.
+        def code_literal(marker):
+            """Строковый литерал C# из строки с меткой — то, что уходит клиенту, буквально."""
+            path = os.path.join(ROOT, "src", "KompasMcp.Api5Adapter", "Api5Session.SectionViews.cs")
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        if marker in line and line.count('"') >= 2:
+                            return line[line.index('"') + 1:line.rindex('"')]
+            except OSError:
+                return None
+            return None
+
+        empty_env, empty_code = call("kompas_create_section_view", {
+            "document_id": api_doc, "expected_revision": api_rev,
+            "base_view_ref": api_bases[0].get("view_ref") if api_bases else None,
+            "mode": "simple", "kind": "section",
+            "trace_model": [-10.0, 500.0, 130.0, 500.0], "look": "left", "x": 150.0, "y": -60.0})
+        api_rev = (empty_env or {}).get("revision_after") or api_rev
+        empty_message = ((empty_env or {}).get("error") or {}).get("message") or ""
+        empty_parts = [code_literal("построен пустым"), code_literal("Созданные объекты удалены")]
+        expected_empty = None if None in empty_parts else "Сечение" + "".join(empty_parts)
+        rep.add("DRW-07.section.empty_refusal",
+                "Сечение, трасса которого не пересекает тело, отвергается, и текст отказа совпадает "
+                "побуквенно с литералом в коде (причина, откат и что осталось в документе)",
+                "PASS" if empty_code == "GEOMETRY_FAILED" and expected_empty
+                and empty_message == expected_empty else "FAIL",
+                f"code={empty_code} совпало={empty_message == expected_empty} "
+                f"ответ={empty_message!r} ожидалось={expected_empty!r}")
+
+        # Долг 49: ступенчатость подтверждается ГЕОМЕТРИЕЙ, а не числом объектов. Критерий: сечение
+        # показывает только те кромки, которые пересекает ЕГО плоскость. Колено уходит на y = 60 и
+        # y = 50 модели, поэтому в фигуре ступенчатого сечения есть стенки Ø8 (60, 60) и Ø10 (90, 50),
+        # а у прямой трассы той же детали (плоскость y = 30) их нет при тех же Ø14 и цековке.
+        # History: docs/decisions/drawings.md#section-stepped-geometry
+        (straight_segments, _ssc, _ssh, api_rev, straight_code,
+         _sso, _ssu) = dxf_snapshot(
+            api_doc, api_rev, os.path.join(workdir, "section-straight.dxf"),
+            save_to=os.path.join(workdir, "section-straight.cdw"))
+        straight_added = geometry_added(base_segments, straight_segments)
+        straight_ok, straight_detail = measure_contour(straight_added, plate_h, True)
+
+    # Ступенчатая и прямая трасса одной детали: у ступенчатой в фигуре есть кромки ОБЕИХ плоскостей
+    # колен, у прямой их нет. Признак - стенки отверстий, которые пересекает только колено.
+    if figure_detail and straight_detail is not None:
+        holes = ("Ø14_сквозное", "цековка_Ø24x6", "Ø8x10_плоское_дно", "Ø10_сквозное", "зенковка_Ø22x90")
+
+        def hole_view(detail):
+            return {name: detail.get(name) for name in holes}
+
+        stepped_has = (figure_detail.get("Ø14_сквозное") is True
+                       and figure_detail.get("Ø8x10_плоское_дно") is True
+                       and figure_detail.get("Ø10_сквозное") is True)
+        straight_lacks = (straight_detail.get("Ø8x10_плоское_дно") is False
+                          and straight_detail.get("Ø10_сквозное") is False)
+        rep.add("DRW-07.section.stepped_geometry",
+                "Ступенчатость сечения подтверждена геометрией: у ступенчатой трассы в фигуре есть "
+                "стенки отверстий ОБЕИХ плоскостей колен (Ø8 на y = 60 и Ø10 на y = 50), у прямой "
+                "трассы той же детали их нет при тех же кромках Ø14",
+                "PASS" if stepped_has and straight_lacks else "FAIL",
+                f"ступенчатое={hole_view(figure_detail)} прямая_трасса={hole_view(straight_detail)} "
+                f"итог_прямой={straight_ok} выгрузка_прямой={straight_code} "
+                f"объектов_прямой={len(straight_added or [])}")
+    else:
+        rep.add("DRW-07.section.stepped_geometry",
+                "Ступенчатость сечения подтверждена геометрией обеих плоскостей колен",
+                "NAMED", "фигура сечения или прямой трассы не выгружена - сравнивать нечего")
 
     # Перестроение: модель меняется, вид перестраивается, разрез читается заново.
     if simple_view and drawing:
@@ -8544,10 +8671,11 @@ def section_checks(client, rep, app_id, workdir):
                     rebuild_reason = rebuild_error.get("message")
                     rebuild_details = rebuild_error.get("details") or {}
                     contour_rev = (env or {}).get("revision_after") or contour_rev
-                    rebuilt_segments, _rc, rebuilt_hatches, contour_rev, rebuilt_export = \
-                        dxf_snapshot(contour_doc, contour_rev,
-                                     os.path.join(workdir, "section-contour-rebuilt.dxf"),
-                                     save_to=contour_path)
+                    (rebuilt_segments, _rc, rebuilt_hatches, contour_rev, rebuilt_export,
+                     _ro, _ru) = dxf_snapshot(
+                        contour_doc, contour_rev,
+                        os.path.join(workdir, "section-contour-rebuilt.dxf"),
+                        save_to=contour_path)
                     rebuilt_added = geometry_added(base_segments, rebuilt_segments)
                     contour_ok_40, contour_detail_40 = measure_contour(rebuilt_added, 40.0, True)
                     contour_rebuilt = {"ok": contour_ok_40, "detail": contour_detail_40,

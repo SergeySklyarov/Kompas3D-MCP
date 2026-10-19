@@ -51,8 +51,10 @@ public static class Program
                                                             ? "Проба S — определённость эскиза: читается ли статус «+ / − / !» из API и различает ли он состояния"
                                                             : options.Identity
                                                                 ? "Проба I — идентичность признака в дереве API5 при одинаковых отображаемых именах"
-                                                            : options.Union
-                                                                ? "Проба U — граница применимости обычного объединения: условие из справки продукта, ответ ядра на разнесённые тела и контроль на контактных"
+                : options.Union
+                    ? "Проба U — граница применимости обычного объединения: условие из справки продукта, ответ ядра на разнесённые тела и контроль на контактных"
+                    : options.SketchCopy
+                        ? "Проба SC — копирование геометрии между эскизами и проецирование объекта в эскиз: документированные маршруты IDrawingGroup и ISketch::AddProjectionOf"
                                                             : options.B5
                                                                 ? "Проба B5 — кинематическая операция, по сечениям и оболочка: документированный маршрут, значения направления и эталоны §9"
                                                             : options.CutArea
@@ -222,6 +224,11 @@ public static class Program
                         BossFuseProbe.Flush(report, options);
                     }
                 });
+            }
+            else if (options.SketchCopy)
+            {
+                var sketchCopy = new SketchCopyProjectProbe(report, options);
+                pump.Run(() => sketchCopy.Run());
             }
             else if (options.VerifyM3d is not null)
             {
@@ -732,6 +739,12 @@ public sealed class Options
     /// it cannot be measured with the product. History: docs/decisions/probes.md#sp-plane</summary>
     public bool SketchPlane { get; private set; }
 
+    /// <summary><c>--sketch-copy</c>: the two documented routes that move geometry between sketches —
+    /// objects through <c>IDrawingGroup::CopyToDocument</c> on the sketch's edit document, and a model
+    /// object into a sketch through <c>ISketch::AddProjectionOf</c> (order
+    /// <c>SKETCH_COPY_PROJECT_RESEARCH</c>). History: docs/decisions/probes.md#sketch-copy-project</summary>
+    public bool SketchCopy { get; private set; }
+
     /// <summary><c>--b5</c>: calibration of the last mandatory queue's three families — sweep
     /// (SM-04), loft (SM-05), shell (SM-13). Closes OQ-A1 and OQ-A12 by measurement.
     /// History: docs/decisions/probes.md#b5</summary>
@@ -859,6 +872,7 @@ public sealed class Options
         var identity = false;
         var union = false;
         var b5 = false;
+        var sketchCopy = false;
         var repositionRead = false;
         var repositionParams = false;
         var cutArea = false;
@@ -957,6 +971,9 @@ public sealed class Options
                 case "--b5":
                     b5 = true;
                     break;
+                case "--sketch-copy":
+                    sketchCopy = true;
+                    break;
                 case "--reposition-read":
                     repositionRead = true;
                     break;
@@ -1041,6 +1058,7 @@ public sealed class Options
             : identity ? "feature-identity"
             : union ? "disconnected-union"
             : b5 ? "b5-sweep-loft-shell"
+            : sketchCopy ? "sketch-copy-project"
             : repositionParams ? "reposition-params"
             : repositionRead ? "reposition-read"
             : cutArea ? "cut-area"
@@ -1070,6 +1088,7 @@ public sealed class Options
             PassportOnly = passportOnly,
             KeepRunning = keep,
             CollectControls = controls,
+            SketchCopy = sketchCopy,
             Lifecycle = lifecycle,
             Extrusion = extrusion,
             Chamfer = chamfer,

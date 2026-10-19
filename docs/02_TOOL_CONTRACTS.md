@@ -244,9 +244,11 @@ _Правка 07.10.2026 (наряд о `coordinate_space` и выравнива
 | `kompas_loft` | ordered section_refs[] (не менее двух), operation, target_body_ref при добавлении/вырезе; `building` auto/by_normal/by_object/cupola, `closed`; документ берётся по `document_id` |
 | `kompas_sweep` | sketch_ref (профиль, задаёт документ), path_ref (траектория, обязана быть в той же детали), `shift_mode` parallel/keep_angle/orthogonal |
 | `kompas_shell` | document_id, face_refs[] удаляемых граней (НЕПУСТОЙ список), thickness_mm, `thin_direction` inward/outward, `tangent_faces` (объявлен, `true` отвергается - см. ниже) |
+| `kompas_draft` | document_id, face_refs[] плоских граней одного тела (НЕПУСТОЙ, без повторов), ровно одно из `base_face_ref` (плоская грань) и `base_plane` (объект `plane`), `angle_deg` 0 < \|a\| < 90 в ГРАДУСАХ, обязательное `direction` outward/inward ОТНОСИТЕЛЬНО ТЕЛА |
+| `kompas_draft_from_edges` | document_id, base_line_edge_refs[] (ребро или цепочка, НЕПУСТОЙ), ровно одно из `direction_ref` (грань, ребро, ось) и `direction_plane`, необязательный `side_face_ref`, `angle_deg`, `reverse` (по умолчанию false) |
 | `kompas_fillet` | edge_refs[], radius_mm, tangent_propagation |
 | `kompas_chamfer` | edge_refs[], explicit mode distance_distance/distance_angle и размеры |
-| `kompas_update_feature` | feature_ref, typed changes, supported_feature_type |
+| `kompas_update_feature` | feature_ref, typed changes, supported_feature_type; у семейства `draft` правятся `angle_deg`, `direction`, `face_refs`, `base_face_ref`/`base_plane` (смена основания только вместе с `direction`) |
 | `kompas_rebuild` | document_id; новые refs/context после перестроения |
 | `kompas_pattern_grid` | copy_kind operations/bodies, source_refs[], axis1_point1_mm/axis1_point2_mm, step1_mm, count1, step2_mm/count2 или axis2_*, angle2_deg; `choose_bodies_type` all_bodies/new_body для копий тел |
 | `kompas_pattern_circular` | copy_kind operations/bodies, source_refs[], axis point/direction, count, angle_deg или полный круг; `reverse_direction`, `save_initial_orientation` (по умолчанию false - экземпляры доворачиваются до радиального направления); ответ несёт перечитанное `save_initial_orientation` и `save_initial_orientation_defaulted` |

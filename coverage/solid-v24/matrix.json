@@ -13502,8 +13502,8 @@
       "priority": "practical_required",
       "catalog_level": "mcp_verified",
       "evidence": [
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/package-check.json",
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft.json",
@@ -13533,7 +13533,7 @@
         "DR.14.refusals"
       ],
       "limitations": [
-        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020c - 15 строк, PASS 37 / FAIL 1; единственный отказ - правка основания построенного уклона (SetPlane возвращает TRUE и модель не меняет); числа - в отчёте наряда.",
         "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
         "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
         "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
@@ -13618,8 +13618,8 @@
       "priority": "practical_required",
       "catalog_level": "mcp_verified",
       "evidence": [
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/package-check.json",
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft.json",
@@ -13646,7 +13646,7 @@
         "DR.14.refusals"
       ],
       "limitations": [
-        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020c - 15 строк, PASS 37 / FAIL 1; единственный отказ - правка основания построенного уклона (SetPlane возвращает TRUE и модель не меняет); числа - в отчёте наряда.",
         "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
         "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
         "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
@@ -13732,8 +13732,8 @@
       "priority": "practical_required",
       "catalog_level": "mcp_verified",
       "evidence": [
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/package-check.json",
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft.json",
@@ -13762,7 +13762,7 @@
         "DR.14.refusals"
       ],
       "limitations": [
-        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020c - 15 строк, PASS 37 / FAIL 1; единственный отказ - правка основания построенного уклона (SetPlane возвращает TRUE и модель не меняет); числа - в отчёте наряда.",
         "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
         "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
         "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
@@ -13847,8 +13847,8 @@
       "priority": "practical_required",
       "catalog_level": "mcp_verified",
       "evidence": [
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/package-check.json",
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft_from_edges.json",
@@ -13877,7 +13877,7 @@
         "DR.14.refusals"
       ],
       "limitations": [
-        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020c - 15 строк, PASS 37 / FAIL 1; единственный отказ - правка основания построенного уклона (SetPlane возвращает TRUE и модель не меняет); числа - в отчёте наряда.",
         "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
         "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
         "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
@@ -13964,8 +13964,8 @@
       "priority": "practical_required",
       "catalog_level": "mcp_verified",
       "evidence": [
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
-        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-9da3fda/package-check.json",
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft_from_edges.json",
@@ -13993,7 +13993,7 @@
         "DR.14.refusals"
       ],
       "limitations": [
-        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020c - 15 строк, PASS 37 / FAIL 1; единственный отказ - правка основания построенного уклона (SetPlane возвращает TRUE и модель не меняет); числа - в отчёте наряда.",
         "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
         "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
         "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",

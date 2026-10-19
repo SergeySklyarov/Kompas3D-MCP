@@ -27,9 +27,10 @@ public sealed record DraftCommand
     /// <see cref="BasePlaneRef"/> must be set — both or neither is <c>INVALID_ARGUMENT</c>.</summary>
     public string? BaseFaceRef { get; init; }
 
-    /// <summary>Base as a plane in the form the project already uses (<c>xy</c>/<c>xz</c>/<c>yz</c> or a
-    /// <c>plane_ref</c>). A plane parallel to the drafted face is refused.</summary>
-    public string? BasePlaneRef { get; init; }
+    /// <summary>Base as a plane in the form the project already uses (<c>base</c>/<c>reference</c>/
+    /// <c>offset_mm</c> — the same <c>plane</c> object as elsewhere). A plane parallel to the drafted
+    /// face is refused.</summary>
+    public PlaneRefDto? BasePlane { get; init; }
 
     /// <summary>Draft angle in DEGREES, <c>0 &lt; |angle| &lt; 90</c>. The bound is the contract's, not
     /// the kernel's: 0° changes nothing and 90° degenerates the face.</summary>
@@ -58,9 +59,13 @@ public sealed record DraftFromEdgesCommand
     /// <summary>Edges of the base line: one edge or a chain. Empty is refused before COM.</summary>
     public required IReadOnlyList<string> BaseLineEdgeRefs { get; init; }
 
-    /// <summary>Direction object: a plane, a flat face, a straight edge or an axis. A revolution
-    /// surface is <c>CAPABILITY_UNAVAILABLE</c> — it is not chosen in this profile.</summary>
-    public required string DirectionRef { get; init; }
+    /// <summary>Direction object as a reference: a flat face, a straight edge or an axis. A revolution
+    /// surface is <c>CAPABILITY_UNAVAILABLE</c> — it is not chosen in this profile. Exactly one of this
+    /// field and <see cref="DirectionPlane"/> is given.</summary>
+    public string? DirectionRef { get; init; }
+
+    /// <summary>Direction object as a plane in the project's own <c>plane</c> form.</summary>
+    public PlaneRefDto? DirectionPlane { get; init; }
 
     /// <summary>Side of the draft: a face adjacent to the base line. Null lets the product choose, as
     /// the guide documents, and the response names what it chose.</summary>
@@ -78,12 +83,16 @@ public sealed record DraftFromEdgesCommand
 /// <summary>Both draft families read back from the model, not echoed from the request.</summary>
 public sealed record DraftResult
 {
-    public required string FeatureRef { get; init; }
+    public required ReferenceDto FeatureRef { get; init; }
 
     /// <summary><c>draft</c> or <c>draft_from_edges</c> — which family the feature belongs to.</summary>
     public required string Family { get; init; }
 
     public required int FaceCount { get; init; }
+
+    /// <summary><c>face</c> or <c>plane</c> — which kind of base the model holds. Null for the
+    /// base-line family, which has no base object.</summary>
+    public string? BaseKind { get; init; }
 
     public required double? AngleReadBackDeg { get; init; }
 

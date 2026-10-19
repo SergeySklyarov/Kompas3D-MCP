@@ -1204,6 +1204,101 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_draft", "Уклон от основания",
+                "Уклон плоских граней тела от основания (SM-12). Маршрут - API5 NewEntity(o3d_incline=42) → " +
+                "ksInclineDefinition; основание - плоская грань тела ЛИБО плоскость, ровно одна форма. " +
+                "СТОРОНА ЗАДАЁТСЯ ОТНОСИТЕЛЬНО ТЕЛА: outward добавляет материал, inward убирает. Собственный флаг " +
+                "продукта direction отсчитывается от нормали ОБЪЕКТА ОСНОВАНИЯ, поэтому одно и то же значение на " +
+                "плоскости и на грани даёт противоположный результат: адаптер вычисляет флаг из стороны и " +
+                "ориентации основания, а не передаёт слово вызывающего, и умолчания у поля нет. УГОЛ - В ГРАДУСАХ, " +
+                "0 < |angle_deg| < 90; это граница контракта (0° ничего не делает, 90° вырождает грань), а не " +
+                "утверждение об API. НЕСКОЛЬКО ГРАНЕЙ С ОДНИМ УГЛОМ - ОДИН ПРИЗНАК, а не признак на каждую. " +
+                "Create() = true при неизменном объёме - ОТКАЗ; исключение одно - основание посередине тела, где " +
+                "клинья компенсируются по построению, и там подтверждает объявленный объём. Многотельный контекст " +
+                "отвергается: профиль drafts-minimal-v1 однотельный.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("face_refs", Sch.Arr(
+                        Sch.Ref("#/$defs/reference"),
+                        "Уклоняемые плоские грани ОДНОГО тела с одним углом: ссылки face: из " +
+                        "kompas_read_topology. Список обязан быть НЕПУСТЫМ и без повторов; неплоская грань " +
+                        "отвергается до COM, потому что её плоскость читается до мутации.",
+                        1, 64)),
+                    ("base_face_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Основание - плоская грань тела (ссылка face:). Взаимоисключающе с base_plane: обе " +
+                        "формы сразу или ни одной - INVALID_ARGUMENT до COM.")),
+                    ("base_plane", Sch.Described(
+                        Sch.Nullable(PlaneSchema(
+                            "Основание - плоскость в той же форме, что опора эскиза: base (xy/xz/yz, при " +
+                            "необходимости со offset_mm) ЛИБО reference на плоскость вида plane. Плоскость, " +
+                            "параллельная уклоняемой грани, отвергается ядром.")),
+                        "Основание - плоскость. Взаимоисключающе с base_face_ref.")),
+                    ("angle_deg", Sch.Num(
+                        "Угол уклона в ГРАДУСАХ. Единица измерена: 10° на эталонном брусе даёт 382367.30 " +
+                        "мм³ (inward) и 417632.70 (outward), радианный вариант дал бы 335163.92 и не " +
+                        "совпал ни разу. Допустимо 0 < |angle_deg| < 90; 0, ±90, NaN и бесконечность " +
+                        "отвергаются до COM.", -90d, 90d)),
+                    ("direction", Sch.Enum(
+                        "Сторона уклона ОТНОСИТЕЛЬНО ТЕЛА: outward - материал добавляется, inward - убирается. " +
+                        "Обязательное поле, умолчания нет: собственное умолчание продукта на плоскости и на " +
+                        "грани означает разное.",
+                        "outward", "inward")),
+                    ("expected_volume_mm3", Sch.Nullable(Sch.Num(
+                        "Аналитическое ожидание объёма детали после операции, мм³. С ним проверка численная, " +
+                        "без него - только изменение объёма и число граней." + DeclaredExpectationRule,
+                        0d, 1e18d))),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
+                WorkerCommands.Draft,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_draft_from_edges", "Уклон от базовой линии",
+                "Уклон граней от базовой линии (SM-12). Маршрут ТОЛЬКО API7: IDraftsFromEdges.Add → " +
+                "IDraftFromEdges (BaseLine, DirectionObject, SideFace, Angle, Reverse) → Update; определения " +
+                "этого типа в API5 нет, и маршрут API5 для него не пробуется. БАЗОВАЯ ЛИНИЯ - ребро или цепочка " +
+                "рёбер: она задаёт начальную границу уклоняемой грани. НАПРАВЛЕНИЕ - плоскость (direction_plane) " +
+                "либо ссылка на плоскую грань, прямолинейное ребро или ось (direction_ref); поверхность вращения " +
+                "в профиль drafts-minimal-v1 не входит и отвергается CAPABILITY_UNAVAILABLE с названием причины. " +
+                "СТОРОНА (side_face_ref) необязательна: без неё сторону выбирает система, и какую грань она взяла, " +
+                "этим маршрутом не читается - это названо в unverified_aspects, а не выдано за известное. " +
+                "reverse - смена направления; в ответе значение указано явно. Угол в градусах, как у kompas_draft.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("base_line_edge_refs", Sch.Arr(
+                        Sch.Ref("#/$defs/reference"),
+                        "Рёбра базовой линии: одно ребро или цепочка. Ссылки edge: из kompas_read_topology. " +
+                        "Список обязан быть НЕПУСТЫМ - пустая базовая линия отвергается до COM.",
+                        1, 64)),
+                    ("direction_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Направляющий объект по ссылке: плоская грань, прямолинейное ребро или ось. " +
+                        "Взаимоисключающе с direction_plane.")),
+                    ("direction_plane", Sch.Described(
+                        Sch.Nullable(PlaneSchema(
+                            "Направляющий объект - плоскость в форме опоры эскиза: base (xy/xz/yz со " +
+                            "offset_mm) ЛИБО reference на плоскость вида plane.")),
+                        "Направляющий объект - плоскость. Взаимоисключающе с direction_ref.")),
+                    ("side_face_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Грань, задающая сторону уклона; обязана прилегать к базовой линии. Не задана - " +
+                        "сторону выбирает система, и выбранная грань не читается.")),
+                    ("angle_deg", Sch.Num(
+                        "Угол уклона в ГРАДУСАХ; 0 < |angle_deg| < 90, как у kompas_draft. Отсчёт - от " +
+                        "проекции направляющего объекта на плоскость сечения поверхности уклона.",
+                        -90d, 90d)),
+                    ("reverse", Sch.Nullable(Sch.Bool(
+                        "Сменить направление (Reverse признака). Без поля - false; значение, которое " +
+                        "применилось, называется в ответе.", false))),
+                    ("expected_volume_mm3", Sch.Nullable(Sch.Num(
+                        "Аналитическое ожидание объёма детали после операции, мм³. С ним проверка численная, " +
+                        "без него - только изменение объёма и число граней." + DeclaredExpectationRule,
+                        0d, 1e18d))),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
+                WorkerCommands.DraftFromEdges,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_pattern_grid", "Массив по сетке",
                                 "Массив экземпляров в узлах параллелограммной сетки. ЧТО КОПИРУЕТСЯ, решает copy_kind, и это два " +
                 "вида массива, а не флаг поведения: operations - копии наследуют область применения операции и " +
@@ -3410,11 +3505,11 @@ public static class ToolCatalog
     /// MEASURED: <c>base</c> sat in <c>required</c> and its enum lacked <c>null</c>, so the "reference
     /// only" form was refused by the client's schema before reaching the server.
     /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
-    private static JsonObject PlaneSchema() => new()
+    private static JsonObject PlaneSchema(string? description = null) => new()
     {
         ["type"] = "object",
         ["title"] = "plane",
-        ["description"] = "Опора эскиза: ИМЕННО ОДНО из двух — base (стандартная плоскость xy/xz/yz, "
+        ["description"] = description ?? "Опора эскиза: ИМЕННО ОДНО из двух — base (стандартная плоскость xy/xz/yz, "
             + "при необходимости со смещением offset_mm) ЛИБО reference (ссылка вида plane). Оба поля "
             + "сразу или ни одного — INVALID_ARGUMENT до обращения к ядру: сервер не выбирает поле за "
             + "вызывающего. Форма одна и та же у kompas_create_sketch и kompas_set_sketch_plane.",

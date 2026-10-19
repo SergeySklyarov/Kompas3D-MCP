@@ -376,6 +376,9 @@ public sealed class CommandDispatcher
             WorkerCommands.Sweep => _sta.Run(() => Sweep(request), "feat.sweep", cancellationToken),
             WorkerCommands.Loft => _sta.Run(() => Loft(request), "feat.loft", cancellationToken),
             WorkerCommands.Shell => _sta.Run(() => Shell(request), "feat.shell", cancellationToken),
+            WorkerCommands.Draft => _sta.Run(() => Draft(request), "feat.draft", cancellationToken),
+            WorkerCommands.DraftFromEdges =>
+                _sta.Run(() => DraftFromEdges(request), "feat.draft_from_edges", cancellationToken),
             WorkerCommands.SolidBoolean => _sta.Run(() => SolidBoolean(request), "solid.boolean", cancellationToken),
             WorkerCommands.SolidSplit => _sta.Run(() => SolidSplit(request), "solid.split", cancellationToken),
             WorkerCommands.SolidCutByPlane => _sta.Run(() => SolidCutByPlane(request), "solid.cut_by_plane", cancellationToken),
@@ -1083,6 +1086,25 @@ public sealed class CommandDispatcher
         var document = _session.RequireDocument(command.DocumentId);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Shell(command), document);
+    }
+
+    /// <summary>Draft (SM-12). The document comes from <c>document_id</c>, as at shell: there may be several
+    /// faces, and the adapter checks each against the named document.</summary>
+    private object? Draft(IpcFrame request)
+    {
+        var command = Argument<DraftCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.Draft(command), document);
+    }
+
+    /// <summary>Draft from a base line (SM-12) — the same addressing rule as the draft from a base.</summary>
+    private object? DraftFromEdges(IpcFrame request)
+    {
+        var command = Argument<DraftFromEdgesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.DraftFromEdges(command), document);
     }
 
     private object? SolidBoolean(IpcFrame request)

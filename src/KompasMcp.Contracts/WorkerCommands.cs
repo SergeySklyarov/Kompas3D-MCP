@@ -97,6 +97,19 @@ public static class WorkerCommands
     /// History: docs/decisions/contracts.md#shell-route</remarks>
     public const string Shell = "feat.shell";
 
+    /// <summary>Draft from a base — «Уклон» (docs/05 SM-12).</summary> <remarks>DOC: <c>ksinclinedefinition.html</c>
+    /// (definition from <c>ksEntity::GetDefinition</c>, members <c>FaceArray</c>, <c>SetPlane</c>, <c>angle</c>,
+    /// <c>direction</c>), <c>obj3dtype.html</c> (<c>o3d_incline = 42</c>). MEASURED: the angle is in degrees and the
+    /// product flag is read against the normal of the base object.
+    /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+    public const string Draft = "feat.draft";
+
+    /// <summary>Draft from a base line — «Уклон от базовой линии» (docs/05 SM-12).</summary> <remarks>DOC: API7 only —
+    /// <c>idraftsfromedges_add.html</c> (<c>Add</c> → properties → <c>Update</c>); API5 has no definition for
+    /// <c>o3d_DraftFromEdges = 644</c>, so no API5 route is attempted.
+    /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+    public const string DraftFromEdges = "feat.draft_from_edges";
+
     /// <summary>Boolean operation on bodies with an explicit target and tools (docs/05 SM-15).</summary> <remarks>DOC:
     /// the documented API7 boolean path: <c>IModelContainer.Booleans.Add()</c> → <c>IBoolean</c> with <c>BaseObject</c>
     /// (target), <c>ModifyObjects</c> (tools), <c>BooleanType</c>, <c>SaveCopyModifyObjects</c>, then <c>Update()</c>.

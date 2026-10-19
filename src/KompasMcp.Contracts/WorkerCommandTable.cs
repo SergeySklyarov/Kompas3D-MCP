@@ -173,6 +173,10 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.Sweep, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.Loft, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.Shell, WorkerAction.ModelMutation, 240_000);
+        // A draft rebuilds the document and re-reads the bodies; the base-line family crosses the API7
+        // bridge first, so its budget is the same as the other bridged features.
+        Cad(WorkerCommands.Draft, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.DraftFromEdges, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.UpdateFeature, WorkerAction.ModelMutation);
         Cad(WorkerCommands.SuppressFeature, WorkerAction.ModelMutation);
         Cad(WorkerCommands.DeleteFeature, WorkerAction.ModelMutation);

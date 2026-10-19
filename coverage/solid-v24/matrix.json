@@ -12961,7 +12961,7 @@
         "geometry_validation": "verified"
       },
       "tests": [
-        "DRW-07.section_view.create.stepped"
+        "DRW-07.create.stepped"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13008,7 +13008,7 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.create.simple"
+        "DRW-07.create.simple"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13056,7 +13056,7 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.read"
+        "DRW-07.read"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13104,7 +13104,7 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.update"
+        "DRW-07.update"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13153,7 +13153,7 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.delete"
+        "DRW-07.delete"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13202,7 +13202,7 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.save_reopen"
+        "DRW-07.save_reopen"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13251,7 +13251,7 @@
         "geometry_validation": "verified"
       },
       "tests": [
-        "DRW-07.section_view.rebuild"
+        "DRW-07.rebuild"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13300,7 +13300,8 @@
         "geometry_validation": "verified"
       },
       "tests": [
-        "DRW-07.section_view.geometry_validation"
+        "DRW-07.geometry_validation",
+        "DRW-07.geometry_validation.holes"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13351,7 +13352,11 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.section_view.negative_tests"
+        "DRW-07.negative_tests.odd_coordinates",
+        "DRW-07.negative_tests.three_points",
+        "DRW-07.negative_tests.both_traces",
+        "DRW-07.negative_tests.unsupported_mode",
+        "DRW-07.negative_tests.trace_misses_body"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",

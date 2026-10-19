@@ -237,6 +237,11 @@ public static class Program
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
                 pump.Run(() => mechanicalMates.Run());
             }
+            else if (options.Drafts)
+            {
+                var drafts = new DraftsProbe(report, options);
+                pump.Run(() => drafts.Run());
+            }
             else if (options.VerifyM3d is not null)
             {
                 var verify = new M3dVerificationProbe(report, options);
@@ -573,6 +578,7 @@ public static class Program
             : options.B5 ? "b5-sweep-loft-shell"
             : options.SketchCopy ? "sketch-copy-project"
             : options.MechanicalMates ? "mechanical-mates"
+            : options.Drafts ? "drafts"
             : options.SketchPlane ? "sketch-plane"
             : options.VmDensityMci ? "vm-density-mci"
             : options.RepositionRead ? "reposition-read"
@@ -760,6 +766,12 @@ public sealed class Options
     /// History: docs/decisions/probes.md#mechanical-mates</summary>
     public bool MechanicalMates { get; private set; }
 
+    /// <summary><c>--drafts</c>: «Уклон» от основания documented route — is it created by
+    /// <c>NewEntity(o3d_incline=42)</c>, what unit does <c>angle</c> take and what does
+    /// <c>direction</c> mean, measured by volume (order <c>SM12_DRAFTS</c>).
+    /// History: docs/decisions/probes.md#drafts</summary>
+    public bool Drafts { get; private set; }
+
     /// <summary><c>--visible</c>: run the probe in a VISIBLE instance. Needed where a documented route
     /// refuses on a hidden document and the refusal would otherwise be read as the product's answer.
     /// History: docs/decisions/probes.md#mechanical-mates</summary>
@@ -894,6 +906,7 @@ public sealed class Options
         var b5 = false;
         var sketchCopy = false;
         var mechanicalMates = false;
+        var drafts = false;
         var visible = false;
         var repositionRead = false;
         var repositionParams = false;
@@ -998,6 +1011,9 @@ public sealed class Options
                     break;
                 case "--mech-mates":
                     mechanicalMates = true;
+                    break;
+                case "--drafts":
+                    drafts = true;
                     break;
                 case "--visible":
                     visible = true;
@@ -1118,6 +1134,7 @@ public sealed class Options
             CollectControls = controls,
             SketchCopy = sketchCopy,
             MechanicalMates = mechanicalMates,
+            Drafts = drafts,
             Visible = visible,
             Lifecycle = lifecycle,
             Extrusion = extrusion,

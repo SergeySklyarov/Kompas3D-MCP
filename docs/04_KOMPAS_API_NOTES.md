@@ -6882,3 +6882,65 @@ IKompasDocument2D → IFragmentDocument`.
 `tools/KompasMcp.Api7Probe --mech-mates`, отчёт `docs/acceptance/api7/mechanical-mates.{json,md}`;
 страницы справки - `reference/kompas-sdk-v24/docs-wire-20261019-mates/` (25 страниц HTTP 200,
 отрицательный контроль 404).
+
+## §4.92. «Уклон» от основания: маршрут документирован, единица угла - ГРАДУСЫ, а `direction` ведёт себя противоположно странице справки (справка SDK 24 по проводу + живое измерение 19.10.2026, наряд `SM12_DRAFTS`)
+
+**Что проверено по проводу.** 31 страница SDK 24 и 2 страницы руководства v24 сняты скриптом
+`reference/kompas-sdk-v24/_fetch_docs_wire_20261019_drafts.py` в
+`reference/kompas-sdk-v24/docs-wire-20261019-drafts/`. HTTP 200 - 27 страниц SDK и обе страницы
+руководства; 404 у `ksinclinedefinition_create`, `iincline_methods`, `idraftsfromedges_methods`,
+`idraftfromedges_methods`; отрицательный контроль `ksinclinedefinition_nosuchmember` и
+`idraftfromedges_sideedges` - 404. Отсутствие `ksinclinedefinition_create` не мешает: `Create`
+принадлежит `ksEntity`, как и у прочих формообразующих операций.
+
+**Маршрут «Уклона» (API5).** `ksPart.NewEntity(o3d_incline = 42)` →
+`ksEntity.GetDefinition` → `ksInclineDefinition` (`ksinclinedefinition.html`: интерфейс получается
+именно через `GetDefinition`). Методы определения по `ksinclinedefinition_methods.html` - только
+`FaceArray`, `GetPlane`, `SetPlane`; свойств - `angle` (`double`), `direction` (`BOOL`).
+`FaceArray()` отдаёт `ksEntityCollection` уклоняемых граней (`ksinclinedefinition_facearray.html`),
+`SetPlane(plane)` принимает «плоский объект `ksEntity`» (`ksinclinedefinition_setplane.html`).
+Порядок «свойства → `ksEntity.Create()` → `RebuildDocument()`» тот же, что у остальных операций.
+
+**Маршрут того же признака (API7).** `IModelContainer.Inclines` (только чтение) → `IInclines.Add()`
+→ `IIncline` с `Faces` (`VARIANT`, SAFEARRAY `VT_ARRAY|VT_DISPATCH`), `Plane` (`IModelObject`),
+`Angle`, `Direction`; запись завершается `IModelObject.Update` (`iinclines_add.html` прямо это
+предписывает). `IIncline` существует с v18.
+
+**«Уклон от базовой линии» (только API7, v22+).** `IModelContainer.DraftsFromEdges` →
+`IDraftsFromEdges.Add()` → `IDraftFromEdges` → `IModelObject.Update`; чтение существующего -
+`IDraftsFromEdges.DraftFromEdges(индекс)`; свойства `BaseLine` (`VARIANT`, набор кривых
+`VT_ARRAY|VT_DISPATCH`), `DirectionObject`, `SideFace` (`IModelObject`), `Angle` (`double`),
+`Reverse` (`BOOL`). Все семь страниц - HTTP 200.
+
+**Условия руководства, совпавшие с нарядом.** `cm_make_draft.html`: основание - плоская грань тела
+либо вспомогательная/координатная плоскость, не параллельная уклоняемой грани; угол может быть
+отрицательным, направление меняется отдельно кнопкой «Сменить направление»; прежний наклон грани не
+учитывается; операция не выполняется, если перестроенные грани не образуют замкнутую поверхность;
+несколько граней с одним углом - одним признаком. `cm_draft_from_edges.html`: направление задаётся
+прямолинейным объектом (параллельно себе), плоским (перпендикулярно плоскости) или поверхностью
+вращения (параллельно оси); базовая линия - ребро или цепочка рёбер, начальная граница уклоняемой
+грани; сторона - любая из граней, прилегающих к базовой линии, по умолчанию выбирается системой.
+
+**Живое измерение (прибор `--drafts`, эталон наряда).** Брус выдавливанием прямоугольника
+`0..100 × 0..80` на `XY` вверх на 50: `V0 = 400000` мм³, 6 граней. Уклон грани «+X» 10°, основание -
+стандартная плоскость XOY, `FaceArray().Add(грань)` → `SetPlane(XOY)` → `angle = 10` → `Create()` →
+`RebuildDocument()`:
+
+| `direction` | объём после, мм³ | материал | эталон |
+|---|---|---|---|
+| `TRUE` | `382367.301929154` | убыл | градусы, «внутрь» (DR-02) |
+| `FALSE` | `417632.698070846` | прибыл | градусы, «наружу» (DR-02) |
+
+Радианный эталон §2.3 (`335163.92`) не совпал ни в одном случае, градусный совпал до 1e-9. **Единица
+угла - ГРАДУСЫ**, допущение §2.3 снято.
+
+**Расхождение со справкой.** `ksinclinedefinition_direction.html` и `iincline_direction.html`
+говорят: «`TRUE` - наружу, `FALSE` - внутрь». Измерение даёт обратное: `TRUE` уменьшает объём, то
+есть уводит вершину грани внутрь тела. По §2.3 наряда контракт молча не переворачивается: числа
+записаны, режим остановлен, вопрос вынесен техлиду (шаг 5 `DISPATCHER.md`). Гипотеза для разбора -
+«наружу» в справке описывает направление построения фантома, а не сторону, куда уходит материал; ни
+одна снятая страница этого не подтверждает и не опровергает.
+
+**Где записано.** `docs/decisions/probes.md#drafts`; прибор `tools/KompasMcp.Api7Probe --drafts`,
+отчёт `docs/acceptance/api7/drafts.{json,md}`; страницы справки -
+`reference/kompas-sdk-v24/docs-wire-20261019-drafts/`.

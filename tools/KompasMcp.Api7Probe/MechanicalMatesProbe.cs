@@ -75,6 +75,14 @@ internal sealed class MechanicalMatesProbe
                 return;
             }
 
+            // THE CONTROL COMES FIRST: the positioner route must work on a component that carries no
+            // mate at all. If it does not, its refusal on mated components says nothing about the
+            // product, and the experiment is over before any linkage is claimed.
+            if (!PositionerControl(follower))
+            {
+                return;
+            }
+
             if (Reopen(path) is not { } document)
             {
                 return;
@@ -93,7 +101,6 @@ internal sealed class MechanicalMatesProbe
             TransmissionLinkage(components[0], components[1]);
             CamCreate(components[0], components[2]);
             CamLinkage(components[0], components[2]);
-            PositionerControl(follower);
         }
         catch (Exception ex)
         {
@@ -111,7 +118,9 @@ internal sealed class MechanicalMatesProbe
 
     private void Launch()
     {
-        var step = _report.Begin("G4.1", "Свой невидимый экземпляр КОМПАС-3D v24",
+        var step = _report.Begin("G4.1", _options.Visible
+                ? "Свой ВИДИМЫЙ экземпляр КОМПАС-3D v24"
+                : "Свой невидимый экземпляр КОМПАС-3D v24",
             "Сеанс поднимается и завершается сам, без чужих процессов?");
         _current = step;
         try
@@ -125,7 +134,8 @@ internal sealed class MechanicalMatesProbe
             var type = Type.GetTypeFromProgID("KOMPAS.Application.5", throwOnError: false)
                        ?? throw new InvalidOperationException("ProgID KOMPAS.Application.5 не зарегистрирован.");
             _app = (KompasObject)Activator.CreateInstance(type)!;
-            _app.Visible = false;
+            _app.Visible = _options.Visible;
+            step.Observe("Visible = " + _options.Visible);
 
             var created = Process.GetProcessesByName("KOMPAS")
                 .Select(p => (uint)p.Id).Except(_pidsBefore).ToArray();
@@ -821,7 +831,7 @@ internal sealed class MechanicalMatesProbe
 
     /// <summary>DISCRIMINATING CONTROL: does the documented positioner route move a component at all where
     /// no mate exists? Without it, «Prepare()=FALSE» cannot be told from a misused instrument.</summary>
-    private void PositionerControl(string followerPath)
+    private bool PositionerControl(string followerPath)
     {
         var step = _report.Begin("G4.9", "Контроль прибора: позиционер поворачивает компонент БЕЗ сопряжений",
             "Работает ли документированный маршрут позиционера там, где сопряжений нет?");
@@ -834,7 +844,7 @@ internal sealed class MechanicalMatesProbe
         if (document.Create(true, false) != true)
         {
             step.Fail("сборка контроля не создана.");
-            return;
+            return false;
         }
 
         // THE CONTAINER IS TAKEN FROM THE DOCUMENT JUST CREATED, not from the application's active
@@ -845,7 +855,7 @@ internal sealed class MechanicalMatesProbe
         if (document7?.TopPart?.Parts is not { } parts7)
         {
             step.Fail("IParts7 нового документа не получен — вставлять нечем.");
-            return;
+            return false;
         }
 
         parts7.AddFromFile(followerPath, ExternalFile: true, Redraw: true);
@@ -855,7 +865,7 @@ internal sealed class MechanicalMatesProbe
         if (insertedCount is null or < 2)
         {
             step.Fail("вставка в документ контроля не дала двух компонентов.");
-            return;
+            return false;
         }
 
         document.RebuildDocument();
@@ -865,7 +875,7 @@ internal sealed class MechanicalMatesProbe
         if (Reopen(path) is not { } reopened)
         {
             step.Fail("сборка контроля не переоткрылась.");
-            return;
+            return false;
         }
 
         _doc = reopened;
@@ -873,14 +883,14 @@ internal sealed class MechanicalMatesProbe
             || collection.GetByIndex(0) is not ksPart component)
         {
             step.Fail("компонент контроля не получен.");
-            return;
+            return false;
         }
 
         var before = Placement(component);
         if (before is null)
         {
             step.Fail("размещение компонента контроля не прочитано.");
-            return;
+            return false;
         }
 
         var edge = StraightEdgeObject(component, step);
@@ -893,8 +903,8 @@ internal sealed class MechanicalMatesProbe
         if (!RotateByPositioner(component, axis, TurnDegrees, step, "компонент контроля"))
         {
             step.Fail("позиционер НЕ повернул даже несопряжённый компонент: маршрут в этом приборе не "
-                + "работает, и его отказ в опыте выше ничего не говорит о сопряжениях.");
-            return;
+                + "работает, и его отказ на сопряжённых компонентах ничего не говорит о сопряжениях.");
+            return false;
         }
 
         var after = Placement(component);
@@ -904,11 +914,13 @@ internal sealed class MechanicalMatesProbe
         if (turn is null || Math.Abs(turn.Value) <= TurnTolerance)
         {
             step.Fail("позиционер ответил успехом, но компонент не повернулся: маршрут не подтверждён.");
-            return;
+            return false;
         }
 
         step.Pass("контроль пройден: позиционер поворачивает несопряжённый компонент — его отказ выше "
             + "относится к сопряжённым компонентам, а не к прибору");
+
+        return true;
     }
 
     /// <summary>An axis through a straight edge: <c>o3d_axisEdge</c> → <c>IAxis3DByEdge.Edge</c>.</summary>

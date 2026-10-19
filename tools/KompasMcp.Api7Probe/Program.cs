@@ -760,6 +760,11 @@ public sealed class Options
     /// History: docs/decisions/probes.md#mechanical-mates</summary>
     public bool MechanicalMates { get; private set; }
 
+    /// <summary><c>--visible</c>: run the probe in a VISIBLE instance. Needed where a documented route
+    /// refuses on a hidden document and the refusal would otherwise be read as the product's answer.
+    /// History: docs/decisions/probes.md#mechanical-mates</summary>
+    public bool Visible { get; private set; }
+
     /// <summary><c>--b5</c>: calibration of the last mandatory queue's three families — sweep
     /// (SM-04), loft (SM-05), shell (SM-13). Closes OQ-A1 and OQ-A12 by measurement.
     /// History: docs/decisions/probes.md#b5</summary>
@@ -889,6 +894,7 @@ public sealed class Options
         var b5 = false;
         var sketchCopy = false;
         var mechanicalMates = false;
+        var visible = false;
         var repositionRead = false;
         var repositionParams = false;
         var cutArea = false;
@@ -993,6 +999,9 @@ public sealed class Options
                 case "--mech-mates":
                     mechanicalMates = true;
                     break;
+                case "--visible":
+                    visible = true;
+                    break;
                 case "--reposition-read":
                     repositionRead = true;
                     break;
@@ -1055,7 +1064,7 @@ public sealed class Options
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--iterations N] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--mech-mates] [--visible] [--iterations N] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -1109,6 +1118,7 @@ public sealed class Options
             CollectControls = controls,
             SketchCopy = sketchCopy,
             MechanicalMates = mechanicalMates,
+            Visible = visible,
             Lifecycle = lifecycle,
             Extrusion = extrusion,
             Chamfer = chamfer,

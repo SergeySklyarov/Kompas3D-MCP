@@ -47,6 +47,8 @@ internal sealed class SketchCopyProjectProbe
     private ksEntity _sketchA = null!;
     private ksEntity _sketchB = null!;
     private ksEntity _sketchP = null!;
+    private ksEntity _sketchPXoz = null!;
+    private ksEntity _plateExtrusion = null!;
     private string _savedPath = string.Empty;
     private int _aObjects;
     private int _aSegments;
@@ -93,11 +95,19 @@ internal sealed class SketchCopyProjectProbe
 
                 ReadTarget();
                 SourceUntouched();
+            }
+
+            // The projection experiment runs BEFORE the first save: the associativity test changes the
+            // source feature through the entity captured at build time, and a reopened document hands out
+            // no such reference.
+            ProjectIntoSketch();
+            if (_sketchA is not null && _sketchB is not null)
+            {
                 SaveReopenAndExtrude();
             }
 
-            ProjectIntoSketch();
             SaveReopenProjection();
+            DeleteProjectionSource();
         }
         catch (Exception ex)
         {
@@ -176,11 +186,17 @@ internal sealed class SketchCopyProjectProbe
         }
 
         _part = (ksPart)_doc.GetPart(-1);
-        if (Api5.BasePlate(_part, PlateWidth, PlateHeight, PlateThickness, step, "sc") is null)
+        // The entity is kept: the associativity test changes the plate's thickness through the very
+        // definition this call returned, and a definition asked for later is not guaranteed to be the
+        // same object.
+        var plate = Api5.BasePlate(_part, PlateWidth, PlateHeight, PlateThickness, step, "sc");
+        if (plate is null)
         {
             step.Fail("Пластина не построена.");
             return;
         }
+
+        _plateExtrusion = plate;
 
         _sketchA = NewSketch(PlaneXoy, "sc-source")!;
         _sketchB = NewSketch(PlaneXoz, "sc-target")!;
@@ -576,19 +592,23 @@ internal sealed class SketchCopyProjectProbe
         var step = _report.Begin("SC.7", "Проецирование объекта в эскиз через ISketch::AddProjectionOf",
             "Документированный маршрут проецирования работает?");
         var source = FindSketch("sc-source");
-        // The receiving sketch sits in XOY, the plane the plate's bottom edges lie IN: a projection of an
-        // edge that lies in the sketch plane is a segment, while an edge normal to it degenerates to a
-        // point — the subject is chosen so a null answer means "no route", not "degenerate projection".
+        // Two receivers, and the pair is what makes the associativity answer observable: the first sits in
+        // the plane its edge LIES in (XOY), so its 2D numbers cannot follow a body growing along the
+        // normal whatever the associativity; the second sits across that normal (XOZ) and carries the edge
+        // of the TOP face, whose 2D numbers are exactly the thickness.
         _sketchP = NewSketch(PlaneXoy, "sc-projection")!;
-        if (source is null || _sketchP is null)
+        _sketchPXoz = NewSketch(PlaneXoz, "sc-projection-xoz")!;
+        if (source is null || _sketchP is null || _sketchPXoz is null)
         {
-            step.Fail("Исходный эскиз или эскиз-приёмник не найдены.");
+            step.Fail("Исходный эскиз или эскизы-приёмники не найдены.");
             return;
         }
 
         var sketch7 = _app.TransferInterface(_sketchP, (int)ksAPITypeEnum.ksAPI7Dual, 0) as ISketch;
+        var sketch7Xoz = _app.TransferInterface(_sketchPXoz, (int)ksAPITypeEnum.ksAPI7Dual, 0) as ISketch;
         step.Data["sketch7_type"] = Api5.RuntimeName(sketch7);
-        if (sketch7 is null)
+        step.Data["sketch7_xoz_type"] = Api5.RuntimeName(sketch7Xoz);
+        if (sketch7 is null || sketch7Xoz is null)
         {
             step.Fail("Эскиз не перенесён в ISketch — проецировать нечем.");
             return;
@@ -597,11 +617,13 @@ internal sealed class SketchCopyProjectProbe
         // The documented argument is an IModelObject; the help names an edge, a vertex or a face, so the
         // subject is a body EDGE. A whole sketch is tried afterwards as a control: an empty answer there
         // must not be read as "projection does not work".
-        var edge = EdgeModel(step);
+        var bottom = PickEdge(topFace: false, step, "bottom");
+        var top = PickEdge(topFace: true, step, "top");
         var sketchModel = _app.TransferInterface(source, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IModelObject;
-        step.Data["projected_edge_type"] = Api5.RuntimeName(edge);
+        step.Data["projected_edge_type"] = Api5.RuntimeName(bottom.Model);
+        step.Data["projected_top_edge_type"] = Api5.RuntimeName(top.Model);
         step.Data["projected_sketch_type"] = Api5.RuntimeName(sketchModel);
-        if (edge is null)
+        if (bottom.Model is null)
         {
             step.Fail("Ребро тела не перенесено в IModelObject — проецировать нечего.");
             return;
@@ -610,13 +632,13 @@ internal sealed class SketchCopyProjectProbe
         // INVARIANT: the projection is asked for INSIDE the sketch edit session — the API5 page of the
         // same member says so directly («работает только в режиме редактирования эскиза»), and a call
         // outside the session answers null, which reads like "no route" and is not one.
-        var session = Session(_sketchP);
-        step.Data["projection_session"] = Api5.RuntimeName(session);
         int count;
         int control;
+        var session = Session(_sketchP);
+        step.Data["projection_session"] = Api5.RuntimeName(session);
         try
         {
-            count = Project(sketch7, edge, step, "edge");
+            count = Project(sketch7, bottom.Model, step, "edge");
             control = Project(sketch7, sketchModel, step, "sketch-control");
         }
         finally
@@ -624,7 +646,19 @@ internal sealed class SketchCopyProjectProbe
             EndSession(_sketchP, "projection");
         }
 
-        _projected = count;
+        int countXoz;
+        var sessionXoz = Session(_sketchPXoz);
+        step.Data["projection_session_xoz"] = Api5.RuntimeName(sessionXoz);
+        try
+        {
+            countXoz = Project(sketch7Xoz, top.Model, step, "top-edge");
+        }
+        finally
+        {
+            EndSession(_sketchPXoz, "projection-xoz");
+        }
+
+        _projected = count + countXoz;
         step.Data["projection_control_sketch"] = control;
         _doc.RebuildDocument();
         var counts = Counts(_sketchP, "p", step);
@@ -632,17 +666,40 @@ internal sealed class SketchCopyProjectProbe
         step.Data["projection_arcs"] = counts.Arcs;
         step.Data["projection_circles"] = counts.Circles;
         step.Data["projection_objects_in_sketch"] = counts.Objects;
+        var countsXoz = Counts(_sketchPXoz, "pxoz", step);
+        step.Data["projection_xoz_objects"] = countsXoz.Objects;
 
         if (count > 0 || counts.Objects > 0)
         {
             step.Pass($"AddProjectionOf(ребро) вернул {count} объектов; в эскизе-приёмнике объектов " +
-                      $"{counts.Objects} ({counts.Segments} отрезков, {counts.Arcs} дуг, {counts.Circles} окружностей).");
-            AssociateOnThicknessChange(step);
+                      $"{counts.Objects} ({counts.Segments} отрезков, {counts.Arcs} дуг, {counts.Circles} окружностей); " +
+                      $"в эскизе на XOZ от ребра верхней грани — {countXoz} (объектов {countsXoz.Objects}).");
+            ProjectionOfAnotherSketchObject(step);
+            AssociateOnThicknessChange();
         }
         else
         {
             step.Fail("AddProjectionOf(ребро) вернул пустой массив и в эскизе объектов не появилось.");
         }
+    }
+
+    /// <summary>Whether an object of ANOTHER sketch may be the projected subject at all.</summary>
+    /// <remarks>DOC: <c>kssketchdefinition_addprojectionof.html</c> — «Параметр <c>entity</c> может быть
+    /// указателем на ребро, вершину или грань»; <c>isketch_addprojectionof.html</c> names the argument as
+    /// <c>IModelObject</c> without widening that list. An object of a sketch is none of the three, so the
+    /// documented route does not accept it and the experiment is NOT run: a probe of an undocumented
+    /// argument would answer about a route nobody has documented.</remarks>
+    private void ProjectionOfAnotherSketchObject(ProbeStep parent)
+    {
+        var step = _report.Begin("SC.7c", "Проекция объекта ДРУГОГО эскиза",
+            "Допускает ли документированный маршрут объект эскиза как IModelObject?");
+        step.Data["documented_argument_kinds"] = "ребро, вершина, грань";
+        step.Data["control_whole_sketch"] = parent.Data.TryGetValue("sketch-control_objects", out var control)
+            ? control
+            : null;
+        step.Unknown("Не измерено: справка допускает только ребро, вершину и грань, а объект эскиза не " +
+                     "назван ни одним из них. Контроль с ЭСКИЗОМ целиком дал 0 объектов — это ответ про " +
+                     "эскиз как целое, а не про его объект.");
     }
 
     /// <summary>One <c>AddProjectionOf</c> call; the answer is the array length, not a boolean.</summary>
@@ -669,88 +726,175 @@ internal sealed class SketchCopyProjectProbe
         }
     }
 
-    /// <summary>Associativity: the plate gets thicker, the projected edge must follow.</summary>
-    /// <remarks>MEASURED: the answer is a COORDINATE of the projection before and after the rebuild, not
-    /// the call's reply — an unassociated copy of the edge would keep its old numbers.</remarks>
-    private void AssociateOnThicknessChange(ProbeStep parent)
+    /// <summary>Associativity: the plate changes thickness, both projections are re-read.</summary>
+    /// <remarks>DOC: <c>ksbaseextrusiondefinition_setsideparam.html</c> — the depth of a base extrusion in
+    /// one direction; <c>ksentity_update.html</c> — «Изменение параметров объекта через интерфейс его
+    /// параметров не приводит к перестроению модели … для перестроения объекта в модели … необходимо
+    /// вызвать данный метод».
+    /// MEASURED: the answer is the COORDINATES of the projections before and after the rebuild, not the
+    /// call's reply — an unassociated copy of the edge would keep its old numbers. The thickness is put
+    /// back afterwards, so the copy experiment that follows keeps its own volume arithmetic.</remarks>
+    private void AssociateOnThicknessChange()
     {
-        var step = _report.Begin("SC.7a", "Ассоциативность проекции при изменении тела",
-            "Двигается ли проекция за исходным ребром?");
-        var before = FirstCoordinates(_sketchP, step);
-        step.Data["coordinates_before"] = before;
+        var step = _report.Begin("SC.7a", "Ассоциативность проекции при изменении исходного тела",
+            "Двигается ли проекция за исходным ребром после перестроения?");
 
-        var thickened = Thicken(PlateThickness + 10d, step);
-        _doc.RebuildDocument();
-        var after = FirstCoordinates(_sketchP, step);
-        step.Data["coordinates_after"] = after;
-        step.Data["body_volume"] = Api5.Num(Api5.Volume(_part));
-        if (!thickened)
+        if (_plateExtrusion is null || _sketchP is null || _sketchPXoz is null)
         {
-            step.Unknown("Толщина не изменена — ассоциативность не проверена.");
+            step.Unknown("Признак выдавливания или эскизы-приёмники не получены — опыт не на чем ставить.");
             return;
         }
 
-        if (before != after)
+        var xozBefore = FirstCoordinates(_sketchPXoz, step, "xoz_before");
+        var xoyBefore = FirstCoordinates(_sketchP, step, "xoy_before");
+        var volumeBefore = Api5.Volume(_part);
+        step.Data["volume_before"] = Api5.Num(volumeBefore);
+
+        var grown = SetThickness(PlateThickness + 10d, step, "grow");
+        var xozAfter = FirstCoordinates(_sketchPXoz, step, "xoz_after");
+        var xoyAfter = FirstCoordinates(_sketchP, step, "xoy_after");
+        var volumeGrown = Api5.Volume(_part);
+        step.Data["volume_after_grow"] = Api5.Num(volumeGrown);
+
+        var restored = SetThickness(PlateThickness, step, "restore");
+        var xozRestored = FirstCoordinates(_sketchPXoz, step, "xoz_restored");
+        var volumeRestored = Api5.Volume(_part);
+        step.Data["volume_after_restore"] = Api5.Num(volumeRestored);
+        step.Data["xoy_changed"] = xoyBefore != xoyAfter;
+
+        if (!grown || !restored)
         {
-            step.Pass("Координаты проекции изменились вместе с телом: связь с исходным ребром живая.");
+            step.Unknown("Толщина не изменена документированным путём — ассоциативность не проверена.");
+            return;
+        }
+
+        if (volumeBefore == volumeGrown || volumeGrown == volumeRestored)
+        {
+            step.Fail($"Тело не изменилось: объём {Api5.Num(volumeBefore)} → {Api5.Num(volumeGrown)} → " +
+                      $"{Api5.Num(volumeRestored)}. Опыт не поставлен, ответа об ассоциативности нет.");
+            return;
+        }
+
+        var follows = xozBefore != xozAfter;
+        var returns = xozRestored == xozBefore;
+        if (follows && returns)
+        {
+            step.Pass($"Проекция на XOZ изменилась вместе с телом и вернулась вместе с ним: до «{xozBefore}», " +
+                      $"после «{xozAfter}», после возврата толщины «{xozRestored}»; объём " +
+                      $"{Api5.Num(volumeBefore)} → {Api5.Num(volumeGrown)} → {Api5.Num(volumeRestored)}. " +
+                      $"Проекция на XOY не изменилась ({xoyBefore == xoyAfter}): её ребро лежит В плоскости " +
+                      "эскиза, и рост по нормали её 2D-чисел не касается.");
+        }
+        else if (!follows)
+        {
+            step.Fail($"Проекция не последовала за ребром: до «{xozBefore}», после «{xozAfter}», при объёме " +
+                      $"{Api5.Num(volumeBefore)} → {Api5.Num(volumeGrown)}.");
         }
         else
         {
-            step.Fail("Координаты проекции не изменились после изменения тела: связь не подтверждена.");
+            step.Fail($"Проекция ушла за телом, но не вернулась: до «{xozBefore}», после «{xozRestored}» " +
+                      "при исходной толщине.");
         }
-
-        _ = parent;
     }
 
-    private bool Thicken(double thickness, ProbeStep step)
+    /// <summary>The documented thickness change of the captured base extrusion, then a rebuild.</summary>
+    private bool SetThickness(double thickness, ProbeStep step, string label)
     {
-        // The feature is looked for in the OPERATIONS collection first: after a reopen the base extrusion
-        // is not in EntityCollection(o3d_baseExtrusion), and an empty collection reads like "no feature".
-        foreach (var collectionType in new short[] { 110, BaseExtrusion })
+        if (_plateExtrusion.GetDefinition() is not ksBaseExtrusionDefinition definition)
         {
-            if (_part.EntityCollection(collectionType) is not ksEntityCollection collection)
-            {
-                continue;
-            }
-
-            step.Data[$"thicken_collection_{collectionType}"] = collection.GetCount();
-            for (var i = 0; i < collection.GetCount(); i++)
-            {
-                // The tree entity's own type number is not the o3d_baseExtrusion constant (measured:
-                // collection 110 holds two features and neither answers type == 24), so the definition
-                // type is what identifies a base extrusion here.
-                if (collection.GetByIndex(i) is not ksEntity entity
-                    || entity.GetDefinition() is not ksBaseExtrusionDefinition definition)
-                {
-                    continue;
-                }
-
-                step.Data["thicken_feature"] = entity.name;
-                step.Data["thicken_set_side_param"] =
-                    Api5.Raw(TryBool(() => definition.SetSideParam(true, 0, thickness, 0d, false)));
-                var rebuilt = TryBool(entity.Update);
-                step.Data["thicken_update"] = Api5.Raw(rebuilt);
-                _doc.RebuildDocument();
-                step.Data["thicken_volume"] = Api5.Num(Api5.Volume(_part));
-                return rebuilt == true;
-            }
+            step.Data[label + "_definition"] = "GetDefinition не дал ksBaseExtrusionDefinition";
+            return false;
         }
 
-        step.Data["thicken_feature"] = "признак выдавливания не найден";
-        return false;
+        var set = TryBool(() => definition.SetSideParam(true, 0, thickness, 0d, false));
+        var updated = TryBool(_plateExtrusion.Update);
+        _doc.RebuildDocument();
+        step.Data[label + "_thickness"] = Api5.Num(thickness);
+        step.Data[label + "_set_side_param"] = Api5.Raw(set);
+        step.Data[label + "_update"] = Api5.Raw(updated);
+        return set == true && updated == true;
     }
 
-    /// <summary>A straight edge of the main body as an API7 model object, by the documented transfer.
-    /// An edge lying in the XOY plane is preferred, so the projection has a segment to produce.</summary>
-    private IModelObject? EdgeModel(ProbeStep step)
+    /// <summary>What becomes of a projection when the feature that produced the subject is deleted.</summary>
+    /// <remarks>DOC: <c>ksdocument3d_deleteobject.html</c> — «Удалить можно любой трехмерный объект»; «Если
+    /// в качестве входного параметра переданы … ребро ksEdgeDefinition … то будет удален весь
+    /// формообразующий элемент, которому принадлежит удаляемый объект». So the edge is the subject and the
+    /// base extrusion is what the call removes.
+    /// MEASURED: the answer is the state of BOTH projection sketches after the rebuild — objects and
+    /// coordinates — read again rather than inferred from the call's reply.</remarks>
+    private void DeleteProjectionSource()
+    {
+        var step = _report.Begin("SC.7b", "Проекция после удаления исходного объекта",
+            "Что остаётся в эскизе, когда признак-источник удалён?");
+        var xoy = FindSketch("sc-projection");
+        var xoz = FindSketch("sc-projection-xoz");
+        if (xoy is null || xoz is null)
+        {
+            step.Unknown("Эскизы с проекциями не найдены после переоткрытия — удалять нечего.");
+            return;
+        }
+
+        var edge = PickEdge(topFace: true, step, "delete");
+        if (edge.Definition is null)
+        {
+            step.Unknown("Ребро-источник не найдено: удалять документированным путём нечего.");
+            return;
+        }
+
+        var beforeXoy = Counts(xoy, "del-xoy-before", step);
+        var beforeXoz = Counts(xoz, "del-xoz-before", step);
+        var beforeCoords = FirstCoordinates(xoz, step, "delete_xoz_before");
+        var beforeCoordsXoy = FirstCoordinates(xoy, step, "delete_xoy_before");
+        var volumeBefore = Api5.Volume(_part);
+        step.Data["volume_before_delete"] = Api5.Num(volumeBefore);
+
+        var deleted = TryBool(() => _doc.DeleteObject(edge.Definition));
+        _doc.RebuildDocument();
+        var volumeAfter = Api5.Volume(_part);
+        step.Data["delete_object"] = Api5.Raw(deleted);
+        step.Data["volume_after_delete"] = Api5.Num(volumeAfter);
+
+        var afterXoy = Counts(xoy, "del-xoy-after", step);
+        var afterXoz = Counts(xoz, "del-xoz-after", step);
+        var afterCoords = FirstCoordinates(xoz, step, "delete_xoz_after");
+        var afterCoordsXoy = FirstCoordinates(xoy, step, "delete_xoy_after");
+        step.Data["xoy_objects_before"] = beforeXoy.Objects;
+        step.Data["xoy_objects_after"] = afterXoy.Objects;
+        step.Data["xoz_objects_before"] = beforeXoz.Objects;
+        step.Data["xoz_objects_after"] = afterXoz.Objects;
+
+        if (deleted != true)
+        {
+            step.Fail("DeleteObject не подтвердил удаление — поведение проекции не наблюдалось.");
+            return;
+        }
+
+        var survived = afterXoz.Objects == beforeXoz.Objects && afterXoy.Objects == beforeXoy.Objects;
+        var sameNumbers = afterCoords == beforeCoords && afterCoordsXoy == beforeCoordsXoy;
+        step.Pass($"Признак удалён (объём {Api5.Num(volumeBefore)} → {Api5.Num(volumeAfter)}); проекции " +
+                  $"{(survived ? "остались" : "изменились")}: XOZ объектов {beforeXoz.Objects} → " +
+                  $"{afterXoz.Objects}, координаты «{beforeCoords}» → «{afterCoords}»; XOY объектов " +
+                  $"{beforeXoy.Objects} → {afterXoy.Objects}, координаты «{beforeCoordsXoy}» → " +
+                  $"«{afterCoordsXoy}»; числа {(sameNumbers ? "прежние" : "другие")}.");
+    }
+
+    /// <summary>A straight edge of the main body as an API7 model object, taken from the face whose
+    /// <c>z</c> makes its projection readable: the bottom face for the sketch on XOY, the top face for the
+    /// sketch on XOZ.</summary>
+    /// <remarks>DOC: <c>isketch_addprojectionof.html</c> — the subject is a model object (an edge, a vertex
+    /// or a face). MEASURED: the two projections answer different questions — a bottom edge lies IN the XOY
+    /// sketch plane, so its 2D numbers cannot move with thickness; a top edge projects into XOZ as the
+    /// thickness itself.</remarks>
+    private (ksEdgeDefinition? Definition, IModelObject? Model) PickEdge(bool topFace, ProbeStep step,
+        string label)
     {
         if (_part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)
         {
-            step.Data["edge_source"] = "тело или коллекция граней недоступны";
-            return null;
+            step.Data[label + "_edge_source"] = "тело или коллекция граней недоступны";
+            return (null, null);
         }
 
-        IModelObject? fallback = null;
+        var wanted = topFace ? PlateThickness : 0d;
         for (var f = 0; f < faces.GetCount(); f++)
         {
             var face = faces.GetByIndex(f) as ksFaceDefinition
@@ -771,34 +915,33 @@ internal sealed class SketchCopyProjectProbe
                 }
 
                 var entity = edgeObject as ksEntity ?? edge.GetEntity() as ksEntity;
-                if (entity is null)
+                if (entity is null
+                    || edge.GetVertex(true) is not ksVertexDefinition v0
+                    || edge.GetVertex(false) is not ksVertexDefinition v1
+                    || !v0.GetPoint(out var ax, out _, out var az)
+                    || !v1.GetPoint(out var bx, out _, out var bz)
+                    || Math.Abs(az - wanted) > 1e-6
+                    || Math.Abs(bz - wanted) > 1e-6)
                 {
                     continue;
                 }
 
-                var inPlane = edge.GetVertex(true) is ksVertexDefinition v0
-                              && edge.GetVertex(false) is ksVertexDefinition v1
-                              && v0.GetPoint(out _, out _, out var az)
-                              && v1.GetPoint(out _, out _, out var bz)
-                              && Math.Abs(az) < 1e-6 && Math.Abs(bz) < 1e-6;
-                var transferred = _app.TransferInterface(entity, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IModelObject;
-                if (!inPlane)
+                // The XOZ receiver needs an edge PARALLEL to X: an edge along Y is normal to that plane and
+                // projects to a point, whose 2D numbers say nothing about the thickness.
+                if (topFace && Math.Abs(ax - bx) < 1e-6)
                 {
-                    fallback ??= transferred;
                     continue;
                 }
 
-                step.Data["edge_face"] = f;
-                step.Data["edge_index"] = e;
-                step.Data["edge_in_plane"] = true;
-                step.Data["edge_type"] = Api5.RuntimeName(transferred);
-                return transferred;
+                step.Data[label + "_face"] = f;
+                step.Data[label + "_edge_index"] = e;
+                step.Data[label + "_edge_z"] = Api5.Num(az);
+                return (edge, _app.TransferInterface(entity, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IModelObject);
             }
         }
 
-        step.Data["edge_in_plane"] = false;
-        step.Data["edge_type"] = Api5.RuntimeName(fallback);
-        return fallback;
+        step.Data[label + "_edge"] = "ребра на грани z=" + Api5.Num(wanted) + " не найдено";
+        return (null, null);
     }
 
     private void SaveReopenProjection()
@@ -1034,7 +1177,7 @@ internal sealed class SketchCopyProjectProbe
 
     /// <summary>The first object's coordinates, read by late binding: the names are asked of the live
     /// object, so a name the wrapper does not carry is reported as such instead of being guessed.</summary>
-    private string FirstCoordinates(ksEntity sketch, ProbeStep step)
+    private string FirstCoordinates(ksEntity sketch, ProbeStep step, string key = "first_object_coordinates")
     {
         var session = Session(sketch);
         if (session is null)
@@ -1048,11 +1191,14 @@ internal sealed class SketchCopyProjectProbe
             var objects = document is null ? Array.Empty<object>() : ObjectsOf(document, step, "coords");
             if (objects.Length == 0)
             {
+                step.Data[key] = "объектов нет";
                 return "объектов нет";
             }
 
             var parts = new List<string>();
-            foreach (var name in new[] { "X1", "Y1", "X2", "Y2", "Xc", "Yc", "Radius", "Length", "Angle" })
+            // A projection of an edge normal to the sketch plane is a POINT object, and a point answers
+            // X/Y rather than X1…Y2 — asking only the segment names would report a live object as unreadable.
+            foreach (var name in new[] { "X1", "Y1", "X2", "Y2", "Xc", "Yc", "X", "Y", "Radius", "Length", "Angle" })
             {
                 try
                 {
@@ -1066,7 +1212,7 @@ internal sealed class SketchCopyProjectProbe
             }
 
             var text = string.Join(" ", parts);
-            step.Data["first_object_coordinates"] = text;
+            step.Data[key] = text;
             return text;
         }
         finally

@@ -106,7 +106,7 @@ public class RotationContractTests
             ?? throw new InvalidOperationException("kompas_rotated не найден в каталоге.");
         var description = tool.Description;
 
-        Assert.Contains("cut: ПОЛНЫЙ ОБОРОТ ВЫРАЖАЕТСЯ", description, StringComparison.Ordinal);
+        Assert.Contains("cut: полный оборот выражается", description, StringComparison.Ordinal);
         Assert.Contains("БОБЫШКА СРАЩИВАЕТСЯ", description, StringComparison.Ordinal);
         Assert.DoesNotContain("ПОЛНЫЙ ОБОРОТ НЕ ВЫРАЖАЕТСЯ", description, StringComparison.Ordinal);
         Assert.DoesNotContain("ВИД boss НА НЕПУСТОЙ ДЕТАЛИ ОТВЕРГАЕТСЯ", description, StringComparison.Ordinal);

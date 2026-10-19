@@ -402,7 +402,7 @@ public class DrawingDomainTests
 
         Assert.True(tool.IsMutation);
         Assert.Contains("ITechnicalDemand", description, StringComparison.Ordinal);
-        Assert.Contains("idrawingdocument_technicaldemand.html", description, StringComparison.Ordinal);
+        Assert.Contains("ITechnicalDemand.Text", description, StringComparison.Ordinal);
         Assert.Contains("text", required);
         Assert.Contains("operation_id", required);
     }

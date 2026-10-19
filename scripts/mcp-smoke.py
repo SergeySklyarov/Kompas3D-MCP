@@ -609,6 +609,9 @@ RUN_GROUPS = (
      "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)"),
     ("mate", "mate", "mate-acceptance.json",
      "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)"),
+    ("mech_mates", "mech-mates", "mech-mates-acceptance.json",
+     "Приёмка MM: механическая передача через MCP — создание и чтение параметров, названные отказы "
+     "(наряд G4, профиль mechanical-mates-minimal-v1)"),
     ("interference", "interference", "interference-acceptance.json",
      "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль "
      "assembly-interference-minimal-v1)"),
@@ -698,6 +701,7 @@ VERTICAL_GROUPS = (
 ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
     ("mate", ["--mate-only"]),
+    ("mech_mates", ["--mech-mates-only"]),
     ("interference", ["--interference-only"]),
     ("drawing", ["--drawing-only"]),
     ("section", ["--section-only"]),
@@ -7501,6 +7505,425 @@ def mate_checks(client, rep, app_id, workdir):
                     "PASS" if (orientation_ok and all(orientation_ok)) else "FAIL",
                     f"сверено строк: {len(orientation_ok)}, расхождений "
                     f"{sum(1 for a in orientation_ok if not a)}; допуск {dot_tolerance}")
+
+
+def mech_mates_checks(client, rep, app_id, workdir):
+    """MM.* — механическая передача через MCP (наряд G4, профиль `mechanical-mates-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Вид `transmission` создаётся и ЧИТАЕТСЯ из модели: движения, коэффициент,
+    направления. Ход ведомого компонента НЕ заявляется: опыт наряда не наблюдал его ни одним
+    документированным маршрутом, поэтому MM-02…MM-05 сверяют ПРОЧИТАННОЕ, а не движение.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Линейное движение и кулачок вне объёма: проверяется названный отказ, а не успех.
+    Смены коэффициента у существующей передачи в контракте нет — `set_mate_parameter` пишет
+    `ParamValue`, которого у передачи не существует.
+    """
+    import math
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def near(value, expected, tolerance=1e-6):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def mates_of(doc):
+        _e, env, _r = client.tool("kompas_list_mates", {"document_id": doc})
+        res = result(env)
+        return res.get("mates") or [], res.get("mate_count")
+
+    # Аналитика эталона: цилиндр Ø60 высотой 10. Объём назван здесь один раз и сверяется с моделью,
+    # а не берётся из окна построения.
+    radius, depth = 30.0, 10.0
+    expected_volume = math.pi * radius * radius * depth
+    src_dir = os.path.join(workdir, "mech-mates-src")
+    os.makedirs(src_dir, exist_ok=True)
+    gear_path = os.path.join(src_dir, "mm-gear.m3d")
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "MM-gear"})
+    part = doc_id(env)
+    prev = rev_of(env)
+    cylinder_face = plane_face = None
+    ok_gear = False
+    if part:
+        env, code = call("kompas_create_sketch", {
+            "document_id": part, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "mm-gear"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+            "entities": [{"kind": "circle", "center_mm": [0, 0], "radius_mm": radius}]})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                  "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": depth,
+                                            "direction": "positive"})
+        prev = rev_of(env, prev)
+        # НОМЕР ГРАНИ — ПОЗИЦИЯ В FaceCollection: чтение топологии идёт по GetByIndex, поэтому
+        # позиция в списке и есть номер, который принимает сопряжение.
+        env, code = call("kompas_list_bodies", {"document_id": part})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        if bodies:
+            env, code = call("kompas_read_topology", {
+                "document_id": part, "body_ref": bodies[0].get("body_ref"), "include": "faces"})
+            for index, face in enumerate(result(env).get("faces") or []):
+                surface = face.get("surface_type")
+                if surface == "cylinder" and cylinder_face is None:
+                    cylinder_face = index
+                if surface == "plane" and plane_face is None:
+                    plane_face = index
+        env, code = call("kompas_save_document", {
+            "document_id": part, "expected_revision": prev, "target_path": gear_path})
+        ok_gear = (not code) and os.path.isfile(gear_path) and cylinder_face is not None
+        call("kompas_close_document", {"document_id": part, "dirty_policy": "discard"})
+
+    rep.add("MM.PREP.gear",
+            "деталь-шестерня (цилиндр Ø60×10) построена инструментами MCP, цилиндрическая и "
+            "плоская грани найдены",
+            "PASS" if ok_gear else "FAIL",
+            f"volume={expected_volume:.2f} cylinder_face={cylinder_face} plane_face={plane_face} "
+            f"path={gear_path} error={code}")
+    if not ok_gear:
+        return
+
+    def component_refs(doc):
+        env, _c = call("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        return [row.get("component_ref") for row in rows]
+
+    def new_pair(name):
+        """Сборка из двух шестерён со сдвигом 150 мм — постановка для ОДНОЙ передачи.
+
+        СВОЯ СБОРКА НА КАЖДЫЙ ОПЫТ: измерено, что вторая передача на той же паре компонентов не
+        создаётся (`Update()=False`, `Valid=False`), а удаление передачи отвергается
+        (`RemoveMateConstraint=False`), поэтому освободить пару нельзя и опыт идёт на новой.
+        """
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"сборка не создана: {code}"
+        for _index in range(2):
+            env, code = call("kompas_insert_component", {
+                "document_id": doc, "expected_revision": current_rev(doc),
+                "source_path": gear_path, "fixed": False})
+            if code:
+                return None, f"вставка компонента: {code} {emsg(env)}"
+        refs = component_refs(doc)
+        if len(refs) != 2:
+            return None, f"компонентов {len(refs)} вместо двух"
+        env, code = call("kompas_set_component_placement", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "component_ref": refs[1],
+            "transform": {"origin_mm": [150, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        if code:
+            return None, f"смещение второго компонента: {code} {emsg(env)}"
+        return doc, None
+
+    def transmission_args(doc, scale1, scale2, **extra):
+        refs = component_refs(doc)
+        args = {"document_id": doc, "expected_revision": current_rev(doc),
+                "constraint_type": "transmission",
+                "first_component_ref": refs[0], "first_face_index": cylinder_face,
+                "second_component_ref": refs[1], "second_face_index": cylinder_face,
+                "motion1": "rotation", "motion2": "rotation",
+                "scale1": scale1, "scale2": scale2}
+        args.update(extra)
+        return args
+
+    def transmission_row(doc, scale1, scale2):
+        mates, _count = mates_of(doc)
+        return next((row for row in mates
+                     if row.get("constraint_type") == "transmission"
+                     and near(row.get("scale1"), scale1) and near(row.get("scale2"), scale2)), None)
+
+    asm, problem = new_pair("MM-asm")
+    rep.add("MM.PREP.components",
+            "сборка из двух шестерён со сдвигом 150 мм до сопряжения (постановка передачи)",
+            "PASS" if asm else "FAIL", problem or f"document={asm}")
+    if not asm:
+        return
+
+    # ========= MM-01: обнаружение =========
+    tools = client.call("tools/list", {}).get("tools", [])
+    entry = next((t for t in tools if t["name"] == "kompas_create_mate"), None)
+    listed_schema = (entry or {}).get("inputSchema") or {}
+    props = listed_schema.get("properties") or {}
+    kinds = ((props.get("constraint_type") or {}).get("enum")) or []
+    fields = [name for name in ("motion1", "motion2", "scale1", "scale2", "direction1", "direction2")
+              if name in props]
+    try:
+        with open(os.path.join(ROOT, "schemas", "kompas_create_mate.json"),
+                  encoding="utf-8-sig") as handle:
+            published = json.load(handle)
+        published.pop("$schema", None)
+    except (OSError, ValueError):
+        published = None
+    _e, caps, _r = client.tool("kompas_capabilities", {})
+    caps_result = (caps or {}).get("result") or {}
+    caps_tools = caps_result.get("tools") or []
+    # ОПИСАНИЕ ВИДА живёт в описании поля `constraint_type`, а не инструмента.
+    description = (props.get("constraint_type") or {}).get("description") or ""
+    rep.add("MM.01.discover",
+            "вид transmission объявлен в схеме kompas_create_mate, шесть полей передачи на месте, "
+            "схема совпадает с реестром, описание вида называет передачу",
+            "PASS" if ("transmission" in kinds and len(fields) == 6
+                       and published == listed_schema and "transmission" in description
+                       and "kompas_create_mate" in caps_tools
+                       and caps_result.get("tool_count") == EXPECTED_TOOL_COUNT) else "FAIL",
+            f"виды={kinds} поля={fields} схема_совпадает={published == listed_schema} "
+            f"описание_называет={'transmission' in description} "
+            f"capabilities: инструмент={'kompas_create_mate' in caps_tools} "
+            f"count={caps_result.get('tool_count')}")
+
+    # ========= MM-02: передача 1:2 — параметры прочитаны из модели =========
+    env, code = call("kompas_create_mate", transmission_args(asm, 1.0, 2.0,
+                                                             direction1=True, direction2=True))
+    res = result(env)
+    mate = res.get("mate") or {}
+    verification = res.get("verification") or {}
+    named_checks = {row.get("name"): row.get("passed")
+                    for row in (verification.get("checks") or [])}
+    unverified = verification.get("unverified_aspects") or []
+    ratio_check = named_checks.get("transmission_ratio_read_back")
+    kinematics_named = any("transmission_kinematics_not_claimed" in text for text in unverified)
+    rep.add("MM.02.transmission_1_2",
+            "передача вращение-вращение 1:2 создана; движения, коэффициент и направления ПРОЧИТАНЫ "
+            "из модели, ход ведомого не заявляется",
+            "PASS" if (not code and mate.get("valid") is True
+                       and mate.get("motion1") == "rotation" and mate.get("motion2") == "rotation"
+                       and near(mate.get("scale1"), 1.0) and near(mate.get("scale2"), 2.0)
+                       and mate.get("direction1") is True and mate.get("direction2") is True
+                       and ratio_check is True and kinematics_named
+                       and res.get("mate_count") == 1) else "FAIL",
+            f"valid={mate.get('valid')} motion={mate.get('motion1')}/{mate.get('motion2')} "
+            f"scale={mate.get('scale1')}:{mate.get('scale2')} "
+            f"direction={mate.get('direction1')}/{mate.get('direction2')} "
+            f"ratio_check={ratio_check} ход_не_заявлен={kinematics_named} "
+            f"count={res.get('mate_count')} error={code} msg={emsg(env)}")
+
+    # ========= MM-06: чтение из модели =========
+    row1 = transmission_row(asm, 1.0, 2.0)
+    _mates, mate_count = mates_of(asm)
+    rep.add("MM.06.read",
+            "kompas_list_mates отдаёт вид transmission и прочитанные из модели движения, "
+            "коэффициент и направления",
+            "PASS" if (row1 is not None and row1.get("motion1") == "rotation"
+                       and row1.get("motion2") == "rotation"
+                       and row1.get("direction1") is True and row1.get("valid") is True
+                       and mate_count == 1) else "FAIL",
+            f"type={row1 and row1.get('constraint_type')} motion={row1 and row1.get('motion1')}/"
+            f"{row1 and row1.get('motion2')} scale={row1 and row1.get('scale1')}:"
+            f"{row1 and row1.get('scale2')} valid={row1 and row1.get('valid')} count={mate_count}")
+
+    # ========= MM-08: удаление — измеренный отказ =========
+    # ИЗМЕРЕНО: `RemoveMateConstraint` возвращает FALSE для передачи, сопряжение остаётся в модели.
+    # Продукт отвечает отказом, а не успехом — проверяется именно это, а не «связь пропала».
+    before_del = mate_count
+    env, code = call("kompas_delete_mate", {"document_id": asm,
+                                            "expected_revision": current_rev(asm),
+                                            "mate_ref": (row1 or {}).get("mate_ref")})
+    _mates, mate_count = mates_of(asm)
+    delete_refused = (code == "VERIFICATION_FAILED"
+                      and "RemoveMateConstraint" in (emsg(env) or ""))
+    rep.add("MM.08.delete_refused",
+            "удаление передачи отвергнуто названной причиной (RemoveMateConstraint=FALSE), "
+            "сопряжение осталось: ложного успеха нет",
+            "PASS" if (delete_refused and mate_count == before_del) else "FAIL",
+            f"код={code} сопряжений {before_del} → {mate_count} msg={emsg(env)}")
+
+    # ========= MM-04: линейное движение — названный отказ =========
+    env, code = call("kompas_create_mate", transmission_args(asm, 1.0, 2.0, motion2="linear"))
+    _mates, after_linear = mates_of(asm)
+    linear_named = any(word in (emsg(env) or "") for word in ("linear", "Линейное"))
+    rep.add("MM.04.linear_refused",
+            "линейное движение отвергнуто названной причиной, сопряжений не прибавилось",
+            "PASS" if (code and after_linear == before_del and linear_named) else "FAIL",
+            f"код={code} сообщение={emsg(env)} сопряжений {before_del} → {after_linear}")
+
+    # ========= MM-05: кулачок — названный отказ =========
+    refs = component_refs(asm)
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "cam_gear",
+        "first_component_ref": refs[0], "first_face_index": cylinder_face,
+        "second_component_ref": refs[1], "second_face_index": cylinder_face})
+    _mates, after_cam = mates_of(asm)
+    rep.add("MM.05.cam_gear_refused",
+            "кулачок отвергнут названной причиной (вне объёма), сопряжений не прибавилось",
+            "PASS" if (code and after_cam == before_del
+                       and "cam_gear" in (emsg(env) or "")) else "FAIL",
+            f"код={code} сообщение={emsg(env)} сопряжений={after_cam}")
+
+    # ========= MM-03 и MM-07: другая передача на СВОЕЙ паре, затем переоткрытие =========
+    pair_b, problem_b = new_pair("MM-asm-2")
+    if not pair_b:
+        rep.add("MM.03.direction_and_ratio", "постановка для второй передачи не построена",
+                "FAIL", problem_b or "")
+    else:
+        env, code = call("kompas_create_mate", transmission_args(pair_b, 2.0, 1.0,
+                                                                 direction2=False))
+        mate3 = result(env).get("mate") or {}
+        rep.add("MM.03.direction_and_ratio",
+                "коэффициент 2:1 и direction2=false прочитаны из модели как заданы; direction1 "
+                "остаётся умолчанием ядра (true); смены коэффициента у существующей передачи в "
+                "контракте нет",
+                "PASS" if (not code and mate3.get("valid") is True
+                           and near(mate3.get("scale1"), 2.0) and near(mate3.get("scale2"), 1.0)
+                           and mate3.get("direction2") is False
+                           and mate3.get("direction1") is True
+                           and result(env).get("mate_count") == 1) else "FAIL",
+                f"valid={mate3.get('valid')} scale={mate3.get('scale1')}:{mate3.get('scale2')} "
+                f"direction={mate3.get('direction1')}/{mate3.get('direction2')} "
+                f"count={result(env).get('mate_count')} error={code} msg={emsg(env)}")
+
+        asm_path = os.path.join(src_dir, "mm-asm-2.a3d")
+        env, code = call("kompas_save_document", {"document_id": pair_b,
+                                                  "expected_revision": current_rev(pair_b),
+                                                  "target_path": asm_path})
+        saved = (not code) and os.path.isfile(asm_path)
+        call("kompas_close_document", {"document_id": pair_b, "dirty_policy": "save"})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": asm_path,
+                                                  "access": "edit"})
+        reopened = doc_id(env)
+        # ССЫЛКИ ПОСЛЕ ПЕРЕОТКРЫТИЯ ВЫДАНЫ ЗАНОВО (измерено: прежние отвергаются
+        # STALE_REFERENCE), поэтому строка ищется по ПРОЧИТАННЫМ ИЗ МОДЕЛИ числам.
+        row3 = transmission_row(reopened, 2.0, 1.0) if reopened else None
+        _mates, count_reopened = mates_of(reopened) if reopened else ([], None)
+        rep.add("MM.07.reopen",
+                "после сохранения, закрытия и переоткрытия передача и её параметры читаются из "
+                "модели теми же числами",
+                "PASS" if (saved and row3 is not None and row3.get("valid") is True
+                           and row3.get("motion1") == "rotation"
+                           and row3.get("direction2") is False
+                           and count_reopened == 1) else "FAIL",
+                f"сохранено={saved} path={asm_path} scale={row3 and row3.get('scale1')}:"
+                f"{row3 and row3.get('scale2')} direction2={row3 and row3.get('direction2')} "
+                f"valid={row3 and row3.get('valid')} count={count_reopened} error={code}")
+
+    # ========= MM-09: идемпотентность и ревизии — на своей паре =========
+    pair_c, problem_c = new_pair("MM-asm-3")
+    if not pair_c:
+        rep.add("MM.09.idempotent", "постановка для идемпотентности не построена", "FAIL",
+                problem_c or "")
+    else:
+        payload = transmission_args(pair_c, 1.0, 3.0)
+        payload["operation_id"] = str(uuid.uuid4())
+        _e, first_env, _r = client.tool("kompas_create_mate", payload, timeout=300)
+        _e, second_env, _r = client.tool("kompas_create_mate", payload, timeout=300)
+        _mates, count_repeat = mates_of(pair_c)
+        replay_warned = any("журналь" in item.lower()
+                            for item in ((second_env or {}).get("warnings") or []))
+        stale_env, stale_code = call("kompas_create_mate", dict(
+            transmission_args(pair_c, 1.0, 3.0),
+            expected_revision=current_rev(pair_c) - 1))
+        _mates, count_after_stale = mates_of(pair_c)
+        rep.add("MM.09.idempotent",
+                "повтор того же operation_id второго сопряжения не создаёт (журнальная запись "
+                "названа), устаревшая ревизия отвергается REVISION_CONFLICT",
+                "PASS" if (error_code(first_env) is None and error_code(second_env) is None
+                           and replay_warned and count_repeat == 1
+                           and stale_code == "REVISION_CONFLICT"
+                           and count_after_stale == count_repeat) else "FAIL",
+                f"первый={error_code(first_env)} повтор={error_code(second_env)} "
+                f"журнал_назван={replay_warned} count={count_repeat} "
+                f"устаревшая_ревизия={stale_code} count_после={count_after_stale}")
+
+    # ========= MM-10: отказы без ложного успеха =========
+    def count_after_refusal(args):
+        before_rows, _c = mates_of(asm)
+        env, code = call("kompas_create_mate", args)
+        after_rows, _c = mates_of(asm)
+        return env, code, len(before_rows), len(after_rows)
+
+    env_a, code_a, n0, n1 = count_after_refusal(transmission_args(asm, 0.0, 2.0))
+    env_b, code_b, _n, n2 = count_after_refusal(transmission_args(asm, -2.0, 2.0))
+    rep.add("MM.10.ratio_refused",
+            "коэффициент 0 и отрицательный отвергнуты до COM, сопряжений не прибавилось",
+            "PASS" if (code_a == "INVALID_ARGUMENT" and code_b == "INVALID_ARGUMENT"
+                       and n0 == n1 == n2) else "FAIL",
+            f"scale1=0 → {code_a}; scale1=-2 → {code_b}; сопряжений {n0} → {n1} → {n2}")
+
+    refs = component_refs(asm)
+    foreign = {"document_id": asm, "expected_revision": current_rev(asm),
+               "constraint_type": "coincidence",
+               "first_component_ref": refs[0], "first_face_index": 0,
+               "second_component_ref": refs[1], "second_face_index": 0,
+               "scale1": 1.0, "scale2": 2.0}
+    env_f, code_f, nf0, nf1 = count_after_refusal(foreign)
+    refs = component_refs(asm)
+    missing = {"document_id": asm, "expected_revision": current_rev(asm),
+               "constraint_type": "transmission",
+               "first_component_ref": refs[0], "first_face_index": cylinder_face,
+               "second_component_ref": refs[1], "second_face_index": cylinder_face,
+               "motion1": "rotation", "motion2": "rotation"}
+    env_m, code_m, nm0, nm1 = count_after_refusal(missing)
+    rep.add("MM.10.foreign_fields",
+            "поля передачи у чужого вида и передача без коэффициента отвергнуты до COM, "
+            "сопряжений не прибавилось",
+            "PASS" if (code_f == "INVALID_ARGUMENT" and code_m == "INVALID_ARGUMENT"
+                       and nf0 == nf1 and nm0 == nm1) else "FAIL",
+            f"поля у coincidence → {code_f}; без коэффициента → {code_m}; "
+            f"сопряжений {nf0} → {nf1} и {nm0} → {nm1}")
+
+    # ПЛОСКАЯ ГРАНЬ КАК ОСЬ: вызов принимается, но сопряжение не подтверждается (`Valid=false`),
+    # и отказ обязан назвать частичный эффект — сопряжение уже в модели.
+    if plane_face is not None:
+        before_rev = current_rev(asm)
+        before_rows, _c = mates_of(asm)
+        env_p, code_p = call("kompas_create_mate", transmission_args(
+            asm, 1.0, 2.0, first_face_index=plane_face))
+        after_rows, _c = mates_of(asm)
+        details = ((env_p or {}).get("error") or {}).get("details") or {}
+        partial_named = (details.get("mate_count_after") == len(after_rows)
+                         and details.get("mate_count_before") == len(before_rows))
+        rep.add("MM.10.non_axis_face",
+                "плоская грань вместо цилиндрической отвергнута VERIFICATION_FAILED, частичный "
+                "эффект назван числом сопряжений, ревизия сдвинута",
+                "PASS" if (code_p == "VERIFICATION_FAILED" and partial_named
+                           and len(after_rows) == len(before_rows) + 1
+                           and current_rev(asm) > before_rev) else "FAIL",
+                f"код={code_p} сопряжений {len(before_rows)} → {len(after_rows)} "
+                f"ревизия {before_rev} → {current_rev(asm)} msg={emsg(env_p)}")
+
+    refs = component_refs(asm)
+    env_c, code_c, nc0, nc1 = count_after_refusal({
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "cam_gear",
+        "first_component_ref": refs[0], "first_face_index": cylinder_face,
+        "second_component_ref": refs[1], "second_face_index": cylinder_face,
+        "cam_faces": []})
+    rep.add("MM.10.cam_faces",
+            "пустой набор граней кулачка отвергнут, сопряжений не прибавилось",
+            "PASS" if (code_c and nc0 == nc1) else "FAIL",
+            f"код={code_c} сообщение={emsg(env_c)} сопряжений {nc0} → {nc1}")
 
 
 def section_checks(client, rep, app_id, workdir):
@@ -15234,6 +15657,10 @@ def main():
     # по той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
     mate_only = "--mate-only" in sys.argv
+    # То же для механической передачи (наряд G4, профиль `mechanical-mates-minimal-v1`): одна группа
+    # MM на своём сеансе, потому что клетка матрицы обязана находиться по ИМЕНИ строки
+    # (`MM.<NN>.<действие>`), а не по номеру в общем потоке.
+    mech_mates_only = "--mech-mates-only" in sys.argv
 
     # То же для блока G1 (пересечения и зазоры между компонентами сборки, профиль
     # `assembly-interference-minimal-v1`): одна группа INT на своём сеансе. Отдельная ветка нужна по
@@ -15374,6 +15801,7 @@ def main():
         "nested": nested_only,
         "assembly": assembly_only,
         "mate": mate_only,
+        "mech_mates": mech_mates_only,
         "interference": interference_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
@@ -15904,6 +16332,14 @@ def main():
 
         if mate_only:
             mate_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if mech_mates_only:
+            mech_mates_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -46755,6 +47191,7 @@ def shutdown_checks(host, config, workdir, rep):
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
+    "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
     "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
     "drawing": lambda c, r, a, w, v, p: drawing_checks(c, r, a, w),
     "section": lambda c, r, a, w, v, p: section_checks(c, r, a, w),

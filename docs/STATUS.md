@@ -22,7 +22,9 @@
   отказал и на компоненте без сопряжений, в том числе в ВИДИМОМ документе (`Prepare = 0`). `cam_gear`
   вне контракта (набор объектов не установлен), линейный режим вне объёма. Профиль
   `mechanical-mates-minimal-v1` (режим `MATE-07…rotation_rotation`, `runtime_verified`), версия
-  `0.10.0`. Открыто: группа `--mech-mates-only` (MM-01…MM-10) и зачётный `--all` — не выполнены.
+  `0.10.0`. Группа `--mech-mates-only` (MM-01…MM-10) написана и прогнана живьём: PASS 38 / FAIL 0
+  (удаление передачи отвергается `RemoveMateConstraint=FALSE`, вторая передача на той же паре не
+  создаётся — обе строки сверяют отказ). Открыто: зачётный `--all` на этом коммите.
   `docs/decisions/mates.md#mechanical-transmission`, `docs/decisions/probes.md#mechanical-mates`,
   `docs/04_KOMPAS_API_NOTES.md` §4.91.
 - **Копирование и проецирование в эскиз (наряд `SKETCH_COPY_PROJECT_RESEARCH`, 19.10.2026, только

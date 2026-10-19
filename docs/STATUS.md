@@ -22,7 +22,8 @@
   редакций «до/после» (-17 507 символов, 4,6 %), достижимый бюджет - около 340 000, вариант «справка
   по запросу» не обоснован без клиентского прогона. `src/`, `schemas/`, `docs/TOOLS.md` не менялись;
   прибор - `scripts/catalog-text-baseline.py`, отчёт - `CATALOG_TEXT_RESEARCH_REPORT_20261019.md`,
-  предложения - `docs/acceptance/evidence/20261019-catalog-text-086f48d/`.
+  предложения - `docs/acceptance/evidence/20261019-catalog-text-086f48d/`, выводы -
+  `docs/decisions/host.md#catalog-text-research`.
 - **Версия:** `<Version>0.9.0</Version>` в `Directory.Build.props`; номер нигде больше не пишется.
 - **Последний выпуск:** `v0.9.0` -
   <https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.9.0>, тег на `0d884a0`, релиз не

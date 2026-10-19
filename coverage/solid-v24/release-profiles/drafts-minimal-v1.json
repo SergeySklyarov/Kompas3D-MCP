@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "profile_id": "drafts-minimal-v1",
+    "title": "Уклоны граней v24: от основания и от базовой линии",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "20.10.2026",
+        "change": "профиль заведён нарядом SM-12: пять режимов §1, общие зависимости §6; уровни подняты по доказательствам группы --drafts-only на поставке и зачётного --all"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E1": "Уклоны — шаг D таблицы G-пробелов, очередь E1"
+    }
+  },
+  "modes": [
+    {
+      "ref": "SM-12.incline.mode_faces_group",
+      "title": "Одна грань и группа граней в одном признаке уклона",
+      "family": "SM-12",
+      "queue": "E1",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: одна грань и четыре боковые грани одним признаком, объём и габарит сверены с аналитикой §5 наряда (382367.30 / 417632.70 для одной грани, 325834.73 / 484529.01 для четырёх). Признаков добавляется один, а не по признаку на грань. Грани разных тел в одном вызове отвергаются (DR.14)."
+    },
+    {
+      "ref": "SM-12.incline.mode_base_face_or_plane",
+      "title": "Основание — плоская грань тела и плоскость",
+      "family": "SM-12",
+      "queue": "E1",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Обе формы основания обязательны и обе проверены: нижняя грань даёт 382367.30, вспомогательная плоскость z = 25 — объём 400000 при габарите X max = 104.408 (клинья компенсируются). Правка основания грань ↔ плоскость поддержана (DR.06). Основание, параллельное уклоняемой грани, и неплоская грань основания отвергаются (DR.14)."
+    },
+    {
+      "ref": "SM-12.incline.mode_direction",
+      "title": "Направление уклона «наружу» / «внутрь»",
+      "family": "SM-12",
+      "queue": "E1",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Сторона обязательна в контракте и проверена обоими значениями на одном угле: inward убирает материал, outward добавляет. Направление меняется отдельно от знака угла (DR.06: 5° inward 391251.13 → outward 408748.87). Смысл флага продукта отсчитывается от нормали основания — измерено на двух основаниях."
+    },
+    {
+      "ref": "SM-12.draft_from_edges.mode_dir_by_object",
+      "title": "Базовое направление объектом: плоскость, грань, ребро, ось",
+      "family": "SM-12",
+      "queue": "E1",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Направление плоскостью и прямолинейным ребром дают один и тот же объём при том же reverse (DR.07, DR.08); цепочка рёбер базовой линии даёт пару {325834.73, 484529.01} (DR.09). Поверхность вращения как направление вне профиля — названный отказ CAPABILITY_UNAVAILABLE (DR.14), а не режим."
+    },
+    {
+      "ref": "SM-12.draft_from_edges.mode_side",
+      "title": "Сторона уклона гранью SideFace и смена направления Reverse",
+      "family": "SM-12",
+      "queue": "E1",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Сторона задаётся гранью, прилегающей к базовой линии; сторона, не прилегающая к ней, отвергается (DR.14). Reverse меняет объём на симметричный (DR.07, DR.09) и правится на месте (DR.10: 391251.13 → 408748.87)."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.refs.planar_face",
+      "title": "Плоская грань как опора (нормаль, локальные координаты положения на грани)",
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "Адрес граней уклоняемого набора и основания: face_refs и base_face_ref берутся из kompas_read_topology; неплоская грань отвергается до COM. Проверяется группой --drafts-only."
+    },
+    {
+      "id": "dep.refs.edges_faces",
+      "title": "Рёбра и грани как объекты выбора с устойчивой адресацией",
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "Адрес рёбер базовой линии: base_line_edge_refs — одно ребро или цепочка; устаревшая ссылка отвечает STALE_REFERENCE. Проверяется группой --drafts-only."
+    },
+    {
+      "id": "dep.refs.planes",
+      "title": "Плоскости: базовые, смещённые, наклонные вокруг оси, опора на плоскую грань",
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "Адрес основания-плоскости и направляющей плоскости: стандартная плоскость и вспомогательная z = 25. Проверяется группой --drafts-only (DR.04, DR.06, DR.14)."
+    },
+    {
+      "id": "dep.api7.in_same_adapter",
+      "title": "API7 в основном коде: один адаптер, один владелец сеанса, одна STA-очередь",
+      "required_actions": [
+        "create",
+        "read",
+        "edit",
+        "negative_tests"
+      ],
+      "gap": "Маршрут уклона от базовой линии существует только в API7 и вызывается в том же адаптере и той же STA-очереди, что прочие вызовы; второго сеанса КОМПАС не заводится. Проверяется группой --drafts-only."
+    },
+    {
+      "id": "dep.units.confirm",
+      "title": "Единицы выбранного нового режима подтверждены замером до его приёмки",
+      "required_actions": [
+        "create",
+        "read",
+        "geometry_validation"
+      ],
+      "gap": "Единица угла обоих признаков измерена, а не принята по допущению: 10 единиц дают 382367.30 (градусы), радианный вариант дал бы 335163.92 и не совпал ни разу. Проверяется группой --drafts-only."
+    },
+    {
+      "id": "dep.lifecycle.feature_cycle",
+      "title": "Жизненный цикл выбранного признака: чтение, правка параметров и опор, перестроение, подавление/восстановление, удаление с зависимостями",
+      "required_actions": [
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies"
+      ],
+      "gap": "Оба семейства проходят чтение, правку, save → close → reopen, подавление с восстановлением и удаление существующими инструментами. Проверяется группой --drafts-only (DR.11, DR.12, DR.13)."
+    }
+  ],
+  "explicitly_out_of_scope": {
+    "deferred_full_P6": [
+      "направление уклона от базовой линии вектором (IDraftFromEdges.Vector3D) — отдельный маршрут и отдельное задание",
+      "направление поверхностью вращения (кроме сферы) — контракт отказывает CAPABILITY_UNAVAILABLE с причиной",
+      "опции панели «Выбирать касательные рёбра» и «Адаптировать скругления»: в составе свойств IDraftFromEdges справки SDK v24 таких членов нет",
+      "уклон внутри выдавливания (draft у SM-02) — другое семейство с другой ассоциативностью",
+      "правка базовой линии, направляющего объекта и стороны уклона от базовой линии",
+      "многотельный контекст (грани разных тел в одном признаке), компоненты сборки, исполнения"
+    ],
+    "next_block_after_profile": [
+      "направление вектором и поверхностью вращения после отдельного задания",
+      "правка базовой линии и направляющего объекта"
+    ]
+  }
+}

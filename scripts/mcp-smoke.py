@@ -567,7 +567,8 @@ def file_sha256(path):
 # История: 81 (до G2) → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза)
 # → 89 (G6: управляющий размер на отрезке эскиза) → 90 (COMPONENT_DELETE: удаление компонента)
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
-EXPECTED_TOOL_COUNT = 94
+# → 96 (SM-12: kompas_draft и kompas_draft_from_edges).
+EXPECTED_TOOL_COUNT = 96
 
 RUN_GROUPS = (
     # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор
@@ -612,6 +613,9 @@ RUN_GROUPS = (
     ("mech_mates", "mech-mates", "mech-mates-acceptance.json",
      "Приёмка MM: механическая передача через MCP — создание и чтение параметров, названные отказы "
      "(наряд G4, профиль mechanical-mates-minimal-v1)"),
+    ("drafts", "drafts", "drafts-acceptance.json",
+     "Приёмка DR: уклоны граней - от основания и от базовой линии, чтение, правка, переоткрытие, "
+     "названные отказы (наряд SM-12, профиль drafts-minimal-v1)"),
     ("interference", "interference", "interference-acceptance.json",
      "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль "
      "assembly-interference-minimal-v1)"),
@@ -702,6 +706,7 @@ ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
     ("mate", ["--mate-only"]),
     ("mech_mates", ["--mech-mates-only"]),
+    ("drafts", ["--drafts-only"]),
     ("interference", ["--interference-only"]),
     ("drawing", ["--drawing-only"]),
     ("section", ["--section-only"]),
@@ -15782,6 +15787,11 @@ def main():
     # (`MM.<NN>.<действие>`), а не по номеру в общем потоке.
     mech_mates_only = "--mech-mates-only" in sys.argv
 
+    # Домен УКЛОНОВ (наряд SM-12, профиль `drafts-minimal-v1`): одна группа DR на своём сеансе.
+    # Клетка матрицы обязана находиться по ИМЕНИ строки (`DR.<NN>.<действие>`), а не по номеру в
+    # общем потоке, - та же причина, что у прочих групп.
+    drafts_only = "--drafts-only" in sys.argv
+
     # То же для блока G1 (пересечения и зазоры между компонентами сборки, профиль
     # `assembly-interference-minimal-v1`): одна группа INT на своём сеансе. Отдельная ветка нужна по
     # той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
@@ -15922,6 +15932,7 @@ def main():
         "assembly": assembly_only,
         "mate": mate_only,
         "mech_mates": mech_mates_only,
+        "drafts": drafts_only,
         "interference": interference_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
@@ -16460,6 +16471,14 @@ def main():
 
         if mech_mates_only:
             mech_mates_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if drafts_only:
+            drafts_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -47308,10 +47327,759 @@ def shutdown_checks(host, config, workdir, rep):
             % (remaining_kompas, my_hosts, my_workers, len(baseline_hosts), len(baseline_workers)))
 
 
+def drafts_checks(client, rep, app_id, workdir):
+    """DR.* - уклоны граней через MCP (наряд SM-12, профиль `drafts-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Оба инструмента работают на бинарях поставки: «уклон» от основания и
+    «уклон от базовой линии» создаются, читаются ИЗ МОДЕЛИ, правятся на месте, подавляются,
+    удаляются и переживают save → close → reopen. Каждая строка сверяет ОБЪЁМ и ГАБАРИТ с
+    аналитикой §5 наряда, а не ответ `true`.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Правка базовой линии, направляющего объекта и стороны в контракте не
+    поддержана - DR.10 правит только угол и `reverse`. Направление вектором и поверхность вращения
+    вне профиля: DR.14 проверяет НАЗВАННЫЙ отказ, а не успех.
+    """
+    import math
+    import os
+
+    # Аналитика §5 наряда: брус 0..100 x 0..80 на XY вверх на 50, V0 = 400000. Вынос d = 50*tan(10).
+    V0 = 400000.0
+    TAN10 = math.tan(math.radians(10.0))
+    D50 = 50.0 * TAN10
+    D25 = 25.0 * TAN10
+    ONE_IN, ONE_OUT = 382367.30, 417632.70
+    FOUR_IN, FOUR_OUT = 325834.73, 484529.01
+    FIVE_IN, FIVE_OUT = 391251.13, 408748.87
+    # Классы допусков профиля заданы ДО прогона: объём - до сотых эталона §5, длина - length_mm.
+    TOL_V = 0.05
+    TOL_MM = 0.01
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def near(value, expected, tolerance=TOL_V):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def vol(doc):
+        rows = bodies(doc)
+        return rows[0].get("volume_mm3") if rows else None
+
+    def x_max(doc):
+        rows = bodies(doc)
+        box = (rows[0].get("bbox") or {}) if rows else {}
+        hi = box.get("max_mm") or []
+        return hi[0] if hi else None
+
+    def body_ref(doc, index=0):
+        rows = bodies(doc)
+        return rows[index].get("body_ref") if len(rows) > index else None
+
+    def faces(doc, normal, index=0):
+        env, code = call("kompas_resolve_selection", {
+            "body_ref": body_ref(doc, index),
+            "predicate": {"surface_type": "plane", "normal_direction": normal},
+            "require_unique": True, "limit": 100})
+        found = result(env)
+        if isinstance(found, dict):
+            found = found.get("matches") or found.get("items") or []
+        return [row.get("id") for row in (found or []) if row.get("id")], code
+
+    def topology(doc, include, index=0):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body_ref(doc, index), "include": include})
+        res = result(env)
+        return res if isinstance(res, dict) else {}
+
+    def edge_at(rows, x=None, y=None, z=None, tol=1e-3):
+        """Рёбра-отрезки, у которых ВСЕ вершины попадают в названные координаты.
+
+        Пустой список вершин НЕ считается совпадением: `all()` на пустом - истина, и такая строка
+        выбрала бы первое попавшееся ребро, доказав не то, что назвала.
+        """
+        out = []
+        for row in rows:
+            vs = row.get("vertices_mm") or []
+            if len(vs) < 2 or row.get("curve_type") != "line":
+                continue
+            if x is not None and not all(abs(v[0] - x) <= tol for v in vs):
+                continue
+            if y is not None and not all(abs(v[1] - y) <= tol for v in vs):
+                continue
+            if z is not None and not all(abs(v[2] - z) <= tol for v in vs):
+                continue
+            out.append(row.get("edge_ref"))
+        return out
+
+    def new_bar(name):
+        """Эталон §5: прямоугольник 0..100 x 0..80 на XY, выдавливание вверх на 50."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"документ не создан: {code}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "bar"})
+        sketch = result(env).get("id")
+        if code or not sketch:
+            return None, f"эскиз не создан: {code}"
+        # УГОЛ, А НЕ ЦЕНТР: у прямоугольника `start_mm` - угол, `center_mm` принадлежит дуге и
+        # окружности. Габарит сверяется строкой DR.PREP.bar, а не принимается на веру.
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 100,
+                          "height_mm": 80}]})
+        if code:
+            return None, f"прямоугольник: {code}"
+        env, code = call("kompas_finish_sketch", {
+            "sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return None, f"эскиз не завершён: {code}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "base",
+            "depth_mm": 50, "direction": "positive", "expected_volume_delta_mm3": V0})
+        if code:
+            return None, f"выдавливание: {code}"
+        return doc, None
+
+    def close(doc):
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def aux_plane(doc, base, offset, name):
+        env, code = call("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": current_rev(doc), "kind": "plane",
+            "mode": "offset", "base_plane": base, "offset_mm": offset, "name": name})
+        res = result(env)
+        return res.get("reference_id") or res.get("id"), code
+
+    def draft_features(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else []
+        return [row for row in rows if row.get("family") in ("draft", "draft_from_edges")]
+
+    def draft_row(doc, **kwargs):
+        args = {"document_id": doc, "expected_revision": current_rev(doc)}
+        args.update(kwargs)
+        return call("kompas_draft", args)
+
+    def from_edges_row(doc, **kwargs):
+        args = {"document_id": doc, "expected_revision": current_rev(doc)}
+        args.update(kwargs)
+        return call("kompas_draft_from_edges", args)
+
+    # ── DR-01: обнаружение ──────────────────────────────────────────────────────────────────────
+    tools = client.call("tools/list", {}).get("tools", [])
+    listed = {t.get("name"): (t.get("inputSchema") or {}) for t in tools}
+    schema_ok = {}
+    for name in ("kompas_draft", "kompas_draft_from_edges"):
+        try:
+            with open(os.path.join(ROOT, "schemas", name + ".json"), encoding="utf-8-sig") as h:
+                published = json.load(h)
+            published.pop("$schema", None)
+        except (OSError, ValueError):
+            published = None
+        schema_ok[name] = published is not None and published == listed.get(name)
+    _e, caps, _r = client.tool("kompas_capabilities", {})
+    caps_result = (caps or {}).get("result") or {}
+    caps_tools = caps_result.get("tools") or []
+    rep.add("DR.01.discover",
+            "оба инструмента в tools/list, схемы совпадают с реестром байт-в-байт, "
+            "kompas_capabilities называет оба, число инструментов равно реестру",
+            "PASS" if (all(schema_ok.values())
+                       and all(n in caps_tools for n in schema_ok)
+                       and caps_result.get("tool_count") == EXPECTED_TOOL_COUNT) else "FAIL",
+            f"schemas={schema_ok} caps_has_both="
+            f"{[n for n in schema_ok if n in caps_tools]} tool_count="
+            f"{caps_result.get('tool_count')} реестр={EXPECTED_TOOL_COUNT}")
+
+    # ── постановка: эталонный брус ─────────────────────────────────────────────────────────────
+    probe, problem = new_bar("DR-prep")
+    prep_ok = bool(probe) and near(vol(probe), V0, 1e-3) and near(x_max(probe), 100.0, TOL_MM)
+    rep.add("DR.PREP.bar",
+            "эталон §5 построен инструментами MCP: брус 0..100 x 0..80 на XY вверх на 50, "
+            "объём 400000, X max = 100",
+            "PASS" if prep_ok else "FAIL",
+            problem or f"volume={vol(probe)} x_max={x_max(probe)} ожидалось 400000 / 100")
+    if not prep_ok:
+        return
+    close(probe)
+
+    # ── DR-02: одна грань +X, основание - нижняя грань, 10 градусов ────────────────────────────
+    dr02 = {}
+    for tag, side, expected, limit in (("inward", "inward", ONE_IN, 100.0),
+                                       ("outward", "outward", ONE_OUT, 100.0 + D50)):
+        doc, problem = new_bar("DR-02-" + tag)
+        if not doc:
+            dr02[tag] = ("FAIL", problem or "брус не построен")
+            continue
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction=side, expected_volume_mm3=expected)
+        got, box = result(env).get("volume_after_mm3"), x_max(doc)
+        # НОРМАЛЬ ГРАНИ: после уклона грань +X отклонена от +X на угол уклона. Читается
+        # `normal_at_center` соседней грани, а не берётся из ответа инструмента.
+        tilted = None
+        for face in topology(doc, "faces").get("faces") or []:
+            n = face.get("normal_at_center") or []
+            if (face.get("surface_type") == "plane" and len(n) >= 3
+                    and abs(abs(n[0]) - math.cos(math.radians(10.0))) <= 1e-3
+                    and abs(abs(n[2]) - math.sin(math.radians(10.0))) <= 1e-3):
+                tilted = n
+                break
+        ok = (not code and near(got, expected) and near(box, limit, TOL_MM) and tilted is not None)
+        dr02[tag] = ("PASS" if ok else "FAIL",
+                     f"volume={got} ожидалось={expected} x_max={box} ожидалось={limit:.3f} "
+                     f"нормаль_наклонена={tilted} error={code}")
+        close(doc)
+    rep.add("DR.02.one_face",
+            "уклон грани +X 10 градусов от нижней грани: inward даёт 382367.30 при X max = 100, "
+            "outward - 417632.70 при X max = 108.816, нормаль грани отклонена от +X на 10 градусов",
+            "PASS" if all(v[0] == "PASS" for v in dr02.values()) and len(dr02) == 2 else "FAIL",
+            " | ".join(f"{k}: {v[0]} {v[1]}" for k, v in dr02.items()))
+
+    # ── DR-03: четыре боковые грани одним признаком ────────────────────────────────────────────
+    dr03 = {}
+    for tag, side, expected in (("inward", "inward", FOUR_IN), ("outward", "outward", FOUR_OUT)):
+        doc, problem = new_bar("DR-03-" + tag)
+        if not doc:
+            dr03[tag] = ("FAIL", problem or "брус не построен")
+            continue
+        sides = []
+        for normal in ([1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]):
+            found, _c = faces(doc, normal)
+            sides += found
+        bottom, _c = faces(doc, [0, 0, -1])
+        before = len(draft_features(doc))
+        env, code = draft_row(doc, face_refs=sides, base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction=side, expected_volume_mm3=expected)
+        got = result(env).get("volume_after_mm3")
+        added = len(draft_features(doc)) - before
+        ok = (not code and len(sides) == 4 and near(got, expected) and added == 1)
+        dr03[tag] = ("PASS" if ok else "FAIL",
+                     f"volume={got} ожидалось={expected} граней={len(sides)} признаков_добавлено="
+                     f"{added} error={code}")
+        close(doc)
+    rep.add("DR.03.four_faces",
+            "четыре боковые грани одним признаком 10 градусов: inward 325834.73, outward 484529.01, "
+            "признаков +1, а не +4",
+            "PASS" if all(v[0] == "PASS" for v in dr03.values()) and len(dr03) == 2 else "FAIL",
+            " | ".join(f"{k}: {v[0]} {v[1]}" for k, v in dr03.items()))
+
+    # ── DR-04: основание - вспомогательная плоскость z = 25 ────────────────────────────────────
+    doc, problem = new_bar("DR-04")
+    if not doc:
+        rep.add("DR.04.base_plane", "основание - вспомогательная плоскость z = 25: объём остаётся "
+                "400000, X max = 104.408", "FAIL", problem or "брус не построен")
+    else:
+        plane, plane_code = aux_plane(doc, "xy", 25, "base25")
+        plus_x, _c = faces(doc, [1, 0, 0])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_plane={"reference": plane},
+                              angle_deg=10, direction="inward")
+        got, box = result(env).get("volume_after_mm3"), x_max(doc)
+        rep.add("DR.04.base_plane",
+                "основание - вспомогательная плоскость z = 25, грань +X, 10 градусов inward: "
+                "объём 400000 (клинья компенсируются), X max = 104.408",
+                "PASS" if (not plane_code and not code and near(got, V0) and
+                           near(box, 100.0 + D25, TOL_MM)) else "FAIL",
+                f"plane={plane} plane_error={plane_code} volume={got} ожидалось={V0} "
+                f"x_max={box} ожидалось={100.0 + D25:.3f} error={code}")
+        close(doc)
+
+    # ── DR-05: чтение признака из модели ───────────────────────────────────────────────────────
+    doc, problem = new_bar("DR-05")
+    if not doc:
+        rep.add("DR.05.read", "kompas_get_feature отдаёт угол, направление, число граней и вид "
+                "основания из модели", "FAIL", problem or "брус не построен")
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward")
+        feature = (result(env).get("feature_ref") or {}).get("id")
+        _e, read, _r = client.tool("kompas_get_feature", {"feature_ref": feature})
+        res = result(read)
+        info = res.get("draft") or {}
+        rep.add("DR.05.read",
+                "kompas_get_feature отдаёт угол, направление, число граней и вид основания, "
+                "прочитанные из модели",
+                "PASS" if (not code and res.get("family") == "draft" and info
+                           and near(info.get("angle_deg"), 10.0, 1e-3)
+                           and info.get("direction") in ("inward", "outward")
+                           and info.get("face_count") == 1
+                           and info.get("base_kind") in ("face", "plane")) else "FAIL",
+                f"family={res.get('family')} draft={json.dumps(info, ensure_ascii=False)[:300]} "
+                f"error={code}")
+        close(doc)
+
+    # ── DR-06: правка уклона от основания ──────────────────────────────────────────────────────
+    dr06 = {}
+    doc, problem = new_bar("DR-06")
+    if not doc:
+        dr06["bar"] = problem or "брус не построен"
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        sides = []
+        for normal in ([1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]):
+            found, _c = faces(doc, normal)
+            sides += found
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
+        feature = (result(env).get("feature_ref") or {}).get("id")
+        dr06["created"] = (code, result(env).get("volume_after_mm3"))
+        for tag, payload, expected in (
+                ("angle_5", {"angle_deg": 5}, FIVE_IN),
+                ("direction_outward", {"direction": True}, FIVE_OUT),
+                ("faces_four", {"angle_deg": 10, "face_refs": sides}, FOUR_IN)):
+            env, code = call("kompas_update_feature", dict(
+                payload, feature_ref=feature, expected_revision=current_rev(doc),
+                expected_volume_mm3=expected))
+            got = result(env).get("volume_after_mm3")
+            dr06[tag] = ("PASS" if (not code and near(got, expected)) else "FAIL",
+                         f"volume={got} ожидалось={expected} error={code}")
+        close(doc)
+    # Основание грань -> плоскость z = 25 проверяется на СВОЁМ брусе: у признака с четырьмя
+    # гранями эталон DR-04 не определён, и подставлять его значило бы сверять не то.
+    doc, problem = new_bar("DR-06b")
+    if not doc:
+        dr06["base_plane"] = ("FAIL", problem or "брус не построен")
+    else:
+        plane, _pc = aux_plane(doc, "xy", 25, "base25")
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
+        feature = (result(env).get("feature_ref") or {}).get("id")
+        env, code = call("kompas_update_feature", {
+            "feature_ref": feature, "expected_revision": current_rev(doc),
+            "base_plane": {"reference": plane}, "expected_volume_mm3": V0})
+        got, box = result(env).get("volume_after_mm3"), x_max(doc)
+        dr06["base_plane"] = ("PASS" if (not code and near(got, V0)
+                                         and near(box, 100.0 + D25, TOL_MM)) else "FAIL",
+                              f"volume={got} ожидалось={V0} x_max={box} error={code}")
+        close(doc)
+    rep.add("DR.06.edit",
+            "правка уклона от основания: угол 10 -> 5 даёт 391251.13, направление outward при 5 "
+            "градусах - 408748.87, грани 1 -> 4 при 10 градусах - 325834.73, основание грань -> "
+            "плоскость z = 25 - объём 400000 и X max 104.408",
+            "PASS" if all(isinstance(v, tuple) and v[0] == "PASS"
+                          for v in dr06.values()) and len(dr06) == 5 else "FAIL",
+            " | ".join(f"{k}: {v[0] + ' ' + v[1] if isinstance(v, tuple) else v}"
+                       for k, v in dr06.items()))
+
+    # ── DR-07 и DR-08: уклон от базовой линии, направление плоскостью и ребром ─────────────────
+    def from_edges_case(name, reverse, direction, chain=False, expected=None):
+        doc, problem = new_bar(name)
+        if not doc:
+            return None, problem or "брус не построен", None
+        rows = topology(doc, "edges").get("edges") or []
+        top = edge_at(rows, z=50)
+        line = top if chain else edge_at(rows, z=50, x=100)[:1]
+        plus_x, _c = faces(doc, [1, 0, 0])
+        if not line:
+            close(doc)
+            return None, f"рёбер базовой линии не найдено (top={len(top)})", None
+        env, code = from_edges_row(doc, base_line_edge_refs=line, direction_plane=direction,
+                                   side_face_ref=(plus_x or [None])[0], angle_deg=10,
+                                   reverse=reverse, expected_volume_mm3=expected)
+        got = result(env).get("volume_after_mm3")
+        read_back = result(env).get("reverse_read_back")
+        close(doc)
+        return (code, got, read_back, len(line)), None, None
+
+    dr07 = {}
+    for reverse in (False, True):
+        got, problem, _x = from_edges_case("DR-07-" + str(reverse), reverse,
+                                           {"base": "xy", "offset_mm": 0})
+        dr07[reverse] = (got, problem) if got else (None, problem)
+    pair07 = {round(v[0][1], 2) for v in dr07.values() if isinstance(v[0], tuple) and v[0][1]}
+    rep.add("DR.07.from_edges_plane",
+            "уклон от базовой линии: верхнее ребро грани +X (z = 50), направление - плоскость XY, "
+            "сторона - грань +X, 10 градусов; reverse=false и true дают два РАЗНЫХ значения из пары "
+            "{382367.30, 417632.70}",
+            "PASS" if (len(pair07) == 2 and pair07 <= {round(ONE_IN, 2), round(ONE_OUT, 2)}) else "FAIL",
+            f"reverse=false={dr07.get(False)} reverse=true={dr07.get(True)} пара={sorted(pair07)} "
+            f"эталон={sorted({round(ONE_IN, 2), round(ONE_OUT, 2)})}")
+
+    # DR-08: то же направление, заданное ПРЯМОЛИНЕЙНЫМ РЕБРОМ (вертикальное ребро при x = 100).
+    dr08 = {}
+    for reverse in (False, True):
+        doc, problem = new_bar("DR-08-" + str(reverse))
+        if not doc:
+            dr08[reverse] = (None, problem or "брус не построен")
+            continue
+        rows = topology(doc, "edges").get("edges") or []
+        line = edge_at(rows, z=50, x=100)[:1]
+        vertical = edge_at(rows, x=100, y=0)[:1]
+        plus_x, _c = faces(doc, [1, 0, 0])
+        env, code = from_edges_row(doc, base_line_edge_refs=line, direction_ref=(vertical or [None])[0],
+                                   side_face_ref=(plus_x or [None])[0], angle_deg=10, reverse=reverse)
+        dr08[reverse] = (result(env).get("volume_after_mm3"), code, len(vertical))
+        close(doc)
+    ref07 = {k: (v[0][1] if isinstance(v[0], tuple) else None) for k, v in dr07.items()}
+    same = all(dr08.get(k) and dr08[k][1] is None and near(dr08[k][0], ref07[k], 0.5)
+               for k in (False, True))
+    rep.add("DR.08.from_edges_edge",
+            "направление прямолинейным ребром (вертикальное ребро при x = 100) даёт тот же объём, "
+            "что плоскость XY при тех же reverse",
+            "PASS" if same else "FAIL",
+            f"ребром={ {k: v[0] for k, v in dr08.items()} } плоскостью={ref07} "
+            f"ошибки={ {k: v[1] for k, v in dr08.items()} }")
+
+    # ── DR-09: базовая линия - цепочка четырёх верхних рёбер ──────────────────────────────────
+    dr09 = {}
+    for reverse in (False, True):
+        got, problem, _x = from_edges_case("DR-09-" + str(reverse), reverse,
+                                           {"base": "xy", "offset_mm": 0}, chain=True)
+        dr09[reverse] = (got, problem)
+    pair09 = {round(v[0][1], 2) for v in dr09.values() if isinstance(v[0], tuple) and v[0][1]}
+    rep.add("DR.09.from_edges_chain",
+            "базовая линия - цепочка четырёх верхних рёбер, направление XY: при смене reverse пара "
+            "{325834.73, 484529.01}",
+            "PASS" if (len(pair09) == 2 and pair09 <= {round(FOUR_IN, 2), round(FOUR_OUT, 2)}) else "FAIL",
+            f"reverse=false={dr09.get(False)} reverse=true={dr09.get(True)} пара={sorted(pair09)} "
+            f"эталон={sorted({round(FOUR_IN, 2), round(FOUR_OUT, 2)})}")
+
+    # ── DR-10: правка уклона от базовой линии ─────────────────────────────────────────────────
+    doc, problem = new_bar("DR-10")
+    if not doc:
+        rep.add("DR.10.from_edges_edit", "правка от базовой линии: угол 10 -> 5 и смена reverse "
+                "дают пару {391251.13, 408748.87}", "FAIL", problem or "брус не построен")
+    else:
+        rows = topology(doc, "edges").get("edges") or []
+        line = edge_at(rows, z=50, x=100)[:1]
+        plus_x, _c = faces(doc, [1, 0, 0])
+        env, code = from_edges_row(doc, base_line_edge_refs=line,
+                                   direction_plane={"base": "xy", "offset_mm": 0},
+                                   side_face_ref=(plus_x or [None])[0], angle_deg=10, reverse=False)
+        feature = (result(env).get("feature_ref") or {}).get("id")
+        env, code = call("kompas_update_feature", {
+            "feature_ref": feature, "expected_revision": current_rev(doc), "angle_deg": 5})
+        five = result(env).get("volume_after_mm3")
+        code5 = code
+        env, code = call("kompas_update_feature", {
+            "feature_ref": feature, "expected_revision": current_rev(doc), "reverse": True})
+        flipped = result(env).get("volume_after_mm3")
+        pair10 = {round(v, 2) for v in (five, flipped) if isinstance(v, (int, float))}
+        rep.add("DR.10.from_edges_edit",
+                "правка от базовой линии: угол 10 -> 5 даёт 391251.13, смена reverse даёт "
+                "408748.87",
+                "PASS" if (not code5 and not code and len(pair10) == 2 and
+                           pair10 <= {round(FIVE_IN, 2), round(FIVE_OUT, 2)}) else "FAIL",
+                f"угол5={five} reverse={flipped} пара={sorted(pair10)} ошибки={code5}/{code}")
+        close(doc)
+
+    # ── DR-11: save -> close -> reopen ────────────────────────────────────────────────────────
+    src = os.path.join(workdir, "drafts-reopen")
+    os.makedirs(src, exist_ok=True)
+    path = os.path.join(src, "dr-reopen.m3d")
+    doc, problem = new_bar("DR-11")
+    if not doc:
+        rep.add("DR.11.reopen", "оба признака читаются из переоткрытого документа до любой записи, "
+                "объём и параметры совпадают со снимком", "FAIL", problem or "брус не построен")
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        minus_x, _c = faces(doc, [-1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward")
+        rows = topology(doc, "edges").get("edges") or []
+        line = edge_at(rows, z=50, x=0)[:1]
+        env2, code2 = from_edges_row(doc, base_line_edge_refs=line,
+                                     direction_plane={"base": "xy", "offset_mm": 0},
+                                     side_face_ref=(minus_x or [None])[0], angle_deg=7,
+                                     reverse=True)
+        before_vol = vol(doc)
+        snapshot = [{"family": r.get("family"), "angle": r.get("angle_deg"),
+                     "reverse": r.get("reverse")} for r in draft_features(doc)]
+        env, save_code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
+        close(doc)
+        env, open_code = call("kompas_open_document", {"path": path})
+        reopened = doc_id(env)
+        read_back = []
+        if reopened:
+            # ЧТЕНИЕ ДО ЛЮБОЙ ЗАПИСИ: иначе потеря параметров была бы замаскирована перезаписью.
+            for row in draft_features(reopened):
+                _e, read, _r = client.tool("kompas_get_feature",
+                                           {"feature_ref": row.get("feature_ref")})
+                info = result(read).get("draft") or {}
+                read_back.append({"family": result(read).get("family"),
+                                  "angle": info.get("angle_deg"),
+                                  "reverse": info.get("reverse")})
+            after_vol = vol(reopened)
+            close(reopened)
+        else:
+            after_vol = None
+        same_params = len(read_back) == len(snapshot) == 2 and all(
+            near(a.get("angle"), b.get("angle"), 1e-3) and a.get("family") == b.get("family")
+            for a, b in zip(read_back, snapshot))
+        rep.add("DR.11.reopen",
+                "save -> close -> reopen: оба признака читаются из переоткрытого документа до любой "
+                "записи, объём и параметры совпадают со снимком",
+                "PASS" if (not code and not code2 and not save_code and not open_code
+                           and same_params and near(after_vol, before_vol, 0.5)) else "FAIL",
+                f"до={before_vol} после={after_vol} снимок={snapshot} прочитано={read_back} "
+                f"ошибки={code}/{code2}/{save_code}/{open_code}")
+        if os.path.isfile(path):
+            os.remove(path)
+
+    # ── DR-12: подавление, восстановление, удаление ───────────────────────────────────────────
+    def lifecycle_case(name, create):
+        """Один признак: создание, подавление, восстановление, удаление. Возвращает снимок.
+
+        ОБА СЕМЕЙСТВА ПРОВЕРЯЮТСЯ РАЗДЕЛЬНО: у признака от базовой линии своя строка дерева (644),
+        и общий механизм признаков сам по себе не доказывает, что она подавляется и удаляется.
+        """
+        doc, problem = new_bar(name)
+        if not doc:
+            return {"ok": False, "why": problem or "брус не построен"}
+        feature, created = create(doc)
+        if not feature:
+            close(doc)
+            return {"ok": False, "why": f"признак не создан: {created}"}
+        count_before = len(draft_features(doc))
+        env, sup = call("kompas_set_feature_suppressed", {
+            "feature_ref": feature, "expected_revision": current_rev(doc), "suppressed": True})
+        sup_vol = vol(doc)
+        env, res = call("kompas_set_feature_suppressed", {
+            "feature_ref": feature, "expected_revision": current_rev(doc), "suppressed": False})
+        res_vol = vol(doc)
+        env, dele = call("kompas_delete_feature", {
+            "feature_ref": feature, "expected_revision": current_rev(doc)})
+        del_result = result(env)
+        del_vol = vol(doc)
+        count_after = len(draft_features(doc))
+        close(doc)
+        return {"ok": (not sup and not res and not dele and near(sup_vol, V0)
+                       and near(res_vol, created, 0.5) and near(del_vol, V0)
+                       and count_before - count_after == 1),
+                "why": (f"создано={created} подавлено={sup_vol} восстановлено={res_vol} "
+                        f"удалено={del_vol} признаков {count_before}->{count_after} "
+                        f"ошибки={sup}/{res}/{dele} удаление="
+                        f"{json.dumps(del_result, ensure_ascii=False)[:200]}")}
+
+    def make_incline(doc):
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
+                              angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
+        return (result(env).get("feature_ref") or {}).get("id"), (result(env).get("volume_after_mm3")
+                                                                  if not code else code)
+
+    def make_from_edges(doc):
+        rows = topology(doc, "edges").get("edges") or []
+        line = edge_at(rows, z=50, x=100)[:1]
+        plus_x, _c = faces(doc, [1, 0, 0])
+        env, code = from_edges_row(doc, base_line_edge_refs=line,
+                                   direction_plane={"base": "xy", "offset_mm": 0},
+                                   side_face_ref=(plus_x or [None])[0], angle_deg=10, reverse=False)
+        return (result(env).get("feature_ref") or {}).get("id"), (result(env).get("volume_after_mm3")
+                                                                  if not code else code)
+
+    life = {"draft": lifecycle_case("DR-12", make_incline),
+            "draft_from_edges": lifecycle_case("DR-12b", make_from_edges)}
+    rep.add("DR.12.lifecycle",
+            "подавление возвращает объём 400000, восстановление - прежний, удаление убирает признак и "
+            "называет зависимые; оба семейства (от основания и от базовой линии)",
+            "PASS" if all(v["ok"] for v in life.values()) else "FAIL",
+            " | ".join(f"{k}: {v['why']}" for k, v in life.items()))
+
+
+    # ── DR-13: идемпотентность и ревизии ─────────────────────────────────────────────────────
+    doc, problem = new_bar("DR-13")
+    if not doc:
+        rep.add("DR.13.idempotency", "повтор operation_id не выполняет второй раз, другие аргументы "
+                "- OPERATION_ID_CONFLICT, устаревшая ревизия - REVISION_CONFLICT", "FAIL",
+                problem or "брус не построен")
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        rev = current_rev(doc)
+        token = str(uuid.uuid4())
+        args = {"document_id": doc, "expected_revision": rev, "face_refs": plus_x[:1],
+                "base_face_ref": (bottom or [None])[0], "angle_deg": 10, "direction": "inward",
+                "operation_id": token}
+        _e, first, _r = client.tool("kompas_draft", dict(args))
+        count_first = len(draft_features(doc))
+        _e, again, _r = client.tool("kompas_draft", dict(args))
+        count_again = len(draft_features(doc))
+        _e, conflict, _r = client.tool("kompas_draft", dict(args, angle_deg=12))
+        code_conflict = error_code(conflict)
+        _e, stale, _r = client.tool("kompas_draft", {
+            "document_id": doc, "expected_revision": rev, "face_refs": plus_x[:1],
+            "base_face_ref": (bottom or [None])[0], "angle_deg": 10, "direction": "outward",
+            "operation_id": str(uuid.uuid4())})
+        code_stale = error_code(stale)
+        # УСТАРЕВШАЯ РЕВИЗИЯ ПОСЛЕ REOPEN: ревизия снимается до закрытия и предъявляется после.
+        src13 = os.path.join(workdir, "drafts-reopen")
+        os.makedirs(src13, exist_ok=True)
+        path13 = os.path.join(src13, "dr-revisions.m3d")
+        old_rev = current_rev(doc)
+        call("kompas_save_document", {"document_id": doc, "expected_revision": old_rev,
+                                      "target_path": path13})
+        close(doc)
+        env, open_code = call("kompas_open_document", {"path": path13})
+        reopened = doc_id(env)
+        code_stale_reopen = None
+        if reopened:
+            face_reopen, _c = faces(reopened, [1, 0, 0])
+            bottom_reopen, _c = faces(reopened, [0, 0, -1])
+            _e, stale2, _r = client.tool("kompas_draft", {
+                "document_id": reopened, "expected_revision": old_rev,
+                "face_refs": face_reopen[:1], "base_face_ref": (bottom_reopen or [None])[0],
+                "angle_deg": 10, "direction": "inward", "operation_id": str(uuid.uuid4())})
+            code_stale_reopen = error_code(stale2)
+            close(reopened)
+        if os.path.isfile(path13):
+            os.remove(path13)
+        rep.add("DR.13.idempotency",
+                "повтор operation_id не создаёт второй признак, другие аргументы с тем же "
+                "operation_id - OPERATION_ID_CONFLICT, устаревшая ревизия - REVISION_CONFLICT, в том "
+                "числе после reopen",
+                "PASS" if (count_first == 1 and count_again == 1
+                           and code_conflict == "OPERATION_ID_CONFLICT"
+                           and code_stale == "REVISION_CONFLICT"
+                           and code_stale_reopen == "REVISION_CONFLICT") else "FAIL",
+                f"признаков={count_first}->{count_again} конфликт={code_conflict} "
+                f"устаревшая={code_stale} после_reopen={code_stale_reopen} open={open_code}")
+
+    # ── DR-14: отказы ─────────────────────────────────────────────────────────────────────────
+    refusals = {}
+    doc, problem = new_bar("DR-14")
+    if not doc:
+        refusals["bar"] = problem or "брус не построен"
+    else:
+        plus_x, _c = faces(doc, [1, 0, 0])
+        minus_x, _c = faces(doc, [-1, 0, 0])
+        bottom, _c = faces(doc, [0, 0, -1])
+        rows = topology(doc, "edges").get("edges") or []
+        line_x = edge_at(rows, z=50, x=100)[:1]
+        line_minus = edge_at(rows, z=50, x=0)[:1]
+        parallel, _pc = aux_plane(doc, "yz", 100, "parallel")
+        cases = {
+            "empty_faces": lambda: draft_row(doc, face_refs=[], base_face_ref=(bottom or [None])[0],
+                                             angle_deg=10, direction="inward"),
+            "empty_base_line": lambda: from_edges_row(
+                doc, base_line_edge_refs=[], direction_plane={"base": "xy", "offset_mm": 0},
+                angle_deg=10),
+            "base_parallel": lambda: draft_row(doc, face_refs=plus_x[:1],
+                                               base_plane={"reference": parallel}, angle_deg=10,
+                                               direction="inward"),
+            "angle_zero": lambda: draft_row(doc, face_refs=plus_x[:1],
+                                            base_face_ref=(bottom or [None])[0], angle_deg=0,
+                                            direction="inward"),
+            "angle_ninety": lambda: draft_row(doc, face_refs=plus_x[:1],
+                                              base_face_ref=(bottom or [None])[0], angle_deg=90,
+                                              direction="inward"),
+            # NaN ЛИТЕРАЛОМ НЕ ОТПРАВЛЯЕТСЯ: `json.dumps(float('nan'))` даёт `NaN`, которого в JSON
+            # нет. Строка проверяет отказ схемы на нечисловом значении.
+            "angle_nan": lambda: draft_row(doc, face_refs=plus_x[:1],
+                                           base_face_ref=(bottom or [None])[0], angle_deg="nan",
+                                           direction="inward"),
+            "base_both": lambda: draft_row(doc, face_refs=plus_x[:1],
+                                           base_face_ref=(bottom or [None])[0],
+                                           base_plane={"base": "xy", "offset_mm": 0}, angle_deg=10,
+                                           direction="inward"),
+            "side_not_adjacent": lambda: from_edges_row(
+                doc, base_line_edge_refs=line_minus, direction_plane={"base": "xy", "offset_mm": 0},
+                side_face_ref=(plus_x or [None])[0], angle_deg=10),
+            "four_faces_45": lambda: draft_row(
+                doc, face_refs=(plus_x[:1] + minus_x[:1] + faces(doc, [0, 1, 0])[0]
+                                + faces(doc, [0, -1, 0])[0]),
+                base_face_ref=(bottom or [None])[0], angle_deg=45, direction="inward"),
+        }
+        for key, runner in cases.items():
+            env, code = runner()
+            refusals[key] = code or "НЕТ ОТКАЗА"
+        refusals["_volume_after"] = vol(doc)
+        close(doc)
+
+    # Неплоская грань основания и поверхность вращения как направление: нужна цилиндрическая грань,
+    # поэтому постановка со своим отверстием.
+    doc, problem = new_bar("DR-14b")
+    if not doc:
+        refusals["cylinder_doc"] = problem or "брус не построен"
+    else:
+        bottom, _c = faces(doc, [0, 0, -1])
+        plus_x, _c = faces(doc, [1, 0, 0])
+        call("kompas_hole", {"document_id": doc, "expected_revision": current_rev(doc),
+                             "face_ref": (bottom or [None])[0], "mode": "blind_flat",
+                             "diameter_mm": 20, "depth_mm": 10, "offset_x_mm": 50,
+                             "offset_y_mm": 40})
+        cylinder = None
+        for face in topology(doc, "faces").get("faces") or []:
+            if face.get("surface_type") == "cylinder":
+                cylinder = face.get("face_ref")
+                break
+        rows = topology(doc, "edges").get("edges") or []
+        line_x = edge_at(rows, z=50, x=100)[:1]
+        env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=cylinder, angle_deg=10,
+                              direction="inward")
+        refusals["base_not_planar"] = code or "НЕТ ОТКАЗА"
+        env, code = from_edges_row(doc, base_line_edge_refs=line_x,
+                                   direction_ref=cylinder, side_face_ref=(plus_x or [None])[0],
+                                   angle_deg=10)
+        refusals["direction_revolution"] = code or "НЕТ ОТКАЗА"
+        close(doc)
+
+    # Грани ДВУХ ТЕЛ в одном вызове: тело делится плоскостью x = 50 на две части.
+    doc, problem = new_bar("DR-14c")
+    if not doc:
+        refusals["split_doc"] = problem or "брус не построен"
+    else:
+        body = body_ref(doc)
+        env, code = call("kompas_split", {
+            "target_body_ref": body, "plane": {"point_mm": [50, 0, 0], "normal_mm": [1, 0, 0]},
+            "document_id": doc, "expected_revision": current_rev(doc)})
+        parts = len(bodies(doc))
+        left, _c = faces(doc, [-1, 0, 0], index=0)
+        right, _c = faces(doc, [1, 0, 0], index=min(1, max(0, parts - 1)))
+        env, code = draft_row(doc, face_refs=left[:1] + right[:1],
+                              base_face_ref=(left or [None])[0], angle_deg=10, direction="inward")
+        refusals["two_bodies"] = code or "НЕТ ОТКАЗА"
+        refusals["_bodies_after_split"] = parts
+        close(doc)
+
+    bad = {k: v for k, v in refusals.items() if not k.startswith("_") and
+           (v in ("НЕТ ОТКАЗА",) or not isinstance(v, str))}
+    rep.add("DR.14.refusals",
+            "пустые грани и пустая базовая линия - отказ до COM; основание, параллельное грани; "
+            "неплоская грань основания; угол 0, 90, NaN; base двумя формами сразу; поверхность "
+            "вращения как направление; сторона, не прилегающая к базовой линии; грани двух тел; "
+            "четыре грани 45 градусов inward - везде предусмотренный отказ без ложного успеха",
+            "PASS" if not bad and "bar" not in refusals and "cylinder_doc" not in refusals
+            and "split_doc" not in refusals else "FAIL",
+            f"коды={json.dumps(refusals, ensure_ascii=False, default=str)}")
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
+    "drafts": lambda c, r, a, w, v, p: drafts_checks(c, r, a, w),
     "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
     "drawing": lambda c, r, a, w, v, p: drawing_checks(c, r, a, w),
     "section": lambda c, r, a, w, v, p: section_checks(c, r, a, w),

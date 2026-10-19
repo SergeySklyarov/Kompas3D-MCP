@@ -200,6 +200,35 @@ public sealed partial class Api5Session
     private EditViewResult EditViewCore(DocumentEntry document, EditViewCommand command, IView view)
     {
         var before = ReadViewRow(document, view);
+
+        // INVARIANT: a scale change over a view that already holds dimensions is REFUSED before any
+        // property is written, because the kernel keeps a dimension's Radius in SHEET mm while its
+        // anchor points follow the view scale: the edit would leave those dimensions on the OLD sheet
+        // radius with no way to rescale them (#drawing-dimensions-scale).
+        // History: docs/decisions/drawings.md#view-scale-refused-with-dimensions
+        if (command.Scale is not null)
+        {
+            var dimensionCount = view is ISymbols2DContainer container ? CountViewDimensions(container) : 0;
+            if (dimensionCount > 0)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"В виде «{before.Name}» уже {dimensionCount} размер(ов): смена масштаба отвергнута до "
+                    + "изменения документа, потому что листовой радиус существующих размеров ядром не "
+                    + "пересчитывается и их геометрия разошлась бы с масштабированной проекцией. Обход: "
+                    + "удалите размеры этого вида, смените масштаб и проставьте размеры заново.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["view_ref"] = command.ViewRef,
+                        ["view_name"] = before.Name,
+                        ["dimension_count"] = dimensionCount,
+                        ["requested_scale"] = command.Scale,
+                        ["remedy"] = "удалить размеры вида, сменить масштаб, проставить размеры заново",
+                    });
+            }
+        }
+
         var drawingObject = view as IDrawingObject
             ?? throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -282,18 +311,6 @@ public sealed partial class Api5Session
         if (!allMatched)
         {
             unverified.Add("view_edit_not_confirmed — перечитанное свойство расходится с заданным");
-        }
-
-        // MEASURED: a dimension's Radius is stored in SHEET mm and taken as-is (see
-        // #drawing-dimensions-scale), while its anchor points are in VIEW mm and follow the scale.
-        // Changing the scale of a view that already holds dimensions therefore leaves those dimensions
-        // on the OLD sheet radius: their geometry no longer matches the rescaled projection. That is
-        // named here rather than returned as a silent success.
-        if (command.Scale is not null && ReadDimensions(document, view, limit: 1).Dimensions.Count > 0)
-        {
-            unverified.Add("dimensions_keep_sheet_radius — в виде уже есть размеры: их радиус хранится "
-                + "в мм ЛИСТА и при смене масштаба ядром не пересчитывается, поэтому геометрия этих "
-                + "размеров расходится с масштабированной проекцией; размеры надо поставить заново");
         }
 
         // A moved or rescaled view can leave the sheet: the same rule as the creation runs after the edit.
@@ -498,6 +515,17 @@ public sealed partial class Api5Session
             ComApartment.Release(view);
         }
     }
+
+    /// <summary>Count the dimensions a view holds through the same container the read route uses.</summary>
+    /// <remarks>INVARIANT: a collection that fails to read contributes zero instead of aborting the
+    /// caller, so an unreadable collection can only lower the count. LIMIT: a view that does not answer
+    /// QI(ISymbols2DContainer) counts as zero, so a scale change over such a view is not refused; the
+    /// read route names the same unavailability.
+    /// History: docs/decisions/drawings.md#view-scale-refused-with-dimensions</remarks>
+    private static int CountViewDimensions(ISymbols2DContainer container) =>
+        (SafeInt(() => (container.LineDimensions as ILineDimensions)?.Count ?? 0) ?? 0)
+        + (SafeInt(() => (container.RadialDimensions as IRadialDimensions)?.Count ?? 0) ?? 0)
+        + (SafeInt(() => (container.DiametralDimensions as IDiametralDimensions)?.Count ?? 0) ?? 0);
 
     private ListDimensionsResult ReadDimensions(DocumentEntry document, IView view, int limit)
     {

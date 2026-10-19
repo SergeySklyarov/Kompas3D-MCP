@@ -327,7 +327,7 @@ public partial class Api5Session
         // INVARIANT: this tool deletes a FEATURE, a SKETCH or an AUXILIARY object of a part, never an
         // assembly component: a component has its own rules (dependent mates, a confirmed address) and its
         // own tool, so deleting it here would bypass both. The refusal is by the reference KIND and precedes
-        // any COM mutation. DOC: ksdocoment3d_deleteobject.html - «Удалить можно любой трехмерный объект».
+        // any COM mutation. DOC: ksdocument3d_deleteobject.html - «Удалить можно любой трехмерный объект».
         // History: docs/decisions/adapter-core.md#delete-object-kinds
         if (stored.Kind == "component")
         {

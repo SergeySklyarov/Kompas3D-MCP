@@ -9722,6 +9722,116 @@ def drawing_checks(client, rep, app_id, workdir):
                 "PASS" if code in ("STALE_REFERENCE", "REVISION_CONFLICT", "INVALID_ARGUMENT",
                                    "DOCUMENT_NOT_FOUND") else "FAIL",
                 f"error={code}")
+
+        # ========= DRW-08: СМЕНА МАСШТАБА ВИДА С РАЗМЕРАМИ ОТВЕРГАЕТСЯ (долги 41, 42) =========
+        # Ожидания записаны ДО прогона: отказ названным кодом ДО мутации, масштаб и листовые радиусы
+        # перечитаны прежними, ревизия не выросла, текст называет обход. Сам обход проверяется на
+        # виде БЕЗ размеров: удаление ОТДЕЛЬНОГО размера не опубликовано ни одним инструментом,
+        # поэтому шаг «удалить размеры» сервер выполнить не может (названо в подробностях строк).
+        def dims_fingerprint(target_ref):
+            _e, _env = call("kompas_list_dimensions", {"document_id": drw, "view_ref": target_ref})
+            return [(r.get("kind"), r.get("value_mm"), r.get("nominal_mm"))
+                    for r in (result(_env).get("dimensions") or [])]
+
+        def view_row_by_number(number):
+            _e, _env = call("kompas_list_drawing_views", {"document_id": drw})
+            return next((r for r in (result(_env).get("views") or [])
+                         if r.get("number") == number), {})
+
+        dim_view_number = assoc[0].get("number")
+        rev_before_refusal = current_rev(drw)
+        dims_before_refusal = dims_fingerprint(view_ref)
+        refusal_op = str(uuid.uuid4())
+        env, code_refuse = call("kompas_edit_view", {
+            "document_id": drw, "expected_revision": rev_before_refusal,
+            "view_ref": view_ref, "scale": 1.0, "operation_id": refusal_op})
+        refuse_details = detail_of(env) or {}
+        refuse_text = ((env or {}).get("error") or {}).get("message") or ""
+        rev_after_refusal = current_rev(drw)
+        dims_after_refusal = dims_fingerprint(view_ref)
+        scale_after_refusal = view_row_by_number(dim_view_number).get("scale")
+        rep.add("DRW-08.view_scale.refused_with_dimensions",
+                "смена масштаба вида С размерами отвергается названным кодом до мутации: масштаб и "
+                "листовые радиусы размеров перечитаны прежними, ревизия не выросла, текст называет обход",
+                "PASS" if (code_refuse == "CAPABILITY_UNAVAILABLE"
+                           and refuse_details.get("dimension_count") == 3
+                           and "удалите размеры" in refuse_text
+                           and rev_after_refusal == rev_before_refusal
+                           and dims_after_refusal == dims_before_refusal
+                           and close_enough(scale_after_refusal, new_scale, 1e-9)) else "FAIL",
+                f"error={code_refuse} details={refuse_details} "
+                f"ревизия {rev_before_refusal} -> {rev_after_refusal} "
+                f"масштаб после отказа={scale_after_refusal} (просили 1.0) "
+                f"размеры до={dims_before_refusal} после={dims_after_refusal} "
+                f"обход_назван={'удалите размеры' in refuse_text}")
+        # ПОВТОР С ТЕМ ЖЕ operation_id: отказ идемпотентен — тот же код, ревизия и документ не тронуты.
+        env, code_replay = call("kompas_edit_view", {
+            "document_id": drw, "expected_revision": rev_before_refusal,
+            "view_ref": view_ref, "scale": 1.0, "operation_id": refusal_op})
+        rev_after_replay = current_rev(drw)
+        rep.add("DRW-08.view_scale.refusal_idempotent",
+                "повтор отказа с тем же operation_id даёт тот же код и не двигает ревизию: частичных "
+                "эффектов и второго исхода нет",
+                "PASS" if (code_replay == "CAPABILITY_UNAVAILABLE"
+                           and rev_after_replay == rev_before_refusal
+                           and dims_fingerprint(view_ref) == dims_before_refusal) else "FAIL",
+                f"error={code_replay} ревизия {rev_before_refusal} -> {rev_after_replay} "
+                f"размеры={dims_fingerprint(view_ref)}")
+
+        # Смена ТОЛЬКО точки привязки проходит и на виде с размерами: листовой радиус она не трогает.
+        anchor_from = view_row_by_number(dim_view_number).get("x")
+        env, code_anchor = call("kompas_edit_view", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": view_ref, "x": (anchor_from or 0.0) + 5.0})
+        anchor_after = view_row_by_number(dim_view_number)
+        rep.add("DRW-08.view_scale.anchor_only_with_dimensions",
+                "смена только точки привязки проходит и на виде с размерами (масштаб не задан — "
+                "отказ не применяется), перечитанное X совпадает с заданным",
+                "PASS" if (code_anchor is None
+                           and close_enough(anchor_after.get("x"), (anchor_from or 0.0) + 5.0, 1e-6)
+                           and close_enough(anchor_after.get("scale"), new_scale, 1e-9)) else "FAIL",
+                f"error={code_anchor} x {anchor_from} -> {anchor_after.get('x')} "
+                f"масштаб={anchor_after.get('scale')} (не менялся)")
+
+        # Вид БЕЗ размеров масштабируется как прежде; затем размеры ставятся в нём заново — это и есть
+        # вторая половина обхода (число и геометрия перечитаны при новом масштабе).
+        plain = next((row for row in assoc if row.get("number") != dim_view_number), None)
+        if plain is None:
+            rep.add("DRW-08.view_scale.without_dimensions",
+                    "вид без размеров масштабируется как прежде", "NAMED",
+                    "второго ассоциативного вида в чертеже нет — менять масштаб не на чем")
+            rep.add("DRW-08.view_scale.workaround_readd",
+                    "обход: после смены масштаба размер ставится заново", "NAMED",
+                    "вид для обхода не найден")
+        else:
+            plain_scale = 0.75
+            env, code_plain = call("kompas_edit_view", {
+                "document_id": drw, "expected_revision": current_rev(drw),
+                "view_ref": plain.get("view_ref"), "scale": plain_scale})
+            plain_after = view_row_by_number(plain.get("number"))
+            rep.add("DRW-08.view_scale.without_dimensions",
+                    "смена масштаба вида БЕЗ размеров проходит как прежде и перечитывается новым",
+                    "PASS" if (code_plain is None
+                               and close_enough(plain_after.get("scale"), plain_scale, 1e-9)
+                               and close_enough(plain.get("scale"), new_scale, 1e-9)) else "FAIL",
+                    f"error={code_plain} вид={plain.get('number')} масштаб "
+                    f"{plain.get('scale')} -> {plain_after.get('scale')} (просили {plain_scale})")
+            env, code_readd = call("kompas_add_dimension", {
+                "document_id": drw, "expected_revision": current_rev(drw),
+                "view_ref": plain_after.get("view_ref"), "dimension_type": "diametral",
+                "point1": [0.0, 0.0, 0.0], "value_mm": HOLE_RADIUS_MM,
+                "position": [20.0, -20.0, 0.0]})
+            readd = result(env).get("dimension") or {}
+            rep.add("DRW-08.view_scale.workaround_readd",
+                    "обход: после смены масштаба размер ставится в том же виде заново — число "
+                    "натуральное, листовой радиус следует НОВОМУ масштабу",
+                    "PASS" if (not code_readd
+                               and close_enough(readd.get("nominal_mm"), HOLE_DIAMETER_MM, TOL_MM)
+                               and close_enough(readd.get("value_mm"),
+                                                HOLE_RADIUS_MM * plain_scale, TOL_MM)) else "FAIL",
+                    f"error={code_readd} nominal={readd.get('nominal_mm')} "
+                    f"value(листовой радиус)={readd.get('value_mm')} "
+                    f"эталон={HOLE_RADIUS_MM * plain_scale} масштаб={plain_scale}")
     else:
         rep.add("DRW-03.dimension.add.create.linear", "линейный размер ставится", "FAIL", "видов нет")
 
@@ -9852,12 +9962,16 @@ def drawing_checks(client, rep, app_id, workdir):
             f"revision={ctx.get('revision')} kind={ctx.get('kind')} "
             f"is_modified_present={('is_modified' in ctx)} "
             f"(документированного признака изменённости в v24 нет)")
-    # Мутация поднимает ревизию: контроль на самой строке ревизий.
+    # Мутация поднимает ревизию: контроль на самой строке ревизий. МУТАЦИЯ — СДВИГ точки привязки, а
+    # не смена масштаба: масштаб над видом с размерами отвергается (долг 42), а сдвиг проходит и на нём.
     rev_before_edit = current_rev(drw)
-    if assoc:
+    env, code = call("kompas_list_drawing_views", {"document_id": drw})
+    rev_target = next(iter(association_views(result(env).get("views") or [])), None)
+    if rev_target:
         env, code = call("kompas_edit_view", {
             "document_id": drw, "expected_revision": rev_before_edit,
-            "view_ref": assoc[0].get("view_ref"), "scale": 1.0})
+            "view_ref": rev_target.get("view_ref"),
+            "x": (rev_target.get("x") or 0.0) + 5.0})
     rev_after_edit = current_rev(drw)
     rep.add("dep.drawing.revisions.edit",
             "мутация вида по АКТУАЛЬНОЙ ревизии применяется и ПОДНИМАЕТ ревизию",
@@ -9965,7 +10079,7 @@ def drawing_checks(client, rep, app_id, workdir):
     _pre_cells = result(env).get("cells") or []
     pre_state["stamp_read_back"] = (_pre_cells[0].get("read_back") if _pre_cells else None)
     # СНИМОК ВИДОВ ОБНОВЛЯЕТСЯ ПЕРЕД СОХРАНЕНИЕМ: после снимка шли ещё мутации (размеры, штамп,
-    # техтребования) и правка масштаба в строке ревизий, поэтому `views_after` успел отстать —
+    # техтребования) и сдвиг вида в строке ревизий, поэтому `views_after` успел отстать —
     # сравнение с ним объявило бы расхождением СОБСТВЕННУЮ правку прибора, а не потерю при
     # переоткрытии. Устаревшее ожидание ставится под сомнение первым, а не подгоняется.
     env, code = call("kompas_list_drawing_views", {"document_id": drw})

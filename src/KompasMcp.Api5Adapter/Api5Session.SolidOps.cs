@@ -1941,6 +1941,8 @@ public sealed partial class Api5Session
         // a B3 feature must reject them rather than accept and ignore.
         new("base_face_ref", new[] { DraftFamily }, c => c.BaseFaceRef),
         new("base_plane", new[] { DraftFamily }, c => c.BasePlane),
+        // The base-line family's own flag: a chamfer edit that names it must be refused, not ignored.
+        new("reverse", new[] { DraftFromEdgesFamily }, c => c.Reverse),
     };
 
     /// <summary>Whether the caller declared an analytical geometry expectation — volume and/or bounding box.</summary>

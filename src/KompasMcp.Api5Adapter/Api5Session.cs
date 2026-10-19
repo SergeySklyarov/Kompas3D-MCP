@@ -2228,6 +2228,14 @@ public static class KompasObjectTypes
     public const int BossLoft = 31;
     public const int CutLoft = 32;
     public const int Fillet = 34;
+
+    /// <summary><c>o3d_DraftFromEdges</c> — the type a finished draft-from-a-base-line feature is seen
+    /// under in the API5 tree.</summary>
+    /// <remarks>MEASURED: the tree shows 644 for a feature created through API7
+    /// <c>IDraftsFromEdges.Add</c>, and the API5 tree element carries no definition — the family is
+    /// recognised by this number alone.
+    /// History: docs/decisions/adapter-features.md#draft-from-edges-read-and-edit</remarks>
+    public const int DraftFromEdges = 644;
     public const int Chamfer = 33;
     public const int BaseEvolution = 45;
     /// <summary><c>o3d_holeOperation</c> — the number a hole feature is CREATED under via

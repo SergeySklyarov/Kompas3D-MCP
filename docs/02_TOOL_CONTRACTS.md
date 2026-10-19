@@ -248,7 +248,7 @@ _Правка 07.10.2026 (наряд о `coordinate_space` и выравнива
 | `kompas_draft_from_edges` | document_id, base_line_edge_refs[] (ребро или цепочка, НЕПУСТОЙ), ровно одно из `direction_ref` (грань, ребро, ось) и `direction_plane`, необязательный `side_face_ref`, `angle_deg`, `reverse` (по умолчанию false) |
 | `kompas_fillet` | edge_refs[], radius_mm, tangent_propagation |
 | `kompas_chamfer` | edge_refs[], explicit mode distance_distance/distance_angle и размеры |
-| `kompas_update_feature` | feature_ref, typed changes, supported_feature_type; у семейства `draft` правятся `angle_deg`, `direction`, `face_refs`, `base_face_ref`/`base_plane` (смена основания только вместе с `direction`) |
+| `kompas_update_feature` | feature_ref, typed changes, supported_feature_type; у семейства `draft` правятся `angle_deg`, `direction`, `face_refs`, `base_face_ref`/`base_plane` (смена основания только вместе с `direction`); у семейства `draft_from_edges` - только `angle_deg` и `reverse`, а базовая линия, направляющий объект и сторона отвергаются по имени поля |
 | `kompas_rebuild` | document_id; новые refs/context после перестроения |
 | `kompas_pattern_grid` | copy_kind operations/bodies, source_refs[], axis1_point1_mm/axis1_point2_mm, step1_mm, count1, step2_mm/count2 или axis2_*, angle2_deg; `choose_bodies_type` all_bodies/new_body для копий тел |
 | `kompas_pattern_circular` | copy_kind operations/bodies, source_refs[], axis point/direction, count, angle_deg или полный круг; `reverse_direction`, `save_initial_orientation` (по умолчанию false - экземпляры доворачиваются до радиального направления); ответ несёт перечитанное `save_initial_orientation` и `save_initial_orientation_defaulted` |

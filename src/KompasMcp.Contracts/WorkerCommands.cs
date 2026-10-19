@@ -1860,6 +1860,14 @@ public sealed record UpdateFeatureCommand
     /// form. The side is carried across the edit: the product flag is recomputed from the new base.</summary>
     public PlaneRefDto? BasePlane { get; init; }
 
+    /// <summary>New <c>Reverse</c> of a draft from a base line (family=<c>draft_from_edges</c>). A separate
+    /// field, not <see cref="Direction"/>: there the flag is the chamfer side, here it swaps the side the
+    /// material is taken from. A separate field keeps "what was asked" distinguishable from "what else
+    /// moved".</summary> <remarks>MEASURED: on one feature <c>FALSE</c> takes material away and
+    /// <c>TRUE</c> adds it, with the angle unchanged.
+    /// History: docs/decisions/adapter-features.md#draft-from-edges-read-and-edit</remarks>
+    public bool? Reverse { get; init; }
+
     /// <summary>New ROTATION angle (family=<c>rotation</c>), degrees. A separate field, not the shared <see
     /// cref="AngleDeg"/> (the chamfer angle): a call with <see cref="AngleDeg"/> on a rotation feature is rejected with
     /// INVALID_ARGUMENT pointing at this field.</summary> <remarks>MEASURED: changing the angle on ONE feature gave a
@@ -2995,7 +3003,9 @@ public sealed record DraftDto(
     double? AngleDeg,
     bool? DirectionFlag,
     int? FaceCount,
-    string? BaseKind);
+    string? BaseKind,
+    bool? Reverse = null,
+    int? BaseLineEdgeCount = null);
 
 public sealed record ShellDto(
     double? ThicknessMm,

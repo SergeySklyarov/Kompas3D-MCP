@@ -24,6 +24,10 @@ public partial class Api5Session
         // ksHoleDefinition (MEASURED), so the mode parameters live only in API7. The type is 583
         // (o3d_Hole3D), not 52 (o3d_holeOperation, the creation factory number — see FindHoleEntity).
         var isHole = entity.type == KompasObjectTypes.Hole3D;
+        // A draft from a base line (SM-12) is recognised by the TREE NUMBER 644 (o3d_DraftFromEdges):
+        // MEASURED, the API5 tree element carries no definition, and the parameters live on the API7
+        // IDraftFromEdges object matched by name.
+        var isDraftFromEdges = entity.type == KompasObjectTypes.DraftFromEdges;
         // Rotation is recognised by the FEATURE NUMBER IN THE TREE (27/28/29), not by QI(IRotated):
         // a tree entity arrives as a raw __ComObject and refuses QI (MEASURED).
         var isRotated = IsRotatedEntity(entity);
@@ -43,6 +47,7 @@ public partial class Api5Session
                      ?? (isLoft ? LoftFamily : null)
                      ?? (isShell ? ShellFamily : null)
                      ?? (definition is ksInclineDefinition ? DraftFamily : null)
+                     ?? (isDraftFromEdges ? DraftFromEdgesFamily : null)
                      ?? (isRotated ? RotationFamily : null)
                      ?? (isHole ? HoleFamily : null)
                      ?? solidFamily;
@@ -103,7 +108,9 @@ public partial class Api5Session
         string? draftNote = null;
         var draft = definition is ksInclineDefinition inclineDefinition
             ? ReadDraftFeature(entity, inclineDefinition, out draftNote)
-            : null;
+            : isDraftFromEdges
+                ? ReadDraftFromEdgesFeature(document, entity, out draftNote)
+                : null;
         var parametersRead = family == ChamferFamily
             ? chamfer is not null
             : family == FilletFamily
@@ -122,7 +129,9 @@ public partial class Api5Session
                                     ? shell?.ThicknessMm is not null
                                     : family == DraftFamily
                                         ? draft?.AngleDeg is not null
-                                        : sides.Count > 0;
+                                        : family == DraftFromEdgesFamily
+                                            ? draft?.AngleDeg is not null && draft.Reverse is not null
+                                            : sides.Count > 0;
         if (solidFamily is not null)
         {
             // For B3 families "read" means "at least one substantive parameter was read": a translation
@@ -148,7 +157,7 @@ public partial class Api5Session
                     EvolutionFamily => "sweep_params_read",
                     LoftFamily => "loft_params_read",
                     ShellFamily => "shell_params_read",
-                    DraftFamily => "draft_params_read",
+                    DraftFamily or DraftFromEdgesFamily => "draft_params_read",
                     _ => "side_params_read",
                 }, parametersRead,
                 Observed: family switch
@@ -231,7 +240,7 @@ public partial class Api5Session
         {
             unverified.Add(shellNote);
         }
-        else if (family == DraftFamily && draftNote is not null)
+        else if (family is DraftFamily or DraftFromEdgesFamily && draftNote is not null)
         {
             unverified.Add(draftNote);
         }
@@ -389,7 +398,7 @@ public partial class Api5Session
             && !chamferRequested && !filletRequested && !rotationRequested && !repositionRequested
             && !splitRequested && !cutRequested && !booleanRequested && !patternRequested
             && !sweepRequested && !loftRequested && !shellRequested && !holeRequested
-            && command.BaseFaceRef is null && command.BasePlane is null)
+            && command.BaseFaceRef is null && command.BasePlane is null && command.Reverse is null)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
@@ -436,6 +445,15 @@ public partial class Api5Session
         }
 
         var definition = entity.GetDefinition();
+
+        // A draft from a base line (SM-12) is recognised by the TREE NUMBER 644, before any definition
+        // branch: MEASURED, the family has no API5 definition at all, so only the tree number says whose
+        // fields angle_deg and reverse are.
+        if (entity.type == KompasObjectTypes.DraftFromEdges)
+        {
+            return UpdateDraftFromEdgesFeature(
+                document, entity, command, volumeBefore, featuresBefore, stateBefore);
+        }
 
         // A draft (SM-12) is selected by its OWN definition, not by the fields: angle_deg, direction and
         // face_refs are shared with the chamfer and shell families, and only the feature can say whose
@@ -860,6 +878,10 @@ public partial class Api5Session
         /// not "zero". It is null for a radius edit too — radius and edge set are edited by different
         /// routes, and the response must not hint that the other changed.</summary>
         int? EdgesReadBack = null,
+        /// <summary><c>Reverse</c> read back from a draft from a base line after the edit. Same principle:
+        /// the field belongs only to the <c>draft_from_edges</c> family and stays null for the others, not
+        /// <c>false</c>.</summary>
+        bool? ReverseReadBack = null,
         /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
         /// not hold is the one this release publishes.</summary>
         IReadOnlyList<string>? Warnings = null);

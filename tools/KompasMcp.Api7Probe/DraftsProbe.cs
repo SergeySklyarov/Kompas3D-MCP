@@ -317,7 +317,49 @@ internal sealed class DraftsProbe
         step.Data["update"] = updated;
         document.RebuildDocument();
         Report(step, part, updated, "базовая линия, reverse=" + (reverse ? "TRUE" : "FALSE"));
+
+        // Read-back decides whether the family can be read and edited at all: the API5 tree gives an
+        // entity with NO ksInclineDefinition, so the API7 object must be matched back by name.
+        step.Data["tree_after"] = TreeSummary(part);
+        step.Data["api7_name"] = Api5.SafeObject(() => ((IModelObject)draft).Name) as string;
+        step.Observe("дерево после создания: " + step.Data["tree_after"]
+            + "; имя объекта API7: " + Api5.Raw(step.Data["api7_name"]));
+        step.Data["read_back"] = ReadDraftFromEdgesByIndex(container, step);
         CloseQuietly(document);
+    }
+
+    /// <summary>Reads the family back through <c>IDraftsFromEdges.DraftFromEdges(index)</c> and names the
+    /// tree element it corresponds to: the edit route needs that correspondence, and the tree element is
+    /// what <c>feature_ref</c> carries.</summary>
+    private static string ReadDraftFromEdgesByIndex(IModelContainer container, ProbeStep step)
+    {
+        try
+        {
+            var collection = container.DraftsFromEdges;
+            var count = Api5.SafeInt(() => collection.Count);
+            step.Data["api7_count"] = count;
+            var parts = new List<string>();
+            for (var i = 0; i < (count ?? 0); i++)
+            {
+                if (collection.DraftFromEdges[(object)i] is not IDraftFromEdges item)
+                {
+                    parts.Add("#" + i + "=<нет объекта>");
+                    continue;
+                }
+
+                var name = Api5.SafeObject(() => item.Name) as string;
+                var angle = Api5.SafeDouble(() => item.Angle);
+                var reverse = Api5.SafeBool(() => item.Reverse);
+                parts.Add("#" + i + " name=" + Api5.Raw(name) + " angle=" + Api5.Num(angle)
+                    + " reverse=" + Api5.Raw(reverse));
+            }
+
+            return parts.Count == 0 ? "<пусто>" : string.Join("; ", parts);
+        }
+        catch (Exception ex)
+        {
+            return "<не читается: " + HResult.Describe(ex) + ">";
+        }
     }
 
     /// <summary>DR.9: the feature's own life - is it visible in the API5 feature tree, does it survive

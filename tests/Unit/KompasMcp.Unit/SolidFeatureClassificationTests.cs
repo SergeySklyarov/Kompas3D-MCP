@@ -62,6 +62,8 @@ public sealed class SolidFeatureClassificationTests
         // The draft's base (SM-12): two forms of one thing, owned by the draft family alone.
         ["base_face_ref"] = ["draft"],
         ["base_plane"] = ["draft"],
+        // The base-line family's own flag (SM-12): a chamfer edit that names it is refused, not ignored.
+        ["reverse"] = ["draft_from_edges"],
     };
 
     /// <summary>Fields not belonging to the B3 families: extrusion, chamfer, fillet, rotation and the B5
@@ -109,7 +111,7 @@ public sealed class SolidFeatureClassificationTests
         foreach (var fileName in new[]
                  {
                      "Api5Session.SolidOps.cs", "Api5Session.PatternEdit.cs", "Api5Session.Hole.cs",
-                     "Api5Session.DraftEdit.cs",
+                     "Api5Session.DraftEdit.cs", "Api5Session.DraftFromEdgesEdit.cs",
                  })
         {
             foreach (Match match in Regex.Matches(
@@ -234,9 +236,9 @@ public sealed class SolidFeatureClassificationTests
             $"в ведомствах названы поля, которых в {nameof(UpdateFeatureCommand)} нет: "
             + string.Join(", ", phantom));
 
-        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 42
-        // with the six native-hole edit fields and the draft's two base forms.
-        Assert.Equal(42, properties.Count);
+        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 43
+        // with the six native-hole edit fields, the draft's two base forms and the base-line family's reverse.
+        Assert.Equal(43, properties.Count);
     }
 
     [Fact]

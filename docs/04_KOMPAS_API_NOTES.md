@@ -4965,6 +4965,11 @@ ksNurbs/ksNurbsPoint`, `GetFragment()`; `ksPolylineParam.closed/style/GetpMathPo
   `direction` - `TRUE`. Нового адреса признаку не нужно: существующие `get_feature`,
   `update_feature`, `set_feature_suppressed`, `delete_feature`, `list_features` применимы как есть.
 
+- **Подавление, восстановление, удаление (DR.10).** `ksEntity.excluded = true` → объём вернулся к
+  `V0`, `false` → прежние `382367.30`, `ksDocument3D.DeleteObject(признак)` → `V0` и в дереве нет
+  `type = 42`. Три операции, которыми уже пользуются `set_feature_suppressed` и `delete_feature`,
+  действуют на уклон без новых маршрутов.
+
 **Следствие для контракта.** `direction: positive` в MCP — НЕ одно геометрическое направление для всех
 операций: адаптер сводит его в `dtNormal` (как и UI КОМПАС), поэтому у `cut` оно означает «против
 нормали эскиза», а у `base`/`boss` — «по нормали». Решение заказчика (09.10.2026, вариант B) —

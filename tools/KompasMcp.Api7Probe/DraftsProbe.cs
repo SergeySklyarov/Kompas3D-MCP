@@ -61,6 +61,7 @@ internal sealed class DraftsProbe
             DraftFromEdges(reverse: false);
             DraftFromEdges(reverse: true);
             Lifecycle();
+            SuppressRestoreDelete();
         }
         catch (Exception ex)
         {
@@ -426,6 +427,95 @@ internal sealed class DraftsProbe
         }
 
         CloseQuietly(reopened);
+    }
+
+    /// <summary>DR.10: suppression, restoration and deletion of the draft feature - the three lifecycle
+    /// operations the existing tools perform on a feature entity.</summary>
+    /// <remarks>The routes are the ones the adapter already uses: <c>ksEntity.excluded</c> for suppression
+    /// and <c>ksDocument3D.DeleteObject</c> for deletion. The step checks the VOLUME, not the flag: a
+    /// feature that reports "excluded" and still shapes the body is not suppressed.</remarks>
+    private void SuppressRestoreDelete()
+    {
+        var step = _report.Begin("DR.10", "Подавление, восстановление, удаление уклона",
+            "Действуют ли на уклон те же три операции, что на прочие признаки?");
+        var document = BuildBar("DR.2", "Брус 100×80×50 выдавливанием");
+        if (document is null)
+        {
+            step.Fail("брус не построен.");
+            return;
+        }
+
+        var part = (ksPart)document.GetPart(-1);
+        var face = PlusXFace(part);
+        if (face is null || part.GetDefaultEntity(PlaneXoy) is not ksEntity basePlane)
+        {
+            step.Fail("грань +X или плоскость XOY не получены.");
+            return;
+        }
+
+        if (part.NewEntity(InclineType) is not ksEntity entity
+            || entity.GetDefinition() is not ksInclineDefinition incline
+            || incline.FaceArray() is not { } faceArray)
+        {
+            step.Fail("Определение уклона или массив граней не получены.");
+            return;
+        }
+
+        Late.Call(faceArray, "Add", face.Element);
+        incline.SetPlane(basePlane);
+        incline.angle = AngleDeg;
+        incline.direction = true;
+        if (Api5.SafeBool(entity.Create) != true)
+        {
+            step.Fail("Create() вернул false.");
+            return;
+        }
+
+        document.RebuildDocument();
+        var volumeDrafted = Api5.Volume(part);
+        step.Data["volume_drafted"] = volumeDrafted;
+
+        entity.excluded = true;
+        Api5.SafeBool(entity.Update);
+        document.RebuildDocument();
+        var volumeSuppressed = Api5.Volume(part);
+        step.Data["volume_suppressed"] = volumeSuppressed;
+
+        entity.excluded = false;
+        Api5.SafeBool(entity.Update);
+        document.RebuildDocument();
+        var volumeRestored = Api5.Volume(part);
+        step.Data["volume_restored"] = volumeRestored;
+
+        var deleted = Api5.SafeBool(() => document.DeleteObject(entity));
+        step.Data["delete"] = deleted;
+        document.RebuildDocument();
+        var volumeDeleted = Api5.Volume(part);
+        step.Data["volume_deleted"] = volumeDeleted;
+        step.Data["tree_after_delete"] = TreeSummary(part);
+        step.Observe("объёмы: уклон " + Api5.Num(volumeDrafted) + ", подавлен "
+            + Api5.Num(volumeSuppressed) + ", восстановлен " + Api5.Num(volumeRestored)
+            + ", удалён " + Api5.Num(volumeDeleted) + "; дерево " + step.Data["tree_after_delete"]);
+
+        var suppressedToV0 = volumeSuppressed is double vs && Math.Abs(vs - VolumeV0) <= VolumeTolerance;
+        var restoredToDraft = volumeRestored is double vr && volumeDrafted is double vd
+            && Math.Abs(vr - vd) <= VolumeTolerance;
+        var deletedToV0 = volumeDeleted is double vx && Math.Abs(vx - VolumeV0) <= VolumeTolerance;
+        if (deleted != true)
+        {
+            step.Fail("DeleteObject вернул " + Api5.Raw(deleted));
+        }
+        else if (!suppressedToV0 || !restoredToDraft || !deletedToV0)
+        {
+            step.Fail("подавление " + Api5.Num(volumeSuppressed) + ", восстановление "
+                + Api5.Num(volumeRestored) + ", удаление " + Api5.Num(volumeDeleted));
+        }
+        else
+        {
+            step.Pass("подавление дало V0, восстановление - прежний объём, удаление - V0 и нет type=42");
+        }
+
+        CloseQuietly(document);
     }
 
     /// <summary>The last operation element of type <c>o3d_incline</c> in the API5 tree.</summary>

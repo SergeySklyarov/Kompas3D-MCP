@@ -1084,9 +1084,10 @@ facesBefore, facesAfter, declaredMismatch)`: она отвечает «отка�
 градусными значениями до 1e-9, радианное `335163.92` - ни разу.
 
 **Жизненный цикл.** Признак виден в дереве API5 как элемент `type = 42` (сосед выдавливания `25`),
-после save → close → reopen читаются те же объём, `angle` и `direction`. Значит существующие
-`get_feature`, `update_feature`, `set_feature_suppressed`, `delete_feature`, `list_features`
-применимы без нового адреса.
+после save → close → reopen читаются те же объём, `angle` и `direction`. `ksEntity.excluded` даёт
+подавление (объём `V0`) и восстановление (прежний объём), `ksDocument3D.DeleteObject` удаляет признак
+(`V0`, в дереве нет `type = 42`). Значит существующие `get_feature`, `update_feature`,
+`set_feature_suppressed`, `delete_feature`, `list_features` применимы без нового адреса.
 
 **Чем подтверждено.** `tools/KompasMcp.Api7Probe --drafts` (шаги DR.3-DR.9), отчёт
 `docs/acceptance/api7/drafts.{json,md}`; разбор - `docs/04_KOMPAS_API_NOTES.md` §4.92,

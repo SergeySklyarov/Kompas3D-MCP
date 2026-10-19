@@ -564,6 +564,7 @@ public static class Program
             : options.Identity ? "feature-identity"
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
+            : options.SketchCopy ? "sketch-copy-project"
             : options.SketchPlane ? "sketch-plane"
             : options.VmDensityMci ? "vm-density-mci"
             : options.RepositionRead ? "reposition-read"

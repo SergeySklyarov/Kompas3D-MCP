@@ -6751,3 +6751,67 @@ IKompasDocument2D → IFragmentDocument`.
 **Где записано.** `docs/decisions/drawings.md#section-route` (правило трассы, отказы, откат),
 прибор `tools/KompasMcp.Api7Probe --section-route` (отчёт `docs/acceptance/api7/section-route.md`),
 живая проба `scripts/probe-section-view.py`, группа приёмки `--section-only` (`DRW-07.*`).
+
+## §4.90. Копирование геометрии между эскизами и проецирование объекта в эскиз: оба маршрута документированы; копирование идёт ТОЛЬКО через клип с `Store`, а `CopyToDocument` внутри одной детали недостижим (справка SDK 24 по проводу + живое измерение 19.10.2026, наряд `SKETCH_COPY_PROJECT_RESEARCH`)
+
+**Что проверялось.** Две возможности переноса геометрии в другой эскиз: (А) копирование объектов -
+группы `IDrawingGroup`, клип, фрагмент, `ksCopyObjEx`; (Б) проецирование объекта в эскиз -
+`ISketch::AddProjectionOf` и `ksSketchDefinition::AddProjectionOf`. Страницы сняты по проводу 19.10.2026
+(26 из 26 ответили HTTP 200, отрицательный контроль `isketch_nosuchmember` и
+`idrawinggroup_copytosomething` - 404), зеркало `reference/kompas-sdk-v24/docs-wire-20261019-sketchcopy/`:
+`isketch_beginedit.html`, `ifragmentdocument.html`, `ifragmentdocument_props.html`,
+`ikompasdocument2d.html`, `ikompasdocument2d1_drawinggroups.html`, `idrawinggroups_add.html`,
+`idrawinggroup_open.html`, `idrawinggroup_addobjects.html`, `idrawinggroup_writetoclip.html`,
+`idrawinggroup_readfromclip.html`, `idrawinggroup_store.html`, `idrawinggroup_close.html`,
+`idrawinggroup_copytodocument.html`, `idrawinggroup_writefragment.html`, `idrawinggroup_readfragment.html`,
+`ksdocument2d_kscopyobjex.html`, `copyobjectparam.html`, `isketch.html`, `isketch_methods.html`,
+`isketch_addprojectionof.html`, `isketch_addsketch.html`, `isketch_writetofragment.html`,
+`kssketchdefinition_addprojectionof.html`, `iauxiliarygeomcontainer_projectioncurves.html`.
+
+**Возможность А - маршрут документирован ЦЕПОЧКОЙ, и она измерена.** `ISketch::BeginEdit()` возвращает
+`IFragmentDocument` («указатель на интерфейс `IFragmentDocument`»), у фрагмента есть свойство `IsSketch`
+(«Документ является эскизом»), `IKompasDocument2D` получается от `IFragmentDocument` через
+`QueryInterface` (это написано в примечании страницы `ikompasdocument2d.html`), коллекция групп - у
+`IKompasDocument2D1.DrawingGroups`. Дальше документированные `IDrawingGroups::Add(temp, Name)`,
+`IDrawingGroup::Open`, `AddObjects`, `WriteToClip(AttrCopy, SpcObjCopy)`, `Close`; в целевом эскизе -
+`Add(temp=true)`, `Open`, `ReadFromClip`, `Store` («Вставить временную группу в документ»), `Close`.
+Измерено на пластине 100×80×10 (контур 60×40 из четырёх отрезков и окружность Ø16, на первом отрезке -
+`ksCHorizontal`): источник отдаёт 5 объектов, клип пишется `True`, постоянная группа клип НЕ читает
+(`ReadFromClip = False`), временная читает (`True`, `ObjectsCount = 4` до `Store`), после `Store` в
+целевом эскизе 5 объектов (`ksDrLineSeg` ×4, `ksDrCircle`), источник сохраняет свои 5.
+
+**Ограничения и размеры НЕ переносятся.** Ограничений у объектов источника после копирования 1
+(`ksCHorizontal`), у объектов приёмника 0. Это следствие предмета копирования: в группу попадают
+графические объекты, а не параметрические связи.
+
+**Копия переживает переоткрытие и годится в профиль.** save -> close -> reopen: в целевом эскизе те же
+5 объектов; базовое выдавливание 5 мм даёт тело 10 994,6903508513 мм³, объём детали
+90 994,6903508513 = 80 000 (пластина) + 10 994,69 - расхождение 0 при допуске 1e-4.
+
+**`CopyToDocument` документирован, но внутри одной детали НЕДОСТИЖИМ.** Страница говорит: «Указатель на
+другой документ, куда копируется группа» (`IKompasDocument2D`). Чтобы получить 2D-документ эскиза,
+нужен его сеанс правки, а деталь держит ОДИН сеанс: при открытом сеансе исходного эскиза
+`BeginEdit()` целевого отвечает `null` (измерено). Маршрут остаётся документированным для двух
+ДОКУМЕНТОВ (чертёж/фрагмент), но не для двух эскизов одной детали.
+
+**Возможность Б - маршрут документирован и работает, но только В СЕАНСЕ ПРАВКИ.** `ISketch::AddProjectionOf`
+(«Добавить в эскиз проекцию объекта», аргумент `IModelObject`, результат - массив созданных
+проекционных объектов) вне сеанса правки отвечает `null`; в сеансе (`BeginEdit` -> `AddProjectionOf` ->
+`EndEdit`) на ребро тела, лежащее в плоскости эскиза, вернул 1 объект: `ksDrLineSeg` с координатами
+`X1=50 Y1=-40 X2=50 Y2=40`, `Length=80`, `Angle=90` - это правое ребро пластины, спроецированное в
+эскиз на XOY. Контроль: тот же вызов с ЭСКИЗОМ в качестве `IModelObject` вернул 0 объектов, поэтому
+«проецировать эскиз целиком» маршрутом не подтверждено. Проекция переживает save -> close -> reopen
+(1 объект на месте).
+
+**Ассоциативность проекции НЕ измерена.** Опыт требовал изменить тело после проецирования; признак
+базового выдавливания после переоткрытия не адресуется в дереве по типу определения
+(`EntityCollection(o3d_operation=110)` даёт 2 признака, ни один не отвечает `ksBaseExtrusionDefinition`,
+`EntityCollection(o3d_baseExtrusion=24)` пуста), поэтому толщина не изменилась и вопрос остался
+открытым. Это ограничение прибора, а не ответ продукта.
+
+**«Слить» эскизы.** Отдельного маршрута справка не описывает: сводится к «скопировать + удалить
+исходный эскиз» (удаление признака уже есть - `kompas_delete_feature`, §4.80).
+
+**Где записано.** `docs/decisions/probes.md#sketch-copy-project`, прибор
+`tools/KompasMcp.Api7Probe --sketch-copy` (отчёт `docs/acceptance/api7/sketch-copy-project.{json,md}`),
+предложение контракта - `SKETCH_COPY_PROJECT_RESEARCH_REPORT_20261019.md` §6.

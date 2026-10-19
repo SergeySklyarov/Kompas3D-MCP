@@ -93,6 +93,11 @@
         "artifact": "coverage/solid-v24/release-profiles/mechanical-mates-minimal-v1.json",
         "title": "Механические сопряжения v24: передача (transmission)",
         "plan": null
+      },
+      "drafts-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/drafts-minimal-v1.json",
+        "title": "Уклоны граней v24: от основания и от базовой линии",
+        "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
       }
     },
     "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -13486,13 +13491,589 @@
         "geometry_validation": "контур — строка create.stepped"
       },
       "name": "Отказы разреза: трасса, исходный вид, режим, пустой результат"
+    },
+    {
+      "operation_id": "SM-12.incline.mode_faces_group",
+      "context": "part.single_body",
+      "catalog_ref": "SM-12",
+      "kind": "profile_mode",
+      "profile": "drafts-minimal-v1",
+      "queue": "E1",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_draft.json",
+      "adapter_route": "kompas_draft: API5 NewEntity(o3d_incline=42) -> GetDefinition -> ksInclineDefinition; FaceArray - одна грань или группа в ОДНОМ признаке; SetPlane(основание) -> angle -> direction -> Create(); подтверждение - объём и габарит тела (ksinclinedefinition.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DR.01.discover",
+        "DR.PREP.bar",
+        "DR.02.one_face",
+        "DR.03.four_faces",
+        "DR.05.read",
+        "DR.06.edit",
+        "DR.11.reopen",
+        "DR.12.lifecycle",
+        "DR.13.idempotency",
+        "DR.14.refusals"
+      ],
+      "limitations": [
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
+        "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
+        "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
+        "Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.",
+        "Одна грань даёт 382367.30 (inward) и 417632.70 (outward) при V0 = 400000; четыре боковые грани одним признаком - 325834.73 и 484529.01; признаков добавляется один."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_draft"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "depends_on": [
+        "dep.refs.planar_face",
+        "dep.units.confirm",
+        "dep.lifecycle.feature_cycle"
+      ]
+    },
+    {
+      "operation_id": "SM-12.incline.mode_base_face_or_plane",
+      "context": "part.single_body",
+      "catalog_ref": "SM-12",
+      "kind": "profile_mode",
+      "profile": "drafts-minimal-v1",
+      "queue": "E1",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_draft.json",
+      "adapter_route": "kompas_draft, основание: base_face_ref - плоская грань тела (ksEntity грани), base_plane - плоскость (стандартная или вспомогательная) через ksInclineDefinition.SetPlane; обе формы взаимоисключающие (ksinclinedefinition_setplane.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "implemented",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DR.01.discover",
+        "DR.PREP.bar",
+        "DR.02.one_face",
+        "DR.04.base_plane",
+        "DR.05.read",
+        "DR.06.edit",
+        "DR.14.refusals"
+      ],
+      "limitations": [
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
+        "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
+        "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
+        "Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.",
+        "Основание-плоскость z = 25 даёт объём 400000 при габарите X max = 104.408 (клинья компенсируются); основание, параллельное уклоняемой грани, и неплоская грань основания отвергаются."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_draft"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "depends_on": [
+        "dep.refs.planar_face",
+        "dep.refs.planes",
+        "dep.units.confirm",
+        "dep.lifecycle.feature_cycle"
+      ]
+    },
+    {
+      "operation_id": "SM-12.incline.mode_direction",
+      "context": "part.single_body",
+      "catalog_ref": "SM-12",
+      "kind": "profile_mode",
+      "profile": "drafts-minimal-v1",
+      "queue": "E1",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_draft.json",
+      "adapter_route": "kompas_draft, direction: outward|inward -> BOOL признака; сторона отсчитывается от нормали ОСНОВАНИЯ (измерено на двух основаниях), а не от абсолютного направления (ksinclinedefinition_direction.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DR.01.discover",
+        "DR.PREP.bar",
+        "DR.02.one_face",
+        "DR.05.read",
+        "DR.06.edit",
+        "DR.11.reopen",
+        "DR.12.lifecycle",
+        "DR.13.idempotency",
+        "DR.14.refusals"
+      ],
+      "limitations": [
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
+        "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
+        "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
+        "Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.",
+        "Страница справки называет смысл флага без привязки к нормали основания; измерено, что на нижней грани TRUE убирает материал, а на верхней - добавляет."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_draft"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "depends_on": [
+        "dep.refs.planar_face",
+        "dep.units.confirm",
+        "dep.lifecycle.feature_cycle"
+      ]
+    },
+    {
+      "operation_id": "SM-12.draft_from_edges.mode_dir_by_object",
+      "context": "part.single_body",
+      "catalog_ref": "SM-12",
+      "kind": "profile_mode",
+      "profile": "drafts-minimal-v1",
+      "queue": "E1",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_draft_from_edges.json",
+      "adapter_route": "kompas_draft_from_edges: API7 IModelContainer.DraftsFromEdges -> IDraftsFromEdges.Add -> IDraftFromEdges; BaseLine (массив кривых), DirectionObject (плоскость/грань/ребро/ось), SideFace, Angle, Reverse -> IModelObject.Update; объект API7 адресуется по имени элемента дерева (idraftfromedges.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DR.01.discover",
+        "DR.PREP.bar",
+        "DR.07.from_edges_plane",
+        "DR.08.from_edges_edge",
+        "DR.09.from_edges_chain",
+        "DR.11.reopen",
+        "DR.12.lifecycle",
+        "DR.13.idempotency",
+        "DR.14.refusals"
+      ],
+      "limitations": [
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
+        "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
+        "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
+        "Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.",
+        "Направление плоскостью и прямолинейным ребром дают один и тот же объём при том же reverse; цепочка четырёх верхних рёбер даёт пару 325834.73 / 484529.01."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_draft_from_edges"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "depends_on": [
+        "dep.refs.edges_faces",
+        "dep.refs.planes",
+        "dep.api7.in_same_adapter",
+        "dep.units.confirm",
+        "dep.lifecycle.feature_cycle"
+      ]
+    },
+    {
+      "operation_id": "SM-12.draft_from_edges.mode_side",
+      "context": "part.single_body",
+      "catalog_ref": "SM-12",
+      "kind": "profile_mode",
+      "profile": "drafts-minimal-v1",
+      "queue": "E1",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/drafts-acceptance.json",
+        "docs/acceptance/evidence/20261020-drafts-5209a2a/package-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_draft_from_edges.json",
+      "adapter_route": "kompas_draft_from_edges, сторона: SideFace - грань, прилегающая к базовой линии; Reverse - BOOL смены направления; правка существующего признака - kompas_update_feature (angle_deg, reverse) (idraftfromedges_sideface.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DR.01.discover",
+        "DR.PREP.bar",
+        "DR.07.from_edges_plane",
+        "DR.09.from_edges_chain",
+        "DR.10.from_edges_edit",
+        "DR.11.reopen",
+        "DR.12.lifecycle",
+        "DR.14.refusals"
+      ],
+      "limitations": [
+        "Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.",
+        "Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.",
+        "Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.",
+        "Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.",
+        "Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.",
+        "Сторона, не прилегающая к базовой линии, отвергается; без side_face_ref сторону выбирает система, и выбранная грань не читается - это названо в unverified_aspects."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_draft_from_edges"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "depends_on": [
+        "dep.refs.edges_faces",
+        "dep.api7.in_same_adapter",
+        "dep.units.confirm",
+        "dep.lifecycle.feature_cycle"
+      ]
     }
   ],
   "pending_families": [
     "SM-06",
     "SM-08",
     "SM-10",
-    "SM-12",
     "SM-14",
     "SM-20",
     "SM-21",

@@ -36,6 +36,21 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль drafts-minimal-v1 — Уклоны граней v24: от основания и от базовой линии
+
+- **обязательных_режимов:** 5
+- **режимов_закрыто:** 4
+- **общих_зависимостей:** 6
+- **зависимостей_закрыто:** 4
+- **профиль_закрыт:** нет
+- **готовность_процента:** 72.7%
+- **по_очередям:** E1 4/5
+- **открытые_режимы:**
+  - `SM-12.incline.mode_base_face_or_plane`
+- **открытые_зависимости:**
+  - `dep.api7.in_same_adapter`
+  - `dep.units.confirm`
+
 ### профиль drawings-minimal-v1 — Минимальные чертежи v24
 
 - **обязательных_режимов:** 6
@@ -159,16 +174,16 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 354
-- **строк_полностью_закрыто:** 163
-- **строк_с_каким_либо_прогрессом:** 178
+- **строк_полностью_закрыто:** 167
+- **строк_с_каким_либо_прогрессом:** 183
 - **семейств_в_каталоге:** 43
-- **семейств_без_строк:** 14
+- **семейств_без_строк:** 13
 - **операций:** 135
 - **режимов_и_вариантов:** 210
-- **применимых_действий:** 2916
-- **действий_verified:** 1065
-- **покрытие_действий:** 36.5%
-- **распределение_статусов:** {'not_started': 1851, 'verified': 1065, 'not_applicable': 624}
+- **применимых_действий:** 2911
+- **действий_verified:** 1109
+- **покрытие_действий:** 38.1%
+- **распределение_статусов:** {'not_started': 1801, 'verified': 1109, 'not_applicable': 629, 'implemented': 1}
 - **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 57, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 56, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -214,6 +229,27 @@
 | `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout, dep.interference.api7_measurer.negative_tests |
 | `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit, dep.interference.distance_unit.negative_tests |
 | `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests, dep.interference.read_only.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `drafts-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SM-12.incline.mode_faces_group` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.03.four_faces, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
+| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | код | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
+| `SM-12.incline.mode_direction` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
+| `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.08.from_edges_edge, DR.09.from_edges_chain, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
+| `SM-12.draft_from_edges.mode_side` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.09.from_edges_chain, DR.10.from_edges_edit, DR.11.reopen, DR.12.lifecycle, DR.14.refusals |
+
+### Общие зависимости профиля `drafts-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.refs.planar_face` | да | discover, read, negative_tests | DEP.DPF.01.discover, DEP.DPF.04.geometry_validation, DEP.DPF.03.negative_tests, DEP.DPF.02.read |
+| `dep.refs.edges_faces` | да | discover, read, negative_tests | DEP.DEF.01.discover, DEP.DEF.03.negative_tests, DEP.DEF.02.read |
+| `dep.refs.planes` | да | discover, read, negative_tests | DEP.DPL.01.discover, DEP.DPL.06.negative_tests, DEP.DPL.05.save_reopen, DEP.DPL.02.create, DEP.DPL.04.edit, DEP.DPL.03.read |
+| `dep.api7.in_same_adapter` | нет | create, read, edit, negative_tests | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
+| `dep.units.confirm` | нет | create, read, geometry_validation | DEP.DUN.01.geometry_validation |
+| `dep.lifecycle.feature_cycle` | да | read, edit, save_reopen, suppress_restore, delete_dependencies | L04, L05, L06, L07, L08, L09, L10, DEP.DLC.06.delete_dependencies, DEP.DLC.02.edit, DEP.DLC.07.negative_tests, DEP.DLC.01.read, DEP.DLC.03.rebuild, DEP.DLC.04.save_reopen, DEP.DLC.05.suppress_restore |
 
 ## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
 
@@ -555,12 +591,12 @@
 | `SM-11.chamfer.mode_stop_cut_object` | SM-11 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-11.chamfer.mode_corner_form` | SM-11 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-11.chamfer.mode_group_apply` | SM-11 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-12.incline.mode_faces_group` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-12.incline.mode_base_face_or_plane` | SM-12 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-12.incline.mode_direction` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `SM-12.incline.mode_faces_group` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.03.four_faces, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
+| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | код | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
+| `SM-12.incline.mode_direction` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
+| `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.08.from_edges_edge, DR.09.from_edges_chain, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
 | `SM-12.draft_from_edges.mode_dir_by_vector` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-12.draft_from_edges.mode_side` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `SM-12.draft_from_edges.mode_side` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.09.from_edges_chain, DR.10.from_edges_edit, DR.11.reopen, DR.12.lifecycle, DR.14.refusals |
 | `SM-13.shell.mode_remove_faces` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.01.discover, B5O.01.create, B5O.01.read, B5O.01.edit, B5O.01.rebuild, B5O.01.save_reopen, B5O.01.suppress_restore, B5O.01.delete_dependencies, B5O.01.negative_tests, B5O.01.geometry_validation, B5.04, B5.05 |
 | `SM-13.shell.mode_tangent_faces` | SM-13 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-13.shell.mode_direction` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.02.discover, B5O.02.create, B5O.02.read, B5O.02.edit, B5O.02.rebuild, B5O.02.save_reopen, B5O.02.suppress_restore, B5O.02.delete_dependencies, B5O.02.negative_tests, B5O.02.geometry_validation, B5.04, B5.05, B5.06 |
@@ -1050,6 +1086,41 @@
   - направление различимо только геометрически: площадь снятого треугольника симметрична к перестановке катетов, поэтому объём её не различает; различатор — распределение площадей боковых граней (CH17: transfer=false → x[720,740] y[940,960], transfer=true → x[740,760] y[920,940])
   - правка direction у существующего признака подтверждена НА ТОМ ЖЕ признаке (CH17e): прежняя строка CH17 сравнивала два разных документа, поэтому edit оставался implemented; теперь доказано переключение false → true с сохранением объёма 79840 и сменой распределения площадей
   - объём не является доказательством направления и в приёмке не используется: он равен 79840 в обоих положениях, поэтому вся геометрическая проверка построена на площадях боковых граней
+- `SM-12.incline.mode_faces_group` — закрыт целиком
+  - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.
+  - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
+  - Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.
+  - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
+  - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
+  - Одна грань даёт 382367.30 (inward) и 417632.70 (outward) при V0 = 400000; четыре боковые грани одним признаком - 325834.73 и 484529.01; признаков добавляется один.
+- `SM-12.incline.mode_base_face_or_plane` — не закрыт
+  - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.
+  - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
+  - Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.
+  - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
+  - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
+  - Основание-плоскость z = 25 даёт объём 400000 при габарите X max = 104.408 (клинья компенсируются); основание, параллельное уклоняемой грани, и неплоская грань основания отвергаются.
+- `SM-12.incline.mode_direction` — закрыт целиком
+  - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.
+  - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
+  - Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.
+  - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
+  - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
+  - Страница справки называет смысл флага без привязки к нормали основания; измерено, что на нижней грани TRUE убирает материал, а на верхней - добавляет.
+- `SM-12.draft_from_edges.mode_dir_by_object` — закрыт целиком
+  - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.
+  - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
+  - Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.
+  - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
+  - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
+  - Направление плоскостью и прямолинейным ребром дают один и тот же объём при том же reverse; цепочка четырёх верхних рёбер даёт пару 325834.73 / 484529.01.
+- `SM-12.draft_from_edges.mode_side` — закрыт целиком
+  - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020 - 15 строк, 0 FAIL; числа строк - в отчёте наряда.
+  - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
+  - Вид основания у семейства от базовой линии не читается: направляющий объект и сторона возвращаются null с причиной, а не нулём.
+  - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
+  - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
+  - Сторона, не прилегающая к базовой линии, отвергается; без side_face_ref сторону выбирает система, и выбранная грань не читается - это названо в unverified_aspects.
 - `SM-13.shell.mode_remove_faces` — закрыт целиком
   - число удаляемых граней — ОБЯЗАТЕЛЬНЫЙ вход: пустой список отвергается ИМЕНОВАННО, потому что измерено на обоих API (B5.6, B5.10), что при пустом списке операция принимается (Create/Update = true), а тело не меняется — 80000.0 при 6 гранях против 21631.999999999996 при 11. «Принято» здесь не означает «применено»
   - касательные грани (tangent_faces = true) отвергаются кодом CAPABILITY_UNAVAILABLE: у API5 ksShellDefinition такого члена нет вовсе, а объявлен он только у API7 IShell.SetFaces — маршрут этого инструмента API5
@@ -1538,6 +1609,6 @@
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 
-`SM-06`, `SM-08`, `SM-10`, `SM-12`, `SM-14`, `SM-20`, `SM-21`, `SM-22`, `SM-24`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
+`SM-06`, `SM-08`, `SM-10`, `SM-14`, `SM-20`, `SM-21`, `SM-22`, `SM-24`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
 
 Полнота инвентаризации не является полнотой реализации (docs/05 §8), а закрытый профиль не является полным P6 (план §1).

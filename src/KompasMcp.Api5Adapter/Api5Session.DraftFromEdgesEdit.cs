@@ -346,6 +346,46 @@ public partial class Api5Session
         return (angle, reverse, edges);
     }
 
+    /// <summary>The tree element of the family with this name, or null when the tree does not show it.</summary>
+    /// <remarks>MEASURED: the element carries type 644 and the name of the API7 object; the reference must
+    /// point at the ELEMENT — an API7 object registered as a feature answers STALE_REFERENCE on every later
+    /// call. Matched by type AND name: the type alone would give the last of several features.</remarks>
+    private static ksEntity? FindDraftFromEdgesEntity(DocumentEntry document, string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (document.PartNow().EntityCollection(
+                    KompasObjectTypes.Of(KompasObjectTypes.OperationElement)) is not ksEntityCollection collection)
+            {
+                return null;
+            }
+
+            ksEntity? found = null;
+            var matches = 0;
+            for (var i = 0; i < collection.GetCount(); i++)
+            {
+                if (collection.GetByIndex(i) is ksEntity entity
+                    && entity.type == KompasObjectTypes.DraftFromEdges
+                    && string.Equals(entity.name, name, StringComparison.Ordinal))
+                {
+                    found = entity;
+                    matches++;
+                }
+            }
+
+            return matches == 1 ? found : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Name of the tree element, or null when the model does not give one.</summary>
     private static string? SafeEntityName(ksEntity entity)
     {

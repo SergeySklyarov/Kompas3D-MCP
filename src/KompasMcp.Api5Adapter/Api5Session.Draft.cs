@@ -315,7 +315,21 @@ public partial class Api5Session
 
         RebuildApi7AndSettle(container, document);
 
-        var reference = References.Register("feature", document.Id, document.Revision, draft);
+        // The reference must point at the TREE element, not at the API7 object: an API7 object registered
+        // as a feature resolves to DraftFromEdgesClass, and every later call answers STALE_REFERENCE.
+        var treeEntity = FindDraftFromEdgesEntity(document, SafeModelName(draft));
+        if (treeEntity is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Признак построен, но в дереве не найден элемент с его именем: ссылка на признак не "
+                + "выдаётся, потому что ссылка на объект API7 не разрешается в признак. Признак остался "
+                + "в документе.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true);
+        }
+
+        var reference = References.Register("feature", document.Id, document.Revision, treeEntity);
         BumpRevision(document, "draft_from_edges.create");
         RequireNoApi7FeatureError(document, draft, reference.Id, "Уклон от базовой линии");
 

@@ -393,7 +393,14 @@ public partial class Api5Session
         }
 
         var plane = command.BasePlane!;
-        var entity = ResolvePlaneEntity(document, plane);
+        // MEASURED: a plane reference carries either an API5 ksEntity or an API7 IPlane3D (auxiliary
+        // geometry), and the kernel refuses the API7 object in SetPlane — the same plane is then taken
+        // from the part's own enumeration by name and type.
+        var entity = plane.Reference is { Length: > 0 } planeReference
+            ? ResolvePlaneSupportObject(
+                document, References.Require(planeReference, document.Id, document.Revision),
+                planeReference, new List<string>())
+            : ResolvePlaneEntity(document, plane);
         var bridge = BridgeFor(document);
         var (point, normal) = ReadPlanePlacement(document, bridge, entity);
         if (point is null || normal is null)

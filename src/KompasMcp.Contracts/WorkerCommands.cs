@@ -1625,6 +1625,11 @@ public sealed record FeatureReadDto(
     /// half: two independent halves of one setup.
     /// History: docs/decisions/contracts.md#shell-tree-number</remarks>
     ShellDto? Shell = null,
+    /// <summary>Draft parameters. Trailing: only for <c>family = "draft"</c>.</summary> <remarks>MEASURED: a
+    /// feature created by <c>NewEntity(42)</c> appears in the tree under number <b>42</b> and answers
+    /// <c>ksInclineDefinition</c>; the base-line family has no API5 definition.
+    /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+    DraftDto? Draft = null,
     /// <summary>Reference to the sketch an extrusion is built on, the SAME address <c>kompas_list_features</c> hands
     /// out for that sketch. Trailing and optional: filled only where <c>GetSketch()</c> answers, null otherwise.
     /// </summary> <remarks>INVARIANT: one live reference per object — the read uses the shared
@@ -2980,6 +2985,18 @@ public sealed record LoftDto(
 /// faces removed BY THE FEATURE ITSELF a repeated set edit after a mutation is inexpressible. Such faces are ABSENT
 /// from the body topology, so <c>kompas_read_topology</c> has nothing to take them from.
 /// History: docs/decisions/contracts.md#shell-read-face-refs</remarks>
+
+/// <summary>Draft parameters read from the model. An empty field means "not read", not zero.</summary>
+/// <remarks>INVARIANT: <c>DirectionFlag</c> is the PRODUCT flag the model holds; the side relative to the
+/// body is not derived here, because the base of a built feature does not answer an object whose
+/// orientation this route reads.
+/// History: docs/decisions/adapter-features.md#draft-edit-and-plane-base</remarks>
+public sealed record DraftDto(
+    double? AngleDeg,
+    bool? DirectionFlag,
+    int? FaceCount,
+    string? BaseKind);
+
 public sealed record ShellDto(
     double? ThicknessMm,
     string? ThinDirection,

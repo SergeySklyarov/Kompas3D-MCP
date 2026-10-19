@@ -42,6 +42,7 @@ public partial class Api5Session
                      ?? (isEvolution ? EvolutionFamily : null)
                      ?? (isLoft ? LoftFamily : null)
                      ?? (isShell ? ShellFamily : null)
+                     ?? (definition is ksInclineDefinition ? DraftFamily : null)
                      ?? (isRotated ? RotationFamily : null)
                      ?? (isHole ? HoleFamily : null)
                      ?? solidFamily;
@@ -99,6 +100,10 @@ public partial class Api5Session
         var shell = isShell && definition is ksShellDefinition shellDefinition
             ? ReadShellFeature(document, entity, shellDefinition, out shellNote)
             : null;
+        string? draftNote = null;
+        var draft = definition is ksInclineDefinition inclineDefinition
+            ? ReadDraftFeature(entity, inclineDefinition, out draftNote)
+            : null;
         var parametersRead = family == ChamferFamily
             ? chamfer is not null
             : family == FilletFamily
@@ -115,7 +120,9 @@ public partial class Api5Session
                                 ? loft is not null && loft.SectionCount is not null
                                 : family == ShellFamily
                                     ? shell?.ThicknessMm is not null
-                                    : sides.Count > 0;
+                                    : family == DraftFamily
+                                        ? draft?.AngleDeg is not null
+                                        : sides.Count > 0;
         if (solidFamily is not null)
         {
             // For B3 families "read" means "at least one substantive parameter was read": a translation
@@ -141,6 +148,7 @@ public partial class Api5Session
                     EvolutionFamily => "sweep_params_read",
                     LoftFamily => "loft_params_read",
                     ShellFamily => "shell_params_read",
+                    DraftFamily => "draft_params_read",
                     _ => "side_params_read",
                 }, parametersRead,
                 Observed: family switch
@@ -208,7 +216,7 @@ public partial class Api5Session
         if (family is null)
         {
             unverified.Insert(0,
-                "family_not_supported — параметрическое чтение заявлено для выдавливаний, фаски, скругления, вращения, родного отверстия, четырёх семейств B3 (булева операция, разделение, отсечение, изменение положения) и трёх семейств B5 (кинематическая операция, элемент по сечениям, оболочка); другие семейства в v1 не раскрываются");
+                "family_not_supported — параметрическое чтение заявлено для выдавливаний, фаски, скругления, вращения, родного отверстия, четырёх семейств B3 (булева операция, разделение, отсечение, изменение положения) и трёх семейств B5 (кинематическая операция, элемент по сечениям, оболочка), а также уклона (draft); другие семейства в v1 не раскрываются");
         }
         else if (family == EvolutionFamily && sweepNote is not null)
         {
@@ -222,6 +230,10 @@ public partial class Api5Session
         else if (family == ShellFamily && shellNote is not null)
         {
             unverified.Add(shellNote);
+        }
+        else if (family == DraftFamily && draftNote is not null)
+        {
+            unverified.Add(draftNote);
         }
         else if (solid?.UnreadableParameters is { Count: > 0 })
         {
@@ -273,6 +285,7 @@ public partial class Api5Session
             loft,
             shell)
         {
+            Draft = draft,
             SketchRef = sketchRef,
             MaterialToward = materialToward,
             MaterialTowardSource = materialTowardSource,

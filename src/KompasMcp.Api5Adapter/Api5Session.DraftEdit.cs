@@ -404,4 +404,59 @@ public partial class Api5Session
             return null;
         }
     }
+
+    /// <summary>Draft parameters read from the feature's own definition (DR-05 of the order).</summary>
+    /// <remarks>INVARIANT: the side relative to the BODY is not published here — MEASURED, the base of a
+    /// built feature does not answer an object whose orientation this route reads, so the side stays
+    /// null with the reason named instead of guessed. The product flag IS published: it is what the
+    /// model holds.
+    /// History: docs/decisions/adapter-features.md#draft-edit-and-plane-base</remarks>
+    private DraftDto? ReadDraftFeature(ksEntity entity, ksInclineDefinition definition, out string? reason)
+    {
+        reason = null;
+
+        var (angle, flag) = ReadInclineParameters(entity);
+        var faces = FaceArrayCount(definition);
+
+        if (angle is null || flag is null || faces is null)
+        {
+            reason = "draft_params_partly_unreadable — с определения не прочиталось: "
+                + (angle is null ? "angle " : string.Empty)
+                + (flag is null ? "direction " : string.Empty)
+                + (faces is null ? "FaceArray" : string.Empty);
+        }
+
+        object? baseObject;
+        try
+        {
+            baseObject = definition.GetPlane();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            baseObject = null;
+        }
+
+        // MEASURED: GetPlane() of a built feature answers an object that is NOT a ksFaceDefinition even
+        // when the base IS a face, so "plane" would be a false claim about the model. Only the face is
+        // recognised; anything else is published as unread with the reason.
+        var baseKind = baseObject is ksFaceDefinition ? "face" : null;
+
+        if (baseObject is null)
+        {
+            reason ??= "draft_base_not_read — GetPlane() не вернул объект основания";
+        }
+        else if (baseKind is null)
+        {
+            reason ??= "draft_base_kind_not_read — объект основания не отвечает ksFaceDefinition, а "
+                + "плоскость от грани этим маршрутом не отличаетcя: вид основания не публикуется";
+        }
+        else
+        {
+            reason ??= "draft_side_not_read — сторона уклона относительно тела не публикуется: "
+                + "ориентация основания построенного признака этим маршрутом не читается, а флаг "
+                + "продукта опубликован как есть";
+        }
+
+        return new DraftDto(angle, flag, faces, baseKind);
+    }
 }

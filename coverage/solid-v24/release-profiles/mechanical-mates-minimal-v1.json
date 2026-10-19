@@ -1,0 +1,94 @@
+{
+ "meta": {
+  "profile_id": "mechanical-mates-minimal-v1",
+  "title": "Механические сопряжения v24: передача (transmission)",
+  "revision": "1.0",
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "19.10.2026",
+    "change": "профиль заведён нарядом G4_MECHANICAL_MATES по решению заказчика: объём - вариант (А), создание и чтение параметров без заявки о кинематике"
+   }
+  ],
+  "target_build": "24.0.0.2799",
+  "queue": {
+   "G4": "Механические сопряжения — шаг D таблицы G-пробелов"
+  }
+ },
+ "modes": [
+  {
+   "ref": "MATE-07.mate.create_transmission",
+   "title": "Создать механическую передачу (transmission)",
+   "family": "MATE",
+   "queue": "G4",
+   "priority": "practical_required",
+   "current_level": "runtime_verified",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Живой прогон группы --mech-mates-only закрывает режим по mode_closed; передача движения ведомому компоненту в профиль не входит и не заявляется."
+  }
+ ],
+ "common_dependencies": [
+  {
+   "id": "dep.mate.object_address",
+   "title": "Адресация грани компонента как объекта передачи",
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; проверяется группой --mech-mates-only."
+  },
+  {
+   "id": "dep.mate.revisions",
+   "title": "Ревизии документа при работе с сопряжениями",
+   "required_actions": [
+    "read",
+    "edit",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; проверяется группой --mech-mates-only."
+  },
+  {
+   "id": "dep.mate.idempotency",
+   "title": "Повтор команды сопряжения по operation_id",
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; проверяется группой --mech-mates-only."
+  },
+  {
+   "id": "dep.mate.save_reopen",
+   "title": "Передача переживает save → close → reopen",
+   "required_actions": [
+    "save_reopen",
+    "read"
+   ],
+   "gap": "Зависимость блока сопряжений; проверяется группой --mech-mates-only."
+  }
+ ],
+ "explicitly_out_of_scope": {
+  "deferred_full_P6": [
+   "передача вращение - линейное: объект — ребро траектории, адреса в контракте нет",
+   "кулачок - толкатель mc_CamGear: набор объектов, при котором сопряжение действительно, не установлен",
+   "передача движения ведомому компоненту: документированный маршрут перемещения связь не показал",
+   "линейное - линейное",
+   "анимация и симуляция механизма"
+  ],
+  "next_block_after_profile": [
+   "кулачок - толкатель после установления набора объектов",
+   "передача вращение - линейное с адресом траектории"
+  ]
+ }
+}

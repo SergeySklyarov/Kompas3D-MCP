@@ -533,31 +533,26 @@ public static class ToolCatalog
             // block C2 accepted by a live run on shipped binaries (MATE 55/55).
             // History: docs/decisions/host.md#mates-domain
             ReadOnly("kompas_list_mates", "Сопряжения сборки",
-                "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта и "
-                + "подтверждение Valid. Читается документированным MateConstraintCollection → "
-                + "ksMateConstraint.GetBaseObj(1|2)/constraintType. Подтверждение — Valid, а не "
-                + "успешный вызов. Признак фиксации печатается именем по СЫРОМУ числу поля "
-                + "ksMateConstraint.fixed по нумерации mateconstraintfixed.html "
-                + "«0 нет фиксации, 1 фиксировать деталь 1, 2 фиксировать деталь 2»; в перечислении "
-                + "API5 ksMateFixedTypeEnum то же значение 0 названо «Неопределено» "
-                + "(ksmatefixedtypeenum.html) — расхождение формулировок названо, а не сглажено.",
+                "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта, "
+                + "подтверждение Valid и — для передачи — MotionType/Scale/Direction. Фиксация "
+                + "печатается по сырому числу поля fixed (mateconstraintfixed.html: 0 нет, 1 деталь 1, "
+                + "2 деталь 2); ksMateFixedTypeEnum называет 0 «Неопределено» — расхождение названо.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.ListMates,
                 requiresDocument: true,
                 requiresOperationId: false),
 
             Mutation("kompas_create_mate", "Создать сопряжение",
-                "Создаёт сопряжение между гранями двух компонентов документированным API7-путём "
-                + "(IMateConstraints3D.Add → BaseObject1/2 → Update). Объект адресуется парой "
-                + "«компонент + номер грани»; грань берётся ksPart.BodyCollection → ksBody.FaceCollection. "
-                + "Подтверждением служит Valid, а не Update()=true.",
+                "Создаёт сопряжение граней двух компонентов (Add → BaseObject1/2 → Update); "
+                + "подтверждение — Valid, а не Update()=true.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("constraint_type", Sch.Enum(
-                        "Тип сопряжения именем (MateConstraintType).",
+                        "Тип по MateConstraintType; transmission — передача (создаётся и читается, ход "
+                        + "ведомого не проверяется), cam_gear вне контракта.",
                         "coincidence", "parallel", "perpendicular", "tangency",
-                        "concentric", "distance", "angle")),
+                        "concentric", "distance", "angle", "transmission")),
                     ("first_component_ref", Sch.Str("Ссылка на первый компонент из kompas_list_components.")),
                     ("first_face_index", Sch.Int("Номер грани первого компонента в его FaceCollection.")),
                     ("second_component_ref", Sch.Str("Ссылка на второй компонент.")),
@@ -567,11 +562,8 @@ public static class ToolCatalog
                     // never checked. MEASURED on two placements: opposite lands on -1, cooriented on +1.
                     // History: docs/decisions/mates.md#alignment-geometry-criterion
                     ("alignment", Sch.Nullable(Sch.Enum(
-                        "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum). "
-                        + "opposite и cooriented подтверждаются ИЗМЕРЕННОЙ ориентацией граней "
-                        + "(face_normals_dot: -1 и +1); closest — ориентацию выбирает ядро, сервер её не "
-                        + "проверяет и возвращает измеренную. Перечитанное значение возвращается как "
-                        + "факт и само по себе отказом не является.",
+                        "Вариант выравнивания: opposite/cooriented подтверждаются измеренной "
+                        + "ориентацией граней, closest не проверяется.",
                         "opposite", "cooriented", "closest"))),
                     // INVARIANT: the parameter is bound to the type and checked by the Host. Per
                     // mateconstrainttype.html only mc_Distance (5, «постоянное расстояние») and
@@ -579,9 +571,16 @@ public static class ToolCatalog
                     // would be recorded and ignored. The help does NOT name the UNITS — the server
                     // confirms by reading back. History: docs/decisions/host.md#mate-param
                     ("param_value", Sch.Nullable(Sch.Num(
-                        "Параметр ограничения: обязателен для distance и angle, запрещён для остальных "
-                        + "типов. Единицы задаются КОМПАС (справкой не названы); подтверждается "
-                        + "чтением обратно.")))),
+                        "Параметр: обязателен для distance/angle, запрещён для остальных типов; "
+                        + "единицы задаёт КОМПАС."))),
+                    ("motion1", Sch.Nullable(Sch.Enum("MotionType1 (transmission).",
+                        "rotation", "linear"))),
+                    ("motion2", Sch.Nullable(Sch.Enum("MotionType2 (transmission).",
+                        "rotation", "linear"))),
+                    ("scale1", Sch.Nullable(Sch.Num("Scale1 > 0 (transmission)."))),
+                    ("scale2", Sch.Nullable(Sch.Num("Scale2 > 0 (transmission)."))),
+                    ("direction1", Sch.Nullable(Sch.Bool("Direction1 (transmission)."))),
+                    ("direction2", Sch.Nullable(Sch.Bool("Direction2 (transmission).")))),
                 WorkerCommands.CreateMate,
                 requiresDocument: true,
                 requiresRevision: true),

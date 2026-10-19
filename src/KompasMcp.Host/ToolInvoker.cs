@@ -367,6 +367,46 @@ public sealed class ToolInvoker : IAsyncDisposable
             // the geometry, and it refused `coincidence + opposite` although the faces land opposite.
             // The single judge is the measured face-normal dot in the adapter, after the solve.
             // History: docs/decisions/mates.md#alignment-geometry-criterion
+
+            // A transmission field on another type is the same defect as a parameter where the type
+            // has none: the number would be accepted and never applied. And a transmission without its
+            // ratio has nothing to write at all.
+            // History: docs/decisions/host.md#mate-transmission
+            var transmissionFields = new[]
+                { "motion1", "motion2", "scale1", "scale2", "direction1", "direction2" }
+                .Where(f => Present(arguments, f))
+                .ToList();
+            if (constraint != "transmission" && transmissionFields.Count > 0)
+            {
+                yield return new SchemaViolation(
+                    "/" + transmissionFields[0], "mode",
+                    "Поля " + string.Join(", ", transmissionFields) + " относятся только к "
+                    + "constraint_type=transmission: у этого вида сопряжения их нет, и принятое "
+                    + "значение было бы записано и проигнорировано.");
+            }
+
+            if (constraint == "transmission")
+            {
+                foreach (var required in new[] { "motion1", "motion2", "scale1", "scale2" })
+                {
+                    if (!Present(arguments, required))
+                    {
+                        yield return new SchemaViolation(
+                            "/" + required, "mode",
+                            "При constraint_type=transmission поле " + required + " обязательно: "
+                            + "передача задаётся движением обеих сторон и коэффициентом.");
+                    }
+                }
+
+                if (Present(arguments, "alignment") || Present(arguments, "param_value"))
+                {
+                    yield return new SchemaViolation(
+                        "/alignment", "mode",
+                        "У transmission нет ни выравнивания, ни параметра: направления задаются "
+                        + "direction1/direction2, соотношение — scale1/scale2.");
+                }
+            }
+
             yield break;
         }
 

@@ -34,6 +34,26 @@ public sealed record CreateMateCommand
     /// <summary>Constraint parameter (distance or angle) — <c>IMateConstraint3D.ParamValue</c>. Not set for mates
     /// without a parameter: <c>null</c> means "not set", not zero.</summary>
     public double? ParamValue { get; init; }
+
+    /// <summary>Transmission only: motion of the first side by name — <c>rotation</c> or <c>linear</c>
+    /// (<c>IMate3DTransmission.MotionType1</c>, <c>ksMateMotionTypeEnum</c>).</summary>
+    public string? Motion1 { get; init; }
+
+    /// <summary>Transmission only: motion of the second side (<c>MotionType2</c>).</summary>
+    public string? Motion2 { get; init; }
+
+    /// <summary>Transmission only: <c>Scale1</c> of the ratio, written through
+    /// <c>IMate3DTransmission.SetScale(Scale1, Scale2)</c>; must be a finite number &gt; 0.</summary>
+    public double? Scale1 { get; init; }
+
+    /// <summary>Transmission only: <c>Scale2</c> of the ratio, same route and bounds as <see cref="Scale1"/>.</summary>
+    public double? Scale2 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction1</c>; <c>null</c> keeps what the kernel sets.</summary>
+    public bool? Direction1 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction2</c>; <c>null</c> keeps what the kernel sets.</summary>
+    public bool? Direction2 { get; init; }
 }
 
 /// <summary>Enumerate the assembly's mates.</summary>
@@ -104,6 +124,25 @@ public sealed record MateRowDto
 
     /// <summary><c>IMateConstraint3D.Valid</c> — confirmation of the mate, not "Update()=true".</summary>
     public bool? Valid { get; init; }
+
+    /// <summary>Transmission only, read from the model: <c>MotionType1</c> as <c>rotation</c>/<c>linear</c>.
+    /// <c>null</c> — not read or not a transmission.</summary>
+    public string? Motion1 { get; init; }
+
+    /// <summary>Transmission only: <c>MotionType2</c> as <c>rotation</c>/<c>linear</c>.</summary>
+    public string? Motion2 { get; init; }
+
+    /// <summary>Transmission only: <c>Scale1</c> read back.</summary>
+    public double? Scale1 { get; init; }
+
+    /// <summary>Transmission only: <c>Scale2</c> read back.</summary>
+    public double? Scale2 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction1</c> read back.</summary>
+    public bool? Direction1 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction2</c> read back.</summary>
+    public bool? Direction2 { get; init; }
 
     public string? Name { get; init; }
 }

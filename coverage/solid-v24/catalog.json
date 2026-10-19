@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 43,
-   "operations": 134,
+   "operations": 135,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 209,
+   "modes_and_variants": 210,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -6476,6 +6476,34 @@
      ],
      "route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
      "modes": []
+    },
+    {
+     "id": "MATE-07.mate.create_transmission",
+     "name": "Создать механическую передачу (transmission)",
+     "level": "runtime_verified",
+     "doc_source": [
+      "imateconstraints3d_add",
+      "imate3dtransmission",
+      "imate3dtransmission_propers",
+      "imate3dtransmission_setscale",
+      "ksmatemotiontypeenum"
+     ],
+     "route": "IPart7.MateConstraints → IMateConstraints3D.Add(mc_Transmission) → приведение QueryInterface к IMate3DTransmission → BaseObject1/2 и RotationAxis1/2 = цилиндрические грани, MotionType1/2 = ksMMotionRotation, SetScale(Scale1, Scale2), Direction1/2 → Update(); подтверждение — Valid и перечитывание MotionType/Scale/Direction из модели (imate3dtransmission_propers.html, imate3dtransmission_setscale.html)",
+     "notes": "Объект сопряжения — ГРАНЬ, не конструктивная ось: с осями в BaseObject1/2 и RotationAxis1/2 то же сопряжение читается Valid=FALSE. Передача движения ведомому компоненту не заявляется: ни один документированный маршрут перемещения её не показал, а маршрут позиционера отказал и на компоненте без сопряжений (видимый документ проверен). Вне объёма: вращение - линейное (объект — ребро траектории, адреса в контракте нет) и cam_gear (набор объектов, при котором Valid=TRUE, не установлен).",
+     "modes": [
+      {
+       "id": "MATE-07.mate.create_transmission.rotation_rotation",
+       "name": "вращение - вращение: две цилиндрические грани, коэффициент и направления",
+       "level": "runtime_verified",
+       "enum": "ksMMotionRotation=2",
+       "tests": [
+        "MM-01",
+        "MM-02",
+        "MM-03",
+        "MM-06"
+       ]
+      }
+     ]
     }
    ]
   },

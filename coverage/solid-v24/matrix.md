@@ -96,6 +96,19 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль mechanical-mates-minimal-v1 — Механические сопряжения v24: передача (transmission)
+
+- **обязательных_режимов:** 1
+- **режимов_закрыто:** 0
+- **общих_зависимостей:** 4
+- **зависимостей_закрыто:** 4
+- **профиль_закрыт:** нет
+- **готовность_процента:** 80.0%
+- **по_очередям:** G4 0/1
+- **открытые_режимы:**
+  - `MATE-07.mate.create_transmission`
+- **открытые_зависимости:** []
+
 ### профиль sketch-bulk-minimal-v1 — Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24
 
 - **обязательных_режимов:** 3
@@ -146,19 +159,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 352
+- **строк_каталога:** 353
 - **строк_полностью_закрыто:** 162
 - **строк_с_каким_либо_прогрессом:** 177
 - **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
-- **операций:** 134
-- **режимов_и_вариантов:** 209
-- **применимых_действий:** 2901
+- **операций:** 135
+- **режимов_и_вариантов:** 210
+- **применимых_действий:** 2911
 - **действий_verified:** 1060
-- **покрытие_действий:** 36.5%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1060, 'not_applicable': 619}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
+- **покрытие_действий:** 36.4%
+- **распределение_статусов:** {'not_started': 1851, 'verified': 1060, 'not_applicable': 619}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 56, 'runtime_verified': 7, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 4, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -357,6 +370,21 @@
 | `dep.api7.in_same_adapter` | да | discover, read, edit, save_reopen | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
 | `dep.foundation` | да | read, negative_tests | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` | да | read, edit, save_reopen, geometry_validation | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
+
+## Метрика 1 — обязательные режимы профиля `mechanical-mates-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `MATE-07.mate.create_transmission` | MATE | practical_required | G4 | runtime_verified | — | — | — | — | — | — | — | — | — | — | — |
+
+### Общие зависимости профиля `mechanical-mates-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.mate.object_address` | да | discover, read, negative_tests | MATE.02.discover, MATE.03.read, MATE.01.face_range |
+| `dep.mate.revisions` | да | read, edit, negative_tests | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
+| `dep.mate.idempotency` | да | create, read, negative_tests | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
+| `dep.mate.save_reopen` | да | save_reopen, read | MATE.05.read, MATE.01.save_reopen |
 
 ## Метрика 1 — обязательные режимы профиля `sketch-bulk-minimal-v1`
 
@@ -682,6 +710,7 @@
 | `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
 | `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests, MATE.05.delete_dependencies |
 | `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
+| `MATE-07.mate.create_transmission.rotation_rotation` | MATE | later | — | runtime_verified | — | — | — | — | — | — | — | — | — | — | — |
 | `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW-01.views.create_standard.create, DRW-01.views.create_standard.edit, DRW-01.views.create_standard.geometry_validation, DRW-01.views.create_standard.negative_tests, DRW-01.views.create_standard.negative_tests.kind, DRW-01.views.create_standard.negative_tests.path, DRW-01.views.create_standard.read, DRW-01.views.create_standard.rebuild, DRW-01.views.create_standard.save_reopen, DRW-02.views.list.read, DRW-02.views.list.read.fields |
 | `DRW-02.views.list` | DRW | practical_required | C3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-02.views.list.discover, DRW-02.views.list.negative_tests, DRW-02.views.list.read, DRW-02.views.list.read.fields, DRW-02.views.list.read.gabarit_named, DRW-02.views.list.read.system_view_named, DRW-02.views.list.save_reopen |
 | `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |

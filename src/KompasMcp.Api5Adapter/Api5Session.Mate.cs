@@ -66,6 +66,14 @@ public sealed partial class Api5Session
         // mate. Called inside the try below, it would throw AFTER the mate was already in the model,
         // leaving the revision unaware of a real change.
         var alignment = AlignmentFromName(command.Alignment);
+        // THE RATIO IS CHECKED HERE FOR THE SAME REASON: a zero, negative or NaN scale accepted by
+        // SetScale would put a mate into the model that the caller reads as a ratio.
+        var isTransmission = type == MateConstraintType.mc_Transmission;
+        if (isTransmission)
+        {
+            RequireTransmissionInputs(command);
+        }
+
         var notes = new List<string>();
 
         var first = FaceObject7(document, command.FirstComponentRef, command.FirstFaceIndex, notes);
@@ -79,6 +87,7 @@ public sealed partial class Api5Session
         var beforeRows = ReadMates(document, notes);
 
         IMateConstraint3D? mate;
+        IMate3DTransmission? transmission = null;
         try
         {
             mate = mates7.Add(type);
@@ -88,6 +97,18 @@ public sealed partial class Api5Session
                     ErrorCodes.GeometryFailed,
                     "IMateConstraints3D.Add вернул null: сопряжение не создано.",
                     RetryPolicy.SameOperationId);
+            }
+
+            if (isTransmission)
+            {
+                // DOC: imate3dtransmission.html — «получение через IMateConstraints3D::Add и
+                // приведение QueryInterface». A mate that does not cast has no documented properties.
+                transmission = mate as IMate3DTransmission
+                    ?? throw new KompasContractException(
+                        ErrorCodes.CapabilityUnavailable,
+                        "Сопряжение создано, но не приводится к IMate3DTransmission: параметры передачи "
+                        + "этим маршрутом недоступны.",
+                        RetryPolicy.AfterReconciliation);
             }
 
             mate.BaseObject1 = first.Model;
@@ -101,6 +122,11 @@ public sealed partial class Api5Session
             {
                 mate.ParamValue = value;
             }
+
+            if (transmission is not null)
+            {
+                ApplyTransmission(transmission, command, first.Model, second.Model, notes);
+            }
         }
         catch (COMException ex)
         {
@@ -113,6 +139,12 @@ public sealed partial class Api5Session
                 $"Создание сопряжения прервалось: {ex.Message}. Сопряжение не подтверждено.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true);
+        }
+        catch (KompasContractException)
+        {
+            // Same reason as above: Add() already put a mate into the model.
+            BumpRevision(document, "mate.create.partial", invalidateAll: true);
+            throw;
         }
 
         bool? updated;
@@ -268,9 +300,48 @@ public sealed partial class Api5Session
                 Expected: $"{expectedDot.Value:0.####}"));
         }
 
+        // THE RATIO IS CONFIRMED BY THE MODEL: SetScale returning true means the number was ACCEPTED,
+        // not that the mate keeps it. MEASURED: Scale1/Scale2 read back as written on cylindrical
+        // faces. The motion of the driven component is NOT checked — see the note below.
+        if (isTransmission)
+        {
+            var ratio = MateTransmissionPolicy.RatioMatches(
+                created.Scale1, created.Scale2, command.Scale1!.Value, command.Scale2!.Value);
+            checks.Add(new("transmission_ratio_read_back", ratio == true,
+                Observed: $"{created.Scale1:0.####}:{created.Scale2:0.####}",
+                Expected: $"{command.Scale1:0.####}:{command.Scale2:0.####}"));
+            if (ratio != true)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.VerificationFailed,
+                    "Передача создана и подтверждена (Valid=true), но коэффициент НЕ перечитан: "
+                    + $"из модели {created.Scale1?.ToString("0.####") ?? "не читается"}:"
+                    + $"{created.Scale2?.ToString("0.####") ?? "не читается"}, запрошено "
+                    + $"{command.Scale1:0.####}:{command.Scale2:0.####}. Успехом это не считается.",
+                    RetryPolicy.AfterReconciliation,
+                    partialEffects: true,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["scale1_requested"] = command.Scale1,
+                        ["scale2_requested"] = command.Scale2,
+                        ["scale1_read"] = created.Scale1,
+                        ["scale2_read"] = created.Scale2,
+                    });
+            }
+        }
+
         // NOT READ IS NOT CONFIRMED, and it is also not a reason to refuse a call our own instrument
         // cannot measure: the gap is NAMED here so nobody reads the success as proof of the orientation.
         var unverified = new List<string>();
+        if (isTransmission)
+        {
+            // MEASURED: the driven component did not move by either documented placement route, and the
+            // positioner route refused on a component that carries no mate at all. The mate is in the
+            // model and its parameters are read from it; the MOTION is not claimed.
+            unverified.Add("transmission_kinematics_not_claimed — коэффициент и направления прочитаны из "
+                + "модели, но передача движения ведомому компоненту не проверяется: документированный "
+                + "маршрут перемещения под сопряжением связь не показал");
+        }
         if (expectedDot is not null && dotAfter is null)
         {
             unverified.Add("alignment_orientation_unverified — ориентация граней не прочитана (нет "
@@ -841,6 +912,10 @@ public sealed partial class Api5Session
                           "НЕ подтверждена");
             }
 
+            var transmission7 = typeValue == (short)MateConstraintType.mc_Transmission
+                ? mate7 as IMate3DTransmission
+                : null;
+
             rows.Add(new MateRowDto
             {
                 MateRef = stored.Id,
@@ -855,6 +930,12 @@ public sealed partial class Api5Session
                 Valid = Bool(() => mate7?.Valid),
                 BaseObject1 = ObjectTypeName(Ref(() => mate.GetBaseObj(1))),
                 BaseObject2 = ObjectTypeName(Ref(() => mate.GetBaseObj(2))),
+                Motion1 = MotionName(EnumOrNull(() => transmission7?.MotionType1)),
+                Motion2 = MotionName(EnumOrNull(() => transmission7?.MotionType2)),
+                Scale1 = transmission7 is null ? null : SafeDouble(() => transmission7.Scale1),
+                Scale2 = transmission7 is null ? null : SafeDouble(() => transmission7.Scale2),
+                Direction1 = Bool(() => transmission7?.Direction1),
+                Direction2 = Bool(() => transmission7?.Direction2),
                 Name = Ref(() => mate7?.Name),
             });
         }
@@ -1025,11 +1106,90 @@ public sealed partial class Api5Session
         "concentric" => MateConstraintType.mc_Concentric,
         "distance" => MateConstraintType.mc_Distance,
         "angle" => MateConstraintType.mc_Angle,
+        "transmission" => MateConstraintType.mc_Transmission,
+        // NAMED REFUSAL, NOT A SILENT ABSENCE: the cam gear is documented and its mate is added, but
+        // the object set that makes it valid is not established, so it is out of this volume.
+        // History: docs/decisions/mates.md#mechanical-transmission
+        "cam_gear" => throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            "Вид cam_gear вне контракта: сопряжение добавляется, но набор объектов, при котором оно "
+            + "действительно (Valid=TRUE), не установлен. Поддерживается только transmission.",
+            RetryPolicy.Never),
         _ => throw new KompasContractException(
             ErrorCodes.InvalidArgument,
             $"Неизвестный тип сопряжения «{name}». Допустимы: coincidence, parallel, perpendicular, " +
-            "tangency, concentric, distance, angle.",
+            "tangency, concentric, distance, angle, transmission.",
             RetryPolicy.Never),
+    };
+
+    /// <summary>The transmission inputs this volume implements, checked before <c>Add</c> creates a mate.</summary>
+    private static void RequireTransmissionInputs(CreateMateCommand command)
+    {
+        if (!MateTransmissionPolicy.IsKnownMotion(command.Motion1)
+            || !MateTransmissionPolicy.IsKnownMotion(command.Motion2))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Для transmission обязательны motion1 и motion2 = rotation. Линейное движение вне "
+                + "объёма: его объект — ребро траектории, а адрес сопряжения задаёт грань. "
+                + $"Принято motion1=«{command.Motion1 ?? "нет"}», motion2=«{command.Motion2 ?? "нет"}».",
+                RetryPolicy.Never);
+        }
+
+        if (!MateTransmissionPolicy.IsUsableScale(command.Scale1)
+            || !MateTransmissionPolicy.IsUsableScale(command.Scale2))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Для transmission обязательны scale1 и scale2: конечные числа больше нуля. Принято "
+                + $"scale1={command.Scale1?.ToString("0.####") ?? "нет"}, "
+                + $"scale2={command.Scale2?.ToString("0.####") ?? "нет"}.",
+                RetryPolicy.Never);
+        }
+    }
+
+    /// <summary>Write the transmission's own properties. DOC: <c>imate3dtransmission_propers.html</c>
+    /// (properties), <c>imate3dtransmission_setscale.html</c> (the ONLY documented method).</summary>
+    /// <remarks>MEASURED: the mate takes the CYLINDRICAL FACE, not a constructive axis built on it —
+    /// the same mate with axes in <c>BaseObject1/2</c> and <c>RotationAxis1/2</c> reads back
+    /// <c>Valid=false</c>. MEASURED: <c>Direction1/2</c> read back TRUE when not written.
+    /// History: docs/decisions/mates.md#mechanical-transmission</remarks>
+    private static void ApplyTransmission(
+        IMate3DTransmission transmission, CreateMateCommand command,
+        IModelObject axis1, IModelObject axis2, List<string> notes)
+    {
+        transmission.MotionType1 = ksMateMotionTypeEnum.ksMMotionRotation;
+        transmission.MotionType2 = ksMateMotionTypeEnum.ksMMotionRotation;
+        transmission.RotationAxis1 = axis1;
+        transmission.RotationAxis2 = axis2;
+
+        // A FALSE HERE IS NOT SWALLOWED: the ratio is judged by the read-back, and the note says that
+        // the writer did not confirm the write, so nobody reads `true` as "the ratio is in the model".
+        if (transmission.SetScale(command.Scale1!.Value, command.Scale2!.Value) != true)
+        {
+            notes.Add("set_scale_not_confirmed — SetScale не подтвердил запись коэффициента; "
+                + "коэффициент проверяется перечитыванием из модели");
+        }
+
+        if (command.Direction1 is { } direction1)
+        {
+            transmission.Direction1 = direction1;
+        }
+
+        if (command.Direction2 is { } direction2)
+        {
+            transmission.Direction2 = direction2;
+        }
+    }
+
+    /// <summary>Motion by the documented <c>ksMateMotionTypeEnum</c>; an unknown number is named by
+    /// number, not replaced by the nearest known one.</summary>
+    private static string? MotionName(ksMateMotionTypeEnum? value) => value switch
+    {
+        null => null,
+        ksMateMotionTypeEnum.ksMMotionLinear => "linear",
+        ksMateMotionTypeEnum.ksMMotionRotation => "rotation",
+        _ => $"unknown_{(int)value.Value}",
     };
 
     /// <summary>Mate type name by the documented <c>MateConstraintType</c>; an unknown value is named by number,

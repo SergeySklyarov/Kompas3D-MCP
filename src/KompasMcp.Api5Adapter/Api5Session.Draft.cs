@@ -9,9 +9,9 @@ using KompasMcp.Domain.Geometry;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Draft of faces — the two native families of SM-12 (profile <c>drafts-minimal-v1</c>).</summary>
-/// <remarks>DOC: <c>ksinclinedefinition.html</c> (definition from <c>ksEntity::GetDefinition</c>, members
-/// <c>FaceArray</c>, <c>SetPlane</c>, <c>angle</c>, <c>direction</c>), <c>obj3dtype.html</c>
-/// (<c>o3d_incline = 42</c>), <c>idraftsfromedges_add.html</c> (API7 <c>Add</c> → properties → <c>Update</c>).
+/// <remarks>DOC: <c>imodelcontainer_inclines.html</c>, <c>iinclines_add.html</c> (API7 <c>Inclines.Add</c>
+/// → <c>Faces</c>/<c>Plane</c>/<c>Angle</c>/<c>Direction</c> → <c>Update</c>), <c>obj3dtype.html</c>
+/// (<c>o3d_incline = 42</c>), <c>idraftsfromedges_add.html</c> (base-line family, same shape).
 /// MEASURED: the angle is in DEGREES and the product flag follows the normal of the BASE OBJECT, so the same
 /// flag tilts a face the other way on a plane and on a face; the side is derived, never passed through.
 /// INVARIANT: geometry is confirmed by volume, not by <c>Create()/Update() = true</c>.
@@ -461,9 +461,11 @@ public partial class Api5Session
         }
 
         var plane = command.BasePlane!;
-        // MEASURED: a plane reference carries either an API5 ksEntity or an API7 IPlane3D (auxiliary
-        // geometry), and the kernel refuses the API7 object in SetPlane — the same plane is then taken
-        // from the part's own enumeration by name and type.
+        // DOC: IIncline.Plane is an IModelObject (iincline_plane.html), so the base must reach the
+        // feature as a model object. MEASURED: a reference carries either an API5 ksEntity or an API7
+        // IPlane3D (auxiliary geometry) that comes back as no entity, while the SAME plane is visible
+        // to API5 in the part's own enumeration - hence the lookup there by name and type.
+        // History: docs/decisions/adapter-features.md#draft-edit-and-plane-base
         var entity = plane.Reference is { Length: > 0 } planeReference
             ? ResolvePlaneSupportObject(
                 document, References.Require(planeReference, document.Id, document.Revision),

@@ -411,11 +411,19 @@ public partial class Api5Session
                             || command.CountersinkDiameterMm is not null
                             || command.CountersinkAngleDeg is not null;
 
+        // A thread designation (SM-08): the fields of the family are its own, and the feature is selected
+        // by the TREE NUMBER 58 — a designation is not an operation and has no API5 definition.
+        var threadRequested = command.NominalDiameterMm is not null || command.PitchMm is not null
+                              || command.LengthMm is not null || command.AutoDiameter is not null
+                              || command.AutoLength is not null || command.LeftHand is not null;
+
         if (command.DepthMm is null && command.EndCondition is null && command.SketchRef is null
             && !chamferRequested && !filletRequested && !rotationRequested && !repositionRequested
             && !splitRequested && !cutRequested && !booleanRequested && !patternRequested
             && !sweepRequested && !loftRequested && !shellRequested && !holeRequested
-            && command.BaseFaceRef is null && command.BasePlane is null && command.Reverse is null)
+            && !threadRequested
+            && command.BaseFaceRef is null && command.BasePlane is null && command.Reverse is null
+            && command.InitialBorderRef is null && command.FinalBorderRef is null)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
@@ -459,6 +467,14 @@ public partial class Api5Session
         if (entity.type == KompasObjectTypes.Hole3D)
         {
             return UpdateHole(document, entity, command, volumeBefore, featuresBefore, stateBefore);
+        }
+
+        // A thread designation (SM-08) is recognised by the TREE NUMBER 58, like a draft from a base line:
+        // the designation lives outside the operation collection and has no API5 definition at all.
+        if (entity.type == KompasObjectTypes.Thread)
+        {
+            return UpdateThreadFeature(
+                document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
         var definition = entity.GetDefinition();
@@ -900,6 +916,9 @@ public partial class Api5Session
         /// the field belongs only to the <c>draft_from_edges</c> family and stays null for the others, not
         /// <c>false</c>.</summary>
         bool? ReverseReadBack = null,
+        /// <summary>Thread parameters read back after an edit. Same principle: the field belongs only to
+        /// the <c>thread</c> family and stays null for the others, not "zero".</summary>
+        ThreadDto? ThreadReadBack = null,
         /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
         /// not hold is the one this release publishes.</summary>
         IReadOnlyList<string>? Warnings = null);

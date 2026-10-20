@@ -79,6 +79,16 @@ public partial class Api5Session
         new("countersink_diameter_mm", "hole", c => c.CountersinkDiameterMm),
         new("countersink_angle_deg", "hole", c => c.CountersinkAngleDeg),
         new("expected_volume_delta_mm3", "hole", c => c.ExpectedVolumeDeltaMm3),
+        // Thread designation (SM-08). Listed for the same reason as the hole fields: without them a
+        // "left_hand + radius_mm" call on a fillet would apply the radius and swallow the flag.
+        new("nominal_diameter_mm", "thread", c => c.NominalDiameterMm),
+        new("pitch_mm", "thread", c => c.PitchMm),
+        new("length_mm", "thread", c => c.LengthMm),
+        new("auto_diameter", "thread", c => c.AutoDiameter),
+        new("auto_length", "thread", c => c.AutoLength),
+        new("left_hand", "thread", c => c.LeftHand),
+        new("initial_border_ref", "thread", c => c.InitialBorderRef),
+        new("final_border_ref", "thread", c => c.FinalBorderRef),
     };
 
     /// <summary>Reject fields not belonging to this B5 family. Rejected BEFORE any COM call.</summary>

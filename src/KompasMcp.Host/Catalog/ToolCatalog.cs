@@ -2166,6 +2166,31 @@ public static class ToolCatalog
                         "публикуется ПРОЧИТАННОЕ, с проверкой countersink_depth_derived. Сверяйте прочитанное, а не " +
                         "запрошенное.",
                         0.0000001d, 180d))),
+                    ("nominal_diameter_mm", Sch.Nullable(Sch.PositiveMm(
+                        "Новый номинальный диаметр ОБОЗНАЧЕНИЯ РЕЗЬБЫ (семейство thread)",
+                        "Взаимоисключающе с auto_diameter: при автоопределении названное число не " +
+                        "используется. Обозначение - метка, а не геометрия: объём тела остаётся прежним, " +
+                        "и подтверждением служит прочитанное с модели значение, а не код возврата."))),
+                    ("pitch_mm", Sch.Nullable(Sch.PositiveMm(
+                        "Новый шаг резьбы (семейство thread)",
+                        "Профиль не подбирает шаг по стандарту: он задаётся числом."))),
+                    ("length_mm", Sch.Nullable(Sch.PositiveMm(
+                        "Новая длина резьбы (семейство thread)",
+                        "Взаимоисключающе с auto_length: там длина берётся по границам."))),
+                    ("auto_diameter", Sch.Nullable(Sch.Bool(
+                        "Включить автоопределение диаметра резьбы (семейство thread). Со значением " +
+                        "nominal_diameter_mm в одном вызове - INVALID_ARGUMENT."))),
+                    ("auto_length", Sch.Nullable(Sch.Bool(
+                        "Включить автоопределение длины резьбы по её границам (семейство thread)."))),
+                    ("left_hand", Sch.Nullable(Sch.Bool(
+                        "Левая резьба (семейство thread). Отдельное поле, не direction: там флаг стороны фаски."))),
+                    ("initial_border_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "НЕ ПОДДЕРЖИВАЕТСЯ: границы построенного обозначения резьбы не меняются - "
+                        + "CAPABILITY_UNAVAILABLE без изменения модели.")),
+                    ("final_border_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "НЕ ПОДДЕРЖИВАЕТСЯ по той же причине, что initial_border_ref.")),
                     ("expected_volume_delta_mm3", Sch.Nullable(Sch.Num(
                                                 "Аналитическое ожидание СНЯТОГО правкой материала (семейство hole), мм³: объём_до − " +
                         "объём_после. ЗНАК - ЧАСТЬ ОПРЕДЕЛЕНИЯ ВЕЛИЧИНЫ: у «стало глубже» положительна, у «стало " +

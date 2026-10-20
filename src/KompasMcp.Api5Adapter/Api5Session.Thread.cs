@@ -360,7 +360,9 @@ public partial class Api5Session
     }
 
     /// <summary>The family name the read side publishes, shared with the contract.</summary>
-    private const string ThreadFamily = ThreadRules.Family;
+    /// <remarks>INVARIANT: the literal equals <see cref="ThreadRules.Family"/>; the classification guard
+    /// parses this constant from the source, so it is written as a literal rather than as an alias.</remarks>
+    private const string ThreadFamily = "thread";
 
     /// <summary>Thread parameters read through API7 by the name the tree element carries.</summary>
     /// <remarks>INVARIANT: the read goes through the SAME route that writes — the API7 collection, never the
@@ -370,10 +372,34 @@ public partial class Api5Session
     private ThreadDto? ReadThreadFeature(DocumentEntry document, ksEntity entity, out string? note)
     {
         note = null;
+        var thread = FindThreadObject(document, entity, out var parameters, out note);
+        if (thread is null || parameters is null)
+        {
+            return null;
+        }
+
+        var (diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength) =
+            ReadThreadParameters(thread, parameters);
+
+        return new ThreadDto(diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength,
+            BaseKindOf(thread));
+    }
+
+    /// <summary>The API7 <c>IThread</c> of a tree element, matched by the name the element carries.</summary>
+    /// <remarks>INVARIANT: the object is matched to the tree element BY NAME; the same instrument serves the
+    /// read and the edit, so "what was read" and "what was written" cannot be two different objects.
+    /// LIMIT: a name that is missing or matches twice yields no object — it is not an identifier then.
+    /// </remarks>
+    private IThread? FindThreadObject(
+        DocumentEntry document, ksEntity entity, out IThreadsParameters? parameters, out string? reason)
+    {
+        parameters = null;
+        reason = null;
+
         var name = SafeText(() => entity.name);
         if (string.IsNullOrEmpty(name))
         {
-            note = "thread_name_unreadable — имя элемента дерева не прочиталось, а объект API7 "
+            reason = "thread_name_unreadable — имя элемента дерева не прочиталось, а объект API7 "
                 + "сопоставляется только по имени";
             return null;
         }
@@ -383,41 +409,38 @@ public partial class Api5Session
         var threads = container is null ? null : ThreadsOf(container);
         if (threads is null)
         {
-            note = "thread_collection_unavailable — коллекция IThreads не отвечает через "
+            reason = "thread_collection_unavailable — коллекция IThreads не отвечает через "
                 + "Symbols3DContainer (" + (bridge.BridgeFailure ?? "мост не построен") + ")";
             return null;
         }
 
-        IThread? thread = null;
+        IThread? thread;
         try
         {
             thread = threads.Thread[(object)name] as IThread;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            note = "thread_object_not_found — в IThreads нет обозначения с именем «" + name + "» ("
+            reason = "thread_object_not_found — в IThreads нет обозначения с именем «" + name + "» ("
                 + ex.GetType().Name + ")";
             return null;
         }
 
         if (thread is null)
         {
-            note = "thread_object_not_found — IThreads.Thread по имени «" + name + "» вернул null";
+            reason = "thread_object_not_found — IThreads.Thread по имени «" + name + "» вернул null";
             return null;
         }
 
-        if (thread is not IThreadsParameters parameters)
+        if (thread is not IThreadsParameters threadParameters)
         {
-            note = "thread_parameters_unavailable — IThread не отвечает IThreadsParameters: диаметр и шаг "
+            reason = "thread_parameters_unavailable — IThread не отвечает IThreadsParameters: диаметр и шаг "
                 + "не читаются";
             return null;
         }
 
-        var (diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength) =
-            ReadThreadParameters(thread, parameters);
-
-        return new ThreadDto(diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength,
-            BaseKindOf(thread));
+        parameters = threadParameters;
+        return thread;
     }
 
     /// <summary><c>edge</c> or <c>face</c> — which kind of base object the model holds.</summary>

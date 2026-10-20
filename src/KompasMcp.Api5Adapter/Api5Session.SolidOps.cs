@@ -1943,6 +1943,16 @@ public sealed partial class Api5Session
         new("base_plane", new[] { DraftFamily }, c => c.BasePlane),
         // The base-line family's own flag: a chamfer edit that names it must be refused, not ignored.
         new("reverse", new[] { DraftFromEdgesFamily }, c => c.Reverse),
+        // Fields of the THREAD family (SM-08): a designation is read and edited by its own branch (tree
+        // number 58), so these belong to it alone — a fillet edit naming left_hand is refused, not ignored.
+        new("nominal_diameter_mm", new[] { ThreadFamily }, c => c.NominalDiameterMm),
+        new("pitch_mm", new[] { ThreadFamily }, c => c.PitchMm),
+        new("length_mm", new[] { ThreadFamily }, c => c.LengthMm),
+        new("auto_diameter", new[] { ThreadFamily }, c => c.AutoDiameter),
+        new("auto_length", new[] { ThreadFamily }, c => c.AutoLength),
+        new("left_hand", new[] { ThreadFamily }, c => c.LeftHand),
+        new("initial_border_ref", new[] { ThreadFamily }, c => c.InitialBorderRef),
+        new("final_border_ref", new[] { ThreadFamily }, c => c.FinalBorderRef),
     };
 
     /// <summary>Whether the caller declared an analytical geometry expectation — volume and/or bounding box.</summary>

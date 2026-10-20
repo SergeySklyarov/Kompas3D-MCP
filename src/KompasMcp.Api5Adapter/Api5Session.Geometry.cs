@@ -3913,6 +3913,30 @@ public sealed partial class Api5Session
             });
         }
 
+        // MEASURED: a thread designation (SM-08) does NOT appear in the operation collection (110) — after
+        // it is created the collection still holds only the extrusion — so its own tree collection (58) is
+        // listed too. Without this row a reopened document offers no way to reach the designation at all.
+        if (document.PartNow().EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.Thread))
+            is ksEntityCollection threads)
+        {
+            for (var i = 0; i < threads.GetCount(); i++)
+            {
+                if (threads.GetByIndex(i) is not ksEntity thread)
+                {
+                    continue;
+                }
+
+                rows.Add(new FeatureRowDto
+                {
+                    FeatureRef = References.Register("feature", document.Id, document.Revision, thread).Id,
+                    Type = thread.type.ToString(),
+                    Name = thread.name ?? string.Empty,
+                    State = SafeIsCreated(thread),
+                    Family = ThreadRules.Family,
+                });
+            }
+        }
+
         return rows;
     }
 

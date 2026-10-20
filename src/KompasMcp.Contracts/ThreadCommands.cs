@@ -127,4 +127,9 @@ public static class ThreadRules
     /// set, so accepting both would answer a number the model does not hold.</summary>
     public static bool ValueOrAuto(double? value, bool auto) =>
         auto ? value is null : PositiveFinite(value);
+
+    /// <summary>The same rule for an EDIT, where both sides are optional: a named value must be positive
+    /// and must not arrive together with <c>auto = true</c>.</summary>
+    public static bool EditValueOrAuto(double? value, bool? auto) =>
+        value is null || (auto != true && PositiveFinite(value));
 }

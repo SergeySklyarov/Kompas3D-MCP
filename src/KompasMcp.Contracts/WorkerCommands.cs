@@ -2047,6 +2047,41 @@ public sealed record UpdateFeatureCommand
     /// <c>call_returned</c>, and <c>expected_volume_delta_not_supplied</c> appears in <c>unverified_aspects</c>.
     /// History: docs/decisions/contracts.md#hole-volume-delta</remarks>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
+
+    /// <summary>New nominal diameter of a thread designation (family=<c>thread</c>), mm. Mutually
+    /// exclusive with <see cref="AutoDiameter"/> — the same rule as at creation.</summary>
+    /// <remarks>DOC: <c>ithread_propers.html</c> and <c>ithreadsparameters_propers.html</c> — the diameter
+    /// and the pitch live on the ADDITIONAL <c>IThreadsParameters</c> interface of the same <c>IThread</c>.
+    /// INVARIANT: a designation is a label, so the volume is expected to stay and is NOT the confirmation
+    /// here; the confirmation is the value read back from the model.
+    /// History: docs/decisions/adapter-features.md#thread-route</remarks>
+    public double? NominalDiameterMm { get; init; }
+
+    /// <summary>New thread pitch (family=<c>thread</c>), mm. Mandatory for the family: the profile does
+    /// not pick a pitch by standard, and a designation without a pitch has nothing to write.</summary>
+    public double? PitchMm { get; init; }
+
+    /// <summary>New thread length (family=<c>thread</c>), mm. Mutually exclusive with
+    /// <see cref="AutoLength"/>, which takes the length from the borders.</summary>
+    public double? LengthMm { get; init; }
+
+    /// <summary>Auto-detect the diameter of a thread designation (family=<c>thread</c>). DOC: with the
+    /// flag set the value the caller names is not used, so both at once is refused.</summary>
+    public bool? AutoDiameter { get; init; }
+
+    /// <summary>Auto-detect the thread length by its borders (family=<c>thread</c>).</summary>
+    public bool? AutoLength { get; init; }
+
+    /// <summary>Left-hand thread (family=<c>thread</c>). A separate field, not <see cref="Direction"/>:
+    /// there the flag is the chamfer side.</summary>
+    public bool? LeftHand { get; init; }
+
+    /// <summary>Border a thread is measured from — REFUSED by name on an existing designation: the base
+    /// object and the borders are outside the edit profile.</summary>
+    public string? InitialBorderRef { get; init; }
+
+    /// <summary>Border a thread ends at — refused by name, as <see cref="InitialBorderRef"/>.</summary>
+    public string? FinalBorderRef { get; init; }
 }
 
 /// <summary>Suppress or restore a feature. Route MEASURED: <c>ksFeature.excluded = true</c> removes the extrusion body
@@ -2717,6 +2752,11 @@ public sealed record FeatureRowDto
     /// rules apply unchanged (it dies on the next rebuild like any other handle).
     /// History: docs/decisions/contracts.md#sketch-ref-readback</remarks>
     public string? SketchRef { get; init; }
+
+    /// <summary>Family the row belongs to, published ONLY where the read side recognises it without
+    /// opening the definition — today the thread designation (SM-08), which lives in the tree collection
+    /// 58 rather than among the operations. Null elsewhere, not a guess.</summary>
+    public string? Family { get; init; }
 }
 
 /// <summary>Body row returned to the Host.</summary>

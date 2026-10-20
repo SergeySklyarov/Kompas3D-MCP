@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-20T04:25:37+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-20T07:20:05+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 141, маршрутов 640.
-- Измеряемая сборка: `release_build`, коммит `05e3da8`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `1c06a5a342a7811ed6664b34434f7bebac51511b8d8435fb272f721503d78552`.
+- Измеряемая сборка: `release_build`, коммит `026326f`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `33b24ab41a88ad430fe33bc1ba0b2555ca01a9a7def239744f48738ce1c841b3`.
 
 ## 2. Сверка полноты
 
@@ -337,8 +337,8 @@ COM-маршрутов по сборкам: {'api7': 382, 'api5': 258, 'adapter-
 | `DRW-07.section_view.rebuild` | DRW | mcp_verified | kompas_create_section_view, kompas_get_section_view, kompas_rebuild_drawing_views | kompas_rebuild_drawing_views + kompas_get_section_view | Не подтверждено |
 | `DRW-07.section_view.geometry_validation` | DRW | mcp_verified | kompas_create_section_view, kompas_export_drawing, kompas_get_section_view | kompas_export_drawing (dxf) + kompas_get_section_view | Не подтверждено |
 | `DRW-07.section_view.negative_tests` | DRW | mcp_verified | kompas_create_section_view | kompas_create_section_view (отказы с описанием частичных изм | Не подтверждено |
-| `SM-12.incline.mode_faces_group` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft: API5 NewEntity(o3d_incline=42) -> GetDefinitio | Подтверждено |
-| `SM-12.incline.mode_base_face_or_plane` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft, основание: base_face_ref - плоская грань тела  | Подтверждено |
+| `SM-12.incline.mode_faces_group` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add | Подтверждено |
+| `SM-12.incline.mode_base_face_or_plane` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft: правка основания по ссылке отвергается (draft_ | Подтверждено |
 | `SM-12.incline.mode_direction` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft, direction: outward|inward -> BOOL признака; ст | Подтверждено |
 | `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft_from_edges, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft_from_edges: API7 IModelContainer.DraftsFromEdge | Не подтверждено |
 | `SM-12.draft_from_edges.mode_side` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft_from_edges, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft_from_edges, сторона: SideFace - грань, прилегаю | Подтверждено |

@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-20T04:25:37+02:00, часы машины +02:00",
+  "date": "2026-10-20T07:20:05+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -55,13 +55,13 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "0732fb8d293e83ed7b457ef0caf1d48be085bda32d99e3e06716e177fd0a3251",
-   "host_dll_sha256": "1c06a5a342a7811ed6664b34434f7bebac51511b8d8435fb272f721503d78552",
+   "host_sha256": "3cc9ad5df3bfa67391f8f7a6d1e44a23c909a4c93172975d4cd975a25536103a",
+   "host_dll_sha256": "33b24ab41a88ad430fe33bc1ba0b2555ca01a9a7def239744f48738ce1c841b3",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "6eb4fb10b85ce90d833125c35a0a212d9580ed978158f03f5c27c91c2474639f",
-   "worker_dll_sha256": "9ebfb25c418b713df080d6550cbcf21419c77bff4ef8e94a5c46a1a71b3fe53b",
-   "adapter_sha256": "65f7857f6610150d23c9fef1c2210dbcd2df563c2113c35d79375e5444b23b2a",
-   "source_commit": "05e3da8",
+   "worker_sha256": "5f140dd9bc681504fc78ef07525d306eeacd5e1d7f1432e2a45e689c9dd3df6a",
+   "worker_dll_sha256": "4aeb76f79095663b80e07233e9b6e72660062901e6b265fed40c13d69c66ed65",
+   "adapter_sha256": "741a35e8e63c2de565872fcfb8d4dbec3703286c7841088ff827061d2345af4f",
+   "source_commit": "026326f",
    "source_tree_dirty": true,
    "tools_count": 96,
    "rows_complete_run": 1734,
@@ -20832,8 +20832,36 @@
    "schemas": [
     "schemas/kompas_draft.json"
    ],
-   "declared_route": "kompas_draft: API5 NewEntity(o3d_incline=42) -> GetDefinition -> ksInclineDefinition; FaceArray - одна грань или группа в ОДНОМ признаке; SetPlane(основание) -> angle -> direction -> Create(); подтверждение - объём и габарит тела (ksinclinedefinition.html)",
+   "declared_route": "kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add -> IIncline; Faces - одна грань или группа в ОДНОМ признаке; Plane(основание) -> Angle -> Direction, запись завершается обновлением объекта модели; подтверждение - объём и габарит тела (iinclines_add.html)",
    "com": [
+    {
+     "member": "ksEntityCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoints3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlanes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "IIncline.Angle",
      "documentation": "Подтверждено"
@@ -20860,14 +20888,6 @@
     },
     {
      "member": "ILineSegment.Angle",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ksDocument3D.Create",
-     "documentation": "Подтверждено"
-    },
-    {
-     "member": "ksEntity.Create",
      "documentation": "Подтверждено"
     },
     {
@@ -20903,29 +20923,29 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksShellDefinition.FaceArray",
+     "member": "IIncline.Faces",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksEntity.GetDefinition",
+     "member": "IModelContainer.Inclines",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksPart.NewEntity",
+     "member": "IIncline.Plane",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksSketchDefinition.SetPlane",
+     "member": "IMirrorPattern.Plane",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksPlaneOffsetDefinition.SetPlane",
+     "member": "ISketch.Plane",
      "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 22
+    "members": 27
    },
    "actions": {
     "discover": "verified",
@@ -20972,20 +20992,24 @@
    "schemas": [
     "schemas/kompas_draft.json"
    ],
-   "declared_route": "kompas_draft, основание: base_face_ref - плоская грань тела (ksEntity грани), base_plane - плоскость (стандартная или вспомогательная) через ksInclineDefinition.SetPlane; обе формы взаимоисключающие (ksinclinedefinition_setplane.html)",
+   "declared_route": "kompas_draft: правка основания по ссылке отвергается (draft_base_edit_unsupported), создание - base_face_ref (плоская грань тела) или base_plane - плоскость через IIncline.Plane; обе формы взаимоисключающие (iincline_plane.html)",
    "com": [
     {
-     "member": "ksSketchDefinition.SetPlane",
+     "member": "IIncline.Plane",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksPlaneOffsetDefinition.SetPlane",
+     "member": "IMirrorPattern.Plane",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Plane",
      "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 2
+    "members": 3
    },
    "actions": {
     "discover": "verified",
@@ -22882,7 +22906,7 @@
    "type": "Object",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:289",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:661",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:663",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:362",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1430",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:952",
@@ -22925,7 +22949,7 @@
    "type": "Int32",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:295",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:669",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:671",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:370",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1010",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1437",
@@ -22989,7 +23013,7 @@
    "type": "Object",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:297",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:671",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:673",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:372",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1439",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:961",
@@ -23043,7 +23067,7 @@
    "type": "Int16",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:297",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:672",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:674",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:51",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:169",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:373",
@@ -23307,7 +23331,7 @@
    "type": "Double",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:155",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:587",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:589",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:164",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:55"
    ],
@@ -23336,7 +23360,7 @@
    "type": "Boolean",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:156",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:587",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:589",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:165",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:56"
    ],
@@ -23471,7 +23495,7 @@
    "type": "Double",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:344",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:600",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:602",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:311",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:329"
    ],
@@ -23500,7 +23524,7 @@
    "type": "Boolean",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:345",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:600",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:602",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:312",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:330"
    ],
@@ -23528,7 +23552,7 @@
    "signature": "Object GetMainBody()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:524",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:526",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:322",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:352",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:75",
@@ -23572,7 +23596,7 @@
    "signature": "prop String name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:673",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:675",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:374",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:394",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:908",
@@ -39718,25 +39742,25 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261020-api-audit-sm12-attempt4/routes.json",
+  "source": "docs/acceptance/evidence/20261020-api-audit-sm12-attempt5-clean/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 3023.5,
-  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
+  "lag_seconds": 1102.3,
+  "newest_input": "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261020-api-audit-sm12-attempt4/wire.json",
+  "source": "docs/acceptance/evidence/20261020-api-audit-sm12-attempt5-clean/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
-  "fresh": true,
-  "lag_seconds": 3402.2,
-  "newest_input": "schemas/kompas_delete_sketch_constraint.json",
-  "reason": "свеж"
+  "fresh": false,
+  "lag_seconds": -1184.9,
+  "newest_input": "coverage/solid-v24/matrix.json",
+  "reason": "измерение старше своего входа"
  },
  "reflection_access": {
   "entries": [
@@ -39997,10 +40021,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:351:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:407:command.Reverse",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:424:command.BaseLineEdgeRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:733:command.FaceRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:742:command.FaceRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:742:command.FaceRefs.Distinct(StringComparer.Ordinal)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:799:command.BaseLineEdgeRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:735:command.FaceRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:744:command.FaceRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:744:command.FaceRefs.Distinct(StringComparer.Ordinal)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:801:command.BaseLineEdgeRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:171:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:285:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:59:ex.GetType()",
@@ -40678,10 +40702,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:351:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:407:command.Reverse",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:424:command.BaseLineEdgeRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:733:command.FaceRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:742:command.FaceRefs",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:742:command.FaceRefs.Distinct(StringComparer.Ordinal)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:799:command.BaseLineEdgeRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:735:command.FaceRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:744:command.FaceRefs",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:744:command.FaceRefs.Distinct(StringComparer.Ordinal)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:801:command.BaseLineEdgeRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:171:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftEdit.cs:285:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.DraftFromEdgesEdit.cs:59:ex.GetType()",
@@ -41655,7 +41679,7 @@
    "statement": "4 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-sm12-attempt4/routes.json"
+    "docs/acceptance/evidence/20261020-api-audit-sm12-attempt5-clean/routes.json"
    ]
   },
   {
@@ -41665,7 +41689,7 @@
    "statement": "4 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-sm12-attempt4/routes.json"
+    "docs/acceptance/evidence/20261020-api-audit-sm12-attempt5-clean/routes.json"
    ]
   },
   {

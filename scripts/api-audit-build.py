@@ -165,6 +165,9 @@ def modes_of(matrix, catalog, routes, docs_by_route):
             "documentation": documentation_verdict(members),
             "actions": row.get("actions") or {},
             "tests": row.get("tests") or [],
+            # INVARIANT: the limit a mode declares reaches the rendered audit verbatim. A mode whose
+            # route is confirmed but whose limit is unstated reads as a full capability.
+            "limitations": [str(item) for item in row.get("limitations") or []],
         })
     return rows
 
@@ -523,6 +526,12 @@ def render(document):
             f"| `{mode['operation_id']}` | {mode.get('family')} | {mode.get('catalog_level')} | "
             f"{', '.join(mode.get('tools') or []) or '-'} | "
             f"{(mode.get('declared_route') or '-')[:60]} | {mode['documentation']['status']} |")
+    limited = [mode for mode in document["modes"] if mode.get("limitations")]
+    if limited:
+        lines += ["", "### Пределы, названные матрицей у режимов", ""]
+        for mode in limited:
+            lines.append(f"- `{mode['operation_id']}`:")
+            lines.extend(f"  - {item}" for item in mode["limitations"])
     lines += [
         "",
         "## 5. COM-маршруты адаптера",

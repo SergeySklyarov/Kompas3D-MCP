@@ -379,6 +379,7 @@ public sealed class CommandDispatcher
             WorkerCommands.Draft => _sta.Run(() => Draft(request), "feat.draft", cancellationToken),
             WorkerCommands.DraftFromEdges =>
                 _sta.Run(() => DraftFromEdges(request), "feat.draft_from_edges", cancellationToken),
+            WorkerCommands.Thread => _sta.Run(() => Thread(request), "feat.thread", cancellationToken),
             WorkerCommands.SolidBoolean => _sta.Run(() => SolidBoolean(request), "solid.boolean", cancellationToken),
             WorkerCommands.SolidSplit => _sta.Run(() => SolidSplit(request), "solid.split", cancellationToken),
             WorkerCommands.SolidCutByPlane => _sta.Run(() => SolidCutByPlane(request), "solid.cut_by_plane", cancellationToken),
@@ -1105,6 +1106,15 @@ public sealed class CommandDispatcher
         var document = _session.RequireDocument(command.DocumentId);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.DraftFromEdges(command), document);
+    }
+
+    /// <summary>Thread designation (SM-08) — the same addressing rule as the draft from a base.</summary>
+    private object? Thread(IpcFrame request)
+    {
+        var command = Argument<ThreadCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.CreateThread(command), document);
     }
 
     private object? SolidBoolean(IpcFrame request)

@@ -2237,6 +2237,12 @@ public static class KompasObjectTypes
     /// History: docs/decisions/adapter-features.md#draft-from-edges-read-and-edit</remarks>
     public const int DraftFromEdges = 644;
 
+    /// <summary><c>o3d_thread</c> — условное изображение резьбы, as the vendor table numbers it (58).</summary>
+    /// <remarks>DOC: <c>obj3dtype.html</c> names 58 <c>o3d_thread</c> with <c>ksThreadDefinition</c> in
+    /// API5 and <c>IThread</c> in API7 — one number for both routes, unlike a hole.
+    /// History: docs/decisions/adapter-features.md#thread-route</remarks>
+    public const int Thread = 58;
+
     /// <summary><c>o3d_incline</c> — «Уклон» от основания as the API5 tree numbers it (42).</summary>
     /// <remarks>MEASURED: a feature created through API7 <c>IInclines.Add</c> appears in the tree under
     /// the same number, which is what the name match of the reference relies on.

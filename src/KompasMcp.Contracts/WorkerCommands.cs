@@ -110,6 +110,13 @@ public static class WorkerCommands
     /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
     public const string DraftFromEdges = "feat.draft_from_edges";
 
+    /// <summary>Native thread designation — условное изображение резьбы (docs/05 SM-08).</summary> <remarks>DOC: API7
+    /// only — <c>ibody7_threads.html</c> → <c>ithreads_add.html</c> (<c>Add</c> → properties → <c>Update</c>);
+    /// diameter and pitch live on the ADDITIONAL interface <c>IThreadsParameters</c>, and <c>Internal</c> is
+    /// read-only there, so the type is read from the model instead of taken as input.
+    /// History: docs/decisions/adapter-features.md#thread-route</remarks>
+    public const string Thread = "feat.thread";
+
     /// <summary>Boolean operation on bodies with an explicit target and tools (docs/05 SM-15).</summary> <remarks>DOC:
     /// the documented API7 boolean path: <c>IModelContainer.Booleans.Add()</c> → <c>IBoolean</c> with <c>BaseObject</c>
     /// (target), <c>ModifyObjects</c> (tools), <c>BooleanType</c>, <c>SaveCopyModifyObjects</c>, then <c>Update()</c>.
@@ -1645,7 +1652,12 @@ public sealed record FeatureReadDto(
     /// <summary>Source of <see cref="MaterialToward"/>: <c>sketch_normal_rule</c> for a read feature.</summary>
     string? MaterialTowardSource = null,
     /// <summary>The sketch normal read in part coordinates, or null when unreadable.</summary>
-    double[]? MaterialTowardSketchNormal = null);
+    double[]? MaterialTowardSketchNormal = null,
+    /// <summary>Thread designation parameters. Trailing: only for <c>family = "thread"</c>.</summary>
+    /// <remarks>MEASURED: a designation created through API7 <c>IThreads.Add</c> appears in the tree under the
+    /// number 58 (<c>o3d_thread</c>) and carries no API5 definition, so the parameters are read through the API7
+    /// collection by the feature name. History: docs/decisions/adapter-features.md#thread-route</remarks>
+    ThreadDto? Thread = null);
 
 public sealed record GetFeatureCommand
 {
@@ -3006,6 +3018,20 @@ public sealed record DraftDto(
     string? BaseKind,
     bool? Reverse = null,
     int? BaseLineEdgeCount = null);
+
+/// <summary>Thread designation parameters read from the model. An empty field means "not read", not zero.</summary>
+/// <remarks>INVARIANT: <c>Internal</c> is read-only in the product (<c>IThreadsParameters</c>), so it is never
+/// an input of <c>kompas_create_thread</c> or of an edit — it is reported as the model holds it.
+/// History: docs/decisions/adapter-features.md#thread-route</remarks>
+public sealed record ThreadDto(
+    double? NominalDiameterMm,
+    double? PitchMm,
+    double? LengthMm,
+    bool? Internal,
+    bool? LeftHand,
+    bool? AutoDiameter,
+    bool? AutoLength,
+    string? BaseKind);
 
 public sealed record ShellDto(
     double? ThicknessMm,

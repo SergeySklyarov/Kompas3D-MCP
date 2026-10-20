@@ -1299,6 +1299,61 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_create_thread", "Условное изображение резьбы",
+                "Родное условное обозначение резьбы КОМПАС на цилиндре (SM-08). Маршрут ТОЛЬКО API7: " +
+                "IBody7.Threads → IThreads.Add → IThread (BaseObject, InitialBorder, FinalBorder, Lenght, " +
+                "AutoLenght, AutoDiameter, LeftThread) → Update; диаметр и шаг пишутся в ДОПОЛНИТЕЛЬНЫЙ " +
+                "интерфейс IThreadsParameters. ЭТО ОБОЗНАЧЕНИЕ, А НЕ ГЕОМЕТРИЯ: винтовая поверхность не " +
+                "строится, объём тела НЕ меняется - неизменный объём здесь ожидаемый исход, а не отказ. " +
+                "БАЗА - ровно одна форма: edge_ref (круговое ребро цилиндра) или face_ref (цилиндрическая " +
+                "грань); при грани начальная и конечная границы ОБЯЗАТЕЛЬНЫ, при ребре необязательны. " +
+                "ВНЕШНЯЯ/ВНУТРЕННЯЯ читается из модели и входом не принимается: продукт выводит тип из " +
+                "базового объекта. ДИАМЕТР и ДЛИНА - значение ЛИБО авто-флаг, не оба; автоопределение длины " +
+                "требует обеих границ. ШАГ обязателен: профиль не подбирает его по стандарту. Коническая " +
+                "базовая поверхность и подгонка базового объекта в профиль threads-minimal-v1 не входят.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("edge_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "База - круговое ребро цилиндра (ссылка edge:). Взаимоисключающе с face_ref: обе " +
+                        "формы сразу или ни одной - INVALID_ARGUMENT до COM.")),
+                    ("face_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "База - цилиндрическая грань (ссылка face:). Тогда границы обязательны. Коническая " +
+                        "грань в профиль не входит.")),
+                    ("initial_border_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Грань, от которой откладывается резьба. При базе-грани обязательна.")),
+                    ("final_border_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Грань, до которой идёт резьба. При базе-грани обязательна; вместе с начальной " +
+                        "задаёт длину при auto_length.")),
+                    ("nominal_diameter_mm", Sch.Described(
+                        Sch.Nullable(Sch.Num(
+                            "Номинальный диаметр резьбы, мм; конечное число > 0. Взаимоисключающе с " +
+                            "auto_diameter: при автоопределении заданное значение продукт не использует.", 0d, 1e6d)),
+                        "Диаметр резьбы, мм. Либо это поле, либо auto_diameter.")),
+                    ("auto_diameter", Sch.Nullable(Sch.Bool(
+                        "Определять диаметр автоматически по базовому объекту. Тогда nominal_diameter_mm не " +
+                        "передаётся; прочитанный диаметр называется в ответе.", false))),
+                    ("length_mm", Sch.Described(
+                        Sch.Nullable(Sch.Num(
+                            "Длина резьбы, мм; конечное число > 0. Взаимоисключающе с auto_length.", 0d, 1e6d)),
+                        "Длина резьбы, мм. Либо это поле, либо auto_length.")),
+                    ("auto_length", Sch.Nullable(Sch.Bool(
+                        "Брать длину по границам. Требует обеих границ; при включении length_mm не передаётся.",
+                        false))),
+                    ("pitch_mm", Sch.Num(
+                        "Шаг резьбы, мм; обязательное конечное число > 0. Стандарт и таблицы шагов в профиль " +
+                        "не входят, поэтому шаг задаёт вызывающий.", 0d, 1e6d)),
+                    ("left_hand", Sch.Nullable(Sch.Bool(
+                        "Левая резьба: продукт добавляет «LH» в обозначение. Без поля - false; значение, " +
+                        "которое прочитано из модели, называется в ответе.", false))),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
+                WorkerCommands.Thread,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_pattern_grid", "Массив по сетке",
                                 "Массив экземпляров в узлах параллелограммной сетки. ЧТО КОПИРУЕТСЯ, решает copy_kind, и это два " +
                 "вида массива, а не флаг поведения: operations - копии наследуют область применения операции и " +

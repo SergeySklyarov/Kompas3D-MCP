@@ -28,6 +28,10 @@ public partial class Api5Session
         // MEASURED, the API5 tree element carries no definition, and the parameters live on the API7
         // IDraftFromEdges object matched by name.
         var isDraftFromEdges = entity.type == KompasObjectTypes.DraftFromEdges;
+        // A thread designation (SM-08) is recognised by the TREE NUMBER 58 (o3d_thread): the API5 tree
+        // element carries no definition, and the parameters live on the API7 IThread object matched by
+        // name through the IThreads collection.
+        var isThread = entity.type == KompasObjectTypes.Thread;
         // Rotation is recognised by the FEATURE NUMBER IN THE TREE (27/28/29), not by QI(IRotated):
         // a tree entity arrives as a raw __ComObject and refuses QI (MEASURED).
         var isRotated = IsRotatedEntity(entity);
@@ -49,6 +53,7 @@ public partial class Api5Session
                      ?? (definition is ksInclineDefinition || entity.type == KompasObjectTypes.Incline
                          ? DraftFamily : null)
                      ?? (isDraftFromEdges ? DraftFromEdgesFamily : null)
+                     ?? (isThread ? ThreadFamily : null)
                      ?? (isRotated ? RotationFamily : null)
                      ?? (isHole ? HoleFamily : null)
                      ?? solidFamily;
@@ -112,6 +117,8 @@ public partial class Api5Session
             : isDraftFromEdges
                 ? ReadDraftFromEdgesFeature(document, entity, out draftNote)
                 : null;
+        string? threadNote = null;
+        var thread = isThread ? ReadThreadFeature(document, entity, out threadNote) : null;
         var parametersRead = family == ChamferFamily
             ? chamfer is not null
             : family == FilletFamily
@@ -132,6 +139,9 @@ public partial class Api5Session
                                         ? draft?.AngleDeg is not null
                                         : family == DraftFromEdgesFamily
                                             ? draft?.AngleDeg is not null && draft.Reverse is not null
+                                            : family == ThreadFamily
+                                                ? thread?.NominalDiameterMm is not null
+                                                  && thread.PitchMm is not null
                                             : sides.Count > 0;
         if (solidFamily is not null)
         {
@@ -159,6 +169,7 @@ public partial class Api5Session
                     LoftFamily => "loft_params_read",
                     ShellFamily => "shell_params_read",
                     DraftFamily or DraftFromEdgesFamily => "draft_params_read",
+                    ThreadFamily => "thread_params_read",
                     _ => "side_params_read",
                 }, parametersRead,
                 Observed: family switch
@@ -245,6 +256,10 @@ public partial class Api5Session
         {
             unverified.Add(draftNote);
         }
+        else if (family == ThreadFamily && threadNote is not null)
+        {
+            unverified.Add(threadNote);
+        }
         else if (solid?.UnreadableParameters is { Count: > 0 })
         {
             // One line for the whole family, not one per field: the names and reasons already sit in
@@ -296,6 +311,7 @@ public partial class Api5Session
             shell)
         {
             Draft = draft,
+            Thread = thread,
             SketchRef = sketchRef,
             MaterialToward = materialToward,
             MaterialTowardSource = materialTowardSource,

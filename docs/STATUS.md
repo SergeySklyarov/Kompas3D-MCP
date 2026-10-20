@@ -14,8 +14,24 @@
 
 ## Текущее состояние
 
-- **Механизм каталога: режим `compact` (наряд `CATALOG_MECHANISM_RESEARCH`, 21.10.2026, `submitted` -
-  на приёмке техлида):** размер `tools/list` больше не зависит от числа операций. Переключатель
+- **`compact` обслуживает весь реестр и стал режимом по умолчанию (наряд `CATALOG_COMPACT`, 21.10.2026,
+  `taken` - идут два зачётных `--all`):** каждая операция `ToolCatalog.All` достижима: прямой набор
+  (11 инструментов) публикуется, остальные вызываются через `kompas_run`. Список «переведённых» как
+  литерал удалён - `CompactCatalog.ViaRun` выводится из реестра, отказ «существует, но не переведена»
+  (`CAPABILITY_UNAVAILABLE`, `reachable_via = not_converted`) удалён как недостижимый, `Reach` отвечает
+  `direct` или `run`. `HostOptions.CatalogMode` по умолчанию `compact`; `full` остаётся выбираемым на
+  выпуск `0.10.0` (`catalog_mode`, `KOMPAS_MCP_CATALOG_MODE`). Предел `limit` у
+  `kompas_find_operations` - размер реестра, а не литерал. `kompas_capabilities` в `compact` называет
+  `catalog_mode`, `tools`/`tool_count` и отдельно `operations`/`operations_via_run`. `docs/TOOLS.md`
+  получил столбец пути вызова из того же источника, что `reachable_via`. Прибор:
+  `mcp-smoke.py --catalog-mode full|compact` (по умолчанию `compact`), обёртка `kompas_run` - одно
+  место в каркасе (`Client.wire`), режим, набор и реестр клиент спрашивает у Хоста. Измерено на
+  `370d878` (Release): тесты **1387/1387**, `--self-test` 82/0, `--emit-schemas` без изменений (схемы
+  байт-в-байт), группа `--catalog-only` в `compact` **PASS 31 / FAIL 0**, группа `--extrusion-only`
+  через `kompas_run` **PASS 47 / FAIL 0**, стражи 0/0/0. Зачётные `--all` в обоих режимах на одном
+  чистом коммите - идут; `docs/decisions/host.md#catalog-compact-default`,
+  `docs/02_TOOL_CONTRACTS.md` §2.18, отчёт `CATALOG_COMPACT_REPORT_20261021.md`.
+- **Механизм каталога: режим `compact` (наряд `CATALOG_MECHANISM_RESEARCH`, 21.10.2026, `accepted`):** размер `tools/list` больше не зависит от числа операций. Переключатель
   `catalog_mode: full | compact` в `kompas-mcp.json` (`KOMPAS_MCP_CATALOG_MODE`,
   `HostOptions.CatalogMode`); по умолчанию `full` и публикует ровно прежние 97 инструментов
   (`contract-diff` до/после - 0 ломок). В `compact` публикуются 11 прямых инструментов плюс

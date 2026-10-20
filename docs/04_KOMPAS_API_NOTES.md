@@ -7085,3 +7085,46 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 
 **Где записано.** `docs/decisions/adapter-features.md#draft-base-edit-refused`; прибор -
 `tools/KompasMcp.Api7Probe --draft-base-edit` (шаг DR.12).
+
+### §4.96. Условное изображение резьбы: маршрут API7, где лежат диаметр и шаг, и что дерево показывает (живое измерение 20.10.2026, наряд `G10_THREAD`)
+
+**Страницы справки** сняты проводом в `reference/kompas-sdk-v24/docs-wire-20261020-threads/`
+(`_fetch_docs_wire_20261020_threads.py`): `ibody7_threads`, `ithreads`, `ithreads_add`, `ithreads_thread`,
+`ithreads_findthread`, `ithread`, `ithread_propers`, `ithread_baseobject`, `ithread_initialborder`,
+`ithread_finalborder`, `ithread_lenght`, `ithread_autolenght`, `ithread_autodiameter`, `ithread_direction`,
+`ithread_leftthread`, `ithread_threadfaces`, `ithreadsparameters`, `ithreadsparameters_propers`,
+`ithreadsparameters_internal/diameter/pitch`, `ksthreaddefinition`, `obj3dtype`.
+
+- **Коллекция.** `IThreads` документирована и как `IBody7.Threads`, и как `Symbols3DContainer::Threads`
+  (`ithreads.html`). В интеропе установленной сборки свойство `Threads` объявлено у
+  `ISymbols3DContainer`: `IModelContainer` его не объявляет, и обращение идёт типизированным
+  приведением, как везде в мосте.
+- **Диаметр и шаг - на ДОПОЛНИТЕЛЬНОМ интерфейсе.** `IThread` объявляет `BaseObject`, `InitialBorder`,
+  `FinalBorder`, `Lenght`, `AutoLenght`, `AutoDiameter`, `Direction`, `LeftThread`, `ThreadFaces`;
+  номинального диаметра и шага среди них нет. `ithreadsparameters_propers.html` кладёт `Diameter`,
+  `Pitch`, `Internal`, `ConicalThreadAngle`, `InternalDiameterCoefficient`, `ThreadStandardFileName` на
+  `IThreadsParameters`, который `IThread` имеет дополнительным. Приведение `thread as IThreadsParameters`
+  работает; без него числа не записать.
+- **Тип резьбы только читается.** `ithreadsparameters_internal.html`: «Свойство доступно только для
+  чтения». Тип выводится продуктом из базового объекта (ребро на цилиндре - внешняя, грань отверстия -
+  внутренняя), поэтому контракт не принимает его входом, а отдаёт прочитанным.
+- **`Lenght` в v24 - только чтение** (`ithread_threadfaces.html` - тела страниц `ithread_lenght` и
+  `ithread_threadfaces` в справке перепутаны местами: страница «длины» описывает `ThreadFaces`, страница
+  «граней» - `Lenght`; обе величины существуют, перепутаны только файлы). Запись длины на создании
+  работает; чтение отдаёт `Lenght` как `double`.
+- **Чего нет в интеропе установленной сборки** (24.0.7.2919): `IThreads.FindThread` и
+  `IThread.ThreadFaces` - обе документированы как новое v24, но в `Interop.KompasAPI7.dll` их нет
+  (`get_ThreadFaces` и `FindThread` не встречаются). Поиск обозначения идёт перебором `IThreads.Thread`
+  по имени, грани обозначения не читаются - это `LIMIT`, а не «не проверено».
+- **Дерево.** Созданное обозначение НЕ появляется в коллекции операций (`o3d_operationElement = 110`):
+  после создания в ней остаётся только выдавливание. Обозначение лежит в коллекции типа
+  `o3d_thread = 58` (`obj3dtype.html`), и ссылка на признак выдаётся по ней.
+- **Объём.** Живая проверка на цилиндре r = 10, h = 40 (V0 = 12566.3706 мм³): создание внешней резьбы по
+  верхнему ребру (`d = 20`, `p = 2.5`, `L = 25`) даёт `Update() = true`, прочитанные `d = 20`, `p = 2.5`,
+  `L = 25`, `internal = false`, `left_hand = false`, объём и число граней прежние (3 → 3). Это и есть
+  ожидаемый исход: обозначение не создаёт винтовой поверхности.
+- **Автодиаметр** на том же ребре читается как `20` - диаметр цилиндра, что совпадает с ожиданием TH-03.
+- **Левая резьба** читается `left_hand = true`; справка `ithread_leftthread.html` описывает следствие -
+  в обозначение добавляются буквы «LH».
+- **Грань-основание отвечает и приведению к `IFace`, и к `IEdge`** (`IThread.BaseObject` для ребра
+  прошёл проверку `is IFace`), поэтому вид базового объекта читается проверкой `is IEdge` ПЕРВОЙ.

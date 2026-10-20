@@ -329,8 +329,11 @@ public partial class Api5Session
 
         try
         {
-            if (document.PartNow().EntityCollection(
-                    KompasObjectTypes.Of(KompasObjectTypes.OperationElement)) is not ksEntityCollection collection)
+            // MEASURED: a designation is NOT an operation of the tree — the collection of
+            // o3d_operationElement (110) holds only the extrusion after a thread is created — so the
+            // thread-typed collection (58) is asked first, and the operation collection is the fallback.
+            if (document.PartNow().EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.Thread))
+                is not ksEntityCollection collection)
             {
                 return null;
             }
@@ -428,9 +431,14 @@ public partial class Api5Session
                 return null;
             }
 
-            // The base is an edge or a face; the interface is the only thing that tells them apart without
-            // asking the tree, and an unreadable base stays null instead of being guessed.
-            return baseObject is IFace ? "face" : "edge";
+            // MEASURED: an edge base answers the IFace cast too, so the edge interface is asked FIRST;
+            // a base that answers neither stays null instead of being guessed.
+            if (baseObject is IEdge)
+            {
+                return "edge";
+            }
+
+            return baseObject is IFace ? "face" : null;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

@@ -15973,6 +15973,7 @@ def main():
         "suppress": bool(suppress_repeat_k),
         "disconnect": disconnect_only,
         "shutdown": shutdown_only,
+        "catalog": catalog_only,
     }
     # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
     # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.

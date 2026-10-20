@@ -120,6 +120,12 @@ class Client:
         # обращении. Вписанный руками список расходится с поставкой ровно тогда, когда поставку
         # меняют, — и прибор начинает посылать поле, которого схема не объявляет.
         self._op_id_tools = None
+        # Режим каталога, опубликованный набор и реестр — из ответа kompas_capabilities, а не из флага
+        # прибора: один и тот же прогон поднимает Хосты разных режимов (группа CT), и клиент обязан
+        # знать режим СВОЕГО Хоста, иначе обёртка kompas_run ушла бы не туда.
+        self._catalog = None
+        self._tools = None
+        self._describe = {}
         # The host writes diagnostics to stderr continuously. Left unread, the pipe buffer fills
         # and the child blocks — which looks exactly like a hung server. Drain it in the background.
         self._stderr_thread = threading.Thread(target=self._pump_stderr, daemon=True)
@@ -204,7 +210,8 @@ class Client:
         return is_error, env, result
 
     def _tool_once(self, name, arguments, timeout):
-        result = self.call("tools/call", {"name": name, "arguments": arguments}, timeout=timeout)
+        wire_name, wire_args = self.wire(name, arguments)
+        result = self.call("tools/call", {"name": wire_name, "arguments": wire_args}, timeout=timeout)
         env = result.get("structuredContent")
         # Запись делается ДО возврата: окно строки должно содержать вызов даже тогда, когда строка
         # падает на разборе ответа. Иначе неудачная проверка выглядела бы как «вызова не было».
@@ -264,11 +271,87 @@ class Client:
         без лишнего поля те же вызовы доходят до продукта.
         """
         if self._op_id_tools is None:
-            tools = self.call("tools/list", {}).get("tools", [])
+            tools = self.tools()
             self._op_id_tools = frozenset(
                 t.get("name") for t in tools
                 if "operation_id" in ((t.get("inputSchema") or {}).get("properties") or {}))
-        return name in self._op_id_tools
+        if name in self._op_id_tools:
+            return True
+        # В `compact` операция реестра не публикуется, но её схема — та же: спрашиваем её у Хоста.
+        if name in self.published():
+            return False
+        schema = (self.describe(name) or {}).get("schema") or {}
+        return "operation_id" in (schema.get("properties") or {})
+
+    def catalog(self):
+        """Режим, опубликованный набор и реестр — из ответа Хоста `kompas_capabilities`.
+
+        ЗАЧЕМ СПРАШИВАТЬ, А НЕ ПЕРЕДАВАТЬ. Режим задаётся на старте процесса, а прогон поднимает
+        несколько Хостов (группа CT — по одному на режим). Клиент, помнящий режим флагом прибора,
+        ошибся бы ровно там, где режимов два. В `full` реестр равен опубликованному набору: отдельного
+        поля `operations` Хост в этом режиме не публикует, и это различие сохраняется.
+        """
+        if self._catalog is None:
+            result = self.call("tools/call", {"name": "kompas_capabilities", "arguments": {}},
+                               timeout=120)
+            body = (result.get("structuredContent") or {}).get("result") or {}
+            published = [str(n) for n in (body.get("tools") or [])]
+            registry = [str(n) for n in (body.get("operations") or published)]
+            self._catalog = {
+                "mode": body.get("catalog_mode") or "full",
+                "published": published,
+                "registry": registry,
+            }
+        return self._catalog
+
+    def mode(self):
+        return self.catalog()["mode"]
+
+    def published(self):
+        return set(self.catalog()["published"])
+
+    def registry(self):
+        return list(self.catalog()["registry"])
+
+    def serves(self, name):
+        """Достижим ли инструмент в этом режиме: опубликован сам или вызывается через kompas_run."""
+        return name in self.published() or name in self.catalog()["registry"]
+
+    def tools(self):
+        if self._tools is None:
+            self._tools = self.call("tools/list", {}).get("tools", [])
+        return self._tools
+
+    def schema_of(self, name):
+        """Схема инструмента НА ПРОВОДЕ в этом режиме: опубликованный отдаёт свою, операция реестра
+        в `compact` — через `kompas_describe_operation` (та же схема, что в schemas/)."""
+        if name in self.published():
+            return next((t.get("inputSchema") for t in self.tools() if t.get("name") == name), None)
+        return (self.describe(name) or {}).get("schema")
+
+    def describe(self, name):
+        """Ответ `kompas_describe_operation` для операции реестра (в `full` — None)."""
+        if name not in self._describe:
+            if name not in self.catalog()["registry"]:
+                self._describe[name] = None
+            else:
+                result = self.call("tools/call", {
+                    "name": "kompas_describe_operation", "arguments": {"id": name}}, timeout=120)
+                self._describe[name] = (result.get("structuredContent") or {}).get("result")
+        return self._describe[name]
+
+    def wire(self, name, arguments):
+        """Как вызов уходит на провод: в `compact` операция реестра — через `kompas_run`.
+
+        INVARIANT: обёрнуто ровно то, что реестр объявляет операцией и что НЕ опубликовано, поэтому
+        неизвестное имя инструмента остаётся неизвестным (отказ продукта, а не подмена прибором), а
+        ответ `kompas_run` возвращается как есть — его не дополняют, иначе сравнение двух путей было
+        бы утверждением о коде, а не о том, что получил клиент.
+        History: docs/decisions/host.md#catalog-mechanism
+        """
+        if name in self.published() or name not in self.catalog()["registry"]:
+            return name, arguments
+        return "kompas_run", {"id": name, "args": arguments}
 
     def tail(self):
         return "\n".join(self.err_lines[-25:])
@@ -570,6 +653,45 @@ def file_sha256(path):
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread).
 EXPECTED_TOOL_COUNT = 97
+
+# Режим каталога прибора (наряд CATALOG_COMPACT). По умолчанию — тот же, что у Хоста по умолчанию:
+# `compact`. Режим попадает в КОПИЮ конфигурации прогона, поэтому Хост поднимается именно в нём.
+DEFAULT_CATALOG_MODE = "compact"
+CATALOG_MODES = ("compact", "full")
+
+
+def apply_catalog_mode(path, mode):
+    """Записать режим каталога в конфигурацию ЭТОГО прогона.
+
+    ЗАЧЕМ В ФАЙЛ, А НЕ В ПЕРЕМЕННУЮ ОКРУЖЕНИЯ. `KOMPAS_MCP_CATALOG_MODE` перебивает конфигурацию, и
+    тогда группа CT не смогла бы поднять Хост во втором режиме. Копия конфигурации у каждого прогона
+    своя, поэтому режим живёт в ней.
+    """
+    with open(path, encoding="utf-8-sig") as fh:
+        data = json.load(fh)
+    data["catalog_mode"] = mode
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def entry_of(client, name):
+    """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
+    describe. Одна форма нужна потому, что строки приёмки сверяют `inputSchema` с schemas/, а в
+    `compact` половина реестра в списке не публикуется."""
+    schema = client.schema_of(name)
+    return None if schema is None else {"name": name, "inputSchema": schema}
+
+
+def listing_matches(client, names):
+    """Опубликованный набор равен ожидаемому для режима, а реестр полон.
+
+    В `full` ожидание прежнее — список равен реестру. В `compact` публикуется постоянный набор, и
+    полнота доказывается РЕЕСТРОМ из `kompas_capabilities.operations`, а не длиной списка: иначе
+    строка требовала бы от режима ровно того, чего он не обещает.
+    """
+    catalog = client.catalog()
+    return (sorted(names) == sorted(catalog["published"])
+            and len(catalog["registry"]) == EXPECTED_TOOL_COUNT)
 
 RUN_GROUPS = (
     # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор
@@ -1092,18 +1214,23 @@ def run_environment(rep):
     }
 
 
-def run_directory_name(started_utc, group, commit, dirty):
-    """Имя каталога прогона: `<UTC-время>-<группа>-<короткий коммит>[-dirty]`.
+def run_directory_name(started_utc, group, commit, dirty, mode=""):
+    """Имя каталога прогона: `<UTC-время>-<группа>-<короткий коммит>[-dirty][-<режим>]`.
 
     `-dirty` не украшение. Коммит в имени описывает ДЕРЕВО ИСХОДНИКОВ, а собранный бинарь при
     незакоммиченных правках этому коммиту не соответствует: имя, которое об этом молчит, читается
     как «прогон шёл на коммите X», и доказательство пришлось бы разбирать заново.
+
+    Режим каталога в имени появляется только тогда, когда он НЕ по умолчанию: два зачётных прогона
+    одного коммита различаются каталогами, а имя прогона по умолчанию остаётся таким, каким его
+    находят приборы цикла (`full_run.py` ищет `*-all-<коммит>`). Режим всегда записан в `run.json`.
     """
     stamp = started_utc.replace("-", "").replace(":", "").replace("T", "-")[:15]
-    return f"{stamp}-{group}-{commit}" + ("-dirty" if dirty else "")
+    suffix = "" if mode in ("", DEFAULT_CATALOG_MODE) else "-" + mode
+    return f"{stamp}-{group}-{commit}" + ("-dirty" if dirty else "") + suffix
 
 
-def create_run_directory(workdir, started_utc, group, commit, dirty):
+def create_run_directory(workdir, started_utc, group, commit, dirty, mode=""):
     """Создать каталог ЭТОГО прогона и вернуть путь.
 
     Различитель `-2`, `-3`, … нужен потому, что два прогона одной группы подряд — обычное дело
@@ -1112,7 +1239,7 @@ def create_run_directory(workdir, started_utc, group, commit, dirty):
     """
     runs = os.path.join(workdir, "runs")
     os.makedirs(runs, exist_ok=True)
-    base = run_directory_name(started_utc, group, commit, dirty)
+    base = run_directory_name(started_utc, group, commit, dirty, mode)
     name, index = base, 1
     while os.path.exists(os.path.join(runs, name)):
         index += 1
@@ -3271,13 +3398,10 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
         return result(env).get("revision")
 
     # ── SB-01.discover: инструменты и схемы ────────────────────────────────────────────────
-    tools = client.call("tools/list", {}).get("tools", [])
+    tools = client.tools()
     names = sorted(t["name"] for t in tools)
-    edit_schema = None
     entity_schema = None
-    for entry in tools:
-        if entry["name"] == "kompas_edit_sketch":
-            edit_schema = entry.get("inputSchema") or {}
+    edit_schema = client.schema_of("kompas_edit_sketch") or {}
     published = _os.path.join(ROOT, "schemas", "kompas_edit_sketch.json")
     drift = None
     try:
@@ -3302,7 +3426,7 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
             "схемы совпадают с реестром; описания называют новые пределы и вид spline",
             "PASS" if (schema_matches and "spline" in kinds and "polyline" in kinds
                        and isinstance(limit_entities, int) and isinstance(limit_vertices, int)
-                       and named_limits and len(names) == EXPECTED_TOOL_COUNT) else "FAIL",
+                       and named_limits and listing_matches(client, names)) else "FAIL",
             f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема kompas_edit_sketch совпадает с реестром="
             f"{schema_matches}; виды={kinds}; предел entities={limit_entities}, "
             f"предел points_mm={limit_vertices}; описания называют числа и источник={named_limits}",
@@ -6004,13 +6128,13 @@ def interference_checks(client, rep, app_id, workdir):
     cube, cube_volume, cube_bbox, cube_err = build_cube("INT-cube-10", cube_path)
 
     # ========= INT.01.discover: инструменты объявлены и схемы совпадают с реестром =========
-    tools = client.call("tools/list", {}).get("tools", [])
+    tools = client.tools()
     names = sorted(t["name"] for t in tools)
     wanted = ("kompas_check_interference", "kompas_measure_gap")
     schema_ok = {}
     for name in wanted:
         published = os.path.join(ROOT, "schemas", name + ".json")
-        listed = next((t for t in tools if t["name"] == name), None)
+        listed = entry_of(client, name)
         try:
             with open(published, encoding="utf-8-sig") as handle:
                 expected = json.load(handle)
@@ -6027,7 +6151,7 @@ def interference_checks(client, rep, app_id, workdir):
     named = all(name in caps_text for name in wanted)
     rep.add("INT.01.discover",
             "оба инструмента объявлены, схемы совпадают с реестром, kompas_capabilities их называет",
-            "PASS" if (all(name in names for name in wanted) and len(names) == EXPECTED_TOOL_COUNT
+            "PASS" if (all(client.serves(name) for name in wanted) and listing_matches(client, names)
                        and all(schema_ok.values()) and named) else "FAIL",
             f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схемы совпадают={schema_ok}; "
             f"capabilities называет={named}")
@@ -7689,8 +7813,8 @@ def mech_mates_checks(client, rep, app_id, workdir):
         return
 
     # ========= MM-01: обнаружение =========
-    tools = client.call("tools/list", {}).get("tools", [])
-    entry = next((t for t in tools if t["name"] == "kompas_create_mate"), None)
+    tools = client.tools()
+    entry = entry_of(client, "kompas_create_mate")
     listed_schema = (entry or {}).get("inputSchema") or {}
     props = listed_schema.get("properties") or {}
     kinds = ((props.get("constraint_type") or {}).get("enum")) or []
@@ -7713,8 +7837,8 @@ def mech_mates_checks(client, rep, app_id, workdir):
             "схема совпадает с реестром, описание вида называет передачу",
             "PASS" if ("transmission" in kinds and len(fields) == 6
                        and published == listed_schema and "transmission" in description
-                       and "kompas_create_mate" in caps_tools
-                       and caps_result.get("tool_count") == EXPECTED_TOOL_COUNT) else "FAIL",
+                       and client.serves("kompas_create_mate")
+                       and len(client.registry()) == EXPECTED_TOOL_COUNT) else "FAIL",
             f"виды={kinds} поля={fields} схема_совпадает={published == listed_schema} "
             f"описание_называет={'transmission' in description} "
             f"capabilities: инструмент={'kompas_create_mate' in caps_tools} "
@@ -13227,10 +13351,10 @@ def export_inertia_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", reason)
 
     # ── EI.01.discover: инструменты и схемы ────────────────────────────────────────────────────────
-    tools = client.call("tools/list", {}).get("tools", [])
+    tools = client.tools()
     names = sorted(t["name"] for t in tools)
-    export_entry = next((t for t in tools if t["name"] == "kompas_export_stl"), None)
-    measure_entry = next((t for t in tools if t["name"] == "kompas_measure"), None)
+    export_entry = entry_of(client, "kompas_export_stl")
+    measure_entry = entry_of(client, "kompas_measure")
     export_schema_ok = False
     if export_entry is not None:
         published = _os.path.join(ROOT, "schemas", "kompas_export_stl.json")
@@ -13248,7 +13372,7 @@ def export_inertia_checks(client, rep, app_id, workdir):
     rep.add("EI.01.discover",
             "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure в схеме есть "
             "свойство inertia и аргумент inertia_units; число инструментов равно ожидаемому",
-            "PASS" if (len(names) == EXPECTED_TOOL_COUNT and export_schema_ok and inertia_property
+            "PASS" if (listing_matches(client, names) and export_schema_ok and inertia_property
                        and inertia_units_property) else "FAIL",
             f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема kompas_export_stl совпадает={export_schema_ok}; "
             f"inertia в перечне свойств={inertia_property}; inertia_units={inertia_units_property}")
@@ -14008,13 +14132,13 @@ def variables_bind_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", reason)
 
     # ── VB.01.discover: инструменты и схемы ────────────────────────────────────────────────────
-    tools = client.call("tools/list", {}).get("tools", [])
+    tools = client.tools()
     names = sorted(t["name"] for t in tools)
     drift_ok = True
     drift_detail = []
     for tool_name in ("kompas_create_variable", "kompas_list_feature_parameters",
                       "kompas_bind_parameter"):
-        entry = next((t for t in tools if t["name"] == tool_name), None)
+        entry = entry_of(client, tool_name)
         published = _os.path.join(ROOT, "schemas", tool_name + ".json")
         want = None
         try:
@@ -14028,7 +14152,7 @@ def variables_bind_checks(client, rep, app_id, workdir):
         drift_detail.append(f"{tool_name}={same}")
     rep.add("VB.01.discover",
             "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; число инструментов равно ожидаемому",
-            "PASS" if (len(names) == EXPECTED_TOOL_COUNT and drift_ok) else "FAIL",
+            "PASS" if (listing_matches(client, names) and drift_ok) else "FAIL",
             f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схемы: {', '.join(drift_detail)}")
 
     # ── построение эталона: две независимые операции через MCP ─────────────────────────────────
@@ -15059,7 +15183,7 @@ def sketch_vertex_checks(client, rep, app_id, workdir):
         return ends, free
 
     # ── SV.01.discover: инструмент и схема объявляют чтение точек ─────────────────────────────────
-    tools = client.call("tools/list", {}).get("tools", [])
+    tools = client.tools()
     names = sorted(t["name"] for t in tools)
     schema = None
     desc = ""
@@ -15089,7 +15213,7 @@ def sketch_vertex_checks(client, rep, app_id, workdir):
             "схема совпадает с реестром; поле include_points объявлено; описание называет "
             "points_mm/points_kind/start_mm/end_mm, through_points и свободные концы",
             "PASS" if (schema_matches and include_ok and names_ok
-                       and len(names) == EXPECTED_TOOL_COUNT) else "FAIL",
+                       and listing_matches(client, names)) else "FAIL",
             f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема совпадает с "
             f"реестром={schema_matches}; include_points объявлено={include_ok}; описанием названо "
             f"{len(named)}/7 признаков {named}; тип include_points={include_schema.get('type')}",
@@ -15657,6 +15781,13 @@ def main():
         if os.path.exists(worker):
             os.environ["KOMPAS_MCP_WORKER_PATH"] = worker
     config = os.path.abspath(argument("--config") or local_config(ROOT))
+    # Режим каталога: тот же, что у Хоста по умолчанию (`compact`). Явное значение нужно для второго
+    # зачётного прогона одного коммита: `--all --catalog-mode full`.
+    catalog_mode = (argument("--catalog-mode") or DEFAULT_CATALOG_MODE).strip().lower()
+    if catalog_mode not in CATALOG_MODES:
+        print("--catalog-mode: допустимы только " + " и ".join(CATALOG_MODES)
+              + ", получено " + catalog_mode)
+        return 2
     workdir = os.path.join(ROOT, "scratch", "mcp-smoke")
     os.makedirs(workdir, exist_ok=True)
     keep = "--keep" in sys.argv
@@ -16007,7 +16138,7 @@ def main():
     # внутри него, иначе упавший прогон снова оставит доказательства врозь от отчёта.
     started_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     commit, tree_dirty = git_state(ROOT)
-    run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty)
+    run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty, catalog_mode)
     rep = Report(report_title, os.path.join(run_dir, report_filename))
     # Разбивка по группам — только у полного прогона: его один отчёт несёт строки всех групп.
     rep.grouped = all_groups
@@ -16040,10 +16171,14 @@ def main():
     # в общий журнал 27 705 строк, то есть доказательство клиентского сеанса перестало быть
     # отличимым от шума прибора. В отчёт идёт ИСХОДНЫЙ путь: по нему отчёт привязывается к поставке.
     measured_config = isolate_config(config, run_dir, "smoke")
+    apply_catalog_mode(measured_config, catalog_mode)
     rep.context = {
         "started_utc": started_utc,
         "run_directory": run_dir,
         "run_group": group,
+        # Режим каталога, в котором шёл прогон: без него два прогона одного коммита неразличимы в
+        # отчёте, а именно их сравнение и есть предмет приёмки.
+        "catalog_mode": catalog_mode,
         "source_commit": commit,
         "source_tree_dirty": tree_dirty,
         # Штамп собранного бинаря (`<Version>+<коммит>`) читается из serverInfo при initialize и
@@ -16116,9 +16251,11 @@ def main():
                 "PASS" if info.get("name") else "FAIL", json.dumps(info, ensure_ascii=False))
         client.notify("notifications/initialized")
 
-        tools = client.call("tools/list", {}).get("tools", [])
+        tools = client.tools()
         names = sorted(t["name"] for t in tools)
-        rep.add("S02", f"tools/list: {len(names)} инструментов", "PASS" if len(names) >= 18 else "FAIL", ", ".join(names))
+        rep.add("S02", f"tools/list: {len(names)} инструментов в режиме {client.mode()}",
+                "PASS" if listing_matches(client, names) else "FAIL",
+                f"опубликовано {len(names)}, реестр {len(client.registry())}; " + ", ".join(names))
 
         # F-05: строка S02 проверяет ТОЛЬКО tools/list и перечисления документов не исполняет.
         # Приписывать ей исполнение `kompas_list_documents` значило бы выдавать список инструментов
@@ -16137,29 +16274,39 @@ def main():
                 + clip(json.dumps(no_session_env, ensure_ascii=False), 240))
 
         required = ["application_id", "detail"]
-        bad = [t["name"] for t in tools
-               if t.get("inputSchema", {}).get("additionalProperties") is not False]
-        rep.add("S03", "все входные схемы закрывают неизвестные поля", "PASS" if not bad else "FAIL", str(bad))
+        # В `compact` опубликованы не все операции, поэтому закрытость проверяется по РЕЕСТРУ: у
+        # опубликованного инструмента схема из списка, у операции — из describe (та же самая).
+        bad = [name for name in client.registry()
+               if ((entry_of(client, name) or {}).get("inputSchema") or {})
+               .get("additionalProperties") is not False]
+        rep.add("S03", "все входные схемы реестра закрывают неизвестные поля",
+                "PASS" if not bad else "FAIL", str(bad))
 
         # Every mutation must declare the fields the contract requires from a client, otherwise the
         # Host's own strictness would reject a legitimate call.
+        # Мутации берутся из ОБЪЯВЛЕННОГО поведения: у опубликованного инструмента это annotations,
+        # у операции реестра — behaviour.destructive из describe. В `compact` второе единственный
+        # способ: списка, где операция стояла бы с аннотациями, в этом режиме нет.
         annotated = [t for t in tools if isinstance(t.get("annotations"), dict)]
-        no_annotations = not annotated
-        if no_annotations:
-            missing_op = []
-        else:
-            mutation_names = [t["name"] for t in annotated
-                              if t["annotations"].get("destructiveHint") is True]
-            missing_op = [n for n in mutation_names
-                          if "operation_id" not in (next(t for t in tools if t["name"] == n)
-                                                     .get("inputSchema", {}).get("properties") or {})]
-            untagged = [t["name"] for t in tools if not isinstance(t.get("annotations"), dict)]
-            if untagged:
-                missing_op.append("без annotations: " + ",".join(untagged))
+        mutation_names = [t["name"] for t in annotated
+                          if t["annotations"].get("destructiveHint") is True]
+        mutation_names += [name for name in client.registry()
+                           if name not in client.published()
+                           and ((client.describe(name) or {}).get("behaviour") or {})
+                           .get("destructive") is True]
+        # `kompas_run` объявлен пишущим честно, но operation_id в его схеме нет и быть не может: поле
+        # принадлежит схеме ОПЕРАЦИИ, которую он вызывает (CT.07 и CT.06 держат именно её).
+        mutation_names = [n for n in mutation_names if n != "kompas_run"]
+        missing_op = [n for n in mutation_names
+                      if "operation_id" not in (((entry_of(client, n) or {}).get("inputSchema") or {})
+                                                .get("properties") or {})]
+        untagged = [t["name"] for t in tools if not isinstance(t.get("annotations"), dict)]
+        if untagged:
+            missing_op.append("без annotations: " + ",".join(untagged))
         rep.add("S03b", "мутации объявляют operation_id в схеме",
-                "UNKNOWN" if no_annotations else ("PASS" if not missing_op else "FAIL"),
+                "UNKNOWN" if not annotated else ("PASS" if not missing_op else "FAIL"),
                 "tools/list не вернул annotations — выводить мутации из них невозможно"
-                if no_annotations else str(missing_op))
+                if not annotated else f"мутаций {len(mutation_names)}: {missing_op}")
 
         # Заявленный в схеме режим обязан работать: `kind=fragment` стоял в перечислении, а адаптер
         # отвечал CAPABILITY_UNAVAILABLE — клиент читал в схеме рабочий режим и получал отказ.
@@ -28496,8 +28643,8 @@ def material_toward_checks(client, rep, app_id, workdir):
         return (chosen or {}).get("feature_ref")
 
     # ========= MT.00.discover: поле ОБЪЯВЛЕНО поставкой, а не подразумевается =========
-    tools = client.call("tools/list", {}).get("tools", [])
-    entry = next((t for t in tools if t.get("name") == "kompas_extrude"), None)
+    tools = client.tools()
+    entry = entry_of(client, "kompas_extrude")
     published = os.path.join(ROOT, "schemas", "kompas_extrude.json")
     try:
         with open(published, encoding="utf-8-sig") as fh:
@@ -28514,7 +28661,7 @@ def material_toward_checks(client, rep, app_id, workdir):
     rep.add("MT.00.discover",
             "kompas_extrude объявляет material_toward шестью словами, direction стал НЕобязательным, "
             "схема на проводе совпадает с опубликованным реестром",
-            "PASS" if (declared and same and len(tools) == EXPECTED_TOOL_COUNT) else "FAIL",
+            "PASS" if (declared and same and listing_matches(client, [t.get("name") for t in tools])) else "FAIL",
             "инструментов=" + str(len(tools)) + " (ожидание " + str(EXPECTED_TOOL_COUNT) + "); "
             + "enum material_toward=" + str(toward.get("enum")) + "; required=" + str(required)
             + "; схема совпадает=" + str(same))
@@ -47555,8 +47702,8 @@ def drafts_checks(client, rep, app_id, workdir):
         return call("kompas_draft_from_edges", args)
 
     # ── DR-01: обнаружение ──────────────────────────────────────────────────────────────────────
-    tools = client.call("tools/list", {}).get("tools", [])
-    listed = {t.get("name"): (t.get("inputSchema") or {}) for t in tools}
+    tools = client.tools()
+    listed = {name: (client.schema_of(name) or {}) for name in client.registry()}
     schema_ok = {}
     for name in ("kompas_draft", "kompas_draft_from_edges"):
         try:
@@ -47573,8 +47720,8 @@ def drafts_checks(client, rep, app_id, workdir):
             "оба инструмента в tools/list, схемы совпадают с реестром байт-в-байт, "
             "kompas_capabilities называет оба, число инструментов равно реестру",
             "PASS" if (all(schema_ok.values())
-                       and all(n in caps_tools for n in schema_ok)
-                       and caps_result.get("tool_count") == EXPECTED_TOOL_COUNT) else "FAIL",
+                       and all(client.serves(n) for n in schema_ok)
+                       and len(client.registry()) == EXPECTED_TOOL_COUNT) else "FAIL",
             f"schemas={schema_ok} caps_has_both="
             f"{[n for n in schema_ok if n in caps_tools]} tool_count="
             f"{caps_result.get('tool_count')} реестр={EXPECTED_TOOL_COUNT}")
@@ -48243,8 +48390,8 @@ def threads_checks(client, rep, app_id, workdir):
         return ref_of(hit.get("edge_ref")) if hit else None
 
     # ===== TH-01: обнаружение =====
-    tools = client.call("tools/list", {}).get("tools", [])
-    entry = next((t for t in tools if t.get("name") == "kompas_create_thread"), None)
+    tools = client.tools()
+    entry = entry_of(client, "kompas_create_thread")
     props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
     required = {"document_id", "expected_revision", "operation_id", "edge_ref", "face_ref",
                 "initial_border_ref", "final_border_ref", "nominal_diameter_mm", "auto_diameter",
@@ -48590,24 +48737,26 @@ def threads_checks(client, rep, app_id, workdir):
 
 
 def catalog_checks(host, config, workdir, rep):
-    """CT.* — механизм каталога: режим `compact` за переключателем (наряд CATALOG_MECHANISM_RESEARCH).
+    """CT.* — механизм каталога: `compact` обслуживает ВЕСЬ реестр (наряд CATALOG_COMPACT).
 
     ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. `tools/list` в `compact` ПОСТОЯНЕН: он не содержит ни одной операции
-    реестра, поэтому не растёт с их числом. `find` находит каждую переведённую операцию по русскому
-    слову из её же назначения; `describe` отдаёт ТУ ЖЕ схему, что прямой инструмент в `full`;
-    `kompas_run` отдаёт тот же ответ, что прямой вызов, и отвергает неверные аргументы по имени поля
-    ДО исполнения. Полный режим не изменился: его список по-прежнему равен реестру.
+    реестра, поэтому не растёт с их числом. Каждая операция реестра находится по русскому слову из
+    своего заголовка и описывается схемой, равной `schemas/<id>.json`; каждая достижима ровно одним
+    путём — опубликованным инструментом или `kompas_run`. `kompas_run` отдаёт тот же ответ, что
+    прямой вызов, и отвергает неверные аргументы по имени поля ДО исполнения. Режим `full` не
+    изменился: его список по-прежнему равен реестру.
 
-    ПОЧЕМУ ГРУППА ВЕДЁТ СВОИ ХОСТЫ. Режим задаётся конфигурацией на старте процесса, а общий Хост
-    прогона поднят в `full`. Свои два Хоста (по одному на режим) — единственный способ сравнить
-    ответы двух режимов на одной машине; КОМПАС при этом живёт в одном экземпляре за раз.
+    ПОЧЕМУ ГРУППА ВЕДЁТ СВОИ ХОСТЫ. Режим задаётся конфигурацией на старте процесса, а режим общего
+    Хоста прогона выбирает флаг прибора. Свои два Хоста (по одному на режим) — единственный способ
+    сравнить ответы двух режимов на одной машине; КОМПАС при этом живёт в одном экземпляре за раз.
     """
     import json as _json
+    import os as _os
+    import re as _re
     import uuid as _uuid
 
     from localconfig import isolate_config
 
-    converted = ["kompas_get_feature", "kompas_extrude", "kompas_create_sketch", "kompas_export_image"]
     catalog_tools = {"kompas_find_operations", "kompas_describe_operation", "kompas_run"}
     # Прямой набор `compact`. Имена и число — УТВЕРЖДЕНИЕ строки CT.02 («список постоянен»), а не
     # копия реестра: строка падает, если состав прямого набора изменился молча.
@@ -48617,14 +48766,6 @@ def catalog_checks(host, config, workdir, rep):
         "kompas_open_document", "kompas_close_document", "kompas_get_context",
         "kompas_capabilities",
     }
-    # Русское слово из назначения каждой переведённой операции (заголовок инструмента).
-    words = {
-        "kompas_extrude": "выдавить",
-        "kompas_create_sketch": "эскиз",
-        "kompas_get_feature": "признака",
-        "kompas_export_image": "снимок",
-    }
-
     def mode_config(tag, mode):
         path = isolate_config(config, workdir, "ct-" + tag)
         with open(path, encoding="utf-8-sig") as fh:
@@ -48693,32 +48834,71 @@ def catalog_checks(host, config, workdir, rep):
                 "PASS" if again_names == compact_names and again_size == compact_size else "FAIL",
                 f"размер {compact_size} → {again_size}, состав совпал={again_names == compact_names}")
 
+        # РЕЕСТР ЦЕЛИКОМ — из ответа Хоста, а не из списка прибора: строка, помнящая состав реестра,
+        # перестала бы замечать его изменение. `find` с пустым запросом отдаёт все операции.
+        env_all, code_all = call(compact, "kompas_find_operations",
+                                 {"query": "", "limit": EXPECTED_TOOL_COUNT})
+        all_rows = ((env_all or {}).get("result") or {}).get("operations") or []
+        registry = [row.get("id") for row in all_rows]
         rep.add("CT.04", "compact: размер не зависит от числа операций — операций в списке нет",
-                "PASS" if not (compact_names & set(converted)) and compact_size * 5 < full_size else "FAIL",
+                "PASS" if (not (compact_names & (set(registry) - direct))
+                           and len(registry) == EXPECTED_TOOL_COUNT and compact_size * 5 < full_size)
+                else "FAIL",
                 f"compact {compact_size} символов против full {full_size} на {len(full_names)} инструментах; "
-                f"переведённые операции в списке: {sorted(compact_names & set(converted))}")
+                f"операций в реестре {len(registry)} (код {code_all}); "
+                f"операции вне прямого набора в списке: {sorted(compact_names & (set(registry) - direct))}")
 
-        hits = {}
-        for op_id, word in words.items():
-            env, code = call(compact, "kompas_find_operations", {"query": word})
-            rows = ((env or {}).get("result") or {}).get("operations") or []
-            ids = [row.get("id") for row in rows[:5]]
-            hits[op_id] = (code, ids, rows)
-        found = {op: op in ids for op, (_c, ids, _r) in hits.items()}
-        reachable = {op: ((hits[op][2][0].get("reachable_via") if hits[op][2] else None)) for op in hits}
-        rep.add("CT.05", "compact: find находит каждую переведённую операцию по русскому слову",
-                "PASS" if all(found.values()) else "FAIL",
-                "; ".join(f"«{words[op]}» → {hits[op][1][:3]}" for op in words),
-                details={"found": found, "first_row": reachable})
+        # CT.05: русское слово из СОБСТВЕННОГО заголовка операции находит её среди первых `limit`.
+        # Слова не вписаны руками: заголовки приходят из того же ответа, что и id, поэтому строка
+        # проверяет словарь продукта, а не догадку прибора.
+        find_fail = {}
+        find_words = {}
+        for row in all_rows:
+            op_id = row.get("id")
+            title = (row.get("title") or "").lower()
+            candidates = sorted({w for w in _re.findall(r"[а-яё]{4,}", title)}, key=len, reverse=True)
+            for word in candidates[:4]:
+                env_w, _c = call(compact, "kompas_find_operations", {"query": word})
+                shown = (((env_w or {}).get("result") or {}).get("operations") or [])[:20]
+                if op_id in [r.get("id") for r in shown]:
+                    find_words[op_id] = word
+                    break
+            if op_id not in find_words:
+                find_fail[op_id] = candidates
+        rep.add("CT.05",
+                "compact: каждая операция реестра находится по русскому слову своего заголовка "
+                "(первые limit)",
+                "PASS" if all_rows and not find_fail else "FAIL",
+                f"операций {len(all_rows)}, нашли все={not find_fail}, "
+                f"слово понадобилось у {len(find_words)}; не нашли: {sorted(find_fail)[:5]}",
+                details={"not_found": find_fail, "word_used": find_words})
 
-        described, d_code = call(compact, "kompas_describe_operation", {"id": "kompas_extrude"})
-        described_schema = ((described or {}).get("result") or {}).get("schema")
-        direct_schema = next((t.get("inputSchema") for t in full_tools
-                              if t.get("name") == "kompas_extrude"), None)
-        rep.add("CT.06", "compact: describe отдаёт ту же схему, что прямой инструмент в full",
-                "PASS" if described_schema and described_schema == direct_schema else "FAIL",
-                f"код={d_code}, схема совпала={described_schema == direct_schema}, "
-                f"schema_ref={((described or {}).get('result') or {}).get('schema_ref')}")
+        # CT.06: схема describe равна опубликованному реестру схем, ДЛЯ КАЖДОЙ операции, и совпадает
+        # со схемой прямого инструмента в `full`. Обе половины нужны: первая держит поставку,
+        # вторая — то, что два режима описывают один и тот же вход.
+        schema_bad = {}
+        for op_id in registry:
+            env_d, d_code = call(compact, "kompas_describe_operation", {"id": op_id})
+            got = ((env_d or {}).get("result") or {}).get("schema")
+            path = _os.path.join(ROOT, "schemas", str(op_id) + ".json")
+            want = None
+            try:
+                with open(path, encoding="utf-8-sig") as fh:
+                    want = _json.load(fh)
+                want.pop("$schema", None)
+            except (OSError, ValueError):
+                want = None
+            full_schema = next((t.get("inputSchema") for t in full_tools
+                                if t.get("name") == op_id), None)
+            if not (got is not None and want is not None and got == want and got == full_schema):
+                schema_bad[op_id] = {"code": d_code, "file": want is not None,
+                                     "equal_file": got == want, "equal_full": got == full_schema}
+        rep.add("CT.06",
+                "compact: describe отдаёт схему, равную schemas/<id>.json и схеме прямого инструмента "
+                "в full, для каждой операции реестра",
+                "PASS" if registry and not schema_bad else "FAIL",
+                f"сверено {len(registry)}; расхождения: {sorted(schema_bad)[:5]}",
+                details={"bad": schema_bad})
 
         # Отказы §2 п.4: неверное поле, неверный тип, отсутствующее обязательное поле. Все три —
         # ДО исполнения, поэтому строка не поднимает ни сеанс, ни КОМПАС.
@@ -48746,12 +48926,15 @@ def catalog_checks(host, config, workdir, rep):
                 "PASS" if code == "INVALID_ARGUMENT" and "kompas_extrude" in nearest else "FAIL",
                 f"код={code}, ближайшие={nearest}")
 
-        env, code = run(compact, "kompas_fillet", {})
-        details = ((env or {}).get("error") or {}).get("details") or {}
-        rep.add("CT.09", "compact: непереведённая операция отвергается по имени, со списком переведённых",
-                "PASS" if code == "CAPABILITY_UNAVAILABLE" and sorted(details.get("converted") or []) == sorted(converted)
-                else "FAIL",
-                f"код={code}, переведённые={details.get('converted')}, reachable_via={details.get('reachable_via')}")
+        # CT.09: достижимость РОВНО ОДНИМ путём. Два пути у одной операции означали бы, что клиент не
+        # знает, какой вызов настоящий; третий (недостижима) — что режим обещает больше, чем даёт.
+        reach = {row.get("id"): row.get("reachable_via") for row in all_rows}
+        bad_reach = {k: v for k, v in reach.items() if v not in ("direct", "run")}
+        direct_rows = sorted(k for k, v in reach.items() if v == "direct")
+        rep.add("CT.09", "compact: каждая операция реестра достижима ровно одним путём (direct или run)",
+                "PASS" if (not bad_reach and direct_rows == sorted(direct)) else "FAIL",
+                f"direct: {len(direct_rows)} (ожидание {len(direct)}), иные ответы: {bad_reach}",
+                details={"direct": direct_rows, "bad": bad_reach})
 
         # ОДИН ОБРАБОТЧИК, ОДИН ОТВЕТ. Одна и та же операция — запись файла `kompas_export_image` —
         # ИСПОЛНЯЕТСЯ в каждом режиме: в compact через kompas_run, в full прямым вызовом. Сравниваются

@@ -1839,14 +1839,16 @@ public static class ToolCatalog
                     ("base_face_ref", Sch.Described(
                         Sch.Nullable(Sch.Ref("#/$defs/reference")),
                         "Новое основание уклона (семейство draft) — плоская грань тела. Взаимоисключающе с " +
-                        "base_plane: обе формы сразу или ни одной — INVALID_ARGUMENT до правки. Сторона " +
-                        "переносится через правку: флаг пересчитывается от нормали НОВОГО основания.")),
+                        "base_plane: обе формы сразу или ни одной — INVALID_ARGUMENT до правки. " +
+                        "НЕ ПОДДЕРЖИВАЕТСЯ: основание построенного уклона не меняется — " +
+                        "CAPABILITY_UNAVAILABLE без изменения модели, признак придётся пересоздать.")),
                     ("base_plane", Sch.Described(
                         Sch.Nullable(PlaneSchema(
                             "Новое основание уклона — плоскость в форме опоры эскиза: base (xy/xz/yz со " +
                             "offset_mm) ЛИБО reference на плоскость вида plane.")),
                         "Новое основание уклона (семейство draft) — плоскость. Взаимоисключающе с " +
-                        "base_face_ref.")),
+                        "base_face_ref. НЕ ПОДДЕРЖИВАЕТСЯ: основание построенного уклона не меняется — " +
+                        "CAPABILITY_UNAVAILABLE без изменения модели.")),
                     ("reverse", Sch.Nullable(Sch.Bool(
                         "Новая смена стороны уклона ОТ БАЗОВОЙ ЛИНИИ (семейство draft_from_edges). " +
                         "Отдельное поле, а не direction: у фаски direction — сторона фаски. Измерено: на " +

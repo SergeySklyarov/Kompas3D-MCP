@@ -7060,3 +7060,28 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 
 **Где записано.** `docs/decisions/adapter-features.md#draft-edit-and-plane-base`; измерение -
 `tools/KompasMcp.Api7Probe --draft-base-edit` (шаг DR.12), отчёт `docs/acceptance/api7/api7-probe-report.{json,md}`.
+
+### §4.95. Основание построенного уклона: где `Plane` применяется, а где нет (20.10.2026)
+
+Страницы: `iincline_plane.html` (`Plane` - `IModelObject`), `iinclines_add.html` (Add → свойства →
+`IModelObject::Update`), `ksinclinedefinition_setplane.html`.
+
+- **API5.** `ksInclineDefinition.SetPlane` на построенном признаке отвечает `TRUE`, `Update()` тоже, а
+  геометрия и флаг остаются прежними - ложный успех, а не правка.
+- **API7 на объекте от `IInclines.Add`.** `Plane` = вспомогательная плоскость `z = 25` и
+  `Direction = true` в одном пакете, один `Update()`: объём `400000`, X max `104.408` (эталон DR-04).
+  Тот же объект, основание назад в грань: `382367.30`, X max `100`.
+- **API7 на объекте, найденном в коллекции по имени** (именно так работает продукт по ссылке):
+  - пакет `Plane`+`Direction`+`Angle`, один `Update()` - не применяется ничего (`382367.30`, X max `100`);
+  - `Plane` один + `Update()`, затем `Angle`+`Direction` вторым - основание не сохраняется, сторона
+    применяется к ПРЕЖНЕМУ основанию (`417632.70`, X max `108.816`);
+  - повторный поиск объекта по имени между записями результата не меняет;
+  - `Plane`+`Direction` пакетом, `Angle` вторым - итог `382367.30` (прежнее основание и прежний флаг).
+
+**Вывод.** Маршрута, который меняет основание построенного уклона по ссылке, нет: новый объект
+`IIncline` из коллекции не принимает запись `Plane` так, как объект, вернувший `Add()`, а сторона и
+основание на нём несовместимы в одном вызове. Продукт отказывает `CAPABILITY_UNAVAILABLE` с кодом
+`draft_base_edit_unsupported` до записи; путь клиента - удалить признак и создать заново.
+
+**Где записано.** `docs/decisions/adapter-features.md#draft-base-edit-refused`; прибор -
+`tools/KompasMcp.Api7Probe --draft-base-edit` (шаг DR.12).

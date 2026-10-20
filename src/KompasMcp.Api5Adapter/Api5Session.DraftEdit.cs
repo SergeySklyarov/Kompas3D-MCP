@@ -11,11 +11,10 @@ namespace KompasMcp.Api5Adapter;
 /// <summary>Editing a draft — the family «Уклон» от основания (SM-12) through <c>kompas_update_feature</c>.</summary>
 /// <remarks>INVARIANT: the edit writes the SAME feature and calls <c>Update()</c>; the confirmation is the
 /// volume, not the return code.
-/// INVARIANT: the side is carried across the edit — the product flag is recomputed from the base
-/// orientation, so changing the base alone does not silently flip the side.
+/// LIMIT: the base does not change — a request for it is refused by name before any write.
 /// LIMIT: the base-line family's edit (angle and <c>Reverse</c>) is not here: its feature has no API5
 /// definition and the API7 object must be matched first; a request for it is refused by name.
-/// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+/// History: docs/decisions/adapter-features.md#draft-base-edit-refused</remarks>
 public partial class Api5Session
 {
     /// <summary>Family name of a draft in edit responses.</summary>
@@ -27,7 +26,7 @@ public partial class Api5Session
         "angle_deg", "direction", "face_refs", "base_face_ref", "base_plane",
     };
 
-    /// <summary>Edit a draft: angle, side, face set and base (face ↔ plane).</summary>
+    /// <summary>Edit a draft: angle, side and face set. The base is refused, not changed.</summary>
     private UpdateFeatureResult UpdateDraftFeature(
         DocumentEntry document,
         ksEntity entity,
@@ -69,32 +68,27 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["angle_deg"] = angle });
         }
 
-        // The flag is carried across the edit WITHOUT re-reading the old base: MEASURED, GetPlane() of a
-        // built feature does not give an object whose orientation this route can read, and a guessed side
-        // would tilt the face the wrong way. So: angle only keeps the flag; `direction` is the product
-        // flag, as the field is documented for this family; a NEW base must come WITH `direction`.
-        if ((command.BaseFaceRef is not null || command.BasePlane is not null)
-            && command.Direction is null)
+        // LIMIT: a new base is REFUSED, not attempted. MEASURED: IIncline.Plane applies a new base only
+        // on the object IInclines.Add returned; on the object found by name — what a reference gives —
+        // a package with Plane applies nothing, and an Update after a lone Plane re-applies the old base.
+        // History: docs/decisions/adapter-features.md#draft-base-edit-refused
+        if (command.BaseFaceRef is not null || command.BasePlane is not null)
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "Смена основания без direction не выполняется: ориентация ПРЕЖНЕГО основания этим "
-                + "маршрутом не читается, и сторона уклона не переносится — подставленная догадка "
-                + "наклонила бы грань в другую сторону. Передайте direction вместе с новым основанием. "
-                + "Признак не изменён.",
+                "Основание построенного уклона не меняется: признак придётся пересоздать. Маршрут API7 "
+                + "применяет новое основание только к объекту, который вернул IInclines.Add; по ссылке "
+                + "признак находится в коллекции по имени, и запись Plane на таком объекте не "
+                + "применяется. Модель не изменена.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
+                    ["code"] = "draft_base_edit_unsupported",
                     ["has_base_face_ref"] = command.BaseFaceRef is not null,
                     ["has_base_plane"] = command.BasePlane is not null,
+                    ["remedy"] = "удалить признак и создать уклон с нужным основанием заново",
                 });
         }
-
-        var (basePayload, basePoint, baseNormal, baseKind) =
-            ResolveDraftEditBase(document, command);
-        var baseOut = basePoint is null || baseNormal is null
-            ? false
-            : BaseNormalPointsOutOfBody(document, basePoint, baseNormal);
 
         var flag = command.Direction ?? flagBefore;
         if (flag is null)
@@ -110,8 +104,6 @@ public partial class Api5Session
                     ["direction_from_request"] = command.Direction,
                 });
         }
-
-        var side = basePoint is null ? null : DraftRules.ContractDirection(flag.Value, baseOut);
 
         List<ksFaceDefinition>? faces = null;
         if (command.FaceRefs is { Count: > 0 } faceRefs)
@@ -140,25 +132,9 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // INVARIANT: the parameters are written together with the base, then one Update() applies the mode.
-        // MEASURED: API5 SetPlane on a BUILT feature answers TRUE and changes nothing; the same base
-        // through IIncline.Plane is applied — 400000 mm³ and X max 104.408, exactly DR-04.
-        // History: docs/decisions/adapter-features.md#draft-edit-and-plane-base
+        // INVARIANT: the properties are written in one package, then one Update() applies the mode.
+        // History: docs/decisions/adapter-features.md#draft-base-edit-refused
         var bridge = BridgeFor(document);
-        IModelObject? base7 = null;
-        if (basePayload is not null)
-        {
-            if (bridge.TransferTo7(basePayload) is not IModelObject transferred)
-            {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "Новое основание вида «" + baseKind + "» не перенесено в API7 как IModelObject (" +
-                    (bridge.BridgeFailure ?? "TransferInterface вернул null") + "). Признак не изменён.",
-                    RetryPolicy.ReacquireContext);
-            }
-
-            base7 = transferred;
-        }
 
         object[]? faces7 = null;
         if (faces is not null)
@@ -180,55 +156,13 @@ public partial class Api5Session
 
         try
         {
-            // ORDER: ONE property per Update. MEASURED, three variants of one call: Plane alone applies
-            // (400000 / X max 104.408); Plane batched with Angle does nothing; Plane batched with Direction
-            // does nothing either. So the side goes first, then the base, each confirmed on its own.
             if (faces7 is not null)
             {
                 incline.Faces = faces7;
             }
 
-            if (base7 is not null)
-            {
-                incline.Direction = flag.Value;
-                if (SafeBool(() => ((IModelObject)incline).Update()) != true)
-                {
-                    throw new KompasContractException(
-                        ErrorCodes.GeometryFailed,
-                        "Сторона уклона записана, но Update() не подтвердил её применение. Признак "
-                        + "изменён частично.",
-                        RetryPolicy.ReacquireContext,
-                        partialEffects: true);
-                }
-
-                RebuildApi7AndSettle(container, document);
-
-                // MEASURED: after Update() the matched wrapper stops carrying property writes — the
-                // re-matched object is what a new call would find.
-                incline = FindDraftIncline(document, entity, out var again, out _) ?? incline;
-                container = again ?? container;
-
-                incline.Plane = base7;
-                if (SafeBool(() => ((IModelObject)incline).Update()) != true)
-                {
-                    throw new KompasContractException(
-                        ErrorCodes.GeometryFailed,
-                        "Новое основание записано, но Update() не подтвердил его применение. Признак "
-                        + "изменён частично.",
-                        RetryPolicy.ReacquireContext,
-                        partialEffects: true);
-                }
-
-                RebuildApi7AndSettle(container, document);
-                incline = FindDraftIncline(document, entity, out again, out _) ?? incline;
-                container = again ?? container;
-            }
-
             incline.Angle = targetAngle;
-            if (base7 is null)
-            {
-                incline.Direction = flag.Value;
-            }
+            incline.Direction = flag.Value;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
@@ -311,67 +245,6 @@ public partial class Api5Session
                 checks,
                 unverified),
             Warnings: Array.Empty<string>());
-    }
-
-    /// <summary>The base for an edit: the requested one, or the feature's own.</summary>
-    /// <remarks>The requested base is resolved exactly as at creation; the feature's own is read from
-    /// <c>GetPlane</c>, so "changed only the angle" keeps the side it had.</remarks>
-    private (object? Payload, double[]? Point, double[]? Normal, string Kind) ResolveDraftEditBase(
-        DocumentEntry document, UpdateFeatureCommand command)
-    {
-        if (command.BaseFaceRef is not null || command.BasePlane is not null)
-        {
-            if (!DraftRules.SingleBase(command.BaseFaceRef, command.BasePlane is null ? null : "plane"))
-            {
-                throw new KompasContractException(
-                    ErrorCodes.InvalidArgument,
-                    "Основание задаётся РОВНО одной формой: base_face_ref либо base_plane. Обе сразу "
-                    + "или ни одной — отказ.",
-                    RetryPolicy.Never,
-                    details: new Dictionary<string, object?>
-                    {
-                        ["has_base_face_ref"] = command.BaseFaceRef is not null,
-                        ["has_base_plane"] = command.BasePlane is not null,
-                    });
-            }
-
-            if (command.BaseFaceRef is { Length: > 0 } faceRef)
-            {
-                var face = RequireFace(document, faceRef);
-                if (PlanarPlacementOf(face) is not { } planar)
-                {
-                    throw new KompasContractException(
-                        ErrorCodes.InvalidArgument,
-                        $"Основание '{faceRef}' не плоская грань: уклон отсчитывается от плоскости.",
-                        RetryPolicy.Never,
-                        details: new Dictionary<string, object?> { ["base_face_ref"] = faceRef });
-                }
-
-                return (face, ToArray(planar.Point), ToArray(planar.Normal), "face");
-            }
-
-            var plane = command.BasePlane!;
-            var planeEntity = plane.Reference is { Length: > 0 } planeReference
-                ? ResolvePlaneSupportObject(
-                    document, References.Require(planeReference, document.Id, document.Revision),
-                    planeReference, new List<string>())
-                : ResolvePlaneEntity(document, plane);
-            var (point, normal) = ReadPlanePlacement(document, BridgeFor(document), planeEntity, plane);
-            if (point is null || normal is null)
-            {
-                throw new KompasContractException(
-                    ErrorCodes.CapabilityUnavailable,
-                    "Нормаль новой плоскости основания не прочитана: сторона уклона отсчитывается от "
-                    + "неё. Признак не изменён.",
-                    RetryPolicy.ReacquireContext);
-            }
-
-            return (planeEntity, point, normal, "plane");
-        }
-
-        // No base in the request: the caller keeps the one the feature has. The geometry is not read,
-        // and the side is reported only when the base was given in the same call.
-        return (null, null, null, "unchanged");
     }
 
     /// <summary>The API7 object of the draft the reference points at, or null with the reason.</summary>

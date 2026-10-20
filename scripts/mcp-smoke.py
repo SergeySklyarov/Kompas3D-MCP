@@ -47726,8 +47726,9 @@ def drafts_checks(client, rep, app_id, workdir):
                               else "FAIL",
                               f"volume={got} ожидалось={FOUR_IN} граней={len(sides)} error={code}")
         close(doc)
-    # Основание грань -> плоскость z = 25 проверяется на СВОЁМ брусе: у признака с четырьмя
-    # гранями эталон DR-04 не определён, и подставлять его значило бы сверять не то.
+    # Основание грань -> плоскость z = 25: правка ОТКАЗЫВАЕТСЯ. Измеренный предел маршрута API7 -
+    # новое основание применяется только к объекту, который вернул IInclines.Add, а по ссылке признак
+    # находится в коллекции по имени. Строка держит отказ и НЕИЗМЕННОСТЬ модели, а не объём DR-04.
     doc, problem = new_bar("DR-06b")
     if not doc:
         dr06["base_plane"] = ("FAIL", problem or "брус не построен")
@@ -47737,23 +47738,21 @@ def drafts_checks(client, rep, app_id, workdir):
         env, code = draft_row(doc, face_refs=plus_x[:1], base_face_ref=(bottom or [None])[0],
                               angle_deg=10, direction="inward", expected_volume_mm3=ONE_IN)
         feature = (result(env).get("feature_ref") or {}).get("id")
-        # СТАНДАРТНАЯ ФОРМА ПЛОСКОСТИ и ОБЯЗАТЕЛЬНЫЙ direction: смена основания без него отвергается
-        # документированным условием продукта (прежняя ориентация этим маршрутом не читается). У правки
-        # `direction` - ФЛАГ ПРОДУКТА (bool), а не слово: `true` даёт ту же сторону, что `inward` при
-        # создании на основании z = 25 (DR-04), потому что нормаль основания смотрит в тело.
         env, code = call("kompas_update_feature", {
             "feature_ref": feature, "expected_revision": current_rev(doc),
-            "base_plane": {"base": "xy", "offset_mm": 25}, "direction": True,
-            "expected_volume_mm3": V0})
-        got, box = result(env).get("volume_after_mm3"), x_max(doc)
-        dr06["base_plane"] = ("PASS" if (not code and near(got, V0)
-                                         and near(box, 100.0 + D25, TOL_MM)) else "FAIL",
-                              f"volume={got} ожидалось={V0} x_max={box} error={code}")
+            "base_plane": {"base": "xy", "offset_mm": 25}, "direction": True})
+        got, box = vol(doc), x_max(doc)
+        refusal = str(((env or {}).get("error") or {}).get("message") or "")
+        dr06["base_plane"] = ("PASS" if (code == "CAPABILITY_UNAVAILABLE"
+                                         and "пересоздать" in refusal
+                                         and near(got, ONE_IN) and near(box, 100.0, TOL_MM)) else "FAIL",
+                              f"code={code} volume={got} ожидалось={ONE_IN} x_max={box} "
+                              f"msg={refusal}")
         close(doc)
     rep.add("DR.06.edit",
             "правка уклона от основания: угол 10 -> 5 даёт 391251.13, направление outward при 5 "
             "градусах - 408748.87, грани 1 -> 4 при 10 градусах - 325834.73, основание грань -> "
-            "плоскость z = 25 - объём 400000 и X max 104.408",
+            "плоскость z = 25 - явный отказ без изменения модели",
             "PASS" if all(isinstance(v, tuple) and v[0] == "PASS"
                           for v in dr06.values()) and len(dr06) == 5 else "FAIL",
             " | ".join(f"{k}: {v[0] + ' ' + v[1] if isinstance(v, tuple) and isinstance(v[0], str) else v}"

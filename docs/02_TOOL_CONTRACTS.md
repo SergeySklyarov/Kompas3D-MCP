@@ -246,6 +246,7 @@ _Правка 07.10.2026 (наряд о `coordinate_space` и выравнива
 | `kompas_shell` | document_id, face_refs[] удаляемых граней (НЕПУСТОЙ список), thickness_mm, `thin_direction` inward/outward, `tangent_faces` (объявлен, `true` отвергается - см. ниже) |
 | `kompas_draft` | document_id, face_refs[] плоских граней одного тела (НЕПУСТОЙ, без повторов), ровно одно из `base_face_ref` (плоская грань) и `base_plane` (объект `plane`), `angle_deg` 0 < \|a\| < 90 в ГРАДУСАХ, обязательное `direction` outward/inward ОТНОСИТЕЛЬНО ТЕЛА |
 | `kompas_draft_from_edges` | document_id, base_line_edge_refs[] (ребро или цепочка, НЕПУСТОЙ), ровно одно из `direction_ref` (грань, ребро, ось) и `direction_plane`, необязательный `side_face_ref`, `angle_deg`, `reverse` (по умолчанию false) |
+| `kompas_create_thread` | document_id, ровно одно из `edge_ref` (круговое ребро цилиндра) и `face_ref` (цилиндрическая грань); при базе-грани обязательны `initial_border_ref` и `final_border_ref`; ровно одно из `nominal_diameter_mm` > 0 и `auto_diameter: true`; ровно одно из `length_mm` > 0 и `auto_length: true` (последнее требует обеих границ); `pitch_mm` > 0 обязателен; `left_hand` (по умолчанию false). Обозначение, а не геометрия: объём тела и число граней обязаны совпасть |
 | `kompas_fillet` | edge_refs[], radius_mm, tangent_propagation |
 | `kompas_chamfer` | edge_refs[], explicit mode distance_distance/distance_angle и размеры |
 | `kompas_update_feature` | feature_ref, typed changes, supported_feature_type; у семейства `draft` правятся `angle_deg`, `direction`, `face_refs`, `base_face_ref`/`base_plane` (смена основания только вместе с `direction`); у семейства `draft_from_edges` - только `angle_deg` и `reverse`, а базовая линия, направляющий объект и сторона отвергаются по имени поля |
@@ -667,3 +668,33 @@ API7→API5 (`kompasobject_transferinterface.html`): измерено, что б
 **Одно предложение в четырёх инструментах.** `kompas_list_sketches`, `kompas_create_sketch`,
 `kompas_list_aux_geometry`, `kompas_create_aux_geometry` называют, что объект удаляется
 `kompas_delete_feature` по выданной ими ссылке.
+
+## 2.17. Условное изображение резьбы (наряд `G10_THREAD`, 20.10.2026)
+
+Новый инструмент `kompas_create_thread` (реестр 96 -> 97). Семейство интегрировано в
+`kompas_get_feature`, `kompas_list_features` (`family = thread`), `kompas_update_feature`,
+`kompas_set_feature_suppressed` и `kompas_delete_feature` — своих инструментов у этих действий нет.
+
+**Это обозначение, а не геометрия.** Винтовая поверхность не строится, объём тела и число граней не
+меняются, и это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта: подтверждение — наличие объекта резьбы в
+дереве и параметры, ПРОЧИТАННЫЕ из модели, а не `Update()/Create() = true` и не эхо запроса. Если
+объём или число граней изменились, вызов отказывает, а не объявляет успех. Строка
+`unverified_aspects` говорит об этом прямо, отдельной фразой, а не общей оговоркой.
+
+**База — ровно одна форма.** `edge_ref` — круговое ребро, принадлежащее цилиндру; `face_ref` —
+цилиндрическая грань. Обе формы или ни одной — `INVALID_ARGUMENT` до COM. При базе-грани начальная и
+конечная границы ОБЯЗАТЕЛЬНЫ (справка `ksthreaddefinition.html`, примечания 1–2); при базе-ребре они
+необязательны, базовая грань определяется ядром.
+
+**Значение и авто-флаг взаимоисключающи.** `nominal_diameter_mm` и `auto_diameter`, `length_mm` и
+`auto_length` — по одной форме; оба сразу, ноль, отрицательное или `NaN` — `INVALID_ARGUMENT`. При
+автоопределении заданное значение не используется (примечание 4 той же страницы), поэтому ответ
+отдаёт ПРОЧИТАННЫЕ из модели диаметр и длину, а не присланные.
+
+**Правка.** `kompas_update_feature` правит диаметр, шаг, длину, `left_hand` и авто-флаги; каждое
+значение перечитывается из модели. Правка базового объекта и границ — именованный отказ
+`CAPABILITY_UNAVAILABLE` с причиной, а не молчаливое игнорирование поля.
+
+**Границы профиля.** Коническая базовая поверхность, смещения подгонки базового объекта, таблицы
+стандартов и подбор шага по стандарту, резьба отверстия SM-07 и показ резьбы на чертеже в профиль
+`threads-minimal-v1` не входят и отдельными инструментами не закрываются.

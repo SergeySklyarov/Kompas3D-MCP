@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 43,
-   "operations": 135,
+   "operations": 136,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 210,
+   "modes_and_variants": 214,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -725,14 +725,119 @@
    "id": "SM-08",
    "title": "Резьба",
    "classification": "solid",
-   "level": "documented",
+   "level": "mcp_verified",
    "evidence": {
     "metadata": "ksThreadDefinition{dr, p, length, autoDefinDr, allLength, faceValue, outside, base/face} в дампе API5",
-    "runtime": "не проверялось; условное обозначение против реальной винтовой геометрии не разведено"
+    "runtime": "измерено 20.10.2026 на build 24.0.0.2799: условное обозначение создаётся по ребру и по цилиндрической грани, читается, правится, подавляется, удаляется и переживает save -> close -> reopen; объём тела не меняется - это обозначение, а не винтовая геометрия"
    },
    "rule": "условная резьба не доказывает наличие винтовой геометрии (docs/05 §5 примечание к SM-08)",
-   "next_step": "проба с числовым критерием: измерить длину грани/объём и сравнить с винтовой геометрией; иначе фиксировать только обозначение",
-   "mcp_support": "none"
+   "next_step": "Живой прогон и группа --threads-only пройдены. Следующее: зачётный --all. Вне профиля остаются стандарты резьбы, коническая резьба, резьба отверстия SM-07 и показ резьбы на чертеже.",
+   "mcp_support": "kompas_create_thread / kompas_get_feature / kompas_update_feature / kompas_set_feature_suppressed / kompas_delete_feature / kompas_list_features",
+   "route": "API7 IBody7.Threads -> IThreads.Add -> IThread (базовый объект, границы, диаметр и шаг через IThreadsParameters, авто-флаги, левая резьба); API5 ksThreadDefinition - документированная альтернатива, в одном признаке с API7 не смешивается",
+   "operations": [
+    {
+     "id": "SM-08.thread",
+     "name": "Условное изображение резьбы",
+     "level": "mcp_verified",
+     "source_user_docs": "cm_thread.html",
+     "source_sdk": "ibody7_threads.html, ithreads.html, ithreads_add.html, ithread.html",
+     "api5": {
+      "found_in": "Bin\\kApi5.tlb",
+      "interfaces": [
+       "ksThreadDefinition"
+      ],
+      "object_type": "o3d_thread"
+     },
+     "api7": {
+      "found_in": "Bin\\kAPI7.tlb",
+      "interfaces": [
+       "IThread",
+       "IThreads",
+       "IThreadsParameters",
+       "IBody7"
+      ],
+      "members": [
+       "BaseObject",
+       "InitialBorder",
+       "FinalBorder",
+       "Lenght",
+       "AutoLenght",
+       "AutoDiameter",
+       "LeftThread",
+       "ThreadFaces",
+       "IThreadsParameters.Diameter",
+       "IThreadsParameters.Pitch"
+      ]
+     },
+     "parameters": [
+      {
+       "name": "BaseObject",
+       "type": "IModelObject (круговое ребро цилиндра или цилиндрическая грань)",
+       "units": "-"
+      },
+      {
+       "name": "InitialBorder / FinalBorder",
+       "type": "IModelObject (грани)",
+       "units": "-",
+       "notes": "при базе-грани обязательны обе; при базе-ребре необязательны"
+      },
+      {
+       "name": "Diameter",
+       "type": "double (IThreadsParameters)",
+       "units": "мм",
+       "notes": "при AutoDiameter не используется"
+      },
+      {
+       "name": "Pitch",
+       "type": "double (IThreadsParameters)",
+       "units": "мм"
+      },
+      {
+       "name": "Lenght",
+       "type": "double",
+       "units": "мм",
+       "notes": "имя члена в справке с опечаткой; при AutoLenght не используется"
+      },
+      {
+       "name": "AutoDiameter / AutoLenght",
+       "type": "VARIANT_BOOL",
+       "units": "-"
+      },
+      {
+       "name": "LeftThread",
+       "type": "VARIANT_BOOL",
+       "units": "-"
+      }
+     ],
+     "modes": [
+      {
+       "id": "SM-08.thread.mode_outer_by_edge",
+       "name": "внешняя по круговому ребру",
+       "level": "mcp_verified",
+       "field": "BaseObject = ребро"
+      },
+      {
+       "id": "SM-08.thread.mode_inner_by_face",
+       "name": "внутренняя по цилиндрической грани с границами",
+       "level": "mcp_verified",
+       "field": "BaseObject = грань, InitialBorder/FinalBorder"
+      },
+      {
+       "id": "SM-08.thread.mode_auto",
+       "name": "автодиаметр и авто-длина",
+       "level": "mcp_verified",
+       "field": "AutoDiameter/AutoLenght"
+      },
+      {
+       "id": "SM-08.thread.mode_hand",
+       "name": "правая и левая резьба",
+       "level": "mcp_verified",
+       "field": "LeftThread"
+      }
+     ],
+     "rule": "условное обозначение не создаёт винтовой геометрии: объём тела и число граней не меняются, и это ожидаемый исход"
+    }
+   ]
   },
   {
    "id": "SM-15",

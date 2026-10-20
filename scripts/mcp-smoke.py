@@ -567,8 +567,9 @@ def file_sha256(path):
 # История: 81 (до G2) → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза)
 # → 89 (G6: управляющий размер на отрезке эскиза) → 90 (COMPONENT_DELETE: удаление компонента)
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
-# → 96 (SM-12: kompas_draft и kompas_draft_from_edges).
-EXPECTED_TOOL_COUNT = 96
+# → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
+# → 97 (SM-08: kompas_create_thread).
+EXPECTED_TOOL_COUNT = 97
 
 RUN_GROUPS = (
     # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор

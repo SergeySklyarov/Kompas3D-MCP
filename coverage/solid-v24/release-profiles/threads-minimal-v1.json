@@ -1,0 +1,149 @@
+{
+  "meta": {
+    "profile_id": "threads-minimal-v1",
+    "title": "Условное изображение резьбы v24: внешняя по ребру, внутренняя по грани, авто, правая/левая",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "20.10.2026",
+        "change": "профиль заведён нарядом SM-08 (G10 = E3): четыре режима §1, общие зависимости §6; уровни подняты по доказательствам живого прибора и группы --threads-only"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E3": "Условное изображение резьбы - шаг D таблицы G-пробелов, очередь E3"
+    }
+  },
+  "modes": [
+    {
+      "ref": "SM-08.thread.mode_outer_by_edge",
+      "title": "Внешняя резьба, базовый объект - круговое ребро цилиндра",
+      "family": "SM-08",
+      "queue": "E3",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: обозначение по верхнему наружному ребру цилиндра r = 10 создаётся, читается (диаметр 20, шаг 2,5, длина 25, внешняя, правая), правится на месте, переживает save -> close -> reopen, подавляется, восстанавливается и удаляется. Объём тела и число граней не меняются - это ожидаемый исход обозначения, а не признак отказа."
+    },
+    {
+      "ref": "SM-08.thread.mode_inner_by_face",
+      "title": "Внутренняя резьба, базовый объект - цилиндрическая грань отверстия с границами",
+      "family": "SM-08",
+      "queue": "E3",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: обозначение на внутренней цилиндрической грани отверстия r = 3,4 создаётся с обеими границами (верх z = 40, низ z = 0), читается как внутреннее с диаметром 8 и длиной по границам 40; объём тела прежний. Без границ база-грань отвергается до COM (TH-11)."
+    },
+    {
+      "ref": "SM-08.thread.mode_auto",
+      "title": "Автоопределение диаметра и автоопределение длины по границам",
+      "family": "SM-08",
+      "queue": "E3",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: автодиаметр на ребре r = 10 читается из модели как 20 (диаметр цилиндра), авто-длина на базе-грани даёт 40 - по границам, а не по запросу. Значение и авто-флаг взаимоисключающи (INVALID_ARGUMENT), авто-длина без обеих границ отвергается. Переключение авто-флагов при правке проверено вместе с прочими правками."
+    },
+    {
+      "ref": "SM-08.thread.mode_hand",
+      "title": "Правая и левая резьба",
+      "family": "SM-08",
+      "queue": "E3",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: признак с left_hand = true читается как левый, соседний без флага - как правый (значение по умолчанию в ответе явное). Правка left_hand false -> true на месте прочитана из модели; объём тела прежний."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.refs.edges_faces",
+      "title": "Рёбра и грани как объекты выбора с устойчивой адресацией",
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "База обозначения - круговое ребро или цилиндрическая грань из kompas_read_topology / kompas_resolve_selection; границы - грани того же тела. Устаревшая ссылка отвечает STALE_REFERENCE, прямолинейное ребро и плоская грань отвергаются до COM. Проверяется группой --threads-only (TH-02, TH-04, TH-11)."
+    },
+    {
+      "id": "dep.api7.in_same_adapter",
+      "title": "API7 в основном коде: один адаптер, один владелец сеанса, одна STA-очередь",
+      "required_actions": [
+        "create",
+        "read",
+        "edit"
+      ],
+      "gap": "Создание, чтение и правка обозначения идут маршрутом API7 (IBody7.Threads -> IThreads -> IThread) в том же адаптере и той же STA-очереди, что прочие вызовы; второго сеанса КОМПАС не заводится, API5 в одном признаке не смешивается. Проверяется группой --threads-only."
+    },
+    {
+      "id": "dep.lifecycle.feature_cycle",
+      "title": "Жизненный цикл выбранного признака: чтение, правка параметров, перестроение, подавление/восстановление, удаление с зависимостями",
+      "required_actions": [
+        "read",
+        "edit",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies"
+      ],
+      "gap": "Обозначение проходит чтение (get_feature, list_features с family = thread), правку диаметра, шага, длины, стороны и авто-флагов, save -> close -> reopen, подавление с восстановлением и удаление существующими инструментами; правка базового объекта и границ - именованный отказ. Проверяется группой --threads-only (TH-06...TH-10)."
+    }
+  ],
+  "explicitly_out_of_scope": {
+    "deferred_full_P6": [
+      "резьба отверстия SM-07 (IHole3D.Thread, ShowThread) - другое семейство",
+      "таблицы стандартов и подбор шага по стандарту (IThreadsParameters, IThreadDialogParam) - не выбрано в профиль",
+      "коническая базовая поверхность - контракт отвечает CAPABILITY_UNAVAILABLE с причиной",
+      "смещения подгонки базового объекта (BaseObjectAdjustment*) - не выбраны",
+      "ksDocument3D.HideAllThreads и показ резьбы на чертеже - другое задание",
+      "винтовая геометрия любого вида: обозначение её не создаёт и не обещает",
+      "многотельный контекст, компоненты сборки, исполнения"
+    ],
+    "next_block_after_profile": [
+      "стандарты резьбы и подбор шага по стандарту",
+      "коническая резьба и резьба отверстия отдельными нарядами"
+    ]
+  }
+}

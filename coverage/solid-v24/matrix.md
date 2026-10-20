@@ -147,6 +147,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль threads-minimal-v1 — Условное изображение резьбы v24: внешняя по ребру, внутренняя по грани, авто, правая/левая
+
+- **обязательных_режимов:** 4
+- **режимов_закрыто:** 4
+- **общих_зависимостей:** 3
+- **зависимостей_закрыто:** 3
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** E3 4/4
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль variables-bind-minimal-v1 — Создание переменных детали и привязка параметров операций v24
 
 - **обязательных_режимов:** 4
@@ -173,19 +185,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 354
-- **строк_полностью_закрыто:** 167
-- **строк_с_каким_либо_прогрессом:** 183
+- **строк_каталога:** 358
+- **строк_полностью_закрыто:** 171
+- **строк_с_каким_либо_прогрессом:** 187
 - **семейств_в_каталоге:** 43
-- **семейств_без_строк:** 13
-- **операций:** 135
-- **режимов_и_вариантов:** 210
-- **применимых_действий:** 2911
-- **действий_verified:** 1109
-- **покрытие_действий:** 38.1%
-- **распределение_статусов:** {'not_started': 1801, 'verified': 1109, 'not_applicable': 629, 'implemented': 1}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 59, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 60, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **семейств_без_строк:** 12
+- **операций:** 136
+- **режимов_и_вариантов:** 214
+- **применимых_действий:** 2947
+- **действий_verified:** 1146
+- **покрытие_действий:** 38.9%
+- **распределение_статусов:** {'not_started': 1800, 'verified': 1146, 'not_applicable': 633, 'implemented': 1}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 60, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 64, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -247,7 +259,7 @@
 | `dep.refs.planar_face` | да | discover, read, negative_tests | DEP.DPF.01.discover, DEP.DPF.04.geometry_validation, DEP.DPF.03.negative_tests, DEP.DPF.02.read |
 | `dep.refs.edges_faces` | да | discover, read, negative_tests | DEP.DEF.01.discover, DEP.DEF.03.negative_tests, DEP.DEF.02.read |
 | `dep.refs.planes` | да | discover, read, negative_tests | DEP.DPL.01.discover, DEP.DPL.06.negative_tests, DEP.DPL.05.save_reopen, DEP.DPL.02.create, DEP.DPL.04.edit, DEP.DPL.03.read |
-| `dep.api7.in_same_adapter` | нет | create, read, edit, negative_tests | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
+| `dep.api7.in_same_adapter` | нет | create, read, edit, negative_tests | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
 | `dep.units.confirm` | нет | create, read, geometry_validation | DEP.DUN.01.geometry_validation |
 | `dep.lifecycle.feature_cycle` | да | read, edit, save_reopen, suppress_restore, delete_dependencies | L04, L05, L06, L07, L08, L09, L10, DEP.DLC.06.delete_dependencies, DEP.DLC.02.edit, DEP.DLC.07.negative_tests, DEP.DLC.01.read, DEP.DLC.03.rebuild, DEP.DLC.04.save_reopen, DEP.DLC.05.suppress_restore |
 
@@ -402,7 +414,7 @@
 | `dep.bodies.multibody` | да | read, geometry_validation, negative_tests | DEP.DMB.02.geometry_validation, DEP.DMB.03.negative_tests, DEP.DMB.01.read |
 | `dep.pattern.associativity` | да | edit, rebuild, save_reopen, geometry_validation | B4.08, B4M.01.edit, B4M.01.rebuild, B4M.01.save_reopen, B4M.01.geometry_validation, B4M.02.edit, B4M.02.rebuild, B4M.02.save_reopen, B4M.02.geometry_validation, B4M.03.edit, B4M.03.rebuild, B4M.03.save_reopen, B4M.03.geometry_validation, B4M.04.edit, B4M.04.rebuild, B4M.04.save_reopen, B4M.04.geometry_validation, B4M.05.edit, B4M.05.rebuild, B4M.05.save_reopen, B4M.05.geometry_validation, B4M.06.edit, B4M.06.rebuild, B4M.06.save_reopen, B4M.06.geometry_validation, B4M.07.edit, B4M.07.rebuild, B4M.07.save_reopen, B4M.07.geometry_validation, B4M.08.edit, B4M.08.rebuild, B4M.08.save_reopen, B4M.08.geometry_validation, B4M.09.edit, B4M.09.rebuild, B4M.09.save_reopen, B4M.09.geometry_validation, B4M.10.edit, B4M.10.rebuild, B4M.10.save_reopen, B4M.10.geometry_validation, DEP.DAS.01.edit, DEP.DAS.04.geometry_validation, DEP.DAS.02.rebuild, DEP.DAS.03.save_reopen |
 | `dep.units.confirm` | да | geometry_validation | DEP.DUN.01.geometry_validation |
-| `dep.api7.in_same_adapter` | да | discover, read, edit, save_reopen | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
+| `dep.api7.in_same_adapter` | да | discover, read, edit, save_reopen | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
 | `dep.foundation` | да | read, negative_tests | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` | да | read, edit, save_reopen, geometry_validation | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
 
@@ -456,6 +468,23 @@
 | `dep.sketch_constraints.type_vocabulary` | да | discover, create | SKC.13.type_vocabulary, SKC.09.negative_tests |
 | `dep.sketch_constraints.state_agreement` | да | read | SKC.15.state_agreement |
 | `dep.sketch_constraints.no_silent_rewrite` | да | create, geometry_validation | SKC.10.geometry_validation, SKC.16.no_silent_rewrite |
+
+## Метрика 1 — обязательные режимы профиля `threads-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SM-08.thread.mode_outer_by_edge` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-01.discovery, TH-02.setup_document, TH-02.setup_cylinder, TH-02.create_outer, TH-02.geometry_unchanged, TH-02.tree_object, TH-06.read_feature, TH-06.list_features, TH-07.edit, TH-07.geometry_unchanged, TH-07.base_refused, TH-08.save_reopen, TH-09.suppress_restore, TH-09.delete, TH-10.idempotency, TH-10.operation_id_conflict, TH-10.revision_conflict, TH-11.refusals |
+| `SM-08.thread.mode_inner_by_face` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-04.create_inner, TH-04.geometry_unchanged, TH-06.read_feature, TH-11.refusals |
+| `SM-08.thread.mode_auto` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-03.auto_diameter, TH-04.create_inner, TH-07.edit, TH-11.refusals |
+| `SM-08.thread.mode_hand` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-05.left_hand, TH-07.edit, TH-06.read_feature |
+
+### Общие зависимости профиля `threads-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.refs.edges_faces` | да | discover, read, negative_tests | DEP.DEF.01.discover, DEP.DEF.03.negative_tests, DEP.DEF.02.read |
+| `dep.api7.in_same_adapter` | да | create, read, edit | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
+| `dep.lifecycle.feature_cycle` | да | read, edit, save_reopen, suppress_restore, delete_dependencies | L04, L05, L06, L07, L08, L09, L10, DEP.DLC.06.delete_dependencies, DEP.DLC.02.edit, DEP.DLC.07.negative_tests, DEP.DLC.01.read, DEP.DLC.03.rebuild, DEP.DLC.04.save_reopen, DEP.DLC.05.suppress_restore |
 
 ## Метрика 1 — обязательные режимы профиля `variables-bind-minimal-v1`
 
@@ -533,6 +562,10 @@
 | `SM-09.fillet.change_edge_set` | SM-09 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | FL02, FL03, FL05, FL06, FL10, FL10s, FL10b, FL10n, FL10r, FL10p, FL10x, FL20, FL21, FL22, FL23, FL24, FL25, FL26, FL27, FL01, FL01v, FL07, FL07e, FL08, FL09, F08.24.discover, F08.24.create, F08.24.read, F08.24.edit, F08.24.rebuild, F08.24.save_reopen, F08.24.suppress_restore, F08.24.delete_dependencies, F08.24.negative_tests, F08.24.geometry_validation |
 | `SM-09.fillet.tangent_chain` | SM-09 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-09.fillet.variable_radius` | SM-09 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
+| `SM-08.thread.mode_outer_by_edge` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-01.discovery, TH-02.setup_document, TH-02.setup_cylinder, TH-02.create_outer, TH-02.geometry_unchanged, TH-02.tree_object, TH-06.read_feature, TH-06.list_features, TH-07.edit, TH-07.geometry_unchanged, TH-07.base_refused, TH-08.save_reopen, TH-09.suppress_restore, TH-09.delete, TH-10.idempotency, TH-10.operation_id_conflict, TH-10.revision_conflict, TH-11.refusals |
+| `SM-08.thread.mode_inner_by_face` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-04.create_inner, TH-04.geometry_unchanged, TH-06.read_feature, TH-11.refusals |
+| `SM-08.thread.mode_auto` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-03.auto_diameter, TH-04.create_inner, TH-07.edit, TH-11.refusals |
+| `SM-08.thread.mode_hand` | SM-08 | practical_required | E3 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | TH-05.left_hand, TH-07.edit, TH-06.read_feature |
 | `SM-15.union.mode_save_tools` | SM-15 | practical_required | B3 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B3.04, B3.32, B3M.04.discover, B3M.04.create, B3M.04.read, B3M.04.edit, B3M.04.rebuild, B3M.04.save_reopen, B3M.04.suppress_restore, B3M.04.delete_dependencies, B3M.04.negative_tests, B3M.04.geometry_validation |
 | `SM-15.union.mode_save_base_copy` | SM-15 | next | B3 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-15.union.mode_multi_tools` | SM-15 | practical_required | B3 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B3.05, B3.33, B3M.05.discover, B3M.05.create, B3M.05.read, B3M.05.edit, B3M.05.rebuild, B3M.05.save_reopen, B3M.05.suppress_restore, B3M.05.delete_dependencies, B3M.05.negative_tests, B3M.05.geometry_validation |
@@ -806,7 +839,7 @@
 | `dep.bodies.multibody` *(вне каталога)* | SM-02 | dependency_of | — | — | — | — | OK | — | — | — | — | — | OK | OK | DEP.DMB.02.geometry_validation, DEP.DMB.03.negative_tests, DEP.DMB.01.read |
 | `dep.pattern.associativity` *(вне каталога)* | SM-18 | dependency_of | — | — | — | — | — | OK | OK | OK | — | — | — | OK | B4.08, B4M.01.edit, B4M.01.rebuild, B4M.01.save_reopen, B4M.01.geometry_validation, B4M.02.edit, B4M.02.rebuild, B4M.02.save_reopen, B4M.02.geometry_validation, B4M.03.edit, B4M.03.rebuild, B4M.03.save_reopen, B4M.03.geometry_validation, B4M.04.edit, B4M.04.rebuild, B4M.04.save_reopen, B4M.04.geometry_validation, B4M.05.edit, B4M.05.rebuild, B4M.05.save_reopen, B4M.05.geometry_validation, B4M.06.edit, B4M.06.rebuild, B4M.06.save_reopen, B4M.06.geometry_validation, B4M.07.edit, B4M.07.rebuild, B4M.07.save_reopen, B4M.07.geometry_validation, B4M.08.edit, B4M.08.rebuild, B4M.08.save_reopen, B4M.08.geometry_validation, B4M.09.edit, B4M.09.rebuild, B4M.09.save_reopen, B4M.09.geometry_validation, B4M.10.edit, B4M.10.rebuild, B4M.10.save_reopen, B4M.10.geometry_validation, DEP.DAS.01.edit, DEP.DAS.04.geometry_validation, DEP.DAS.02.rebuild, DEP.DAS.03.save_reopen |
 | `dep.units.confirm` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | OK | DEP.DUN.01.geometry_validation |
-| `dep.api7.in_same_adapter` *(вне каталога)* | — | dependency_of | — | — | OK | — | OK | OK | — | OK | — | — | — | — | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
+| `dep.api7.in_same_adapter` *(вне каталога)* | — | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | — | — | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
 | `dep.foundation` *(вне каталога)* | — | dependency_of | — | — | — | — | OK | — | — | — | — | — | OK | — | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` *(вне каталога)* | SM-30 | dependency_of | — | — | — | — | OK | OK | — | OK | — | — | — | OK | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
 | `dep.assembly.document_lifecycle` *(вне каталога)* | ASM | dependency_of | — | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | н/п | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests, ASM.03.save_reopen, ASM.04.discover, ASM.05.discover, ASM.06.save_reopen |
@@ -1032,6 +1065,29 @@
   - Границы: измерено только для одиночного тела, пластина 100×80×10, четыре вертикальных угловых ребра на основной XY; при радиусе r один угол снимает (1−π/4)·r²·10. Опыты H-2 воспроизведены 4/4 прогонов, все 14 шагов PASS.
   - СОЗДАНИЕ СКРУГЛЕНИЯ НА Г-ОБРАЗНОЙ ПЛАСТИНЕ: ложный успех исправлен, второй вид назван и НЕ закрыт (наряд FL25_FALSE_SUCCESS, 13.10.2026). Строка FL25 падала не на расширении, а на ПОДГОТОВКЕ: kompas_fillet на одном выпуклом вертикальном ребре Г-пластины отвечал status=succeeded, error=null, уровень call_returned, ревизия 5→6 - а тело не менялось. Прибор тогда не сохранял полный ответ, и разбор начинался с повторного прогона; теперь при отказе строки прибор сохраняет полные ответы вызовов её окна рядом с отчётом (<отчёт>.failures.json). Снимок назвал причину: отметка сверки перестроения rebuild_repeated с числами «было 67980.6858, стало 68000, перестроений 2», то есть Create() скругление ПРИМЕНИЛ, а контрольное перестроение сверки SettleAfterMutation его СНЯЛО. Признак оставался в дереве, тело его не удерживало - тот же класс, что у kompas_extrude, где он отвергается NO_GEOMETRY_CHANGE. ИСПРАВЛЕНО: измеренный ноль-результат (объём И топология прочитаны, ни один не сдвинулся) теперь отказ NO_GEOMETRY_CHANGE с details.code=fillet_not_applied, partial_effects=true и feature_ref признака для kompas_delete_feature, и стоит он ДО сравнения с заявленным ожиданием; правило живёт в чистой функции BodyChangePolicy.Unchanged. Правило заявленного ожидания не менялось. Приёмка: группа --fillet-only на Release-сборке чистого коммита, 50 повторов подряд - 50 PASS в каждом, 0 FAIL; полный --all на Release - 0 актуальных FAIL. НЕ ЗАКРЫТО и названо: второй вид того же корня - перестроение не снимает скругление, а ПЕРЕНОСИТ его на ВХОДЯЩИЙ угол (объём 67980.6858 → 68019.3142, граней 8 → 9). Тело при этом меняется, поэтому правилом Unchanged он не ловится, и вызов по-прежнему отвечает call_returned с проваленным volume_delta. Критерий для него у скругления уже измерен и ДРУГОЙ - СОСТАВ набора рёбер, а не объём (docs/04 §4.5.1: на входящем углу скругление материал добавляет); перенос этого критерия на СОЗДАНИЕ признака требует отдельного измерения (какой ссылкой IFillet.BaseObjects отвечает сразу после создания) и решения заказчика. Частота: до правки отказ подготовки воспроизведён 2 раза в 20 повторах в «холодной» фазе; после правки в 50 повторах не воспроизведён.
   - ДОПОЛНЕНО 13.10.2026 (наряд FILLET_REBUILD_STABILITY): вид B, названный выше как НЕ закрытый, закрыт проверкой ПРИЛЕГАНИЯ поверхности к запрошенному ребру — см. ограничение строки SM-09.fillet.constant_radius_body_edges. Само расширение набора (1→2) этим не меняется: оно по-прежнему не выражено контрактом, и строка FL25 по-прежнему принимает честный отказ как PASS.
+- `SM-08.thread.mode_outer_by_edge` — закрыт целиком
+  - Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.
+  - Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.
+  - kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.
+  - Живой прогон 20.10.2026: цилиндр r = 10, h = 40, V0 = 12566.3706 мм3; обозначение d = 20, p = 2,5, L = 25, внешняя, правая; объём и число граней 3 -> 3; правка 18/2/30/левая прочитана из модели; удаление 5 -> 4 обозначения.
+  - Смена базового объекта и границ при правке отвергается по имени поля (CAPABILITY_UNAVAILABLE), а не игнорируется молча.
+- `SM-08.thread.mode_inner_by_face` — закрыт целиком
+  - Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.
+  - Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.
+  - kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.
+  - Отверстие r = 3,4 сквозное; обозначение d = 8, длина по границам 40, тип прочитан как внутренний. Правка проверена на внешнем обозначении того же семейства (TH-07): маршрут правки один, различается только базовый объект.
+  - База-грань без начальной и конечной границ отвергается до COM (INVALID_ARGUMENT).
+- `SM-08.thread.mode_auto` — закрыт целиком
+  - Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.
+  - Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.
+  - kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.
+  - Автодиаметр на ребре r = 10 прочитан из модели как 20 - диаметр цилиндра, а не эхо запроса; авто-длина на базе-грани дала 40.
+  - Значение вместе с авто-флагом отвергается (INVALID_ARGUMENT); авто-длина без обеих границ отвергается. Переключение авто-флагов при правке проверено в TH-07.
+- `SM-08.thread.mode_hand` — закрыт целиком
+  - Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.
+  - Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.
+  - kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.
+  - Левая резьба прочитана как левая, соседняя без флага - как правая; правка left_hand false -> true прочитана из модели, объём прежний.
 - `SM-15.union.mode_save_tools` — закрыт целиком
   - expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.
   - ОТКАЗ ЯДРА ДОХОДИТ КАК ОТКАЗ: касание по ребру и разнесённые тела (входы вне объявленной области применимости объединения) отвергаются IBoolean.Update() = false с кодом GEOMETRY_FAILED, partial_effects = true и ФАКТИЧЕСКИМ состоянием модели (B3.18, B3.44), а не выдаются за успех. Правило «успешный Update() не доказывает геометрию» проверяется против ОБЪЯВЛЕННОГО ожидания, а не против наблюдаемого. Это ГРАНИЦА ПРИМЕНИМОСТИ обычного union (справка v24: «Объединение тел возможно, если они пересекаются или имеют общую поверхность»), а не отдельный положительный режим: проверка B3.44 отвечает на вопрос «честен ли отказ», и положительного создания объединения разнесённых тел она не заявляет и не заменяет.
@@ -1468,6 +1524,7 @@
   - Признак API7 различим из API5 по типу 583 (o3d_Hole3D) и ищется сканированием ОБЕИХ коллекций — OperationElement(110) и EntityCollection(-1). Это измеренная поправка: прежний поиск по типу 52 (o3d_holeOperation) не находил признак НИКОГДА, потому что 52 — номер создания через NewEntity, а в дереве он не появляется (проба N.1).
   - Мост пересекается только через Api7Bridge, и ни один вызов не минует очередь Worker и реестр документов/ревизий/ссылок. Своей STA-очереди API7 не заводит.
   - Изоляция вклада Perpendicular от опорной грани не измерена (см. SM-07.native_hole.axis_by_face_normal) — это ограничение строки режима, а не зависимости.
+  - Создание через API7 в том же адаптере и той же STA-очереди дополнительно проверено на условном обозначении резьбы (TH-02 внешняя по ребру, TH-04 внутренняя по грани): IBody7.Threads -> IThreads.Add идёт через Api7Bridge, второго сеанса КОМПАС не заводится.
 - `dep.assembly.document_lifecycle` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
   - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
@@ -1610,6 +1667,6 @@
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 
-`SM-06`, `SM-08`, `SM-10`, `SM-14`, `SM-20`, `SM-21`, `SM-22`, `SM-24`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
+`SM-06`, `SM-10`, `SM-14`, `SM-20`, `SM-21`, `SM-22`, `SM-24`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
 
 Полнота инвентаризации не является полнотой реализации (docs/05 §8), а закрытый профиль не является полным P6 (план §1).

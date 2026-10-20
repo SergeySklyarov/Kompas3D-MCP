@@ -4689,7 +4689,7 @@
       "adapter_route": "Api7Bridge — единственная точка входа в API7 в src/: Application() через KompassObject.ksGetApplication7(), ContainerFor(document, id, revision) через TransferInterface(ksAPI7Dual), TransferTo7/TransferAllTo7 для опор, Rebuild(container, document) после каждой мутации, ReleaseAll при закрытии",
       "actions": {
         "discover": "verified",
-        "create": "not_started",
+        "create": "verified",
         "read": "verified",
         "edit": "verified",
         "rebuild": "not_started",
@@ -4720,20 +4720,24 @@
         "DEP.DAP.01.discover",
         "DEP.DAP.02.read",
         "DEP.DAP.03.edit",
-        "DEP.DAP.04.save_reopen"
+        "DEP.DAP.04.save_reopen",
+        "TH-02.create_outer",
+        "TH-04.create_inner"
       ],
       "evidence": [
         "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs",
         "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs",
         "src/KompasMcp.Api5Adapter/Api5Session.Features.cs",
         "docs/acceptance/api7/hole-modes.md",
-        "scripts/mcp-smoke.py"
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261020-threads-e7925e5/live-check.json"
       ],
       "limitations": [
         "Закрыто для измеренной области: четыре режима родного отверстия проходят полный цикл (создание, чтение параметров, адресуемость признака, подавление/восстановление, удаление, save→close→reopen) на целевом build 24.0.0.2799.",
         "Признак API7 различим из API5 по типу 583 (o3d_Hole3D) и ищется сканированием ОБЕИХ коллекций — OperationElement(110) и EntityCollection(-1). Это измеренная поправка: прежний поиск по типу 52 (o3d_holeOperation) не находил признак НИКОГДА, потому что 52 — номер создания через NewEntity, а в дереве он не появляется (проба N.1).",
         "Мост пересекается только через Api7Bridge, и ни один вызов не минует очередь Worker и реестр документов/ревизий/ссылок. Своей STA-очереди API7 не заводит.",
-        "Изоляция вклада Perpendicular от опорной грани не измерена (см. SM-07.native_hole.axis_by_face_normal) — это ограничение строки режима, а не зависимости."
+        "Изоляция вклада Perpendicular от опорной грани не измерена (см. SM-07.native_hole.axis_by_face_normal) — это ограничение строки режима, а не зависимости.",
+        "Создание через API7 в том же адаптере и той же STA-очереди дополнительно проверено на условном обозначении резьбы (TH-02 внешняя по ребру, TH-04 внутренняя по грани): IBody7.Threads -> IThreads.Add идёт через Api7Bridge, второго сеанса КОМПАС не заводится."
       ],
       "acceptance": [
         "один адаптер и один владелец сеанса API7: Api7Bridge — единственная точка входа в API7 в src/",
@@ -14069,11 +14073,522 @@
         "dep.units.confirm",
         "dep.lifecycle.feature_cycle"
       ]
+    },
+    {
+      "operation_id": "SM-08.thread.mode_outer_by_edge",
+      "context": "part.single_body",
+      "catalog_ref": "SM-08",
+      "kind": "profile_mode",
+      "profile": "threads-minimal-v1",
+      "queue": "E3",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-threads-e7925e5/live-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_create_thread.json",
+      "adapter_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "TH-01.discovery",
+        "TH-02.setup_document",
+        "TH-02.setup_cylinder",
+        "TH-02.create_outer",
+        "TH-02.geometry_unchanged",
+        "TH-02.tree_object",
+        "TH-06.read_feature",
+        "TH-06.list_features",
+        "TH-07.edit",
+        "TH-07.geometry_unchanged",
+        "TH-07.base_refused",
+        "TH-08.save_reopen",
+        "TH-09.suppress_restore",
+        "TH-09.delete",
+        "TH-10.idempotency",
+        "TH-10.operation_id_conflict",
+        "TH-10.revision_conflict",
+        "TH-11.refusals"
+      ],
+      "limitations": [
+        "Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.",
+        "Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.",
+        "kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.",
+        "Живой прогон 20.10.2026: цилиндр r = 10, h = 40, V0 = 12566.3706 мм3; обозначение d = 20, p = 2,5, L = 25, внешняя, правая; объём и число граней 3 -> 3; правка 18/2/30/левая прочитана из модели; удаление 5 -> 4 обозначения.",
+        "Смена базового объекта и границ при правке отвергается по имени поля (CAPABILITY_UNAVAILABLE), а не игнорируется молча."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "обозначение листовое в дереве: правка параметров и есть перестроение (TH-07); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          },
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          },
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "SM-08.thread.mode_inner_by_face",
+      "context": "part.single_body",
+      "catalog_ref": "SM-08",
+      "kind": "profile_mode",
+      "profile": "threads-minimal-v1",
+      "queue": "E3",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-threads-e7925e5/live-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_create_thread.json",
+      "adapter_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "TH-04.create_inner",
+        "TH-04.geometry_unchanged",
+        "TH-06.read_feature",
+        "TH-11.refusals"
+      ],
+      "limitations": [
+        "Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.",
+        "Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.",
+        "kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.",
+        "Отверстие r = 3,4 сквозное; обозначение d = 8, длина по границам 40, тип прочитан как внутренний. Правка проверена на внешнем обозначении того же семейства (TH-07): маршрут правки один, различается только базовый объект.",
+        "База-грань без начальной и конечной границ отвергается до COM (INVALID_ARGUMENT)."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "обозначение листовое в дереве: правка параметров и есть перестроение (TH-07); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          },
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          },
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "SM-08.thread.mode_auto",
+      "context": "part.single_body",
+      "catalog_ref": "SM-08",
+      "kind": "profile_mode",
+      "profile": "threads-minimal-v1",
+      "queue": "E3",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-threads-e7925e5/live-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_create_thread.json",
+      "adapter_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "TH-03.auto_diameter",
+        "TH-04.create_inner",
+        "TH-07.edit",
+        "TH-11.refusals"
+      ],
+      "limitations": [
+        "Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.",
+        "Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.",
+        "kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.",
+        "Автодиаметр на ребре r = 10 прочитан из модели как 20 - диаметр цилиндра, а не эхо запроса; авто-длина на базе-грани дала 40.",
+        "Значение вместе с авто-флагом отвергается (INVALID_ARGUMENT); авто-длина без обеих границ отвергается. Переключение авто-флагов при правке проверено в TH-07."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "обозначение листовое в дереве: правка параметров и есть перестроение (TH-07); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          },
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          },
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "SM-08.thread.mode_hand",
+      "context": "part.single_body",
+      "catalog_ref": "SM-08",
+      "kind": "profile_mode",
+      "profile": "threads-minimal-v1",
+      "queue": "E3",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "docs/acceptance/evidence/20261020-threads-e7925e5/live-check.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_create_thread.json",
+      "adapter_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "TH-05.left_hand",
+        "TH-07.edit",
+        "TH-06.read_feature"
+      ],
+      "limitations": [
+        "Обозначение, а не геометрия: винтовая поверхность не строится, объём тела и число граней не меняются - это ОЖИДАЕМЫЙ исход, а не отсутствие эффекта. В ответе и в описании инструмента сказано прямо, в unverified_aspects это не спрятано.",
+        "Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.",
+        "kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.",
+        "Левая резьба прочитана как левая, соседняя без флага - как правая; правка left_hand false -> true прочитана из модели, объём прежний."
+      ],
+      "not_applicable_reasons": {
+        "rebuild": "обозначение листовое в дереве: правка параметров и есть перестроение (TH-07); перестроение вышестоящего признака в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_get_feature"
+          },
+          {
+            "tool": "kompas_list_features"
+          }
+        ]
+      },
+      "edit_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_feature_suppressed"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_delete_feature"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_thread"
+          },
+          {
+            "tool": "kompas_update_feature"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
     }
   ],
   "pending_families": [
     "SM-06",
-    "SM-08",
     "SM-10",
     "SM-14",
     "SM-20",

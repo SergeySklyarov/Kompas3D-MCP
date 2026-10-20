@@ -3,6 +3,7 @@ using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Journaling;
+using KompasMcp.Domain.Schema;
 using KompasMcp.Host.Catalog;
 
 namespace KompasMcp.Host;
@@ -77,6 +78,17 @@ public sealed class HostSession : IAsyncDisposable
 
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
+        // The compact mode's three tools are not catalog entries: one branch answers them, and
+        // kompas_run re-enters THIS method, so a call through it takes exactly the same path as a
+        // direct call — one handler, one validation, one journal. In `full` they are not published
+        // and therefore answer as an unknown tool, as before.
+        // History: docs/decisions/host.md#catalog-mechanism
+        if (CompactCatalog.IsCompactTool(toolName)
+            && string.Equals(_options.CatalogMode, CompactCatalog.CompactMode, StringComparison.Ordinal))
+        {
+            return await InvokeCompactAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+        }
+
         var tool = ToolCatalog.All.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
         if (tool is null)
         {
@@ -168,6 +180,182 @@ public sealed class HostSession : IAsyncDisposable
         }
 
         return await DispatchAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Answers the compact mode's own tools. <c>kompas_run</c> validates the arguments against
+    /// the target tool's published schema and then re-enters <see cref="InvokeAsync"/>, so the refusal
+    /// for a bad argument names the field BEFORE any COM call and the execution is the same one the
+    /// direct tool performs.</summary>
+    /// <remarks>INVARIANT: <c>kompas_run</c> adds nothing to the answer. A client comparing the two
+    /// paths must see one envelope, otherwise "same handler" would be a claim about code, not about
+    /// what the client receives. History: docs/decisions/host.md#catalog-mechanism</remarks>
+    private async Task<ResultEnvelope<JsonNode?>> InvokeCompactAsync(
+        string toolName, JsonObject arguments, CancellationToken cancellationToken)
+    {
+        switch (toolName)
+        {
+            case CompactCatalog.FindTool:
+                return FindOperations(arguments);
+            case CompactCatalog.DescribeTool:
+                return DescribeOperation(arguments);
+            case CompactCatalog.RunTool:
+                break;
+            default:
+                return UnknownTool(toolName);
+        }
+
+        var id = JsonScalars.ReadString(arguments["id"]);
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return Refusal(
+                ErrorCodes.InvalidArgument,
+                "kompas_run требует id операции: его даёт kompas_find_operations.",
+                RetryPolicy.Never,
+                new JsonObject { ["schema_ref"] = "kompas_find_operations" },
+                remedy: "Вызовите kompas_find_operations с русским словом из назначения операции.");
+        }
+
+        var operation = CompactCatalog.Operation(id);
+        if (operation is null)
+        {
+            return Refusal(
+                ErrorCodes.InvalidArgument,
+                $"Операции '{id}' нет в каталоге этого сервера.",
+                RetryPolicy.Never,
+                new JsonObject
+                {
+                    ["id"] = id,
+                    ["nearest_ids"] = new JsonArray(
+                        CompactCatalog.NearestIds(id).Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                },
+                remedy: "Возьмите точный id из kompas_find_operations.");
+        }
+
+        // LIMIT: the prototype serves four operations; the rest are named rather than left to a
+        // mysterious "unknown tool", so the model learns what exists and what is reachable.
+        if (!CompactCatalog.IsConverted(id))
+        {
+            return Refusal(
+                ErrorCodes.CapabilityUnavailable,
+                $"Операция '{id}' существует, но в режиме compact не переведена: прототип отдаёт через "
+                + "kompas_run только " + string.Join(", ", CompactCatalog.Converted) + ".",
+                RetryPolicy.Never,
+                new JsonObject
+                {
+                    ["id"] = id,
+                    ["reachable_via"] = CompactCatalog.Reach(id),
+                    ["converted"] = new JsonArray(
+                        CompactCatalog.Converted.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                },
+                remedy: "Запустите сервер с catalog_mode=full, чтобы вызвать операцию напрямую.");
+        }
+
+        var args = arguments["args"] as JsonObject ?? new JsonObject();
+        var violations = JsonSchemaValidator.Validate(operation.InputSchema, args);
+        if (violations.Count > 0)
+        {
+            return Refusal(
+                ErrorCodes.InvalidArgument,
+                $"Аргументы операции '{id}' не прошли её схему: {violations[0].Message}",
+                RetryPolicy.Never,
+                new JsonObject
+                {
+                    ["id"] = id,
+                    ["schema_ref"] = "schemas/" + id + ".json",
+                    ["violations"] = new JsonArray(violations
+                        .Select(v => (JsonNode)new JsonObject
+                        {
+                            ["path"] = v.Path,
+                            ["keyword"] = v.Keyword,
+                            ["message"] = v.Message,
+                        })
+                        .ToArray()),
+                },
+                remedy: "kompas_describe_operation с этим id называет полную схему входа.");
+        }
+
+        return await InvokeAsync(operation.Name, args, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static ResultEnvelope<JsonNode?> FindOperations(JsonObject arguments)
+    {
+        var query = JsonScalars.ReadString(arguments["query"]) ?? string.Empty;
+        var group = JsonScalars.ReadString(arguments["group"]);
+        var limit = (int)Math.Clamp(JsonScalars.ReadLong(arguments["limit"]) ?? 20, 1, 97);
+
+        var hits = CompactCatalog.Search(query, group);
+        var shown = hits.Take(limit).ToArray();
+        var operations = new JsonArray(shown.Select(hit => (JsonNode)new JsonObject
+        {
+            ["id"] = hit.Tool.Name,
+            ["title"] = hit.Tool.Title,
+            ["purpose"] = CompactCatalog.Purpose(hit.Tool),
+            ["group"] = CompactCatalog.GroupOf(hit.Tool.Name),
+            ["reachable_via"] = CompactCatalog.Reach(hit.Tool.Name),
+            // The example is a shape to edit, not a promise that the call will succeed: the
+            // placeholders still have to be replaced with real ids.
+            ["example"] = hit.Score > 0 ? CompactCatalog.Example(hit.Tool) : null,
+        }).ToArray());
+
+        var result = new JsonObject
+        {
+            ["query"] = query,
+            ["group"] = group,
+            ["matched"] = hits.Count,
+            ["shown"] = shown.Length,
+            ["operations"] = operations,
+        };
+
+        return Succeeded(
+            result,
+            hits.Count == 0
+                ? new[] { $"Ничего не найдено по запросу «{query}»: попробуйте слово из назначения операции или группу." }
+                : null,
+            new[] { "no_effect_on_model" });
+    }
+
+    private static ResultEnvelope<JsonNode?> DescribeOperation(JsonObject arguments)
+    {
+        var id = JsonScalars.ReadString(arguments["id"]);
+        if (string.IsNullOrWhiteSpace(id) || CompactCatalog.Operation(id) is not { } tool)
+        {
+            return Refusal(
+                ErrorCodes.InvalidArgument,
+                $"Операции '{id}' нет в каталоге этого сервера.",
+                RetryPolicy.Never,
+                new JsonObject
+                {
+                    ["id"] = id,
+                    ["nearest_ids"] = new JsonArray(
+                        CompactCatalog.NearestIds(id ?? string.Empty).Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                },
+                remedy: "Возьмите точный id из kompas_find_operations.");
+        }
+
+        var result = new JsonObject
+        {
+            ["id"] = tool.Name,
+            ["title"] = tool.Title,
+            ["group"] = CompactCatalog.GroupOf(tool.Name),
+            ["reachable_via"] = CompactCatalog.Reach(tool.Name),
+            ["purpose"] = CompactCatalog.Purpose(tool),
+            ["description"] = tool.Description,
+            // The SAME document the direct tool validates against and the file schemas/ ships, so the
+            // three cannot describe different input.
+            ["schema"] = tool.InputSchema.DeepClone(),
+            ["schema_ref"] = "schemas/" + tool.Name + ".json",
+            ["example"] = CompactCatalog.Example(tool),
+            ["behaviour"] = new JsonObject
+            {
+                ["read_only"] = tool.Behaviour.ReadOnly,
+                ["destructive"] = tool.Behaviour.Destructive,
+                ["requires_operation_id"] = tool.Behaviour.RequiresOperationId,
+                ["requires_document"] = tool.Behaviour.RequiresDocument,
+                ["requires_expected_revision"] = tool.Behaviour.RequiresExpectedRevision,
+            },
+        };
+
+        return Succeeded(result, null, new[] { "no_effect_on_model" });
     }
 
     /// <summary>Run an ordinary call: entry under the active-call counter, so a release cannot slip
@@ -1295,9 +1483,27 @@ public sealed class HostSession : IAsyncDisposable
         }
 
         var node = (JsonObject)result.DeepClone();
-        node["tools"] = new JsonArray(
-            ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
-        node["tool_count"] = ToolCatalog.All.Count;
+        var mode = options?.CatalogMode ?? CompactCatalog.FullMode;
+        var published = CompactCatalog.Listing(mode);
+
+        // In `compact` the client must be able to tell the three statements apart: what is published,
+        // what exists in the registry, and what of that is reachable through kompas_run. One list for
+        // all three would tell a compact client it has 97 tools it cannot call.
+        node["catalog_mode"] = mode;
+        node["tools"] = new JsonArray(published.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+        node["tool_count"] = published.Count;
+        if (string.Equals(mode, CompactCatalog.CompactMode, StringComparison.Ordinal))
+        {
+            node["operations"] = new JsonArray(
+                ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+            node["operations_via_run"] = new JsonArray(
+                CompactCatalog.Converted.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
+            node["operations_note"] =
+                "operations - весь реестр; вызываются через kompas_run, но прототип перевёл только "
+                + "operations_via_run, остальные отвергаются по имени (reachable_via в "
+                + "kompas_find_operations).";
+        }
+
         node["server_version"] = Program.ServerVersion;
 
         // The file policy is published HERE, from the SAME two lists the PATH_NOT_ALLOWED refusal names,

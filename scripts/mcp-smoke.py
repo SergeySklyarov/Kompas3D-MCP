@@ -685,6 +685,9 @@ RUN_GROUPS = (
     ("shutdown", "shutdown", "shutdown-acceptance.json",
      "Приёмка SD: завершение сеанса не оставляет висящий КОМПАС, а несохранённая работа сохраняется "
      "спасательной копией (наряд SHUTDOWN_NO_ORPHANS)"),
+    ("catalog", "catalog", "catalog-acceptance.json",
+     "Приёмка CT: механизм каталога — режим compact постоянен по размеру, find/describe/run, отказы "
+     "по имени поля, full не изменился (наряд CATALOG_MECHANISM_RESEARCH)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -727,6 +730,9 @@ ALL_GROUPS_EXTRA = (
     # Группа SD ведёт свои процессы Хоста и не пользуется свежим общим сеансом: см. ветку `shutdown`
     # в run_extra_group_fresh. Последняя, чтобы её собственные процессы были единственными.
     ("shutdown", ["--shutdown-only"]),
+    # Группа CT тоже ведёт свои Хосты: режим каталога задаётся конфигурацией на старте, а общий Хост
+    # прогона поднят в `full`. Свежий общий сеанс ей не нужен.
+    ("catalog", ["--catalog-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -818,10 +824,10 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     # - их называет родство от PID этого Хоста.
     preflight_and_record(rep, [client.p.pid], "group:" + key)
 
-    if key == "shutdown":
-        # Группа SD — исключение из правила «свой свежий сеанс»: она ведёт СВОИ процессы Хоста
-        # (закрывает им stdin, убивает их) и общего сеанса не касается. Общий сеанс здесь был бы
-        # ЧУЖИМ живым экземпляром КОМПАС на момент её проверки уборки.
+    if key in ("shutdown", "catalog"):
+        # Группы SD и CT — исключения из правила «свой свежий сеанс»: SD ведёт СВОИ процессы Хоста
+        # (закрывает им stdin, убивает их), CT поднимает два Хоста в разных режимах каталога. Общий
+        # сеанс здесь был бы ЧУЖИМ живым экземпляром КОМПАС на момент их проверки.
         dispatch_extra_group(client, rep, None, workdir, key, vm_reference_doc, None)
         return
 
@@ -15915,6 +15921,10 @@ def main():
     # процессы Хоста (закрывает им stdin и убивает их), поэтому общего сеанса прибора не использует.
     shutdown_only = "--shutdown-only" in sys.argv
 
+    # Наряд CATALOG_MECHANISM_RESEARCH: режим каталога `compact`. Группа ведёт СВОИ два Хоста (по
+    # одному на режим), потому что режим задаётся конфигурацией на старте процесса.
+    catalog_only = "--catalog-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -16315,6 +16325,12 @@ def main():
             # связи и после убийства Хоста, а общий сеанс прибора гасит стенд. Вертикальный сеанс ей
             # не нужен и мешал бы: его КОМПАС остался бы жить и попал бы в строку об уборке.
             shutdown_checks(host, measured_config, workdir, rep)
+            return finish(rep, client)
+
+        if catalog_only:
+            # Группа CT поднимает свои Хосты в двух режимах каталога: общий Хост прогона работает в
+            # `full`, а сравнить ответы двух режимов можно только двумя процессами.
+            catalog_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
         # --- the vertical slice ------------------------------------------------------
@@ -48572,6 +48588,220 @@ def threads_checks(client, rep, app_id, workdir):
         rep.add("TH-09.delete", "удаление обозначения", "FAIL", "переоткрытия не было")
 
 
+def catalog_checks(host, config, workdir, rep):
+    """CT.* — механизм каталога: режим `compact` за переключателем (наряд CATALOG_MECHANISM_RESEARCH).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. `tools/list` в `compact` ПОСТОЯНЕН: он не содержит ни одной операции
+    реестра, поэтому не растёт с их числом. `find` находит каждую переведённую операцию по русскому
+    слову из её же назначения; `describe` отдаёт ТУ ЖЕ схему, что прямой инструмент в `full`;
+    `kompas_run` отдаёт тот же ответ, что прямой вызов, и отвергает неверные аргументы по имени поля
+    ДО исполнения. Полный режим не изменился: его список по-прежнему равен реестру.
+
+    ПОЧЕМУ ГРУППА ВЕДЁТ СВОИ ХОСТЫ. Режим задаётся конфигурацией на старте процесса, а общий Хост
+    прогона поднят в `full`. Свои два Хоста (по одному на режим) — единственный способ сравнить
+    ответы двух режимов на одной машине; КОМПАС при этом живёт в одном экземпляре за раз.
+    """
+    import json as _json
+    import uuid as _uuid
+
+    from localconfig import isolate_config
+
+    converted = ["kompas_get_feature", "kompas_extrude", "kompas_create_sketch", "kompas_export_image"]
+    catalog_tools = {"kompas_find_operations", "kompas_describe_operation", "kompas_run"}
+    # Прямой набор `compact`. Имена и число — УТВЕРЖДЕНИЕ строки CT.02 («список постоянен»), а не
+    # копия реестра: строка падает, если состав прямого набора изменился молча.
+    direct = {
+        "kompas_health", "kompas_connect", "kompas_session_status", "kompas_acquire_session",
+        "kompas_release_session", "kompas_disconnect", "kompas_create_document",
+        "kompas_open_document", "kompas_close_document", "kompas_get_context",
+        "kompas_capabilities",
+    }
+    # Русское слово из назначения каждой переведённой операции (заголовок инструмента).
+    words = {
+        "kompas_extrude": "выдавить",
+        "kompas_create_sketch": "эскиз",
+        "kompas_get_feature": "признака",
+        "kompas_export_image": "снимок",
+    }
+
+    def mode_config(tag, mode):
+        path = isolate_config(config, workdir, "ct-" + tag)
+        with open(path, encoding="utf-8-sig") as fh:
+            data = _json.load(fh)
+        data["catalog_mode"] = mode
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(data, fh, ensure_ascii=False, indent=2)
+        return path
+
+    def open_host(tag, mode):
+        probe = Client(host, mode_config(tag, mode))
+        probe.call("initialize", {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "mcp-smoke-ct-" + tag, "version": "0"}}, timeout=60)
+        probe.notify("notifications/initialized")
+        return probe
+
+    def stop(probe):
+        try:
+            if probe.p.stdin:
+                probe.p.stdin.close()
+        except OSError:
+            pass
+        try:
+            probe.p.wait(timeout=60)
+        except Exception:
+            probe.p.kill()
+
+    def listing(probe):
+        result = probe.call("tools/list", {}, timeout=120)
+        tools = result.get("tools") or []
+        return tools, {t.get("name") for t in tools}, len(_json.dumps(result, ensure_ascii=False))
+
+    def call(probe, tool, args, timeout=300):
+        payload = dict(args)
+        if probe.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(_uuid.uuid4()))
+        _e, env, _r = probe.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def run(probe, op_id, args, timeout=300):
+        """Операция через kompas_run: аргументы уходят как есть, id — полем."""
+        return call(probe, "kompas_run", {"id": op_id, "args": args}, timeout=timeout)
+
+    full = open_host("full", "full")
+    compact = open_host("compact", "compact")
+    try:
+        full_tools, full_names, full_size = listing(full)
+        rep.add("CT.01", "full: список инструментов равен реестру, инструментов каталога в нём нет",
+                "PASS" if len(full_names) == EXPECTED_TOOL_COUNT and not (full_names & catalog_tools)
+                else "FAIL",
+                f"инструментов {len(full_names)} (реестр {EXPECTED_TOOL_COUNT}), размер {full_size} символов, "
+                f"лишних {sorted(full_names & catalog_tools)}")
+
+        compact_tools, compact_names, compact_size = listing(compact)
+        expected = direct | catalog_tools
+        rep.add("CT.02", "compact: список постоянен — прямой набор плюс три инструмента каталога",
+                "PASS" if compact_names == expected else "FAIL",
+                f"инструментов {len(compact_names)} (ожидалось {len(expected)}), размер {compact_size} "
+                f"символов; лишние {sorted(compact_names - expected)}, недостающие {sorted(expected - compact_names)}")
+
+        # ПОСТОЯНСТВО, а не одноразовый размер: второй запрос того же клиента обязан вернуть то же
+        # самое. Иначе «постоянен» означало бы «однажды измерили».
+        _again_tools, again_names, again_size = listing(compact)
+        rep.add("CT.03", "compact: второй tools/list того же Хоста совпадает по составу и размеру",
+                "PASS" if again_names == compact_names and again_size == compact_size else "FAIL",
+                f"размер {compact_size} → {again_size}, состав совпал={again_names == compact_names}")
+
+        rep.add("CT.04", "compact: размер не зависит от числа операций — операций в списке нет",
+                "PASS" if not (compact_names & set(converted)) and compact_size * 5 < full_size else "FAIL",
+                f"compact {compact_size} символов против full {full_size} на {len(full_names)} инструментах; "
+                f"переведённые операции в списке: {sorted(compact_names & set(converted))}")
+
+        hits = {}
+        for op_id, word in words.items():
+            env, code = call(compact, "kompas_find_operations", {"query": word})
+            rows = ((env or {}).get("result") or {}).get("operations") or []
+            ids = [row.get("id") for row in rows[:5]]
+            hits[op_id] = (code, ids, rows)
+        found = {op: op in ids for op, (_c, ids, _r) in hits.items()}
+        reachable = {op: ((hits[op][2][0].get("reachable_via") if hits[op][2] else None)) for op in hits}
+        rep.add("CT.05", "compact: find находит каждую переведённую операцию по русскому слову",
+                "PASS" if all(found.values()) else "FAIL",
+                "; ".join(f"«{words[op]}» → {hits[op][1][:3]}" for op in words),
+                details={"found": found, "first_row": reachable})
+
+        described, d_code = call(compact, "kompas_describe_operation", {"id": "kompas_extrude"})
+        described_schema = ((described or {}).get("result") or {}).get("schema")
+        direct_schema = next((t.get("inputSchema") for t in full_tools
+                              if t.get("name") == "kompas_extrude"), None)
+        rep.add("CT.06", "compact: describe отдаёт ту же схему, что прямой инструмент в full",
+                "PASS" if described_schema and described_schema == direct_schema else "FAIL",
+                f"код={d_code}, схема совпала={described_schema == direct_schema}, "
+                f"schema_ref={((described or {}).get('result') or {}).get('schema_ref')}")
+
+        # Отказы §2 п.4: неверное поле, неверный тип, отсутствующее обязательное поле. Все три —
+        # ДО исполнения, поэтому строка не поднимает ни сеанс, ни КОМПАС.
+        bad = {
+            "неизвестное поле": {"document_id": "d", "no_such_field": 1},
+            "неверный тип": {"plane": 42},
+            "нет обязательного": {},
+        }
+        bad_rows = {}
+        for label, args in bad.items():
+            env, code = run(compact, "kompas_create_sketch", args)
+            details = ((env or {}).get("error") or {}).get("details") or {}
+            bad_rows[label] = (code, [v.get("path") for v in details.get("violations") or []],
+                               details.get("schema_ref"))
+        rep.add("CT.07", "compact: kompas_run отвергает неверные аргументы по имени поля до исполнения",
+                "PASS" if all(code == "INVALID_ARGUMENT" and paths and ref == "schemas/kompas_create_sketch.json"
+                              for code, paths, ref in bad_rows.values()) else "FAIL",
+                "; ".join(f"{label}: {code} {paths}" for label, (code, paths, _ref) in bad_rows.items()),
+                details={"rows": {k: list(v) for k, v in bad_rows.items()}})
+
+        env, code = run(compact, "kompas_extrde", {"document_id": "d"})
+        details = ((env or {}).get("error") or {}).get("details") or {}
+        nearest = details.get("nearest_ids") or []
+        rep.add("CT.08", "compact: неизвестный id — отказ с ближайшими id",
+                "PASS" if code == "INVALID_ARGUMENT" and "kompas_extrude" in nearest else "FAIL",
+                f"код={code}, ближайшие={nearest}")
+
+        env, code = run(compact, "kompas_fillet", {})
+        details = ((env or {}).get("error") or {}).get("details") or {}
+        rep.add("CT.09", "compact: непереведённая операция отвергается по имени, со списком переведённых",
+                "PASS" if code == "CAPABILITY_UNAVAILABLE" and sorted(details.get("converted") or []) == sorted(converted)
+                else "FAIL",
+                f"код={code}, переведённые={details.get('converted')}, reachable_via={details.get('reachable_via')}")
+
+        # ОДИН ОБРАБОТЧИК, ОДИН ОТВЕТ. Одна и та же операция — запись файла `kompas_export_image` —
+        # ИСПОЛНЯЕТСЯ в каждом режиме: в compact через kompas_run, в full прямым вызовом. Сравниваются
+        # статус, код, уровень проверки, состав полей результата и существование файла; изменчивые
+        # значения (пути, идентификаторы, размеры) не сравниваются. Строка требует УСПЕХА, а не
+        # совпадения двух отказов: совпасть на отказе значит не дойти до обработчика операции.
+        def doc_of(env):
+            res = (env or {}).get("result") or {}
+            return res.get("document_id") or res.get("id") or (env or {}).get("document_id")
+
+        compare = {}
+        for probe, tag, via_run in ((compact, "compact", True), (full, "full", False)):
+            env_c, _code = call(probe, "kompas_connect",
+                                {"mode": "launch", "make_visible": False}, timeout=300)
+            app = (env_c or {}).get("application_id")
+            env_d, code_d = call(probe, "kompas_create_document",
+                                 {"application_id": app, "kind": "part", "name": "catalog-check-" + tag},
+                                 timeout=300)
+            doc = doc_of(env_d)
+            image = os.path.join(workdir, "catalog-check-" + tag + ".png")
+            if os.path.exists(image):
+                os.remove(image)
+            args = {"document_id": doc, "expected_revision": (env_d or {}).get("revision_after") or 1,
+                    "format": "png", "save_path": image, "operation_id": str(_uuid.uuid4())}
+            env_op, code_op = (run(probe, "kompas_export_image", args) if via_run
+                               else call(probe, "kompas_export_image", args))
+            res = (env_op or {}).get("result")
+            compare[tag] = {
+                "document": bool(doc),
+                "create_code": code_d,
+                "status": (env_op or {}).get("status"),
+                "code": code_op,
+                "level": ((env_op or {}).get("verification") or {}).get("level"),
+                "keys": sorted(res) if isinstance(res, dict) else None,
+                "file": os.path.exists(image),
+            }
+            if doc:
+                call(probe, "kompas_close_document", {"document_id": doc, "dirty_policy": "discard"},
+                     timeout=120)
+            call(probe, "kompas_disconnect",
+                 {"application_id": app, "close_owned_application": True}, timeout=120)
+        succeeded = compare["compact"]["code"] is None and compare["compact"]["file"]
+        rep.add("CT.10", "compact: kompas_run отдаёт тот же ответ, что прямой вызов в full",
+                "PASS" if succeeded and compare["compact"] == compare["full"] else "FAIL",
+                f"compact={compare['compact']} full={compare['full']}",
+                details=compare)
+    finally:
+        stop(compact)
+        stop(full)
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -48593,6 +48823,9 @@ EXTRA_GROUP_CHECKS = {
     # Группа SD не пользуется общим сеансом: она ведёт свои процессы Хоста, поэтому ей нужен путь к
     # исполняемому файлу и конфигурация, а не app_id. Свежий сеанс для неё не поднимается.
     "shutdown": lambda c, r, a, w, v, p: shutdown_checks(c.host_exe, c.config, w, r),
+    # Группа CT ведёт свои Хосты в двух режимах каталога, поэтому ей нужен путь к исполняемому файлу
+    # и конфигурация, а не app_id.
+    "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
 }
 
 

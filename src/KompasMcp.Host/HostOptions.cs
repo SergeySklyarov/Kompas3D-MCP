@@ -24,6 +24,13 @@ public sealed class HostOptions
 
     public string? WorkerLogPath { get; init; }
 
+    /// <summary>Which catalog the Host publishes: <c>full</c> (every tool, the default) or
+    /// <c>compact</c> (a fixed set plus find/describe/run).</summary>
+    /// <remarks>INVARIANT: an unknown value stops the Host at startup. A mode typo silently falling back
+    /// to <c>full</c> would hand the client 97 tools while the operator asked for three.
+    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
+    public string CatalogMode { get; init; } = Catalog.CompactCatalog.FullMode;
+
     public string LogPath { get; init; } = Default("logs", "host.jsonl");
 
     public string JournalPath { get; init; } = Default("journal", "operations.jsonl");
@@ -83,6 +90,7 @@ public sealed class HostOptions
             AllowUncPaths = ReadBool(node, "allow_unc_paths") ?? false,
             WorkerPath = ReadString(node, "worker_path"),
             WorkerLogPath = ReadString(node, "worker_log_path"),
+            CatalogMode = ReadMode(node, "catalog_mode"),
             LogPath = ReadString(node, "log_path") ?? Default("logs", "host.jsonl"),
             JournalPath = ReadString(node, "journal_path") ?? Default("journal", "operations.jsonl"),
             ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default(),
@@ -97,7 +105,7 @@ public sealed class HostOptions
     private static HostOptions FromEnvironment(HostOptions options)
     {
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in new[] { "KOMPAS_MCP_CONFIG", "KOMPAS_MCP_READONLY_ROOTS", "KOMPAS_MCP_WRITABLE_ROOTS", "KOMPAS_MCP_EXPORT_ROOTS", "KOMPAS_MCP_WORKER_PATH" })
+        foreach (var name in new[] { "KOMPAS_MCP_CONFIG", "KOMPAS_MCP_READONLY_ROOTS", "KOMPAS_MCP_WRITABLE_ROOTS", "KOMPAS_MCP_EXPORT_ROOTS", "KOMPAS_MCP_WORKER_PATH", "KOMPAS_MCP_CATALOG_MODE" })
         {
             var value = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(value))
@@ -120,6 +128,7 @@ public sealed class HostOptions
             ExportRoots = overrides.TryGetValue("KOMPAS_MCP_EXPORT_ROOTS", out var ex) ? Split(ex) : options.ExportRoots,
             WorkerPath = overrides.TryGetValue("KOMPAS_MCP_WORKER_PATH", out var wp) ? wp : options.WorkerPath,
             AllowUncPaths = options.AllowUncPaths,
+            CatalogMode = overrides.TryGetValue("KOMPAS_MCP_CATALOG_MODE", out var mode) ? NormalizeMode(mode) : options.CatalogMode,
             WorkerLogPath = options.WorkerLogPath,
             LogPath = options.LogPath,
             JournalPath = options.JournalPath,
@@ -140,6 +149,24 @@ public sealed class HostOptions
     private static int? ReadInt(JsonObject node, string key) => node[key] is JsonValue value && value.TryGetValue<int>(out var parsed) ? parsed : null;
 
     private static bool? ReadBool(JsonObject node, string key) => node[key] is JsonValue value && value.TryGetValue<bool>(out var parsed) ? parsed : null;
+
+    private static string ReadMode(JsonObject node, string key) =>
+        node[key] is JsonValue value && value.TryGetValue<string>(out var text) ? NormalizeMode(text) : Catalog.CompactCatalog.FullMode;
+
+    /// <summary>Accept only the two published mode names, case-insensitively; anything else stops the
+    /// Host with the name it received.</summary>
+    private static string NormalizeMode(string text)
+    {
+        var mode = text.Trim().ToLowerInvariant();
+        return mode switch
+        {
+            Catalog.CompactCatalog.FullMode => Catalog.CompactCatalog.FullMode,
+            Catalog.CompactCatalog.CompactMode => Catalog.CompactCatalog.CompactMode,
+            _ => throw new InvalidDataException(
+                $"catalog_mode='{text}': допустимы только '{Catalog.CompactCatalog.FullMode}' и "
+                + $"'{Catalog.CompactCatalog.CompactMode}'."),
+        };
+    }
 
     /// <summary>Refuse to start when the configuration would allow writing into a directory the operator
     /// declared read-only, or when no writable root exists at all.</summary>

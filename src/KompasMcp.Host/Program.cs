@@ -66,7 +66,7 @@ public static class Program
 
         // A schema that this build cannot fully interpret would silently accept input the client
         // believes is rejected, so it is a startup failure rather than a runtime surprise.
-        foreach (var tool in ToolCatalog.All)
+        foreach (var tool in ToolCatalog.All.Concat(CompactCatalog.Tools))
         {
             try
             {
@@ -124,7 +124,7 @@ public static class Program
         builder.Services.AddMcpServer(serverOptions =>
         {
             serverOptions.ServerInfo = new Implementation { Name = ServerName, Title = "КОМПАС-3D MCP", Version = ServerVersion };
-            serverOptions.ServerInstructions = Instructions;
+            serverOptions.ServerInstructions = CompactCatalog.Instructions(options.CatalogMode);
 
             // The schemas in ToolCatalog are the contract: published verbatim and the same document the
             // Host validates against, so tools/list and validation cannot drift. The SDK-generated
@@ -132,7 +132,7 @@ public static class Program
             //
             // Capabilities starts null on a bare McpServerOptions, so the whole object is assigned.
             serverOptions.Capabilities = new ServerCapabilities { Tools = new ToolsCapability() };
-            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log);
+            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log, options);
             serverOptions.Handlers.CallToolHandler = async (request, cancellationToken) => await CallToolAsync(session, log, request, cancellationToken).ConfigureAwait(false);
         }).WithStdioServerTransport();
 
@@ -214,15 +214,16 @@ public static class Program
     /// so refusals travel in the call envelope (<see cref="CallToolAsync"/>). Ownership is neither taken
     /// nor refreshed here.
     /// History: docs/decisions/host.md#listtools-no-ownership</remarks>
-    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
+    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log, HostOptions options)
     {
         _ = request;
         _ = cancellationToken;
-        log.Write("debug", "tools/list", new { tools = ToolCatalog.All.Count });
+        var published = CompactCatalog.Listing(options.CatalogMode);
+        log.Write("debug", "tools/list", new { tools = published.Count, catalog_mode = options.CatalogMode });
 
         // The mapping lives in McpToolFactory so the size guard measures exactly this listing.
         // History: docs/decisions/host.md#tools-list-size-guard
-        var tools = McpToolFactory.CreateAll(ToolCatalog.All);
+        var tools = McpToolFactory.CreateAll(published);
 
         return ValueTask.FromResult(new ListToolsResult { Tools = tools, NextCursor = null });
     }

@@ -180,10 +180,9 @@ public partial class Api5Session
 
         try
         {
-            // ORDER: the base ALONE, applied and confirmed, then the parameters. MEASURED, three variants
-            // of one call: Plane alone applies (400000 / X max 104.408); Plane batched with Angle does
-            // nothing; Plane batched with Direction does nothing either. The side after the first Update
-            // is the open question — it did not follow on the re-matched object.
+            // ORDER: ONE property per Update. MEASURED, three variants of one call: Plane alone applies
+            // (400000 / X max 104.408); Plane batched with Angle does nothing; Plane batched with Direction
+            // does nothing either. So the side goes first, then the base, each confirmed on its own.
             if (faces7 is not null)
             {
                 incline.Faces = faces7;
@@ -191,6 +190,24 @@ public partial class Api5Session
 
             if (base7 is not null)
             {
+                incline.Direction = flag.Value;
+                if (SafeBool(() => ((IModelObject)incline).Update()) != true)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.GeometryFailed,
+                        "Сторона уклона записана, но Update() не подтвердил её применение. Признак "
+                        + "изменён частично.",
+                        RetryPolicy.ReacquireContext,
+                        partialEffects: true);
+                }
+
+                RebuildApi7AndSettle(container, document);
+
+                // MEASURED: after Update() the matched wrapper stops carrying property writes — the
+                // re-matched object is what a new call would find.
+                incline = FindDraftIncline(document, entity, out var again, out _) ?? incline;
+                container = again ?? container;
+
                 incline.Plane = base7;
                 if (SafeBool(() => ((IModelObject)incline).Update()) != true)
                 {
@@ -203,16 +220,15 @@ public partial class Api5Session
                 }
 
                 RebuildApi7AndSettle(container, document);
-
-                // MEASURED: after Update() the matched wrapper stops carrying property writes — the base
-                // applied, the angle written to the SAME object did not. Re-matched by name, as a new call
-                // would find it.
-                incline = FindDraftIncline(document, entity, out var again, out _) ?? incline;
+                incline = FindDraftIncline(document, entity, out again, out _) ?? incline;
                 container = again ?? container;
             }
 
             incline.Angle = targetAngle;
-            incline.Direction = flag.Value;
+            if (base7 is null)
+            {
+                incline.Direction = flag.Value;
+            }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
@@ -401,6 +417,21 @@ public partial class Api5Session
         {
             reason = "draft_collection_unavailable — IModelContainer.Inclines пуст";
             return null;
+        }
+
+        // DOC: <c>iinclines.html</c> — <c>IInclines.Incline</c> takes an index OR a name. The name is
+        // asked first: MEASURED, an object walked out of the collection by index carries single-property
+        // writes but ignores a batch of them, which is the shape of every failed base edit.
+        try
+        {
+            if (collection.Incline[(object)name] is IIncline byName)
+            {
+                return byName;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            // The name lookup is not the only documented form: the walk below stays as the fallback.
         }
 
         var count = SafeInt(() => collection.Count) ?? 0;

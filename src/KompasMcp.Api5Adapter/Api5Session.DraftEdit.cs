@@ -180,9 +180,10 @@ public partial class Api5Session
 
         try
         {
-            // ORDER: one documented property group per Update — the base first, applied and confirmed,
-            // then the parameters. MEASURED: a new Plane written together with Angle/Direction leaves the
-            // body as it was, while the same two writes in this order give 400000 mm³ and X max 104.408.
+            // ORDER: the base ALONE, applied and confirmed, then the parameters. MEASURED, three variants
+            // of one call: Plane alone applies (400000 / X max 104.408); Plane batched with Angle does
+            // nothing; Plane batched with Direction does nothing either. The side after the first Update
+            // is the open question — it did not follow on the re-matched object.
             if (faces7 is not null)
             {
                 incline.Faces = faces7;
@@ -202,6 +203,12 @@ public partial class Api5Session
                 }
 
                 RebuildApi7AndSettle(container, document);
+
+                // MEASURED: after Update() the matched wrapper stops carrying property writes — the base
+                // applied, the angle written to the SAME object did not. Re-matched by name, as a new call
+                // would find it.
+                incline = FindDraftIncline(document, entity, out var again, out _) ?? incline;
+                container = again ?? container;
             }
 
             incline.Angle = targetAngle;

@@ -231,25 +231,9 @@ public sealed class HostSession : IAsyncDisposable
                 remedy: "Возьмите точный id из kompas_find_operations.");
         }
 
-        // LIMIT: the prototype serves four operations; the rest are named rather than left to a
-        // mysterious "unknown tool", so the model learns what exists and what is reachable.
-        if (!CompactCatalog.IsConverted(id))
-        {
-            return Refusal(
-                ErrorCodes.CapabilityUnavailable,
-                $"Операция '{id}' существует, но в режиме compact не переведена: прототип отдаёт через "
-                + "kompas_run только " + string.Join(", ", CompactCatalog.Converted) + ".",
-                RetryPolicy.Never,
-                new JsonObject
-                {
-                    ["id"] = id,
-                    ["reachable_via"] = CompactCatalog.Reach(id),
-                    ["converted"] = new JsonArray(
-                        CompactCatalog.Converted.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
-                },
-                remedy: "Запустите сервер с catalog_mode=full, чтобы вызвать операцию напрямую.");
-        }
-
+        // Every registry entry is served: the direct subset by its own tool, the rest here. The
+        // refusal for "exists but not converted" is gone with the prototype.
+        // History: docs/decisions/host.md#catalog-mechanism
         var args = arguments["args"] as JsonObject ?? new JsonObject();
         var violations = JsonSchemaValidator.Validate(operation.InputSchema, args);
         if (violations.Count > 0)
@@ -281,7 +265,7 @@ public sealed class HostSession : IAsyncDisposable
     {
         var query = JsonScalars.ReadString(arguments["query"]) ?? string.Empty;
         var group = JsonScalars.ReadString(arguments["group"]);
-        var limit = (int)Math.Clamp(JsonScalars.ReadLong(arguments["limit"]) ?? 20, 1, 97);
+        var limit = (int)Math.Clamp(JsonScalars.ReadLong(arguments["limit"]) ?? 20, 1, ToolCatalog.All.Count);
 
         var hits = CompactCatalog.Search(query, group);
         var shown = hits.Take(limit).ToArray();
@@ -1483,7 +1467,7 @@ public sealed class HostSession : IAsyncDisposable
         }
 
         var node = (JsonObject)result.DeepClone();
-        var mode = options?.CatalogMode ?? CompactCatalog.FullMode;
+        var mode = options?.CatalogMode ?? CompactCatalog.CompactMode;
         var published = CompactCatalog.Listing(mode);
 
         // In `compact` the client must be able to tell the three statements apart: what is published,
@@ -1497,11 +1481,10 @@ public sealed class HostSession : IAsyncDisposable
             node["operations"] = new JsonArray(
                 ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
             node["operations_via_run"] = new JsonArray(
-                CompactCatalog.Converted.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
+                CompactCatalog.ViaRun.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
             node["operations_note"] =
-                "operations - весь реестр; вызываются через kompas_run, но прототип перевёл только "
-                + "operations_via_run, остальные отвергаются по имени (reachable_via в "
-                + "kompas_find_operations).";
+                "operations - весь реестр; каждая операция достижима: direct - опубликованным "
+                + "инструментом, run - через kompas_run (reachable_via в kompas_find_operations).";
         }
 
         node["server_version"] = Program.ServerVersion;

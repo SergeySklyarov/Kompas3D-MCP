@@ -24,12 +24,12 @@ public sealed class HostOptions
 
     public string? WorkerLogPath { get; init; }
 
-    /// <summary>Which catalog the Host publishes: <c>full</c> (every tool, the default) or
-    /// <c>compact</c> (a fixed set plus find/describe/run).</summary>
+    /// <summary>Which catalog the Host publishes: <c>compact</c> (a fixed set plus find/describe/run,
+    /// the default) or <c>full</c> (every tool, kept for one release).</summary>
     /// <remarks>INVARIANT: an unknown value stops the Host at startup. A mode typo silently falling back
-    /// to <c>full</c> would hand the client 97 tools while the operator asked for three.
+    /// to one of the two would hand the client a catalog the operator did not ask for.
     /// History: docs/decisions/host.md#catalog-mechanism</remarks>
-    public string CatalogMode { get; init; } = Catalog.CompactCatalog.FullMode;
+    public string CatalogMode { get; init; } = Catalog.CompactCatalog.CompactMode;
 
     public string LogPath { get; init; } = Default("logs", "host.jsonl");
 
@@ -151,7 +151,7 @@ public sealed class HostOptions
     private static bool? ReadBool(JsonObject node, string key) => node[key] is JsonValue value && value.TryGetValue<bool>(out var parsed) ? parsed : null;
 
     private static string ReadMode(JsonObject node, string key) =>
-        node[key] is JsonValue value && value.TryGetValue<string>(out var text) ? NormalizeMode(text) : Catalog.CompactCatalog.FullMode;
+        node[key] is JsonValue value && value.TryGetValue<string>(out var text) ? NormalizeMode(text) : Catalog.CompactCatalog.CompactMode;
 
     /// <summary>Accept only the two published mode names, case-insensitively; anything else stops the
     /// Host with the name it received.</summary>

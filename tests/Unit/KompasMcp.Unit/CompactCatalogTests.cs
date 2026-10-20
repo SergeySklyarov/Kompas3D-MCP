@@ -176,6 +176,60 @@ public sealed class CompactCatalogTests
         Assert.True(text.Length * 4 < fullSize, $"compact {text.Length} символов против full {fullSize}");
     }
 
+    /// <summary>Every operation of the registry is reachable, and exactly one way: the direct subset by
+    /// its own tool, the rest through <c>kompas_run</c>. No operation is left without a path.</summary>
+    /// <remarks>INVARIANT: <see cref="CompactCatalog.Reach"/> answers one of two words for every
+    /// registry name, and the two sets do not overlap. A third answer would be the prototype's "exists
+    /// but not converted", which this mode no longer has.
+    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
+    [Fact]
+    public void EveryOperationIsReachableExactlyOneWay()
+    {
+        var direct = CompactCatalog.Direct.Select(t => t.Name).ToArray();
+        var viaRun = CompactCatalog.ViaRun;
+
+        Assert.Empty(direct.Intersect(viaRun, StringComparer.Ordinal));
+        Assert.Equal(ToolCatalog.All.Count, direct.Length + viaRun.Count);
+        Assert.Equal(ToolCatalog.All.Count, CompactCatalog.Search(string.Empty, null).Count);
+
+        foreach (var tool in ToolCatalog.All)
+        {
+            var reach = CompactCatalog.Reach(tool.Name);
+            Assert.Contains(reach, new[] { "direct", "run" });
+            Assert.Equal(direct.Contains(tool.Name, StringComparer.Ordinal) ? "direct" : "run", reach);
+        }
+    }
+
+    /// <summary>The direct subset is a fixed, named set: it is the prototype's eleven tools and nothing
+    /// else, so a silent addition to it fails here rather than in a report.</summary>
+    /// <remarks>INVARIANT: the set does not grow with the registry. TEST: this test.
+    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
+    [Fact]
+    public void DirectSubsetIsTheNamedEleven()
+    {
+        var expected = new[]
+        {
+            "kompas_health", "kompas_connect", "kompas_session_status", "kompas_acquire_session",
+            "kompas_release_session", "kompas_disconnect", "kompas_create_document",
+            "kompas_open_document", "kompas_close_document", "kompas_get_context",
+            "kompas_capabilities",
+        };
+
+        Assert.Equal(expected.OrderBy(n => n, StringComparer.Ordinal),
+            CompactCatalog.Direct.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal));
+    }
+
+    /// <summary>The <c>find</c> limit is the size of the registry, not a literal: a bound smaller than
+    /// the catalog would hide operations from a search that claims to cover it.</summary>
+    [Fact]
+    public void FindLimitComesFromTheRegistry()
+    {
+        var find = CompactCatalog.Tools.Single(t => t.Name == CompactCatalog.FindTool);
+        var limit = (find.InputSchema["properties"] as JsonObject)!["limit"] as JsonObject;
+        var maximum = limit!["maximum"]!.GetValue<long>();
+        Assert.Equal(ToolCatalog.All.Count, (int)maximum);
+    }
+
     private static readonly JsonSerializerOptions Wire = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

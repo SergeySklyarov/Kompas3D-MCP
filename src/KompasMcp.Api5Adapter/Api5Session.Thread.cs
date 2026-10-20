@@ -381,7 +381,7 @@ public partial class Api5Session
         var (diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength) =
             ReadThreadParameters(thread, parameters);
 
-        note = "thread_base_kind_unknown — вид базового объекта при чтении не отдаётся: продукт сам "
+        note = "thread_base_kind_unknown - вид базового объекта при чтении не отдаётся: продукт сам "
             + "определяет базовую грань по ребру (ksthreaddefinition.html), и форма, заданная при "
             + "создании, в модели не хранится. В ответе создания вид берётся из запроса.";
 

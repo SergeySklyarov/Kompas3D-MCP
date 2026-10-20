@@ -14,9 +14,10 @@
     "Поэтому шаблон обязан оставаться корректным JSON - файл с комментариями '#' Host отвергает",
     "на старте с кодом возврата 64, ещё до подключения к КОМПАС.",
     "",
-    "catalog_mode - что сервер публикует в tools/list: full (по умолчанию) отдаёт все операции",
-    "отдельными инструментами, compact - постоянный набор плюс kompas_find_operations,",
-    "kompas_describe_operation и kompas_run. Любое другое значение останавливает сервер на старте."
+    "catalog_mode - что сервер публикует в tools/list: compact (по умолчанию) отдаёт постоянный",
+    "набор плюс kompas_find_operations, kompas_describe_operation и kompas_run, а КАЖДАЯ операция",
+    "реестра вызывается через kompas_run; full отдаёт все операции отдельными инструментами и",
+    "остаётся выбираемым на один выпуск. Любое другое значение останавливает сервер на старте."
   ],
   "read_only_roots": [
     "C:\\kompas-mcp\\read-only-models"
@@ -28,7 +29,7 @@
     "C:\\kompas-mcp\\export"
   ],
   "allow_unc_paths": false,
-  "catalog_mode": "full",
+  "catalog_mode": "compact",
   "worker_path": null,
   "worker_log_path": "C:\\kompas-mcp\\logs\\worker.jsonl",
   "log_path": "C:\\kompas-mcp\\logs\\host.jsonl",

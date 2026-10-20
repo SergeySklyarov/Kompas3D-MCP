@@ -14,20 +14,22 @@ public static class ToolListing
     public const string BeginMarker = "<!-- BEGIN TOOL LISTING -->";
     public const string EndMarker = "<!-- END TOOL LISTING -->";
 
-    /// <summary>A Markdown table, one row per tool: name, title, first sentence of the description.
-    /// No trailing blank line beyond the block itself, so the surrounding Markdown controls spacing.</summary>
-    /// <remarks>INVARIANT: the published documents carry no em dash, so the listing prints a hyphen in
-    /// its place, and a pipe inside a cell is escaped so it cannot split the row. Only the rendered text
-    /// changes: the catalog descriptions and schemas stay as they are.
+    /// <summary>A Markdown table, one row per tool: name, the path that reaches it, title, first
+    /// sentence of the description. No trailing blank line beyond the block itself, so the surrounding
+    /// Markdown controls spacing.</summary>
+    /// <remarks>INVARIANT: the call path column is <see cref="CompactCatalog.Reach"/>, the same source as
+    /// <c>reachable_via</c>, so the document cannot claim a path the mode does not serve. A pipe inside a
+    /// cell is escaped and an em dash becomes a hyphen: only the rendered text changes, not the catalog.
     /// TEST: ToolListingTests.GeneratedBlock_HasNoEmDash.</remarks>
     public static string Markdown(IReadOnlyList<ToolDefinition> tools)
     {
         var sb = new StringBuilder();
         sb.Append("Всего инструментов: ").Append(tools.Count).Append(".\n\n");
-        sb.Append("| Инструмент | Назначение | Что делает |\n|---|---|---|\n");
+        sb.Append("| Инструмент | Путь вызова | Назначение | Что делает |\n|---|---|---|---|\n");
         foreach (var tool in tools)
         {
-            sb.Append("| `").Append(tool.Name).Append("` | ").Append(Cell(tool.Title)).Append(" | ");
+            sb.Append("| `").Append(tool.Name).Append("` | ").Append(CompactCatalog.Reach(tool.Name));
+            sb.Append(" | ").Append(Cell(tool.Title)).Append(" | ");
             sb.Append(Cell(Summary(tool.Description))).Append(" |\n");
         }
 

@@ -26,6 +26,9 @@ public class HostSessionLifecycleTests : IDisposable
         Directory.CreateDirectory(_directory);
         _options = new HostOptions
         {
+            // Explicit, because the DEFAULT is now `compact`: this fixture checks the `full` answer,
+            // where the published listing IS the registry.
+            CatalogMode = CompactCatalog.FullMode,
             JournalPath = Path.Combine(_directory, "operations.jsonl"),
             LogPath = Path.Combine(_directory, "host.jsonl"),
         };
@@ -123,6 +126,41 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Equal(Program.ServerVersion, Body(envelope)["server_version"]!.GetValue<string>());
     }
 
+    /// <summary>The DEFAULT mode is <c>compact</c>, and its answer tells the three statements apart:
+    /// what is published, what exists in the registry, and what of that is reached through
+    /// <c>kompas_run</c>.</summary>
+    /// <remarks>INVARIANT: the default is not a report claim — the HostOptions initializer and the
+    /// configuration reader both answer <c>compact</c> when the key is absent.
+    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
+    [Fact]
+    public async Task Capabilities_DefaultMode_PublishesCompactListingAndWholeRegistry()
+    {
+        var options = new HostOptions
+        {
+            JournalPath = Path.Combine(_directory, "default-operations.jsonl"),
+            LogPath = Path.Combine(_directory, "default-host.jsonl"),
+        };
+        Assert.Equal(CompactCatalog.CompactMode, options.CatalogMode);
+
+        await using var session = new HostSession(
+            options, HostOwnership.Open(options.JournalPath),
+            HostLog.Open(Path.Combine(_directory, "default-log.jsonl")));
+        var envelope = await session.InvokeAsync("kompas_capabilities", new JsonObject(), CancellationToken.None);
+        var body = Body(envelope);
+
+        Assert.Equal(CompactCatalog.CompactMode, body["catalog_mode"]!.GetValue<string>());
+        var published = ((JsonArray)body["tools"]!).Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(CompactCatalog.Direct.Count + CompactCatalog.Tools.Count, published.Length);
+        Assert.Equal(published.Length, body["tool_count"]!.GetValue<int>());
+        Assert.DoesNotContain("kompas_extrude", published);
+
+        var operations = ((JsonArray)body["operations"]!).Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(ToolCatalog.All.Count, operations.Length);
+        var viaRun = ((JsonArray)body["operations_via_run"]!).Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(CompactCatalog.ViaRun, viaRun);
+        Assert.Equal(operations.Length, published.Length + viaRun.Length - CompactCatalog.Tools.Count);
+    }
+
     /// <summary>INVARIANT: a <c>kompas_capabilities</c> answer produced by the WORKER (the environment
     /// block of <c>env.probe</c>, which knows nothing about the catalog) gets the same three fields,
     /// and its own environment fields are left alone.</summary>
@@ -142,7 +180,10 @@ public class HostSessionLifecycleTests : IDisposable
                 """)!.AsObject(),
         };
 
-        var merged = HostSession.WithCapabilitiesCatalog(workerAnswer);
+        // `full` explicitly: the subject here is the merge of the WORKER's environment block, not the
+        // default mode. The compact answer is held by Capabilities_DefaultMode_PublishesCompactListing…
+        var merged = HostSession.WithCapabilitiesCatalog(
+            workerAnswer, new HostOptions { CatalogMode = CompactCatalog.FullMode });
         var body = (JsonObject)merged.Result!;
 
         Assert.Equal(ToolCatalog.All.Count, body["tool_count"]!.GetValue<int>());

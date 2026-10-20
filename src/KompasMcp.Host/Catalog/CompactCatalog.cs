@@ -25,22 +25,13 @@ public static class CompactCatalog
     /// start, keep its context or hand itself back without them.</summary>
     /// <remarks>MEASURED: every session begins with connect and get_context and every mutation is
     /// followed by a fresh context, so these calls happen on every path and cost nothing to keep
-    /// direct. Everything else is reached through <see cref="RunTool"/>.</remarks>
+    /// direct. Everything else is reached through <see cref="RunTool"/>.
+    /// TEST: CompactCatalogTests.CompactListingIsFixedAndFullIsUntouched.</remarks>
     private static readonly string[] DirectNames =
     {
         "kompas_health", "kompas_connect", "kompas_session_status", "kompas_acquire_session",
         "kompas_release_session", "kompas_disconnect", "kompas_create_document", "kompas_open_document",
         "kompas_close_document", "kompas_get_context", "kompas_capabilities",
-    };
-
-    /// <summary>The operations this prototype serves through <see cref="RunTool"/>: one read, one
-    /// feature creation, one with a large schema, one that writes a file.</summary>
-    /// <remarks>LIMIT: an operation outside this set is refused by name; converting the remaining 93
-    /// is the implementation order's work, not this prototype's.
-    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
-    private static readonly string[] ConvertedNames =
-    {
-        "kompas_get_feature", "kompas_extrude", "kompas_create_sketch", "kompas_export_image",
     };
 
     /// <summary>Groups shown by <see cref="FindTool"/>. Presentation only: the operation set stays
@@ -105,6 +96,15 @@ public static class CompactCatalog
     public static IReadOnlyList<ToolDefinition> Direct { get; } =
         ToolCatalog.All.Where(t => DirectNames.Contains(t.Name, StringComparer.Ordinal)).ToArray();
 
+    /// <summary>The operations reached through <see cref="RunTool"/>: the registry MINUS the direct
+    /// subset.</summary>
+    /// <remarks>INVARIANT: this is derived, never listed. A literal list of converted names would drift
+    /// from the registry, and an operation missing from it would be refused by a mode that claims to
+    /// serve the whole catalog. History: docs/decisions/host.md#catalog-mechanism</remarks>
+    public static IReadOnlyList<string> ViaRun { get; } =
+        ToolCatalog.All.Where(t => !DirectNames.Contains(t.Name, StringComparer.Ordinal))
+            .Select(t => t.Name).ToArray();
+
     /// <summary>The three tools <c>compact</c> adds. They are NOT in <see cref="ToolCatalog.All"/>:
     /// <c>full</c> must publish exactly what it published before this change.</summary>
     public static IReadOnlyList<ToolDefinition> Tools { get; } = BuildTools();
@@ -118,22 +118,20 @@ public static class CompactCatalog
     public static bool IsCompactTool(string? name) =>
         name is FindTool or DescribeTool or RunTool;
 
-    /// <summary>Whether the operation is served through <see cref="RunTool"/> in this prototype.</summary>
-    public static bool IsConverted(string name) => ConvertedNames.Contains(name, StringComparer.Ordinal);
-
-    public static IReadOnlyList<string> Converted => ConvertedNames;
-
     public static ToolDefinition? Operation(string id) =>
         ByName.TryGetValue(id, out var tool) ? tool : null;
 
     public static string GroupOf(string name) => Groups.TryGetValue(name, out var group) ? group : "other";
 
-    /// <summary>How the client reaches the operation in the current mode: direct, through
-    /// <c>kompas_run</c>, or not at all.</summary>
+    /// <summary>How the client reaches the operation: directly or through <c>kompas_run</c>. Every
+    /// registry entry is reachable, so there is no third answer.</summary>
+    /// <remarks>INVARIANT: the answer is one of two, because <c>compact</c> serves the whole registry.
+    /// A third value would tell a client an operation exists and cannot be called, which the mode
+    /// does not do. TEST: CompactCatalogTests.EveryOperationIsReachableExactlyOneWay.
+    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
     public static string Reach(string name) =>
-        DirectNames.Contains(name, StringComparer.Ordinal) ? "direct"
-        : IsConverted(name) ? "run"
-        : "not_converted";
+        DirectNames.Contains(name, StringComparer.Ordinal) ? "direct" : "run";
+
 
     /// <summary>Ranked search over ids, titles, descriptions and groups.</summary>
     /// <remarks>INVARIANT: the search reads the SAME descriptions the direct tools publish, so a
@@ -262,9 +260,8 @@ public static class CompactCatalog
         Одновременно моделью работает только один сеанс: SESSION_NOT_ACQUIRED или SESSION_OWNER_ACTIVE
         означает, что сеанс занят или требует явного захвата (kompas_session_status, затем
         kompas_acquire_session). После захвата прежние document_id и revision недействительны.
-        Не все операции переведены: kompas_find_operations и kompas_describe_operation называют
-        доступность каждой строки (direct, run, not_converted) — непереведённая операция отвергается
-        kompas_run по имени, а не молчанием.
+        Каждая операция реестра достижима: kompas_find_operations и kompas_describe_operation
+        называют путь вызова (direct - опубликованный инструмент, run - через kompas_run).
         """;
 
     /// <summary>Ids close to an unknown one, by common prefix and by shared words: a model that
@@ -353,7 +350,8 @@ public static class CompactCatalog
                     ("group", Sch.Nullable(Sch.Str(
                         "Ограничить группой: session, document, sketch, feature, boolean, pattern, "
                         + "assembly, drawing, variables, inspection, file."))),
-                    ("limit", Sch.Nullable(Sch.Int("Сколько совпадений вернуть, по умолчанию 20.", 1, 97))))),
+                    ("limit", Sch.Nullable(Sch.Int("Сколько совпадений вернуть, по умолчанию 20.",
+                        1, ToolCatalog.All.Count))))),
             new ToolBehaviour(ReadOnly: true, Destructive: false, RequiresOperationId: false,
                 RequiresDocument: false, RequiresExpectedRevision: false, HostLocal: true),
             string.Empty);

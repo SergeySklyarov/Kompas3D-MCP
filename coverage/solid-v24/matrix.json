@@ -13507,7 +13507,7 @@
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft.json",
-      "adapter_route": "kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add -> IIncline; Faces - одна грань или группа в ОДНОМ признаке; Plane(основание) -> Angle -> Direction -> IModelObject.Update; подтверждение - объём и габарит тела (iinclines_add.html)",
+      "adapter_route": "kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add -> IIncline; Faces - одна грань или группа в ОДНОМ признаке; Plane(основание) -> Angle -> Direction, запись завершается обновлением объекта модели; подтверждение - объём и габарит тела (iinclines_add.html)",
       "actions": {
         "discover": "verified",
         "create": "verified",
@@ -13623,7 +13623,7 @@
         "scripts/mcp-smoke.py"
       ],
       "parameters_schema": "schemas/kompas_draft.json",
-      "adapter_route": "kompas_draft: правка основания по ссылке отвергается (draft_base_edit_unsupported), создание - base_face_ref (плоская грань тела) или base_plane (стандартная или вспомогательная плоскость); обе формы взаимоисключающие (iincline_plane.html)",
+      "adapter_route": "kompas_draft: правка основания по ссылке отвергается (draft_base_edit_unsupported), создание - base_face_ref (плоская грань тела) или base_plane - плоскость через IIncline.Plane; обе формы взаимоисключающие (iincline_plane.html)",
       "actions": {
         "discover": "verified",
         "create": "verified",

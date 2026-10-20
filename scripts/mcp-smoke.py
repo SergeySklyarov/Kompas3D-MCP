@@ -48236,6 +48236,11 @@ def threads_checks(client, rep, app_id, workdir):
     rep.add("TH-01.discovery", "инструмент объявлен, схема несёт поля контракта",
             "PASS" if entry is not None and not missing else "FAIL",
             f"в tools/list={entry is not None}; полей={len(props)}; нет={missing}")
+    _e, capenv, _r = client.tool("kompas_capabilities", {})
+    cap_text = json.dumps(capenv, ensure_ascii=False)
+    rep.add("TH-01.capabilities", "kompas_capabilities называет инструмент резьбы",
+            "PASS" if "kompas_create_thread" in cap_text else "FAIL",
+            f"capabilities={len(cap_text)} символов")
 
     # ===== эталон: цилиндр r = 10, h = 40 =====
     _e, env, _r = client.tool("kompas_create_document",
@@ -48293,6 +48298,13 @@ def threads_checks(client, rep, app_id, workdir):
     rep.add("TH-02.tree_object", "обозначение появилось в дереве",
             "PASS" if len(threads_of(doc)) == 1 else "FAIL",
             f"обозначений={len(threads_of(doc))}")
+    # Вид базы при чтении не угадывается: продукт сам определяет базовую грань по ребру, поэтому
+    # чтение отвечает unknown (см. описание kompas_create_thread), а ответ создания - из запроса.
+    _e, g2env, _r = client.tool("kompas_get_feature", {"feature_ref": fref})
+    kind2 = (result(g2env).get("thread") or {}).get("base_kind")
+    rep.add("TH-02.base_kind_read", "чтение по ребру не выдаёт вид базы за форму запроса",
+            "PASS" if kind2 == "unknown" and r2.get("base_kind") == "edge" else "FAIL",
+            f"создание={r2.get('base_kind')} чтение={kind2}")
 
     # ===== TH-03: автодиаметр =====
     th3, code3 = call("kompas_create_thread", {
@@ -48349,6 +48361,46 @@ def threads_checks(client, rep, app_id, workdir):
         rep.add("TH-04.geometry_unchanged", "внутреннее обозначение не меняет объём",
                 "PASS" if near(volume(doc, body), v_before_inner, 1e-6) else "FAIL",
                 f"volume={volume(doc, body)} (было {v_before_inner})")
+        fref4 = ref_of(r4.get("feature_ref"))
+        _e, g4env, _r = client.tool("kompas_get_feature", {"feature_ref": fref4})
+        kind4 = (result(g4env).get("thread") or {}).get("base_kind")
+        rep.add("TH-04.base_kind_read", "чтение по грани не выдаёт вид базы за форму запроса",
+                "PASS" if kind4 == "unknown" and r4.get("base_kind") == "face" else "FAIL",
+                f"создание={r4.get('base_kind')} чтение={kind4}")
+
+        # TH-12: правка ВНУТРЕННЕЙ резьбы на месте — диаметр и шаг, каждый прочитан после записи.
+        _env12, e12 = call("kompas_update_feature", {
+            "feature_ref": fref4, "expected_revision": revision(),
+            "nominal_diameter_mm": 10, "pitch_mm": 1.5})
+        _e, g12, _r = client.tool("kompas_get_feature", {"feature_ref": fref4})
+        t12 = result(g12).get("thread") or {}
+        rep.add("TH-12.edit_inner", "правка внутренней резьбы: d 8 -> 10, p 1.25 -> 1.5 прочитаны",
+                "PASS" if (not error_code(e12) and near(t12.get("nominal_diameter_mm"), 10)
+                           and near(t12.get("pitch_mm"), 1.5) and t12.get("internal") is True
+                           and near(volume(doc, body), v_before_inner, 1e-6)) else "FAIL",
+                f"d={t12.get('nominal_diameter_mm')} p={t12.get('pitch_mm')} "
+                f"internal={t12.get('internal')} error={error_code(e12)}")
+
+        # TH-13: авто-длина при правке — явная длина, затем возврат к авто по границам.
+        auto_length_at_creation = r4.get("length_mm")
+        _env13a, e13a = call("kompas_update_feature", {
+            "feature_ref": fref4, "expected_revision": revision(),
+            "length_mm": 12, "auto_length": False})
+        _e, g13a, _r = client.tool("kompas_get_feature", {"feature_ref": fref4})
+        t13a = result(g13a).get("thread") or {}
+        _env13b, e13b = call("kompas_update_feature", {
+            "feature_ref": fref4, "expected_revision": revision(), "auto_length": True})
+        _e, g13b, _r = client.tool("kompas_get_feature", {"feature_ref": fref4})
+        t13b = result(g13b).get("thread") or {}
+        rep.add("TH-13.auto_length_edit",
+                "авто-длина при правке: явная длина прочитана, возврат к авто даёт длину по границам",
+                "PASS" if (not error_code(e13a) and near(t13a.get("length_mm"), 12)
+                           and t13a.get("auto_length") is False
+                           and not error_code(e13b) and t13b.get("auto_length") is True
+                           and near(t13b.get("length_mm"), auto_length_at_creation)) else "FAIL",
+                f"явная L={t13a.get('length_mm')} auto={t13a.get('auto_length')}; "
+                f"авто L={t13b.get('length_mm')} auto={t13b.get('auto_length')} "
+                f"(при создании {auto_length_at_creation}); ошибки={error_code(e13a)},{error_code(e13b)}")
     else:
         rep.add("TH-04.create_inner", "внутренняя резьба по грани", "FAIL",
                 f"внутренняя грань не найдена: граней={len(frows)} плоскостей={len(planes)} "

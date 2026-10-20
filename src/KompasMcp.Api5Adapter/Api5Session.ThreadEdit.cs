@@ -237,7 +237,7 @@ public partial class Api5Session
                 unverified),
             ThreadReadBack: new ThreadDto(
                 after.Diameter, after.Pitch, after.Length, after.Internal, after.LeftHand,
-                after.AutoDiameter, after.AutoLength, BaseKindOf(thread)),
+                after.AutoDiameter, after.AutoLength, BaseKindUnreadable),
             Warnings: Array.Empty<string>());
     }
 

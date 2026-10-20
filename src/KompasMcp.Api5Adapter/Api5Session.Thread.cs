@@ -381,8 +381,12 @@ public partial class Api5Session
         var (diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength) =
             ReadThreadParameters(thread, parameters);
 
+        note = "thread_base_kind_unknown — вид базового объекта при чтении не отдаётся: продукт сам "
+            + "определяет базовую грань по ребру (ksthreaddefinition.html), и форма, заданная при "
+            + "создании, в модели не хранится. В ответе создания вид берётся из запроса.";
+
         return new ThreadDto(diameter, pitch, length, internalThread, leftHand, autoDiameter, autoLength,
-            BaseKindOf(thread));
+            BaseKindUnreadable);
     }
 
     /// <summary>The API7 <c>IThread</c> of a tree element, matched by the name the element carries.</summary>
@@ -443,31 +447,16 @@ public partial class Api5Session
         return thread;
     }
 
-    /// <summary><c>edge</c> or <c>face</c> — which kind of base object the model holds.</summary>
-    private static string? BaseKindOf(IThread thread)
-    {
-        try
-        {
-            var baseObject = thread.BaseObject;
-            if (baseObject is null)
-            {
-                return null;
-            }
-
-            // MEASURED: an edge base answers the IFace cast too, so the edge interface is asked FIRST;
-            // a base that answers neither stays null instead of being guessed.
-            if (baseObject is IEdge)
-            {
-                return "edge";
-            }
-
-            return baseObject is IFace ? "face" : null;
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            return null;
-        }
-    }
+    /// <summary>The kind of base object the READ side can report: the form is not kept by the model.</summary>
+    /// <remarks>DOC: <c>imodelobject_modelobjecttype.html</c> gives <c>IModelObject.ModelObjectType</c>, and
+    /// <c>obj3dtype.html</c> names <c>o3d_edge</c>/<c>o3d_face</c>. MEASURED: <c>IThread.BaseObject</c> of a
+    /// designation created on an EDGE answers <c>o3d_face</c>, because the product determines the base face
+    /// itself (<c>ksthreaddefinition.html</c>: «если базовый объект - ребро, базовая грань определяется
+    /// автоматически»). INVARIANT: the read answers <c>unknown</c> instead of that determined face — a
+    /// client would take the face for the form it created. The creation answer keeps the requested form.
+    /// History: docs/decisions/adapter-features.md#thread-base-kind
+    /// </remarks>
+    private const string BaseKindUnreadable = "unknown";
 
     private static string? SafeText(Func<string?> read)
     {

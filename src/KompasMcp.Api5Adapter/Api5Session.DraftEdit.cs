@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using KompasAPI7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Geometry;
@@ -37,23 +38,24 @@ public partial class Api5Session
     {
         RejectForeignDraftEditFields(command);
 
-        if (DefinitionOf(entity) is not ksInclineDefinition definition)
+        // ROUTE: the same API7 object the creation uses — API5 and API7 are never called on one feature.
+        var incline = FindDraftIncline(document, entity, out var container, out var reason);
+        if (incline is null || container is null)
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "Признак не отвечает ksInclineDefinition: записать угол, сторону, набор граней и "
-                + "основание некуда. Признак не изменён.",
-                RetryPolicy.Never,
+                "Объект IIncline этого признака не найден: " + reason + ". Признак не изменён.",
+                RetryPolicy.ReacquireContext,
                 details: new Dictionary<string, object?>
                 {
-                    ["code"] = "draft_definition_not_recognized",
+                    ["code"] = "draft_object_not_matched",
                     ["tree_type"] = entity.type,
                 });
         }
 
-        var angleBefore = SafeDouble(() => definition.angle);
-        var flagBefore = SafeBool(() => definition.direction);
-        var facesBefore = FaceArrayCount(definition);
+        var angleBefore = SafeDouble(() => incline.Angle);
+        var flagBefore = SafeBool(() => incline.Direction);
+        var facesBefore = InclineFaceCount(incline);
 
         var angle = command.AngleDeg ?? angleBefore;
         if (angle is not double targetAngle || !DraftRules.AngleInRange(targetAngle))
@@ -138,70 +140,106 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // INVARIANT: the parameters are written before the base, the base last before Update().
-        // MEASURED: SetPlane on a BUILT feature returns TRUE and changes nothing — flag and body stay as
-        // they were, while the same call at CREATION applies; the order of the two writes changes none
-        // of it. LIMIT: the base of a built feature is not changed by this route.
-        if (!WriteDraftParameters(definition, targetAngle, flag.Value))
+        // INVARIANT: the parameters are written together with the base, then one Update() applies the mode.
+        // MEASURED: API5 SetPlane on a BUILT feature answers TRUE and changes nothing; the same base
+        // through IIncline.Plane is applied — 400000 mm³ and X max 104.408, exactly DR-04.
+        // History: docs/decisions/adapter-features.md#draft-edit-and-plane-base
+        var bridge = BridgeFor(document);
+        IModelObject? base7 = null;
+        if (basePayload is not null)
+        {
+            if (bridge.TransferTo7(basePayload) is not IModelObject transferred)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    "Новое основание вида «" + baseKind + "» не перенесено в API7 как IModelObject (" +
+                    (bridge.BridgeFailure ?? "TransferInterface вернул null") + "). Признак не изменён.",
+                    RetryPolicy.ReacquireContext);
+            }
+
+            base7 = transferred;
+        }
+
+        object[]? faces7 = null;
+        if (faces is not null)
+        {
+            faces7 = new object[faces.Count];
+            for (var i = 0; i < faces.Count; i++)
+            {
+                if (bridge.TransferTo7(faces[i]) is not IModelObject face7)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.GeometryFailed,
+                        "Уклоняемая грань не перенесена в API7 как IModelObject. Признак не изменён.",
+                        RetryPolicy.ReacquireContext);
+                }
+
+                faces7[i] = face7;
+            }
+        }
+
+        try
+        {
+            // ORDER: one documented property group per Update — the base first, applied and confirmed,
+            // then the parameters. MEASURED: a new Plane written together with Angle/Direction leaves the
+            // body as it was, while the same two writes in this order give 400000 mm³ and X max 104.408.
+            if (faces7 is not null)
+            {
+                incline.Faces = faces7;
+            }
+
+            if (base7 is not null)
+            {
+                incline.Plane = base7;
+                if (SafeBool(() => ((IModelObject)incline).Update()) != true)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.GeometryFailed,
+                        "Новое основание записано, но Update() не подтвердил его применение. Признак "
+                        + "изменён частично.",
+                        RetryPolicy.ReacquireContext,
+                        partialEffects: true);
+                }
+
+                RebuildApi7AndSettle(container, document);
+            }
+
+            incline.Angle = targetAngle;
+            incline.Direction = flag.Value;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "Запись angle/direction в ksInclineDefinition не состоялась: признак не изменён.",
+                "Свойства уклона не записаны: " + ex.GetType().Name + ". Признак изменён частично.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true);
         }
 
-        if (basePayload is not null && SafeBool(() => definition.SetPlane(basePayload)) != true)
-        {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                "Новое основание не принято: SetPlane вернул отказ на объекте вида «" + baseKind
-                + "». Признак изменён частично: угол и сторона записаны.",
-                RetryPolicy.ReacquireContext,
-                partialEffects: true,
-                details: new Dictionary<string, object?> { ["base_kind"] = baseKind });
-        }
-
-        var facesWritten = -1;
-        if (faces is not null)
-        {
-            facesWritten = WriteDraftFaces(definition, faces);
-            if (facesWritten != faces.Count)
-            {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "Уклоняемые грани записаны не полностью: " + facesWritten + " из " + faces.Count
-                    + ". Признак изменён частично.",
-                    RetryPolicy.ReacquireContext,
-                    partialEffects: true);
-            }
-        }
-
-        var updated = SafeBool(entity.Update);
+        var updated = SafeBool(() => ((IModelObject)incline).Update());
         if (updated != true)
         {
             var refusalDetails = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
             AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "ksEntity.Update() вернул false: записанный режим не применён к модели. Признак "
+                "Update() уклона вернул false: записанный режим не применён к модели. Признак "
                 + "изменён частично.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
                 details: refusalDetails);
         }
 
-        document.PartNow().RebuildModel();
-        SettleAfterMutation(document);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "draft.update");
 
         var reference = References.Require(command.FeatureRef, document.Id, document.Revision);
         var stateAfter = ReadFeatureState(entity);
-        RequireNoFeatureError(document, entity, command.FeatureRef, "Уклон (правка)");
+        RequireNoApi7FeatureError(document, incline, command.FeatureRef, "Уклон (правка)");
 
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
-        var (angleReadBack, flagReadBack) = ReadInclineParameters(entity);
+        var (angleReadBack, flagReadBack) = ReadInclineParameters(incline);
 
         var checks = new List<NamedCheck>
         {
@@ -223,8 +261,8 @@ public partial class Api5Session
 
         if (faces is not null)
         {
-            checks.Add(new NamedCheck("faces_read_back", FaceArrayCount(definition) == faces.Count,
-                Observed: Num(FaceArrayCount(definition)), Expected: Num(faces.Count)));
+            checks.Add(new NamedCheck("faces_read_back", InclineFaceCount(incline) == faces.Count,
+                Observed: Num(InclineFaceCount(incline)), Expected: Num(faces.Count)));
         }
 
         var unverified = new List<string>
@@ -313,55 +351,101 @@ public partial class Api5Session
         return (null, null, null, "unchanged");
     }
 
-    /// <summary>Angle and flag written together: the two are one mode, and writing half of it would make
-    /// "exactly what was asked changed" indistinguishable from "this changed too".</summary>
-    private static bool WriteDraftParameters(ksInclineDefinition definition, double angle, bool flag)
+    /// <summary>The API7 object of the draft the reference points at, or null with the reason.</summary>
+    /// <remarks>MEASURED: the API7 object is matched to the tree element BY NAME — a name that matches
+    /// twice is not an identifier, and the edit is refused instead of picking one.
+    /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+    private IIncline? FindDraftIncline(
+        DocumentEntry document, ksEntity entity, out IModelContainer? container, out string? reason)
     {
+        reason = null;
+        container = null;
+
+        var bridge = BridgeFor(document);
+        container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
+        if (container is null)
+        {
+            reason = "api7_container_unavailable — маршрут API7 не построился: "
+                + (bridge.BridgeFailure ?? "причина не известна");
+            return null;
+        }
+
+        var name = SafeEntityName(entity);
+        if (string.IsNullOrEmpty(name))
+        {
+            reason = "draft_name_unreadable — имя элемента дерева не прочиталось, а объект API7 "
+                + "сопоставляется только по имени";
+            return null;
+        }
+
+        IInclines? collection;
         try
         {
-            definition.angle = angle;
-            definition.direction = flag;
-            return true;
+            collection = container.Inclines;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            return false;
+            reason = "draft_collection_unavailable — IModelContainer.Inclines не отвечает: "
+                + ex.GetType().Name;
+            return null;
         }
+
+        if (collection is null)
+        {
+            reason = "draft_collection_unavailable — IModelContainer.Inclines пуст";
+            return null;
+        }
+
+        var count = SafeInt(() => collection.Count) ?? 0;
+        IIncline? found = null;
+        var matches = 0;
+        for (var i = 0; i < count; i++)
+        {
+            if (collection.Incline[(object)i] is not IIncline item)
+            {
+                continue;
+            }
+
+            if (!string.Equals(SafeModelName(item), name, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            found = item;
+            matches++;
+        }
+
+        if (matches == 1)
+        {
+            return found;
+        }
+
+        reason = matches == 0
+            ? "draft_object_not_found — в IInclines нет объекта с именем «" + name
+              + "» (объектов в коллекции: " + count.ToString(CultureInfo.InvariantCulture) + ")"
+            : "draft_object_ambiguous — имя «" + name + "» отвечает " + matches
+              + " объектам: имя не является идентификатором";
+        return null;
     }
 
-    /// <summary>The face set is a FULL replacement: what is passed is what must be drafted.</summary>
-    private static int WriteDraftFaces(ksInclineDefinition definition, IReadOnlyList<ksFaceDefinition> faces)
+    /// <summary>Number of drafted faces on the API7 feature: <c>Faces</c> is a VARIANT that carries one
+    /// face as a bare object and a set as an array.</summary>
+    private static int? InclineFaceCount(IIncline incline)
     {
-        object? holder;
         try
         {
-            holder = definition.FaceArray();
+            return incline.Faces switch
+            {
+                null => null,
+                object[] array => array.Length,
+                Array array => array.Length,
+                _ => 1,
+            };
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            return 0;
+            return null;
         }
-
-        if (holder is not ksEntityCollection collection)
-        {
-            return 0;
-        }
-
-        if (SafeBool(() => collection.Clear()) != true)
-        {
-            return 0;
-        }
-
-        var written = 0;
-        foreach (var face in faces)
-        {
-            if (SafeBool(() => collection.Add(face)) == true)
-            {
-                written++;
-            }
-        }
-
-        return written;
     }
 
     /// <summary>Fields of other families are refused by name, not ignored.</summary>
@@ -396,69 +480,51 @@ public partial class Api5Session
             });
     }
 
-    /// <summary>Faces of the feature's own array, or null when the array does not read.</summary>
-    private static int? FaceArrayCount(ksInclineDefinition definition)
-    {
-        try
-        {
-            return definition.FaceArray() is ksEntityCollection collection ? collection.GetCount() : null;
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Draft parameters read from the feature's own definition (DR-05 of the order).</summary>
-    /// <remarks>INVARIANT: the side relative to the BODY is not published here — MEASURED, the base of a
-    /// built feature does not answer an object whose orientation this route reads, so the side stays
-    /// null with the reason named instead of guessed. The product flag IS published: it is what the
-    /// model holds.
+    /// <summary>Draft parameters read from the API7 feature (DR-05 of the order).</summary>
+    /// <remarks>INVARIANT: the read goes through the route that writes. The side relative to the BODY is
+    /// not published: <c>Plane</c> tells a plane from a face only by the interface it answers, so an
+    /// unrecognised base stays null WITH the reason instead of a guess.
     /// History: docs/decisions/adapter-features.md#draft-edit-and-plane-base</remarks>
-    private DraftDto? ReadDraftFeature(ksEntity entity, ksInclineDefinition definition, out string? reason)
+    private DraftDto? ReadDraftFeature(DocumentEntry document, ksEntity entity, out string? reason)
     {
         reason = null;
 
-        var (angle, flag) = ReadInclineParameters(entity);
-        var faces = FaceArrayCount(definition);
+        var incline = FindDraftIncline(document, entity, out _, out reason);
+        if (incline is null)
+        {
+            return null;
+        }
+
+        var (angle, flag) = ReadInclineParameters(incline);
+        var faces = InclineFaceCount(incline);
 
         if (angle is null || flag is null || faces is null)
         {
-            reason = "draft_params_partly_unreadable — с определения не прочиталось: "
-                + (angle is null ? "angle " : string.Empty)
-                + (flag is null ? "direction " : string.Empty)
-                + (faces is null ? "FaceArray" : string.Empty);
+            reason = "draft_params_partly_unreadable — с IIncline не прочиталось: "
+                + (angle is null ? "Angle " : string.Empty)
+                + (flag is null ? "Direction " : string.Empty)
+                + (faces is null ? "Faces" : string.Empty);
         }
 
         object? baseObject;
         try
         {
-            baseObject = definition.GetPlane();
+            baseObject = incline.Plane;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             baseObject = null;
         }
 
-        // MEASURED: GetPlane() of a built feature answers an object that is NOT a ksFaceDefinition even
-        // when the base IS a face, so "plane" would be a false claim about the model. Only the face is
-        // recognised; anything else is published as unread with the reason.
-        var baseKind = baseObject is ksFaceDefinition ? "face" : null;
-
+        var baseKind = baseObject is IPlane3D ? "plane" : null;
         if (baseObject is null)
         {
-            reason ??= "draft_base_not_read — GetPlane() не вернул объект основания";
+            reason ??= "draft_base_not_read — Plane не вернул объект основания";
         }
         else if (baseKind is null)
         {
-            reason ??= "draft_base_kind_not_read — объект основания не отвечает ksFaceDefinition, а "
-                + "плоскость от грани этим маршрутом не отличаетcя: вид основания не публикуется";
-        }
-        else
-        {
-            reason ??= "draft_side_not_read — сторона уклона относительно тела не публикуется: "
-                + "ориентация основания построенного признака этим маршрутом не читается, а флаг "
-                + "продукта опубликован как есть";
+            reason ??= "draft_base_kind_not_read — объект основания не отвечает IPlane3D, а плоскость от "
+                + "грани этим маршрутом не отличаетcя: вид основания не публикуется";
         }
 
         return new DraftDto(angle, flag, faces, baseKind);

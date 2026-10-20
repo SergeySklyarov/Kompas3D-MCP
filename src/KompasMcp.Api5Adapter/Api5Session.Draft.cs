@@ -83,55 +83,97 @@ public partial class Api5Session
         var facesBefore = CountFaces(document);
         var revisionBefore = document.Revision;
 
-        if (part.NewEntity(InclineType) is not ksEntity entity
-            || entity.GetDefinition() is not ksInclineDefinition definition)
+        // ROUTE: the whole family goes through API7 — IInclines.Add → Faces/Plane/Angle/Direction →
+        // Update. MEASURED: API5 SetPlane answers TRUE on a BUILT feature and leaves the body as it was,
+        // so the base could not be edited; the same properties through API7 apply on creation and edit.
+        // Mixing the two routes on one feature is forbidden, hence creation goes with them.
+        // History: docs/decisions/adapter-features.md#draft-route-and-direction
+        var bridge = BridgeFor(document);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
+        if (container is null)
         {
             throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                "Определение уклона не получено: NewEntity(42) вернул объект без ksInclineDefinition. " +
-                "Признак не создавался.",
+                ErrorCodes.CapabilityUnavailable,
+                "Маршрут API7 не построился: " + (bridge.BridgeFailure ?? "причина не известна") +
+                ". Уклон граней этим маршрутом не создаётся; признак не создавался.",
                 RetryPolicy.ReacquireContext);
         }
 
-        definition.angle = command.AngleDeg;
-        definition.direction = flag.Value;
-
-        var attached = AttachDraftFaces(definition, faces);
-        if (attached != faces.Count)
+        var faces7 = new object[faces.Count];
+        for (var i = 0; i < faces.Count; i++)
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                $"Уклоняемые грани присоединены не полностью: {attached} из {faces.Count}. FaceArray() " +
-                "не привёлся к ksEntityCollection либо Add() вернул false. Уклон не создавался.",
-                RetryPolicy.ReacquireContext,
-                details: new Dictionary<string, object?>
-                {
-                    ["attached_faces"] = attached,
-                    ["requested_faces"] = faces.Count,
-                });
+            if (bridge.TransferTo7(faces[i]) is not IModelObject face7)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    "Уклоняемая грань не перенесена в API7 как IModelObject (" +
+                    (bridge.BridgeFailure ?? "TransferInterface вернул null") +
+                    "). Признак не создавался.",
+                    RetryPolicy.ReacquireContext,
+                    details: new Dictionary<string, object?> { ["face_ref"] = command.FaceRefs[i] });
+            }
+
+            faces7[i] = face7;
         }
 
-        // SetPlane takes the «плоский объект»: a face of the body is accepted as well as a plane —
-        // MEASURED on both, and the two give opposite results for the same flag.
-        if (SafeBool(() => definition.SetPlane(basePayload)) != true)
+        if (bridge.TransferTo7(basePayload) is not IModelObject base7)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                $"Основание уклона не принято: SetPlane вернул отказ на объекте вида «{baseKind}». " +
-                "Уклон не создавался.",
+                "Основание уклона вида «" + baseKind + "» не перенесено в API7 как IModelObject (" +
+                (bridge.BridgeFailure ?? "TransferInterface вернул null") +
+                "). Признак не создавался.",
                 RetryPolicy.ReacquireContext,
                 details: new Dictionary<string, object?> { ["base_kind"] = baseKind });
         }
 
+        IIncline? incline = null;
+        try
+        {
+            incline = container.Inclines?.Add() as IIncline;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "IInclines.Add() прервался: " + ex.GetType().Name + ". Уклон не создавался.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        if (incline is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "IInclines.Add() не вернул IIncline: коллекция уклонов не доступна. Признак не создавался.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        try
+        {
+            incline.Faces = faces7;
+            incline.Plane = base7;
+            incline.Angle = command.AngleDeg;
+            incline.Direction = flag.Value;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Свойства уклона не записаны: " + ex.GetType().Name + ". Признак остался в дереве без " +
+                "параметров и назван в partial_effects.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true);
+        }
+
         ClearKompasResult(document);
-        var created = SafeBool(entity.Create);
+        var created = SafeBool(() => ((IModelObject)incline).Update());
         if (created != true)
         {
             var details = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
             AddKompasFailure(details, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "Create() уклона вернул " + (created is null ? "ошибку вызова" : "false") +
+                "Update() уклона вернул " + (created is null ? "ошибку вызова" : "false") +
                 ": тело не перестроено. Основание, параллельное уклоняемой грани, и незамкнутая " +
                 "поверхность после перестроения дают именно этот исход — это отказ, а не частичный " +
                 "результат.",
@@ -140,13 +182,25 @@ public partial class Api5Session
                 details: details);
         }
 
-        SafeBool(entity.Update);
-        part.RebuildModel();
-        SettleAfterMutation(document);
+        RebuildApi7AndSettle(container, document);
 
-        var reference = References.Register("feature", document.Id, document.Revision, entity);
+        // The reference must point at the TREE element: an API7 object registered as a feature does not
+        // resolve back into a feature and every later call would answer STALE_REFERENCE.
+        var treeEntity = FindDraftInclineEntity(document, SafeModelName(incline));
+        if (treeEntity is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Признак построен, но в дереве не найден элемент с его именем: ссылка на признак не "
+                + "выдаётся, потому что ссылка на объект API7 не разрешается в признак. Признак остался "
+                + "в документе.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true);
+        }
+
+        var reference = References.Register("feature", document.Id, document.Revision, treeEntity);
         BumpRevision(document, "draft.create");
-        RequireNoFeatureError(document, entity, reference.Id, "Уклон");
+        RequireNoApi7FeatureError(document, incline, reference.Id, "Уклон");
 
         var volumeAfter = ReadVolume(document);
         var bodiesAfter = CountBodies(document);
@@ -154,9 +208,9 @@ public partial class Api5Session
 
         var checks = new List<NamedCheck>
         {
-            new("operation_created", created == true, "Create() вернул true"),
-            new("faces_attached", attached == faces.Count,
-                "присоединено граней: " + attached + " из " + faces.Count),
+            new("operation_created", created == true, "Update() вернул true"),
+            new("faces_attached", faces7.Length == faces.Count,
+                "присоединено граней: " + faces7.Length + " из " + faces.Count),
             new("body_count_unchanged", bodiesAfter == bodiesBefore,
                 "тел " + bodiesBefore + " → " + bodiesAfter),
             new("face_count_unchanged", facesAfter == facesBefore,
@@ -164,7 +218,7 @@ public partial class Api5Session
                 Expected: "уклон наклоняет грань, а не добавляет новую"),
         };
 
-        var (angleReadBack, flagReadBack) = ReadInclineParameters(entity);
+        var (angleReadBack, flagReadBack) = ReadInclineParameters(incline);
         checks.Add(new NamedCheck("angle_read_back",
             angleReadBack is double angle && Math.Abs(angle - command.AngleDeg) <= 1e-6,
             Observed: Num(angleReadBack), Expected: Num(command.AngleDeg)));
@@ -177,7 +231,7 @@ public partial class Api5Session
 
         return new DraftResult
         {
-            FeatureRef = ToDto(reference, entity.name),
+            FeatureRef = ToDto(reference, SafeModelName(incline)),
             Family = "draft",
             FaceCount = faces.Count,
             BaseKind = baseKind,
@@ -523,19 +577,16 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Angle and product flag read back from the feature's own definition.</summary>
-    private static (double? Angle, bool? Flag) ReadInclineParameters(ksEntity entity)
+    /// <summary>Angle and product flag read back from the API7 feature.</summary>
+    /// <remarks>INVARIANT: the read goes through the SAME route that writes — API5 and API7 are never
+    /// called on one feature, so the definition object is not consulted here.</remarks>
+    private static (double? Angle, bool? Flag) ReadInclineParameters(IIncline incline)
     {
         try
         {
-            if (entity.GetDefinition() is not ksInclineDefinition definition)
-            {
-                return (null, null);
-            }
-
-            return (definition.angle, definition.direction);
+            return (incline.Angle, incline.Direction);
         }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or MissingMethodException)
+        catch (Exception ex) when (ex is COMException or InvalidCastException or MissingMemberException)
         {
             return (null, null);
         }
@@ -594,35 +645,45 @@ public partial class Api5Session
         return false;
     }
 
-    /// <summary>Attach the drafted faces to the definition; fewer than requested means the route did not
-    /// build, and that is a refusal rather than "some of the faces".</summary>
-    private static int AttachDraftFaces(ksInclineDefinition definition, IReadOnlyList<ksFaceDefinition> faces)
+    /// <summary>The tree element of a draft built through API7, matched by the name the feature carries.</summary>
+    /// <remarks>MEASURED: the API7 object is not a feature reference — it resolves to the wrapper class and
+    /// every later call answers STALE_REFERENCE — so the tree element with the same name is taken instead.
+    /// </remarks>
+    private static ksEntity? FindDraftInclineEntity(DocumentEntry document, string? name)
     {
-        object? holder;
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
         try
         {
-            holder = definition.FaceArray();
+            if (document.PartNow().EntityCollection(
+                    KompasObjectTypes.Of(KompasObjectTypes.OperationElement)) is not ksEntityCollection collection)
+            {
+                return null;
+            }
+
+            ksEntity? found = null;
+            var matches = 0;
+            for (var i = 0; i < collection.GetCount(); i++)
+            {
+                if (collection.GetByIndex(i) is ksEntity entity
+                    && entity.type == KompasObjectTypes.Incline
+                    && string.Equals(entity.name, name, StringComparison.Ordinal))
+                {
+                    found = entity;
+                    matches++;
+                }
+            }
+
+            return matches == 1 ? found : null;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            return 0;
+            // A tree that cannot be walked is reported by the caller as "not found".
+            return null;
         }
-
-        if (holder is not ksEntityCollection collection)
-        {
-            return 0;
-        }
-
-        var attached = 0;
-        foreach (var face in faces)
-        {
-            if (SafeBool(() => collection.Add(face)) == true)
-            {
-                attached++;
-            }
-        }
-
-        return attached;
     }
 
     /// <summary>An edge by registry reference — with the same document and revision checks as a face.</summary>

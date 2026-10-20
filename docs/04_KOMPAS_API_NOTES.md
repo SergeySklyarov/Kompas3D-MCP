@@ -7040,3 +7040,23 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 **Где записано.** `docs/decisions/adapter-features.md#draft-from-edges-read-and-edit`; измерение -
 `tools/KompasMcp.Api7Probe --drafts`, шаги DR.7/DR.8 (поля `tree_after`, `api7_name`, `api7_count`,
 `read_back`), отчёт `docs/acceptance/api7/drafts.{json,md}`.
+
+## §4.94. «Уклон» от основания: смена основания построенного признака выполняется маршрутом API7, а API5 `SetPlane` на нём молчит (живое измерение 20.10.2026, наряд `SM12_DRAFTS`)
+
+**Что измерено.** На брусе `100×80×50` уклон построен маршрутом API7 (`IModelContainer.Inclines` →
+`IInclines.Add` → `Faces`/`Plane`/`Angle`/`Direction` → `IModelObject.Update`) с основанием-ГРАНЬЮ
+(нижняя грань), 10°, флаг `FALSE`: объём `382367.3019`, X max `100` - то же, что даёт API5 на создании.
+Затем на этом же объекте `IIncline.Plane` заменён смещённой плоскостью `z = 25`, `Direction` = `TRUE`,
+`Update()`: объём `400000`, X max `104.408174517712`. Это ровно эталон DR-04, то есть новое основание
+применено. Для сравнения: `ksInclineDefinition.SetPlane` на построенном признаке в тех же условиях
+отвечает TRUE и оставляет геометрию прежней (§4.93).
+
+**Условия применимости.** `IIncline.Plane` - «указатель на интерфейс IModelObject»
+(`iincline_plane.html`), поэтому и грань, и плоскость передаются объектом API7, а не API5 `ksEntity`:
+перенос делает `TransferInterface` с `ksAPI7Dual`. Объект признака находится в `IInclines` по имени
+(`IInclines.Incline`, индекс или имя); объект API7 в ссылку на признак не годится - ссылка выдаётся на
+элемент дерева с тем же именем. Смешанный вызов API5 и API7 на одном признаке не применяется: всё
+семейство «Уклон» от основания идёт маршрутом API7 (создание, чтение, правка).
+
+**Где записано.** `docs/decisions/adapter-features.md#draft-edit-and-plane-base`; измерение -
+`tools/KompasMcp.Api7Probe --draft-base-edit` (шаг DR.12), отчёт `docs/acceptance/api7/api7-probe-report.{json,md}`.

@@ -17,7 +17,9 @@ public static class Program
 
         var report = new ProbeReport
         {
-            Title = options.PassportOnly
+            Title = options.DraftsBaseEdit
+                ? "Проба DR-12 — смена основания построенного уклона через API7: IIncline.Plane"
+                : options.PassportOnly
                 ? "Паспорт среды пробы API7 (ADR-003 §4)"
                 : options.ShutdownScenario is not null
                     ? "Проба SO — завершение сеанса с несохранённым документом: висит ли Quit() и каким маршрутом его нет (наряд SHUTDOWN_NO_ORPHANS)"
@@ -236,6 +238,11 @@ public static class Program
             {
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
                 pump.Run(() => mechanicalMates.Run());
+            }
+            else if (options.DraftsBaseEdit)
+            {
+                var baseEdit = new DraftsProbe(report, options);
+                pump.Run(() => baseEdit.RunBaseEdit());
             }
             else if (options.Drafts)
             {
@@ -772,6 +779,9 @@ public sealed class Options
     /// History: docs/decisions/probes.md#drafts</summary>
     public bool Drafts { get; private set; }
 
+    /// <summary>--draft-base-edit: the base of a built incline changed through API7 (probe DR-12).</summary>
+    public bool DraftsBaseEdit { get; private set; }
+
     /// <summary><c>--visible</c>: run the probe in a VISIBLE instance. Needed where a documented route
     /// refuses on a hidden document and the refusal would otherwise be read as the product's answer.
     /// History: docs/decisions/probes.md#mechanical-mates</summary>
@@ -907,6 +917,7 @@ public sealed class Options
         var sketchCopy = false;
         var mechanicalMates = false;
         var drafts = false;
+        var draftsBaseEdit = false;
         var visible = false;
         var repositionRead = false;
         var repositionParams = false;
@@ -1015,6 +1026,9 @@ public sealed class Options
                 case "--drafts":
                     drafts = true;
                     break;
+                case "--draft-base-edit":
+                    draftsBaseEdit = true;
+                    break;
                 case "--visible":
                     visible = true;
                     break;
@@ -1080,14 +1094,15 @@ public sealed class Options
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--mech-mates] [--visible] [--iterations N] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--mech-mates] [--draft-base-edit] [--visible] [--iterations N] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
         }
 
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-        var stem = passportOnly ? "env-passport" : lifecycle ? "sketch-lifecycle"
+        var stem = passportOnly ? "env-passport" : draftsBaseEdit ? "draft-base-edit"
+            : lifecycle ? "sketch-lifecycle"
             : extrusion ? "extrusion-sketch" : chamfer ? "chamfer" : sketchReopen ? "sketch-geometry-reopen"
             : filletEdgeSet ? "fillet-edge-set"
             : filletBaseObjects ? "fillet-base-objects"
@@ -1135,6 +1150,7 @@ public sealed class Options
             SketchCopy = sketchCopy,
             MechanicalMates = mechanicalMates,
             Drafts = drafts,
+            DraftsBaseEdit = draftsBaseEdit,
             Visible = visible,
             Lifecycle = lifecycle,
             Extrusion = extrusion,

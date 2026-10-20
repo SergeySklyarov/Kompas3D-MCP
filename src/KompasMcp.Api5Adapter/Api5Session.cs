@@ -2236,6 +2236,12 @@ public static class KompasObjectTypes
     /// recognised by this number alone.
     /// History: docs/decisions/adapter-features.md#draft-from-edges-read-and-edit</remarks>
     public const int DraftFromEdges = 644;
+
+    /// <summary><c>o3d_incline</c> — «Уклон» от основания as the API5 tree numbers it (42).</summary>
+    /// <remarks>MEASURED: a feature created through API7 <c>IInclines.Add</c> appears in the tree under
+    /// the same number, which is what the name match of the reference relies on.
+    /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
+    public const int Incline = 42;
     public const int Chamfer = 33;
     public const int BaseEvolution = 45;
     /// <summary><c>o3d_holeOperation</c> — the number a hole feature is CREATED under via

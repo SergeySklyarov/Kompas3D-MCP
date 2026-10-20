@@ -46,7 +46,8 @@ public partial class Api5Session
                      ?? (isEvolution ? EvolutionFamily : null)
                      ?? (isLoft ? LoftFamily : null)
                      ?? (isShell ? ShellFamily : null)
-                     ?? (definition is ksInclineDefinition ? DraftFamily : null)
+                     ?? (definition is ksInclineDefinition || entity.type == KompasObjectTypes.Incline
+                         ? DraftFamily : null)
                      ?? (isDraftFromEdges ? DraftFromEdgesFamily : null)
                      ?? (isRotated ? RotationFamily : null)
                      ?? (isHole ? HoleFamily : null)
@@ -106,8 +107,8 @@ public partial class Api5Session
             ? ReadShellFeature(document, entity, shellDefinition, out shellNote)
             : null;
         string? draftNote = null;
-        var draft = definition is ksInclineDefinition inclineDefinition
-            ? ReadDraftFeature(entity, inclineDefinition, out draftNote)
+        var draft = family == DraftFamily
+            ? ReadDraftFeature(document, entity, out draftNote)
             : isDraftFromEdges
                 ? ReadDraftFromEdgesFeature(document, entity, out draftNote)
                 : null;
@@ -455,10 +456,11 @@ public partial class Api5Session
                 document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // A draft (SM-12) is selected by its OWN definition, not by the fields: angle_deg, direction and
-        // face_refs are shared with the chamfer and shell families, and only the feature can say whose
-        // they are. The branch stands before the chamfer one for that reason.
-        if (definition is ksInclineDefinition)
+        // A draft (SM-12) is selected by its OWN definition or by the TREE NUMBER 42, not by the fields:
+        // angle_deg, direction and face_refs are shared with the chamfer and shell families, and only the
+        // feature can say whose they are. The tree number is the fallback because the feature is built
+        // through API7, which does not promise an API5 definition object.
+        if (definition is ksInclineDefinition || entity.type == KompasObjectTypes.Incline)
         {
             return UpdateDraftFeature(
                 document, entity, command, volumeBefore, featuresBefore, stateBefore);

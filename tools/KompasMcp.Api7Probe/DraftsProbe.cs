@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
 using Kompas6Constants3D;
@@ -129,6 +130,191 @@ internal sealed class DraftsProbe
             Report(step, part, created, "API5 direction=" + (outward ? "TRUE" : "FALSE"));
             CloseQuietly(document);
         }
+    }
+
+    /// <summary>DR.12 alone: the base of a BUILT incline changed through API7, nothing else measured.</summary>
+    /// <remarks>A separate entry point, so the one question is answered without the eight steps that
+    /// build their own bars: a run that hangs on an earlier step would leave this one unmeasured.</remarks>
+    public void RunBaseEdit()
+    {
+        try
+        {
+            Launch();
+            Api7BaseEdit();
+        }
+        catch (Exception ex)
+        {
+            _report.Begin("DR.12", "Необработанное исключение пробы DR-12").Fail(ex.ToString());
+        }
+    }
+
+    /// <summary>DR.12: the base of a built incline switched face → plane z = 25 through
+    /// <c>IIncline.Plane</c>.</summary>
+    /// <remarks>DOC: <c>iincline_plane.html</c> (<c>Plane</c> is an <c>IModelObject</c>) and
+    /// <c>iinclines_add.html</c> (Add → properties → <c>IModelObject::Update</c>).
+    /// MEASURED QUESTION: does the documented setter change the body on a built feature, where API5
+    /// <c>SetPlane</c> answers TRUE and leaves the geometry alone?
+    /// History: docs/decisions/adapter-features.md#draft-edit-and-plane-base</remarks>
+    private void Api7BaseEdit()
+    {
+        var step = _report.Begin("DR.12", "API7: основание построенного уклона грань → плоскость z = 25",
+            "Применяет ли IIncline.Plane новое основание там, где API5 SetPlane молчит?");
+        var document = BuildBar("DR.2", "Брус 100×80×50 выдавливанием");
+        if (document is null)
+        {
+            return;
+        }
+
+        var part = (ksPart)document.GetPart(-1);
+        var face = PlusXFace(part);
+        var bottom = FaceHandles(part).FirstOrDefault(f => f.Normal is { } n
+            && Math.Abs(n[0]) < 0.01 && Math.Abs(n[1]) < 0.01 && n[2] < -0.99);
+        if (face is null || bottom is null)
+        {
+            step.Fail("грань +X или нижняя грань не найдены.");
+            return;
+        }
+
+        if (Container(part) is not { } container)
+        {
+            step.Fail("деталь не отвечает QI(IModelContainer).");
+            return;
+        }
+
+        var face7 = ToApi7(face.Element);
+        var bottom7 = ToApi7(bottom.Element);
+        if (face7 is null || bottom7 is null)
+        {
+            step.Fail("грань +X или нижняя грань не перенесены в API7 как IModelObject.");
+            return;
+        }
+
+        // The base of DR-04: an auxiliary plane z = 25. It is a separate object, not the feature under
+        // test, so it is built by the route the product already uses for auxiliary planes.
+        if (part.GetDefaultEntity(PlaneXoy) is not ksEntity xoy
+            || part.NewEntity(Api5.PlaneOffset) is not ksEntity offsetEntity
+            || offsetEntity.GetDefinition() is not ksPlaneOffsetDefinition offsetDefinition)
+        {
+            step.Fail("Смещённая плоскость z = 25 не создана.");
+            return;
+        }
+
+        offsetDefinition.SetPlane(xoy);
+        offsetDefinition.offset = BarZ / 2d;
+        offsetDefinition.direction = true;
+        if (Api5.SafeBool(offsetEntity.Create) != true)
+        {
+            step.Fail("Create() смещённой плоскости вернул false.");
+            return;
+        }
+
+        var plane7 = ToApi7(offsetEntity);
+        if (plane7 is null)
+        {
+            step.Fail("Смещённая плоскость не перенесена в API7 как IModelObject.");
+            return;
+        }
+
+        IIncline? incline = null;
+        try
+        {
+            incline = container.Inclines?.Add() as IIncline;
+        }
+        catch (Exception ex)
+        {
+            step.Observe("IInclines.Add: " + HResult.Describe(ex));
+        }
+
+        if (incline is null)
+        {
+            step.Fail("IInclines.Add() не вернул IIncline - маршрут API7 недоступен.");
+            return;
+        }
+
+        // State the DR-06 subcase starts from: base is the bottom FACE, the product flag is FALSE
+        // (measured on this base: material removed, 382367.30).
+        incline.Faces = new object[] { face7 };
+        incline.Plane = bottom7;
+        incline.Angle = AngleDeg;
+        incline.Direction = false;
+        var created = Api5.SafeBool(() => ((IModelObject)incline).Update());
+        document.RebuildDocument();
+        var volumeFaceBase = Api5.Volume(part);
+        var xMaxFaceBase = XMax(part);
+        step.Data["update_face_base"] = created;
+        step.Data["volume_face_base"] = volumeFaceBase;
+        step.Data["x_max_face_base"] = xMaxFaceBase;
+        step.Observe("до правки: основание-грань, объём " + Api5.Num(volumeFaceBase)
+            + ", X max " + Api5.Num(xMaxFaceBase) + " (эталон 382367.30 / 100)");
+
+        // The edit itself: new base and the flag that goes with it (the product derives the flag from
+        // the base normal, and DR-04 measured TRUE on this plane).
+        incline.Plane = plane7;
+        incline.Direction = true;
+        var updated = Api5.SafeBool(() => ((IModelObject)incline).Update());
+        document.RebuildDocument();
+        var volumePlaneBase = Api5.Volume(part);
+        var xMaxPlaneBase = XMax(part);
+        step.Data["update_plane_base"] = updated;
+        step.Data["volume_plane_base"] = volumePlaneBase;
+        step.Data["x_max_plane_base"] = xMaxPlaneBase;
+        step.Data["plane_read_back"] = SafeObjectName(() => incline.Plane);
+        step.Observe("после правки: основание-плоскость z = 25, объём " + Api5.Num(volumePlaneBase)
+            + ", X max " + Api5.Num(xMaxPlaneBase) + " (эталон DR-04: 400000 / 104.408)");
+
+        // The product does not keep the object it created: it re-finds the feature BY NAME in the
+        // collection on every call. Does THAT object accept a new base? Back to the bottom face.
+        var matched = MatchIncline(container, SafeObjectName(() => incline));
+        double? volumeByName = null;
+        double? xMaxByName = null;
+        if (matched is not null)
+        {
+            matched.Plane = bottom7;
+            matched.Direction = false;
+            step.Data["update_by_name"] = Api5.SafeBool(() => ((IModelObject)matched).Update());
+            document.RebuildDocument();
+            volumeByName = Api5.Volume(part);
+            xMaxByName = XMax(part);
+            step.Data["volume_by_name"] = volumeByName;
+            step.Data["x_max_by_name"] = xMaxByName;
+            step.Observe("объект, найденный по имени: основание назад в грань, объём "
+                + Api5.Num(volumeByName) + ", X max " + Api5.Num(xMaxByName) + " (эталон 382367.30 / 100)");
+        }
+        else
+        {
+            step.Data["update_by_name"] = null;
+            step.Observe("объект по имени в IInclines не найден");
+        }
+
+        if (created != true)
+        {
+            step.Fail("Update() на создании вернул " + Api5.Raw(created) + "; объём "
+                + Api5.Num(volumeFaceBase));
+            return;
+        }
+        else if (volumeFaceBase is not double before || Math.Abs(before - VolumeInward) > VolumeTolerance)
+        {
+            step.Fail("до правки объём " + Api5.Num(volumeFaceBase) + " вместо 382367.30: правка мерила бы "
+                + "не тот признак");
+        }
+        else if (volumePlaneBase is double after && Math.Abs(after - VolumeV0) <= VolumeTolerance
+                 && xMaxPlaneBase is double x && Math.Abs(x - 104.408d) <= 0.01d)
+        {
+            step.Pass("API7 сменил основание: объём " + Api5.Num(volumePlaneBase) + ", X max "
+                + Api5.Num(xMaxPlaneBase) + " - как DR-04");
+        }
+        else if (volumePlaneBase is double unchanged && Math.Abs(unchanged - VolumeInward) <= VolumeTolerance)
+        {
+            step.Fail("основание НЕ сменилось: объём остался " + Api5.Num(volumePlaneBase) + ", X max "
+                + Api5.Num(xMaxPlaneBase) + " - API7 ведёт себя как API5 SetPlane");
+        }
+        else
+        {
+            step.Fail("после правки объём " + Api5.Num(volumePlaneBase) + ", X max "
+                + Api5.Num(xMaxPlaneBase) + " - ни эталон DR-04, ни прежняя геометрия");
+        }
+
+        CloseQuietly(document);
     }
 
     /// <summary>DR.5: the same feature through API7 <c>IInclines.Add</c>, which the help page describes
@@ -809,6 +995,71 @@ internal sealed class DraftsProbe
 
     private IModelObject? ToApi7(object element) =>
         _app.TransferInterface(element, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IModelObject;
+
+    /// <summary>The far X of the body's own bounding box: DR-04 is separated from DR-02 by this
+    /// number, because the volume there is V0 by construction.</summary>
+    private static double? XMax(ksPart part)
+    {
+        if (part.GetMainBody() is not ksBody body
+            || Api5.SafeBool(() => body.GetGabarit(out _, out _, out _, out _, out _, out _)) != true)
+        {
+            return null;
+        }
+
+        body.GetGabarit(out _, out _, out _, out var x2, out _, out _);
+        return x2;
+    }
+
+    /// <summary>The draft matched BY NAME in the collection — the way the product finds it on every call.</summary>
+    private static IIncline? MatchIncline(IModelContainer container, string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        try
+        {
+            var collection = container.Inclines;
+            var count = collection is null ? 0 : Api5.SafeInt(() => collection.Count) ?? 0;
+            IIncline? found = null;
+            var matches = 0;
+            for (var i = 0; i < count; i++)
+            {
+                if (collection!.Incline[(object)i] is not IIncline item)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(SafeObjectName(() => item), name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                found = item;
+                matches++;
+            }
+
+            return matches == 1 ? found : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Name of the object a property hands back, or null when it cannot be read.</summary>
+    private static string? SafeObjectName(Func<object?> read)
+    {
+        try
+        {
+            return (read() as IModelObject)?.Name;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or MissingMethodException)
+        {
+            return null;
+        }
+    }
 
     private FaceHandle? PlusXFace(ksPart part) =>
         FaceHandles(part).FirstOrDefault(f => f.Normal is { } n

@@ -616,6 +616,10 @@ RUN_GROUPS = (
     ("drafts", "drafts", "drafts-acceptance.json",
      "Приёмка DR: уклоны граней - от основания и от базовой линии, чтение, правка, переоткрытие, "
      "названные отказы (наряд SM-12, профиль drafts-minimal-v1)"),
+    ("threads", "threads", "threads-acceptance.json",
+     "Приёмка TH: условное изображение резьбы через MCP — создание по ребру и по грани, чтение, "
+     "правка, подавление, удаление, переоткрытие, названные отказы (наряд G10, профиль "
+     "threads-minimal-v1)"),
     ("interference", "interference", "interference-acceptance.json",
      "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль "
      "assembly-interference-minimal-v1)"),
@@ -707,6 +711,7 @@ ALL_GROUPS_EXTRA = (
     ("mate", ["--mate-only"]),
     ("mech_mates", ["--mech-mates-only"]),
     ("drafts", ["--drafts-only"]),
+    ("threads", ["--threads-only"]),
     ("interference", ["--interference-only"]),
     ("drawing", ["--drawing-only"]),
     ("section", ["--section-only"]),
@@ -15797,6 +15802,9 @@ def main():
     # той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
     # (`INT.<NN>.<действие>`), а не по номеру в общем потоке.
     interference_only = "--interference-only" in sys.argv
+    # Домен РЕЗЬБЫ (наряд G10, профиль `threads-minimal-v1`): одна группа TH на своём сеансе — клетка
+    # матрицы обязана находиться по ИМЕНИ строки (`TH.<NN>.<действие>`), а не по номеру в общем потоке.
+    threads_only = "--threads-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -15934,6 +15942,7 @@ def main():
         "mech_mates": mech_mates_only,
         "drafts": drafts_only,
         "interference": interference_only,
+        "threads": threads_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -16479,6 +16488,14 @@ def main():
 
         if drafts_only:
             drafts_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if threads_only:
+            threads_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -48142,12 +48159,373 @@ def drafts_checks(client, rep, app_id, workdir):
             f"коды={json.dumps(refusals, ensure_ascii=False, default=str)}")
 
 
+def threads_checks(client, rep, app_id, workdir):
+    """TH-01…TH-11 — условное изображение резьбы через MCP (наряд G10, профиль `threads-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Обозначение создаётся на круговом ребре цилиндра и на цилиндрической грани
+    отверстия, читается с модели, правится на месте, подавляется, удаляется и переживает переоткрытие.
+    Подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и наличие объекта в дереве, а не код возврата.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Винтовая геометрия не строится: это условное обозначение, поэтому НЕИЗМЕННЫЙ объём -
+    ожидаемый исход, а не признак отказа. Коническая база, стандарты шага, резьба отверстия и показ на
+    чертеже в профиль не входят.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def ref_of(value):
+        return value.get("id") if isinstance(value, dict) else value
+
+    def near(value, expected, tolerance=1e-3):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def volume(doc, body):
+        _e, env, _r = client.tool("kompas_measure", {"target_ref": body, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def faces(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology",
+                                  {"document_id": doc, "body_ref": body, "include": "faces"})
+        rows = result(env).get("faces")
+        return rows if isinstance(rows, list) else []
+
+    def edges(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology",
+                                  {"document_id": doc, "body_ref": body, "include": "edges"})
+        rows = result(env).get("edges")
+        return rows if isinstance(rows, list) else []
+
+    def threads_of(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else []
+        return [x for x in rows if x.get("family") == "thread"]
+
+    def top_edge(doc, body):
+        rows = edges(doc, body)
+        hit = next((r for r in rows if near(r.get("radius_mm"), 10.0, 1e-6)
+                    and near((r.get("center_mm") or [0, 0, 0])[2], 40.0, 1e-6)), None)
+        return ref_of(hit.get("edge_ref")) if hit else None
+
+    # ===== TH-01: обнаружение =====
+    tools = client.call("tools/list", {}).get("tools", [])
+    entry = next((t for t in tools if t.get("name") == "kompas_create_thread"), None)
+    props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    required = {"document_id", "expected_revision", "operation_id", "edge_ref", "face_ref",
+                "initial_border_ref", "final_border_ref", "nominal_diameter_mm", "auto_diameter",
+                "length_mm", "auto_length", "pitch_mm", "left_hand"}
+    missing = sorted(required - set(props))
+    rep.add("TH-01.discovery", "инструмент объявлен, схема несёт поля контракта",
+            "PASS" if entry is not None and not missing else "FAIL",
+            f"в tools/list={entry is not None}; полей={len(props)}; нет={missing}")
+
+    # ===== эталон: цилиндр r = 10, h = 40 =====
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    doc = doc_id(env)
+    rep.add("TH-02.setup_document", "документ-деталь создан", "PASS" if doc else "FAIL",
+            f"document={doc}")
+    if not doc:
+        return
+
+    def revision():
+        return current_rev(doc)
+
+    sk, _r = call("kompas_create_sketch",
+                      {"document_id": doc, "expected_revision": revision(), "plane": {"base": "xy"}})
+    sketch = ref_of(result(sk).get("sketch_ref")) or result(sk).get("id")
+    call("kompas_edit_sketch", {"sketch_ref": sketch, "expected_revision": revision(),
+                                "mode": "append",
+                                "entities": [{"kind": "circle", "center_mm": [0, 0],
+                                              "radius_mm": 10}]})
+    call("kompas_finish_sketch", {"sketch_ref": sketch, "expected_revision": revision()})
+    ex, _r = call("kompas_extrude", {"sketch_ref": sketch, "expected_revision": revision(),
+                                         "operation": "base", "end_condition": "blind",
+                                         "depth_mm": 40, "direction": "positive"})
+    _e, benv, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+    bodies = result(benv)
+    bodies = bodies if isinstance(bodies, list) else []
+    body = ref_of(bodies[0].get("body_ref")) if bodies else None
+    v0 = volume(doc, body)
+    f0 = len(faces(doc, body))
+    rep.add("TH-02.setup_cylinder", "цилиндр r = 10, h = 40: объём и число граней прочитаны",
+            "PASS" if near(v0, 12566.3706, 1e-3) and f0 >= 3 else "FAIL",
+            f"volume={v0} faces={f0} body={body} error={error_code(ex)}")
+
+    # ===== TH-02: внешняя резьба по ребру =====
+    edge = top_edge(doc, body)
+    th, code = call("kompas_create_thread", {
+        "document_id": doc, "expected_revision": revision(), "edge_ref": edge,
+        "nominal_diameter_mm": 20, "pitch_mm": 2.5, "length_mm": 25})
+    r2 = result(th)
+    v1 = volume(doc, body)
+    f1 = len(faces(doc, body))
+    rep.add("TH-02.create_outer",
+            "внешняя резьба по ребру: d = 20, p = 2.5, L = 25 прочитаны с модели",
+            "PASS" if (not code and near(r2.get("nominal_diameter_mm"), 20)
+                       and near(r2.get("pitch_mm"), 2.5) and near(r2.get("length_mm"), 25)
+                       and r2.get("internal") is False and r2.get("left_hand") is False) else "FAIL",
+            f"d={r2.get('nominal_diameter_mm')} p={r2.get('pitch_mm')} L={r2.get('length_mm')} "
+            f"internal={r2.get('internal')} left={r2.get('left_hand')} error={code}")
+    rep.add("TH-02.geometry_unchanged", "обозначение не меняет тело: объём и число граней прежние",
+            "PASS" if near(v1, v0, 1e-6) and f1 == f0 else "FAIL",
+            f"volume={v1} (было {v0}), faces={f1} (было {f0})")
+    fref = ref_of(r2.get("feature_ref"))
+    rep.add("TH-02.tree_object", "обозначение появилось в дереве",
+            "PASS" if len(threads_of(doc)) == 1 else "FAIL",
+            f"обозначений={len(threads_of(doc))}")
+
+    # ===== TH-03: автодиаметр =====
+    th3, code3 = call("kompas_create_thread", {
+        "document_id": doc, "expected_revision": revision(), "edge_ref": top_edge(doc, body),
+        "auto_diameter": True, "pitch_mm": 2.5, "length_mm": 10})
+    r3 = result(th3)
+    rep.add("TH-03.auto_diameter",
+            "автоопределение диаметра: прочитанный диаметр равен диаметру цилиндра",
+            "PASS" if (not code3 and near(r3.get("nominal_diameter_mm"), 20)
+                       and r3.get("auto_diameter") is True) else "FAIL",
+            f"d={r3.get('nominal_diameter_mm')} auto={r3.get('auto_diameter')} error={code3}")
+
+    # ===== TH-05: левая резьба =====
+    th5, code5 = call("kompas_create_thread", {
+        "document_id": doc, "expected_revision": revision(), "edge_ref": top_edge(doc, body),
+        "nominal_diameter_mm": 20, "pitch_mm": 2.5, "length_mm": 12, "left_hand": True})
+    r5 = result(th5)
+    rep.add("TH-05.left_hand", "левая резьба прочитана как левая, соседняя - как правая",
+            "PASS" if (not code5 and r5.get("left_hand") is True
+                       and r2.get("left_hand") is False) else "FAIL",
+            f"left={r5.get('left_hand')} соседняя={r2.get('left_hand')} error={code5}")
+
+    # ===== TH-04: внутренняя резьба по грани с границами =====
+    _e, sel, _r = client.tool("kompas_resolve_selection", {
+        "body_ref": body, "predicate": {"surface_type": "plane", "normal_direction": [0, 0, 1]},
+        "require_unique": True, "limit": 10})
+    rows_sel = result(sel)
+    rows_sel = rows_sel if isinstance(rows_sel, list) else []
+    top_face = ref_of(rows_sel[0].get("id")) if rows_sel else None
+    hole, code_h = call("kompas_hole", {"face_ref": top_face, "expected_revision": revision(),
+                                            "mode": "blind_flat", "diameter_mm": 6.8,
+                                            "depth_mm": 30})
+    frows = faces(doc, body)
+    inner = next((f for f in frows if f.get("surface_type") == "cylinder"
+                  and near(f.get("radius_mm") or 0, 3.4, 1e-6)), None)
+    planes = [f for f in frows if f.get("surface_type") == "plane"]
+    v_before_inner = volume(doc, body)
+    if inner and len(planes) >= 2:
+        big = max(planes, key=lambda f: f.get("area_mm2") or 0)
+        small = min(planes, key=lambda f: f.get("area_mm2") or 1e9)
+        th4, code4 = call("kompas_create_thread", {
+            "document_id": doc, "expected_revision": revision(),
+            "face_ref": ref_of(inner.get("face_ref")),
+            "initial_border_ref": ref_of(big.get("face_ref")),
+            "final_border_ref": ref_of(small.get("face_ref")),
+            "nominal_diameter_mm": 8, "pitch_mm": 1.25, "auto_length": True})
+        r4 = result(th4)
+        rep.add("TH-04.create_inner",
+                "внутренняя резьба по грани: тип прочитан как внутренний, длина - по границам",
+                "PASS" if (not code4 and r4.get("internal") is True
+                           and near(r4.get("nominal_diameter_mm"), 8)) else "FAIL",
+                f"internal={r4.get('internal')} d={r4.get('nominal_diameter_mm')} "
+                f"L={r4.get('length_mm')} error={code4}")
+        rep.add("TH-04.geometry_unchanged", "внутреннее обозначение не меняет объём",
+                "PASS" if near(volume(doc, body), v_before_inner, 1e-6) else "FAIL",
+                f"volume={volume(doc, body)} (было {v_before_inner})")
+    else:
+        rep.add("TH-04.create_inner", "внутренняя резьба по грани", "FAIL",
+                f"внутренняя грань не найдена: граней={len(frows)} плоскостей={len(planes)} "
+                f"error_hole={code_h}")
+
+    # ===== TH-06: чтение =====
+    _e, gf, _r = client.tool("kompas_get_feature", {"feature_ref": fref})
+    code6 = error_code(gf)
+    g = result(gf)
+    t = g.get("thread") or {}
+    rep.add("TH-06.read_feature",
+            "get_feature отдаёт семейство и параметры из модели",
+            "PASS" if (not code6 and g.get("family") == "thread"
+                       and near(t.get("nominal_diameter_mm"), 20)
+                       and near(t.get("pitch_mm"), 2.5)) else "FAIL",
+            f"family={g.get('family')} d={t.get('nominal_diameter_mm')} p={t.get('pitch_mm')} "
+            f"error={code6}")
+    rep.add("TH-06.list_features", "list_features называет семейство",
+            "PASS" if threads_of(doc) else "FAIL",
+            f"строк с family=thread: {len(threads_of(doc))}")
+
+    # ===== TH-07: правка =====
+    v_before_edit = volume(doc, body)
+    up, code7 = call("kompas_update_feature", {
+        "feature_ref": fref, "expected_revision": revision(), "nominal_diameter_mm": 18,
+        "pitch_mm": 2, "length_mm": 30, "left_hand": True})
+    _e, gf2, _r = client.tool("kompas_get_feature", {"feature_ref": fref})
+    t2 = (result(gf2).get("thread") or {})
+    rep.add("TH-07.edit",
+            "правка d 20 → 18, p 2.5 → 2, L 25 → 30, left_hand → true: всё прочитано после правки",
+            "PASS" if (not code7 and near(t2.get("nominal_diameter_mm"), 18)
+                       and near(t2.get("pitch_mm"), 2) and near(t2.get("length_mm"), 30)
+                       and t2.get("left_hand") is True) else "FAIL",
+            f"d={t2.get('nominal_diameter_mm')} p={t2.get('pitch_mm')} L={t2.get('length_mm')} "
+            f"left={t2.get('left_hand')} error={code7}")
+    rep.add("TH-07.geometry_unchanged", "правка обозначения не меняет тело",
+            "PASS" if near(volume(doc, body), v_before_edit, 1e-6) else "FAIL",
+            f"volume={volume(doc, body)} (было {v_before_edit})")
+    base_up, code_base = call("kompas_update_feature", {
+        "feature_ref": fref, "expected_revision": revision(), "base_face_ref": top_face})
+    rep.add("TH-07.base_refused", "смена базового объекта отвергнута по имени",
+            "PASS" if code_base == "CAPABILITY_UNAVAILABLE" else "FAIL", f"код={code_base}")
+
+    # ===== TH-10: идемпотентность и ревизии =====
+    payload10 = {"document_id": doc, "expected_revision": revision(),
+                 "edge_ref": top_edge(doc, body), "nominal_diameter_mm": 20, "pitch_mm": 1.5,
+                 "length_mm": 8, "operation_id": str(uuid.uuid4())}
+    _e, c10, _r = client.tool("kompas_create_thread", dict(payload10))
+    code10 = error_code(c10)
+    n_first = len(threads_of(doc))
+    _e, c10b, _r = client.tool("kompas_create_thread", dict(payload10))
+    n_replay = len(threads_of(doc))
+    rep.add("TH-10.idempotency", "повтор operation_id второго обозначения не создаёт",
+            "PASS" if (not code10 and n_replay == n_first) else "FAIL",
+            f"обозначений {n_first} → {n_replay}, код={code10}")
+    _e, conflict, _r = client.tool("kompas_create_thread",
+                                   {**payload10, "pitch_mm": 1.75})
+    code_conf = error_code(conflict)
+    rep.add("TH-10.operation_id_conflict", "тот же operation_id с другими аргументами отвергнут",
+            "PASS" if code_conf == "OPERATION_ID_CONFLICT" else "FAIL", f"код={code_conf}")
+    _e, stale, _r = client.tool("kompas_create_thread",
+                                {**payload10, "operation_id": str(uuid.uuid4()),
+                                 "expected_revision": 1})
+    code_stale = error_code(stale)
+    rep.add("TH-10.revision_conflict", "устаревшая ревизия отвергнута",
+            "PASS" if code_stale == "REVISION_CONFLICT" else "FAIL", f"код={code_stale}")
+
+    # ===== TH-09: подавление и восстановление =====
+    v_before_sup = volume(doc, body)
+    sup, code_sup = call("kompas_set_feature_suppressed",
+                             {"feature_ref": fref, "expected_revision": revision(),
+                              "suppressed": True})
+    _e, st_sup, _r = client.tool("kompas_get_feature", {"feature_ref": fref})
+    res_, code_res = call("kompas_set_feature_suppressed",
+                              {"feature_ref": fref, "expected_revision": revision(),
+                               "suppressed": False})
+    _e, st_res, _r = client.tool("kompas_get_feature", {"feature_ref": fref})
+    rep.add("TH-09.suppress_restore",
+            "подавление прочитано, восстановление прочитано, объём прежний",
+            "PASS" if (not code_sup and not code_res
+                       and result(st_sup).get("excluded") is True
+                       and result(st_res).get("excluded") is False
+                       and near(volume(doc, body), v_before_sup, 1e-6)) else "FAIL",
+            f"excluded {result(st_sup).get('excluded')} → {result(st_res).get('excluded')}; "
+            f"volume={volume(doc, body)} (было {v_before_sup}); коды={code_sup}/{code_res}")
+
+    # ===== TH-11: отказы до COM =====
+    refusals = {}
+    cases = {
+        "both_bases": {"edge_ref": top_edge(doc, body), "face_ref": top_face,
+                       "nominal_diameter_mm": 20, "pitch_mm": 2.5, "length_mm": 10},
+        "no_base": {"nominal_diameter_mm": 20, "pitch_mm": 2.5, "length_mm": 10},
+        "face_without_borders": {"face_ref": top_face, "nominal_diameter_mm": 20,
+                                 "pitch_mm": 2.5, "length_mm": 10},
+        "auto_length_without_borders": {"edge_ref": top_edge(doc, body),
+                                        "nominal_diameter_mm": 20, "pitch_mm": 2.5,
+                                        "auto_length": True},
+        "diameter_and_auto": {"edge_ref": top_edge(doc, body), "nominal_diameter_mm": 20,
+                              "auto_diameter": True, "pitch_mm": 2.5, "length_mm": 10},
+        "zero_pitch": {"edge_ref": top_edge(doc, body), "nominal_diameter_mm": 20,
+                       "pitch_mm": 0, "length_mm": 10},
+        "negative_diameter": {"edge_ref": top_edge(doc, body), "nominal_diameter_mm": -20,
+                              "pitch_mm": 2.5, "length_mm": 10},
+    }
+    threads_before_refusals = len(threads_of(doc))
+    rev_before_refusals = revision()
+    for label, args in cases.items():
+        _env, code_ = call("kompas_create_thread",
+                           {"document_id": doc, "expected_revision": revision(), **args})
+        refusals[label] = code_
+    threads_after_refusals = len(threads_of(doc))
+    rep.add("TH-11.refusals",
+            "все отказы предусмотрены и не оставили признака",
+            "PASS" if (all(c == "INVALID_ARGUMENT" for c in refusals.values())
+                       and threads_after_refusals == threads_before_refusals) else "FAIL",
+            f"коды={json.dumps(refusals, ensure_ascii=False)}; обозначений "
+            f"{threads_before_refusals} → {threads_after_refusals}; "
+            f"ревизия {rev_before_refusals} → {revision()}")
+
+    # ===== TH-08: save → close → reopen =====
+    path = os.path.join(workdir, "threads-acceptance.m3d")
+    sv, code_sv = call("kompas_save_document",
+                           {"document_id": doc, "expected_revision": revision(),
+                            "target_path": path})
+    cl, code_cl = call("kompas_close_document", {"document_id": doc,
+                                                     "dirty_policy": "discard"})
+    op2, code_op = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                    "access": "edit"})
+    doc2 = doc_id(op2)
+    if doc2:
+        rows2 = threads_of(doc2)
+        first2 = ref_of(rows2[0].get("feature_ref")) if rows2 else None
+        gf3 = {}
+        if first2:
+            _e, gf3, _r = client.tool("kompas_get_feature", {"feature_ref": first2})
+        t3 = (result(gf3).get("thread") or {})
+        rep.add("TH-08.save_reopen",
+                "после переоткрытия обозначения видны, параметры совпадают со снимком",
+                "PASS" if (not code_sv and not code_cl and not code_op and rows2
+                           and near(t3.get("nominal_diameter_mm"), 18)
+                           and near(t3.get("pitch_mm"), 2)
+                           and near(t3.get("length_mm"), 30)
+                           and t3.get("left_hand") is True) else "FAIL",
+                f"обозначений={len(rows2)} d={t3.get('nominal_diameter_mm')} "
+                f"p={t3.get('pitch_mm')} L={t3.get('length_mm')} left={t3.get('left_hand')} "
+                f"коды={code_sv}/{code_cl}/{code_op}")
+        if rows2:
+            _e, b2, _r = client.tool("kompas_list_bodies", {"document_id": doc2})
+            bl = result(b2)
+            bl = bl if isinstance(bl, list) else []
+            body2 = ref_of(bl[0].get("body_ref")) if bl else None
+            v_before_del = volume(doc2, body2)
+            dl, code_del = call("kompas_delete_feature", {
+                "feature_ref": ref_of(rows2[-1].get("feature_ref")),
+                "expected_revision": current_rev(doc2), "confirm_dependents": True})
+            after_del = len(threads_of(doc2))
+            rep.add("TH-09.delete",
+                    "удаление обозначения: объектов резьбы на один меньше, тело прежнее",
+                    "PASS" if (not code_del and after_del == len(rows2) - 1
+                               and near(volume(doc2, body2), v_before_del, 1e-6)) else "FAIL",
+                    f"обозначений {len(rows2)} → {after_del}; volume={volume(doc2, body2)} "
+                    f"(было {v_before_del}); код={code_del}")
+        else:
+            rep.add("TH-09.delete", "удаление обозначения", "FAIL",
+                    "обозначений в переоткрытом документе нет")
+    else:
+        rep.add("TH-08.save_reopen", "save → close → reopen", "FAIL",
+                f"документ не переоткрылся: коды={code_sv}/{code_cl}/{code_op}")
+        rep.add("TH-09.delete", "удаление обозначения", "FAIL", "переоткрытия не было")
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
     "drafts": lambda c, r, a, w, v, p: drafts_checks(c, r, a, w),
     "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
+    "threads": lambda c, r, a, w, v, p: threads_checks(c, r, a, w),
     "drawing": lambda c, r, a, w, v, p: drawing_checks(c, r, a, w),
     "section": lambda c, r, a, w, v, p: section_checks(c, r, a, w),
     "variables_material": lambda c, r, a, w, v, p: variables_material_checks(

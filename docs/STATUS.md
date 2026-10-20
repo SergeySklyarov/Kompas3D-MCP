@@ -26,13 +26,13 @@
   Измерено живьём: внешняя по ребру `d = 20`, `p = 2,5`, `L = 25`; автодиаметр прочитан как `20`;
   внутренняя по грани `d = 8`, длина по границам `40`; левая прочитана как левая; правка
   `18 / 2 / 30 / левая`; переоткрытие сохраняет параметры; удаление 5 -> 4. Группа `--threads-only`
-  (TH-01…TH-11): **PASS 45 / FAIL 0**. Профиль `threads-minimal-v1` (4 режима): закрыт целиком,
+  (TH-01…TH-13): **PASS 51 / FAIL 0**. Профиль `threads-minimal-v1` (4 режима): закрыт целиком,
   `problems` пуст; строк матрицы 191, счётчики каталога 136 операций и 214 режимов.
-  **Не подтверждено:** `kompas_capabilities` для нового инструмента живьём не вызывался; вид базового
-  объекта читается ненадёжно - у обозначения по ребру `get_feature` отвечает `base_kind = face`, ответ
-  создания берёт вид базы из запроса (отчёт §9.3).
-  `docs/decisions/adapter-features.md#thread-route`, `docs/04_KOMPAS_API_NOTES.md` §4.96,
-  `docs/02_TOOL_CONTRACTS.md` §2.17.
+  **Предел чтения:** вид базового объекта при чтении не отдаётся - `base_kind = unknown` с причиной
+  в `unverified_aspects`, потому что продукт сам определяет базовую грань по ребру; ответ создания
+  берёт форму из запроса (отчёт §15.1).
+  `docs/decisions/adapter-features.md#thread-route`, `#thread-base-kind`,
+  `docs/04_KOMPAS_API_NOTES.md` §4.96, `docs/02_TOOL_CONTRACTS.md` §2.17.
 - **Уклон (наряд `SM12_DRAFTS`, 20.10.2026, `submitted` - на приёмке техлида):** два инструмента -
   `kompas_draft` (API7 `IModelContainer.Inclines` → `IInclines.Add`) и `kompas_draft_from_edges` (API7
   `IDraftsFromEdges.Add`) - работают на поставке `0.10.0`; сторона задаётся ОТ ТЕЛА

@@ -243,7 +243,7 @@ DXF плоских деталей; там же - экспорт STL/IGES из р
 | 5 | Ограничения эскиза и управляющие размеры | G6 | профиль `sketch-constraints-minimal-v1`, 5 обязательных режимов `SKC-01…SKC-05`; наряд `OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md` | отдельный MINOR после `0.7.0` (ожидаемо `0.8.0`) |
 | 6 | Механические сопряжения | G4 | виды `transmission` и `cam_gear` в `kompas_create_mate`; зависит от #1 | MINOR |
 | 7 | Уклоны SM-12 | E1 | наряд `SM12_DRAFTS_DEVELOPER_PROMPT.md` | MINOR |
-| 8 | Условное изображение резьбы | G10 = E3 (SM-08) | `kompas_create_thread`; один наряд, не два | MINOR |
+| 8 | Условное изображение резьбы | G10 = E3 (SM-08) | `kompas_create_thread`; один наряд, не два; наряд `G10_THREAD_DEVELOPER_PROMPT.md` (написан 20.10.2026) | MINOR |
 | 9 | Мастер-геометрия | G8 | копия геометрии из внешнего документа и синхронизация | MINOR |
 | 10 | Разнесённый вид | G9 | шаги разнесения сборки | MINOR |
 | 11 | Сечения | G11 | динамические сечения модели для снимка | MINOR |

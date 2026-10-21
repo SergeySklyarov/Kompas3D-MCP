@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 44,
-   "operations": 137,
+   "families": 45,
+   "operations": 138,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 216,
+   "modes_and_variants": 218,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8026,6 +8026,70 @@
       {
        "id": "G8.copy_geometry.mode_associativity",
        "name": "Синхронизация с изменённым источником (Synhronise)",
+       "level": "mcp_verified"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "G9",
+   "title": "Разнесённый вид сборки: режим, шаги разнесения и их чтение",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "metadata": "kAPI7.tlb: IDismantleParameters (QI от IAssemblyDocument), IDismantleStep; IAssemblyDocument.DismantleMode; ksDocument3D.dismantleMode",
+    "runtime": "измерено 21.10.2026 на build 24.0.0.2799: шаг входит в модель только на IDismantleStep.Update(); при включённом режиме перенос матрицы компонента равен расстоянию шага вдоль вспомогательной оси (40 мм по X для одного компонента, 25 мм по Y для двух), при выключенном - собранному размещению"
+   },
+   "rule": "шаг подтверждается чтением после Update(), а разнесение - матрицей компонента (IPart7.GetSummMatrix), а не ответом вызова; направление шага обратно не читается",
+   "next_step": "Группа --dismantle-only и профиль dismantle-minimal-v1 пройдены; следующее - зачётный --all. Вне профиля остаются разнесённый ассоциативный вид чертежа (IAssociationView::ExplodedView), поворот шага и чтение направления.",
+   "mcp_support": "kompas_set_dismantle / kompas_list_dismantle_steps",
+   "route": "API7 QI(IAssemblyDocument -> IDismantleParameters) -> AddDismantleStep() -> Parts (SafeArray из IPart7) / Distance (double) / DirectionObject (IModelObject, вспомогательная ось) -> IDismantleStep.Update() -> RebuildDocument; чтение - DismantleStepsCount / DismantleStep[i] / Parts / Distance; удаление - DeleteDismantleStep(i), очистка - ClearDismantleParameters()",
+   "operations": [
+    {
+     "id": "G9.dismantle",
+     "name": "Разнесённый вид сборки и шаги разнесения",
+     "level": "mcp_verified",
+     "source_user_docs": "нет отдельной страницы пользователя: режим описан в справке SDK",
+     "source_sdk": "idismantleparameters.html, idismantleparameters_props.html, idismantleparameters_methods.html, idismantleparameters_dismantlestepscount.html, idismantleparameters_dismantlestep.html, idismantleparameters_adddismantlestep.html, idismantleparameters_deletedismantlestep.html, idismantleparameters_cleardismantleparameters.html, idismantlestep.html, idismantlestep_props.html, idismantlestep_parts.html, idismantlestep_distance.html, idismantlestep_directionobject.html, idismantlestep_vector.html, ksapi_idismantlestep_update.html, ksdocument3d_dismantlemode.html, iassemblydocument_dismantlemode.html",
+     "api5": {
+      "found_in": "Bin\\kApi5.tlb",
+      "interfaces": [
+       "ksDocument3D.dismantleMode"
+      ],
+      "object_type": "нет отдельного типа: режим - свойство документа"
+     },
+     "api7": {
+      "found_in": "Bin\\kAPI7.tlb",
+      "interfaces": [
+       "IDismantleParameters",
+       "IDismantleStep",
+       "IAssemblyDocument",
+       "IModelObject"
+      ],
+      "members": [
+       "DismantleMode",
+       "DismantleStepsCount",
+       "DismantleStep[Index]",
+       "AddDismantleStep",
+       "DeleteDismantleStep",
+       "ClearDismantleParameters",
+       "Parts",
+       "Distance",
+       "DirectionObject",
+       "Vector",
+       "Update"
+      ]
+     },
+     "modes": [
+      {
+       "id": "G9.dismantle.mode_steps",
+       "name": "Режим и шаги: запись, чтение, сохранение",
+       "level": "mcp_verified"
+      },
+      {
+       "id": "G9.dismantle.mode_exploded",
+       "name": "Разнесение по матрице компонента и возврат в собранное",
        "level": "mcp_verified"
       }
      ]

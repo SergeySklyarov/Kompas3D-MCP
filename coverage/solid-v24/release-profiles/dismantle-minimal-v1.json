@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "profile_id": "dismantle-minimal-v1",
+    "title": "Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "21.10.2026",
+        "change": "профиль заведён нарядом OMEGA_G9_DISMANTLE (шаг D #10, G9): включение и выключение разнесённого вида, запись шагов, чтение, удаление и очистка; уровни подняты по группе --dismantle-only"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E4": "Разнесённый вид сборки - шаг D таблицы G-пробелов, очередь E4"
+    }
+  },
+  "modes": [
+    {
+      "ref": "G9.dismantle.mode_steps",
+      "title": "Режим разнесённого вида и шаги разнесения: запись, чтение, сохранение",
+      "family": "G9",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: сборка из двух компонентов, шаг на один компонент (40 мм вдоль оси X) и шаг на два компонента (25 мм вдоль оси Y) записаны документированным маршрутом QI(IAssemblyDocument -> IDismantleParameters) -> AddDismantleStep/Parts/Distance/DirectionObject -> Update, прочитаны обратно числом, компонентами и расстоянием, переживают save -> close -> open. Отказы: деталь вместо сборки, несуществующая ссылка компонента, компонент вместо направляющего объекта, вложенный компонент без адреса, устаревшая ревизия."
+    },
+    {
+      "ref": "G9.dismantle.mode_exploded",
+      "title": "Разнесение доказано геометрией: смещение компонента шага равно заданному, выключение возвращает собранное",
+      "family": "G9",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Разнесение читается ГЕОМЕТРИЕЙ: при включённом режиме суммарная матрица компонента шага (IPart7.GetSummMatrix через kompas_list_components) сдвинута ровно на расстояние шага вдоль заданной оси (40 мм по X для одного компонента, 25 мм по Y для двух), соседний компонент не сдвинут; выключение режима возвращает собранное размещение (сдвиг 0). Удаление шага и очистка возвращают собранное состояние. Направление шага обратно не читается - это ограничение названо, а не выдано за проверку."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.api7.dismantle_interface",
+      "title": "IDismantleParameters как дополнительный интерфейс IAssemblyDocument",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen"
+      ],
+      "gap": "Интерфейс получается ТОЛЬКО документированным QI от IAssemblyDocument (страница называет «Версия: Компас v20»); второй точки входа нет. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом. Проверяется группой --dismantle-only (DSM-01, DSM-08, DSM-11)."
+    }
+  ],
+  "explicitly_out_of_scope": [
+    "Разнесённый ассоциативный вид чертежа (IAssociationView::ExplodedView, ksAssociationViewParam::disassembly) - вне профиля по решению техлида.",
+    "Поворот шага: справка не даёт документированного способа задать поворот, поэтому шаг умеет только перемещение вдоль направляющего объекта.",
+    "Чтение направления шага: DirectionObject читается null, Vector приходит с ksVector3DUnknown и без параметров - направление write-only в этой версии.",
+    "Правка шага: документированный интерфейс умеет добавлять, удалять по номеру и очищать; непустой набор шагов переписывается целиком.",
+    "Направление числами (вектор): справка даёт только DirectionObject типа IModelObject, поэтому направление задаётся ссылкой на вспомогательную ось сборки.",
+    "Компоненты, вложенные в подсборку: ksDocument3D.PartCollection(true) перечисляет структуру плоско, адреса у вложенного компонента нет - отказ, а не догадка."
+  ]
+}

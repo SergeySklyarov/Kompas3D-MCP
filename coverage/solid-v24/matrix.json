@@ -1,4 +1,4 @@
-{
+﻿{
   "meta": {
     "artifact": "coverage/solid-v24/matrix.json",
     "schema_version": "1.1",
@@ -14786,6 +14786,200 @@
         "routes": [
           {
             "tool": "kompas_measure"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "G9.dismantle.mode_steps",
+      "context": "assembly.two_components",
+      "catalog_ref": "G9",
+      "kind": "profile_mode",
+      "profile": "dismantle-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_set_dismantle.json",
+      "adapter_route": "kompas_set_dismantle: API7 QI(IAssemblyDocument -> IDismantleParameters) -> AddDismantleStep() -> Parts (SafeArray из IPart7) / Distance (double) / DirectionObject (IModelObject) -> IDismantleStep.Update() -> RebuildDocument; чтение - DismantleStepsCount / DismantleStep[i] / Parts / Distance (idismantleparameters.html, idismantleparameters_adddismantlestep.html, idismantlestep_parts.html, idismantlestep_distance.html, idismantlestep_directionobject.html, ksapi_idismantlestep_update.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "tests": [
+        "DSM-01.discovery",
+        "DSM-01.schema",
+        "DSM-02.setup",
+        "DSM-03.axis",
+        "DSM-04.step_one",
+        "DSM-08.read_back",
+        "DSM-11.save_reopen",
+        "DSM-12.not_assembly",
+        "DSM-12.missing_component",
+        "DSM-12.bad_direction",
+        "DSM-12.nested_component",
+        "DSM-12.stale_revision",
+        "DSM-12.refusal_names_effect"
+      ],
+      "limitations": [
+        "Направление шага задаётся ССЫЛКОЙ на вспомогательную ось сборки: справка даёт DirectionObject типа IModelObject и не даёт векторного входа. Плоскость, ребро, грань и сам компонент смещения не дают (измерено).",
+        "Направление обратно не читается: DirectionObject читается null, Vector приходит с ksVector3DUnknown и без параметров. Строка приёмки этого не обещает.",
+        "Правки шага нет: документированный интерфейс умеет добавлять, удалять по номеру и очищать, поэтому непустой набор шагов переписывается целиком.",
+        "Компоненты адресуются только на верхнем уровне: вложенный компонент отвергается CAPABILITY_UNAVAILABLE."
+      ],
+      "not_applicable_reasons": {
+        "edit": "правки шага в справке нет: только AddDismantleStep, DeleteDismantleStep и ClearDismantleParameters",
+        "rebuild": "перестроение выполняет сама мутация (RebuildDocument внутри вызова), отдельного действия у режима нет",
+        "suppress_restore": "включение и выключение режима - действие строки G9.dismantle.mode_exploded, здесь не повторяется",
+        "delete_dependencies": "удаление шага и очистка - действие строки G9.dismantle.mode_exploded",
+        "geometry_validation": "разнесение доказывается в строке G9.dismantle.mode_exploded по матрице компонента"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_dismantle_steps"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_dismantle"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_dismantle_steps"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_dismantle"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "G9.dismantle.mode_exploded",
+      "context": "assembly.two_components",
+      "catalog_ref": "G9",
+      "kind": "profile_mode",
+      "profile": "dismantle-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_list_dismantle_steps.json",
+      "adapter_route": "компонент шага читается по IPart7.GetSummMatrix (тот же маршрут, что у kompas_list_components): при включённом DismantleMode перенос матрицы равен расстоянию шага вдоль оси направления; при выключенном - собранному размещению (ipart7_getsummmatrix.html, ksdocument3d_dismantlemode.html, idismantleparameters_deletedismantlestep.html, idismantleparameters_cleardismantleparameters.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_applicable",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "not_applicable",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "DSM-03.axis",
+        "DSM-05.exploded",
+        "DSM-06.mode_off",
+        "DSM-07.step_many",
+        "DSM-09.delete_step",
+        "DSM-10.clear"
+      ],
+      "limitations": [
+        "Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.",
+        "Поворот шага не проверяется: справка не даёт документированного способа его задать."
+      ],
+      "not_applicable_reasons": {
+        "edit": "правки шага в справке нет",
+        "rebuild": "перестроение выполняет сама мутация",
+        "save_reopen": "сохранение и переоткрытие шагов проверены строкой G9.dismantle.mode_steps (DSM-11)",
+        "negative_tests": "отказы проверены строкой G9.dismantle.mode_steps (DSM-12)"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_dismantle_steps"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_dismantle"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_components"
+          },
+          {
+            "tool": "kompas_list_dismantle_steps"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_dismantle"
+          }
+        ]
+      },
+      "delete_dependencies_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_dismantle"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_components"
           }
         ]
       }

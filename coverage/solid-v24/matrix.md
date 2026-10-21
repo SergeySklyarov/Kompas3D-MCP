@@ -36,6 +36,19 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль dismantle-minimal-v1 — Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента
+
+- **обязательных_режимов:** 2
+- **режимов_закрыто:** 2
+- **общих_зависимостей:** 1
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** нет
+- **готовность_процента:** 66.7%
+- **по_очередям:** E4 2/2
+- **открытые_режимы:** []
+- **открытые_зависимости:**
+  - `dep.api7.dismantle_interface (строки нет)`
+
 ### профиль drafts-minimal-v1 — Уклоны граней v24: от основания и от базовой линии
 
 - **обязательных_режимов:** 5
@@ -197,19 +210,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 360
-- **строк_полностью_закрыто:** 173
-- **строк_с_каким_либо_прогрессом:** 189
-- **семейств_в_каталоге:** 44
+- **строк_каталога:** 362
+- **строк_полностью_закрыто:** 175
+- **строк_с_каким_либо_прогрессом:** 191
+- **семейств_в_каталоге:** 45
 - **семейств_без_строк:** 12
-- **операций:** 137
-- **режимов_и_вариантов:** 216
-- **применимых_действий:** 2959
-- **действий_verified:** 1158
-- **покрытие_действий:** 39.1%
-- **распределение_статусов:** {'not_started': 1800, 'verified': 1158, 'not_applicable': 641, 'implemented': 1}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 61, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 66, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 138
+- **режимов_и_вариантов:** 218
+- **применимых_действий:** 2970
+- **действий_verified:** 1169
+- **покрытие_действий:** 39.4%
+- **распределение_статусов:** {'not_started': 1800, 'verified': 1169, 'not_applicable': 650, 'implemented': 1}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 62, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 68, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -253,6 +266,19 @@
 | `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout, dep.interference.api7_measurer.negative_tests |
 | `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit, dep.interference.distance_unit.negative_tests |
 | `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests, dep.interference.read_only.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `dismantle-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `G9.dismantle.mode_steps` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DSM-01.discovery, DSM-01.schema, DSM-02.setup, DSM-03.axis, DSM-04.step_one, DSM-08.read_back, DSM-11.save_reopen, DSM-12.not_assembly, DSM-12.missing_component, DSM-12.bad_direction, DSM-12.nested_component, DSM-12.stale_revision, DSM-12.refusal_names_effect |
+| `G9.dismantle.mode_exploded` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | OK | н/п | OK | DSM-03.axis, DSM-05.exploded, DSM-06.mode_off, DSM-07.step_many, DSM-09.delete_step, DSM-10.clear |
+
+### Общие зависимости профиля `dismantle-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.api7.dismantle_interface` | нет | discover, read, save_reopen | — |
 
 ## Метрика 1 — обязательные режимы профиля `drafts-minimal-v1`
 
@@ -852,6 +878,8 @@
 | `STEP.import` | STEP | practical_required | — | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | STEP.import.discover, STEP.import.create, STEP.import.read, STEP.import.rebuild, STEP.import.save_reopen, STEP.import.negative_tests, STEP.import.geometry_validation |
 | `G8.copy_geometry.mode_body_from_file` | G8 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | CG-01.discovery, CG-01.schema, CG-01.capabilities, CG-02.source, CG-02.receiver, CG-03.create, CG-03.list, CG-05.save_reopen, CG-06.missing_file, CG-06.outside_roots, CG-06.no_body, CG-06.stale_revision, CG-06.refusal_names_effect |
 | `G8.copy_geometry.mode_associativity` | G8 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | CG-04.source_edited, CG-04.associativity, CG-05.save_reopen, CG-06.missing_file, CG-06.stale_revision |
+| `G9.dismantle.mode_steps` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DSM-01.discovery, DSM-01.schema, DSM-02.setup, DSM-03.axis, DSM-04.step_one, DSM-08.read_back, DSM-11.save_reopen, DSM-12.not_assembly, DSM-12.missing_component, DSM-12.bad_direction, DSM-12.nested_component, DSM-12.stale_revision, DSM-12.refusal_names_effect |
+| `G9.dismantle.mode_exploded` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | OK | н/п | OK | DSM-03.axis, DSM-05.exploded, DSM-06.mode_off, DSM-07.step_many, DSM-09.delete_step, DSM-10.clear |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1523,6 +1551,14 @@
   - Synhronise() отвечает TRUE и при недоступном источнике (измерено: файл удалён, геометрия прежняя), поэтому отказ выносит Хост по пути, а инструмент проверяет файл до вызова продукта.
   - Уровень подтверждения синхронизации - call_returned: ожидаемый объём клиент задаёт сам, инструмент возвращает объём и тела до и после.
   - Изменение источника выполняется инструментами Хоста (kompas_update_feature по признаку выдавливания); правка признака переоткрытого документа читает семейство как null, поэтому группа ищет признак по наличию эскиза.
+- `G9.dismantle.mode_steps` — закрыт целиком
+  - Направление шага задаётся ССЫЛКОЙ на вспомогательную ось сборки: справка даёт DirectionObject типа IModelObject и не даёт векторного входа. Плоскость, ребро, грань и сам компонент смещения не дают (измерено).
+  - Направление обратно не читается: DirectionObject читается null, Vector приходит с ksVector3DUnknown и без параметров. Строка приёмки этого не обещает.
+  - Правки шага нет: документированный интерфейс умеет добавлять, удалять по номеру и очищать, поэтому непустой набор шагов переписывается целиком.
+  - Компоненты адресуются только на верхнем уровне: вложенный компонент отвергается CAPABILITY_UNAVAILABLE.
+- `G9.dismantle.mode_exploded` — закрыт целиком
+  - Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.
+  - Поворот шага не проверяется: справка не даёт документированного способа его задать.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

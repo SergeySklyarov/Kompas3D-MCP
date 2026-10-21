@@ -418,6 +418,8 @@ public sealed class CommandDispatcher
             WorkerCommands.ReplaceComponent => _sta.Run(() => ReplaceComponent(request), "asm.replace_component", cancellationToken),
             WorkerCommands.CheckComponentLinks => _sta.Run(() => CheckComponentLinks(request), "asm.check_links", cancellationToken),
             WorkerCommands.DeleteComponent => _sta.Run(() => DeleteComponent(request), "asm.delete_component", cancellationToken),
+            WorkerCommands.SetDismantle => _sta.Run(() => SetDismantle(request), "asm.set_dismantle", cancellationToken),
+            WorkerCommands.ListDismantleSteps => _sta.Run(() => ListDismantleSteps(request), "asm.list_dismantle_steps", cancellationToken),
             WorkerCommands.CheckInterference => _sta.Run(() => CheckInterference(request), "asm.check_interference", cancellationToken),
             WorkerCommands.MeasureGap => _sta.Run(() => MeasureGap(request), "asm.measure_gap", cancellationToken),
             WorkerCommands.ListMates => _sta.Run(() => ListMates(request), "mate.list", cancellationToken),
@@ -1565,11 +1567,22 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.DeleteComponent(command), document);
     }
 
+    // The exploded view writes the model (steps and mode), so it bumps the revision like every other
+    // mutation of the assembly domain; reading it only READs.
+    private object? SetDismantle(IpcFrame request)
+    {
+        var command = Argument<SetDismantleCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetDismantle(command), document);
+    }
+
+    private object? ListDismantleSteps(IpcFrame request) =>
+        _session.ListDismantleSteps(Argument<ListDismantleStepsCommand>(request));
+
     // Both G1 commands only READ: they do not pass through TaggedAfter (no control copy, no revision
     // bump), exactly like the other read commands of the assembly domain.
     private object? CheckInterference(IpcFrame request) =>
         _session.CheckInterference(Argument<CheckInterferenceCommand>(request));
-
     private object? MeasureGap(IpcFrame request) =>
         _session.MeasureGap(Argument<MeasureGapCommand>(request));
 

@@ -251,6 +251,13 @@ public static class WorkerCommands
     public const string CheckComponentLinks = "asm.check_links";
     public const string DeleteComponent = "asm.delete_component";
 
+    // ── block G9 "exploded view" (profile dismantle-minimal-v1) ──
+    // asm.set_dismantle → DSM-01…DSM-03, asm.list_dismantle_steps → DSM-04. Both rest on the documented
+    // QI(IAssemblyDocument → IDismantleParameters); a step's direction is an OBJECT (an auxiliary axis),
+    // because the interface has no numeric direction input.
+    public const string SetDismantle = "asm.set_dismantle";
+    public const string ListDismantleSteps = "asm.list_dismantle_steps";
+
     // ── block C2 "minimal mates" (profile mates-minimal-v1) ──
     // mate.create → MATE-01, mate.list → MATE-02, mate.set_parameter → MATE-03,
     // mate.set_fixed → MATE-04, mate.delete → MATE-05. MATE-06 (component placement after a mate)

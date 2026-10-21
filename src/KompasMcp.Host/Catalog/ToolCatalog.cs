@@ -465,6 +465,83 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // ===== exploded view (block G9, profile dismantle-minimal-v1) =====
+            // The route is the documented QI(IAssemblyDocument → IDismantleParameters); a step's direction
+            // is an OBJECT, so the field takes an auxiliary-axis reference and nothing else.
+            Mutation("kompas_set_dismantle", "Включить разнесённый вид и записать шаги разнесения",
+                "Включает и выключает разнесённый вид сборки (IAssemblyDocument.DismantleMode) и "
+                + "записывает шаги разнесения документированным "
+                + "QI(IAssemblyDocument → IDismantleParameters) → AddDismantleStep/Parts/Distance/"
+                + "DirectionObject → Update. Шаг входит в модель ТОЛЬКО на Update() (измерено: число "
+                + "шагов 0 до и 1 после). НАПРАВЛЕНИЕ ЗАДАЁТСЯ ОБЪЕКТОМ, А НЕ ЧИСЛАМИ: справка даёт "
+                + "DirectionObject типа IModelObject и не даёт векторного входа, поэтому direction_ref - "
+                + "ссылка на ВСПОМОГАТЕЛЬНУЮ ОСЬ этой сборки (kompas_create_aux_geometry, kind=axis, "
+                + "mode=by_2_points); плоскость, ребро, грань и сам компонент смещения не дают (измерено). "
+                + "ПРАВКИ ШАГА НЕТ: документированный интерфейс умеет добавлять, удалять по номеру "
+                + "(delete_steps) и очищать (clear), но не править шаг, поэтому непустой steps "
+                + "переписывает набор целиком (очистка, затем запись заново), и "
+                + "ответ это называет. АДРЕСАЦИЯ: component_refs - ссылки kompas_list_components на "
+                + "компоненты ВЕРХНЕГО уровня; вложенный компонент отвергается CAPABILITY_UNAVAILABLE. "
+                + "distance_mm ноль означает «не двигать», отрицательное значение двигает в обратную "
+                + "сторону (измерено). РАЗНЕСЕНИЕ ЧИТАЕТСЯ ГЕОМЕТРИЕЙ: при включённом режиме "
+                + "kompas_list_components показывает смещение компонентов шага на distance_mm вдоль оси, "
+                + "а выключение режима возвращает собранное размещение.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mode", Sch.Nullable(Sch.Bool(
+                        "Разнесённый вид включён (true) или выключен (false). Не задан - режим не "
+                        + "меняется. Измерено: запись шага при выключенном режиме оставляет документ с "
+                        + "включённым режимом, поэтому порядок «сначала mode» соблюдается явно."))),
+                    ("clear", Sch.Nullable(Sch.Bool(
+                        "Удалить все шаги через ClearDismantleParameters() и ничего не писать. "
+                        + "Взаимоисключающе с непустым steps.", false))),
+                    ("delete_steps", Sch.Nullable(Sch.Arr(
+                        Sch.Int("Номер шага в том виде, в каком его вернул kompas_list_dismantle_steps."),
+                        "Удалить отдельные шаги через DeleteDismantleStep до остальной записи. Номера "
+                        + "удаляются от большего к меньшему, потому что после удаления следующие "
+                        + "сдвигаются.", 1, 64))),
+                    ("steps", Sch.Nullable(Sch.Arr(
+                        Sch.ObjAll(
+                            "Шаг разнесения",
+                            new (string, JsonObject)[]
+                            {
+                                ("component_refs", Sch.Arr(
+                                    Sch.Str("Ссылка на экземпляр из kompas_list_components."),
+                                    "Компоненты ВЕРХНЕГО уровня, которые двигает этот шаг. Один шаг "
+                                    + "двигает все перечисленные компоненты на одно и то же расстояние "
+                                    + "вдоль одной оси.",
+                                    1, 64)),
+                                ("distance_mm", Sch.Num(
+                                    "Расстояние вдоль оси направления, мм. Ноль - не двигать; "
+                                    + "отрицательное значение - в обратную сторону (измерено).", -1e6, 1e6)),
+                                ("direction_ref", Sch.Str(
+                                    "Ссылка на вспомогательную ОСЬ этой сборки: единственный вид "
+                                    + "направляющего объекта, который продукт принял в измерении. Ось "
+                                    + "создаётся kompas_create_aux_geometry (kind=axis, mode=by_2_points).")),
+                            },
+                            "Один шаг: какие компоненты, насколько и вдоль какой оси."),
+                        "Шаги разнесения. Не задано - существующие шаги остаются; пустой список - шаги "
+                        + "очищаются; непустой - набор ПЕРЕПИСЫВАЕТСЯ (правки шага в справке нет).",
+                        0, 64)))),
+                WorkerCommands.SetDismantle,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_list_dismantle_steps", "Шаги разнесения сборки",
+                "Читает режим разнесённого вида и шаги разнесения документированным маршрутом "
+                + "DismantleStepsCount / DismantleStep[i] / Parts / Distance. Компоненты шага "
+                + "возвращаются ссылками того же вида, что kompas_list_components (сопоставление по "
+                + "объекту, а не по номеру), поэтому по ним читаются размещение и геометрия. "
+                + "НАПРАВЛЕНИЕ НЕ ВОЗВРАЩАЕТСЯ: DirectionObject читается null, а Vector приходит без "
+                + "параметров (ksVector3DUnknown) - направление шага в этой версии write-only, и это "
+                + "названо, а не заменено догадкой. Шаг, компонент которого не сопоставлен со "
+                + "структурой сборки, называется в notes, а не выдаётся за прочитанный.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListDismantleSteps,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             // ===== interference and gaps (block G1, profile assembly-interference-minimal-v1) =====
             // Routes measured from the help over the wire and from the installed type library; both
             // commands only READ, so neither declares operation_id.

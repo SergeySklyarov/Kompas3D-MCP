@@ -66,6 +66,7 @@ public static class CompactCatalog
         ["kompas_create_mate"] = "assembly", ["kompas_delete_mate"] = "assembly",
         ["kompas_list_mates"] = "assembly", ["kompas_set_mate_parameter"] = "assembly",
         ["kompas_set_mate_fixed"] = "assembly",
+        ["kompas_set_dismantle"] = "assembly", ["kompas_list_dismantle_steps"] = "assembly",
         ["kompas_create_drawing_views"] = "drawing", ["kompas_list_drawing_views"] = "drawing",
         ["kompas_edit_view"] = "drawing", ["kompas_rebuild_drawing_views"] = "drawing",
         ["kompas_add_dimension"] = "drawing", ["kompas_list_dimensions"] = "drawing",

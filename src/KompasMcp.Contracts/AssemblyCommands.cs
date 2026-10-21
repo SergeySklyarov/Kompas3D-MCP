@@ -240,6 +240,11 @@ public sealed record SetDismantleCommand
 
     /// <summary>Remove every step through <c>ClearDismantleParameters()</c> and write nothing.</summary>
     public bool Clear { get; init; }
+
+    /// <summary>Indices of steps to remove one by one through <c>DeleteDismantleStep</c> before anything
+    /// else happens. DOC: <c>idismantleparameters_deletedismantlestep.html</c> — a removed step shifts the
+    /// indices after it, so they are removed from the highest down.</summary>
+    public IReadOnlyList<int>? DeleteStepIndices { get; init; }
 }
 
 /// <summary>Read the exploded view: the mode and the steps.</summary>

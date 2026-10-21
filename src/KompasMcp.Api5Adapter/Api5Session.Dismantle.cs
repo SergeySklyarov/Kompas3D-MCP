@@ -54,6 +54,22 @@ public partial class Api5Session
         var before = Int(() => parameters.DismantleStepsCount);
         checks.Add(new NamedCheck("steps_count_read_before", before is not null, before?.ToString()));
 
+        if (command.DeleteStepIndices is { Count: > 0 } doomed)
+        {
+            // DOC: idismantleparameters_deletedismantlestep.html — the step at the index goes away and the
+            // indices after it shift, so the highest index is removed first.
+            foreach (var index in doomed.Distinct().OrderByDescending(position => position))
+            {
+                var deleted = Bool(() => parameters.DeleteDismantleStep(index));
+                checks.Add(new NamedCheck("step_deleted_" + index, deleted == true));
+                if (deleted != true)
+                {
+                    unverified.Add($"step_not_deleted_{index} — DeleteDismantleStep({index}) не подтвердил " +
+                                   "удаление: шаг мог остаться");
+                }
+            }
+        }
+
         if (command.Clear || command.Steps is { Count: 0 })
         {
             // DOC: idismantleparameters_cleardismantleparameters.html — removes every step at once.

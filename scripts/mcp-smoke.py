@@ -659,7 +659,7 @@ def file_sha256(path):
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread).
-EXPECTED_TOOL_COUNT = 100
+EXPECTED_TOOL_COUNT = 102
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -798,8 +798,11 @@ RUN_GROUPS = (
      "Приёмка CT: механизм каталога — список постоянен по размеру, find/describe/run, отказы по "
      "имени поля (наряды CATALOG_MECHANISM_RESEARCH и CATALOG_FULL_REMOVAL)"),
     ("copy_geometry", "copy-geometry", "copy-geometry-acceptance.json",
-     "Приёмка CG: копия геометрии из файла другой детали — создание, чтение, ассоциативность, "
+     "Приёмка CG: копия геометрии из файла другой детали - создание, чтение, ассоциативность, "
      "save -> reopen и названные отказы (наряд G8, профиль master-geometry-minimal-v1)"),
+    ("dismantle", "dismantle", "dismantle-acceptance.json",
+     "Приёмка DSM: разнесённый вид сборки - режим, шаги, разнесение по матрице компонента, "
+     "save -> reopen и отказы (наряд G9, профиль dismantle-minimal-v1)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -846,6 +849,7 @@ ALL_GROUPS_EXTRA = (
     # ответы приёмки от следов общего сеанса. Свежий общий сеанс ей не нужен.
     ("catalog", ["--catalog-only"]),
     ("copy_geometry", ["--copy-geometry-only"]),
+    ("dismantle", ["--dismantle-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -15921,6 +15925,9 @@ def main():
     # матрицы обязана находиться по ИМЕНИ строки (`TH.<NN>.<действие>`), а не по номеру в общем потоке.
     threads_only = "--threads-only" in sys.argv
     copy_geometry_only = "--copy-geometry-only" in sys.argv
+    # Домен РАЗНЕСЕНИЯ (наряд G9, профиль `dismantle-minimal-v1`): одна группа DSM на своём сеансе -
+    # клетка матрицы обязана находиться по ИМЕНИ строки (`DSM.<NN>.<действие>`).
+    dismantle_only = "--dismantle-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16064,6 +16071,7 @@ def main():
         "interference": interference_only,
         "threads": threads_only,
         "copy_geometry": copy_geometry_only,
+        "dismantle": dismantle_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -16636,6 +16644,14 @@ def main():
 
         if copy_geometry_only:
             copy_geometry_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if dismantle_only:
+            dismantle_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -49215,6 +49231,378 @@ def copy_geometry_checks(client, rep, app_id, workdir):
             "удаления копии нет")
 
 
+def dismantle_checks(client, rep, app_id, workdir):
+    """DSM-01…DSM-13 - разнесённый вид сборки (наряд G9, профиль `dismantle-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Разнесение видно ГЕОМЕТРИЕЙ, а не ответом вызова: при включённом режиме
+    суммарная матрица компонента шага (IPart7.GetSummMatrix, тот же маршрут, что у
+    `kompas_list_components`) сдвинута ровно на расстояние шага вдоль заданной оси, а выключение режима
+    возвращает собранное размещение. Шаг читается обратно числом, компонентами и расстоянием.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Направление шага обратно не читается (`DirectionObject` = null, `Vector` без
+    параметров) - строка названа UNKNOWN с причиной, а не выдана за PASS. Поворот шага в профиль не
+    входит: справка не даёт его вовсе.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def near(value, expected, tolerance=0.01):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def components(doc, recursive=False):
+        env, code = call("kompas_list_components", {"document_id": doc, "recursive": recursive})
+        rows = result(env).get("components")
+        return (rows if isinstance(rows, list) else []), code
+
+    def ref_of(row):
+        ref = row.get("component_ref")
+        return ref.get("id") if isinstance(ref, dict) else ref
+
+    def translation(row):
+        """Смещение компонента из суммарной матрицы: 16 чисел, перенос - в 12, 13, 14 (измерено)."""
+        matrix = row.get("matrix")
+        if isinstance(matrix, list) and len(matrix) >= 16:
+            return [matrix[12], matrix[13], matrix[14]]
+        return None
+
+    def shift(before, after):
+        if not before or not after:
+            return None
+        return [round(a - b, 3) for a, b in zip(after, before)]
+
+    def steps(doc):
+        env, code = call("kompas_list_dismantle_steps", {"document_id": doc})
+        return result(env), code
+
+    def plate(doc, name):
+        """Деталь 40x40x10 в файле `name` - источник компонентов сборки."""
+        sk, _c = call("kompas_create_sketch", {"document_id": doc,
+                                               "expected_revision": revision(doc),
+                                               "plane": {"base": "xy"}})
+        sketch = result(sk).get("sketch_ref") or result(sk).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        call("kompas_edit_sketch", {"sketch_ref": sketch, "expected_revision": revision(doc),
+                                    "mode": "append",
+                                    "entities": [{"kind": "rectangle", "start_mm": [0, 0],
+                                                  "width_mm": 40, "height_mm": 40}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        _e, code = call("kompas_extrude", {"sketch_ref": sketch,
+                                           "expected_revision": revision(doc),
+                                           "operation": "base", "end_condition": "blind",
+                                           "depth_mm": 10, "direction": "positive"})
+        path = os.path.join(workdir, name)
+        _e2, saved = call("kompas_save_document", {"document_id": doc,
+                                                   "expected_revision": revision(doc),
+                                                   "target_path": path})
+        return path, code or saved
+
+    # ===== DSM-01: обнаружение =====
+    registry = (client.catalog() or {}).get("registry") or []
+    missing = [n for n in ("kompas_set_dismantle", "kompas_list_dismantle_steps")
+               if n not in registry]
+    rep.add("DSM-01.discovery", "оба инструмента разнесения есть в реестре каталога",
+            "PASS" if not missing else "FAIL",
+            f"в реестре={len(registry)}; нет={missing}")
+    entry = entry_of(client, "kompas_set_dismantle")
+    props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    need = {"document_id", "expected_revision", "operation_id", "mode", "steps",
+            "delete_steps", "clear"}
+    rep.add("DSM-01.schema", "схема записи несёт режим, шаги, удаление по номеру и очистку",
+            "PASS" if entry is not None and not (need - set(props)) else "FAIL",
+            f"полей={props}")
+
+    # ===== DSM-02: постановка - сборка из двух компонентов =====
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    part = doc_id(env)
+    part_path, part_code = plate(part, "dsm-part.m3d") if part else (None, "no_document")
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "assembly", "name": "DSM"})
+    asm = doc_id(env)
+    insert_errors = []
+    if asm:
+        for offset in ([0.0, 0.0, 0.0], [150.0, 0.0, 0.0]):
+            _e, ins, _r = client.tool("kompas_insert_component",
+                                      {"document_id": asm,
+                                       "expected_revision": revision(asm),
+                                       "source_path": part_path,
+                                       "fixed": False,
+                                       "transform": {"origin_mm": offset,
+                                                     "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]},
+                                       "operation_id": str(uuid.uuid4())}, timeout=300)
+            if error_code(ins):
+                insert_errors.append(error_code(ins))
+    before_rows, _c = components(asm) if asm else ([], "no_document")
+    rep.add("DSM-02.setup", "сборка из двух компонентов: структура и размещение прочитаны",
+            "PASS" if len(before_rows) == 2 and not insert_errors else "FAIL",
+            f"компонентов={len(before_rows)} ошибки_вставки={insert_errors} сборка={bool(asm)} "
+            f"деталь={part_code}")
+    if len(before_rows) != 2:
+        rep.add("DSM-03.axis", "ось направления создана", "FAIL",
+                "постановка не собрана: дальше нечего разносить")
+        return
+
+    assembled = {ref_of(row): translation(row) for row in before_rows}
+    first, second = ref_of(before_rows[0]), ref_of(before_rows[1])
+
+    # ===== DSM-03: ось направления (единственный принятый вид направляющего объекта) =====
+    xenv, xcode = call("kompas_create_aux_geometry",
+                       {"document_id": asm, "expected_revision": revision(asm),
+                        "kind": "axis", "mode": "by_2_points",
+                        "point1_mm": [0, 0, 0], "point2_mm": [10, 0, 0], "name": "DSM-X"})
+    x_axis = result(xenv).get("reference_id")
+    yenv, ycode = call("kompas_create_aux_geometry",
+                       {"document_id": asm, "expected_revision": revision(asm),
+                        "kind": "axis", "mode": "by_2_points",
+                        "point1_mm": [0, 0, 0], "point2_mm": [0, 10, 0], "name": "DSM-Y"})
+    y_axis = result(yenv).get("reference_id")
+    rep.add("DSM-03.axis", "две оси направления созданы документированным маршрутом",
+            "PASS" if x_axis and y_axis and not (xcode or ycode) else "FAIL",
+            f"x={x_axis} y={y_axis} ошибки={xcode or ycode}")
+
+    # ===== DSM-04: шаг на один компонент =====
+    one, one_code = call("kompas_set_dismantle",
+                         {"document_id": asm, "expected_revision": revision(asm),
+                          "mode": True,
+                          "steps": [{"component_refs": [first], "distance_mm": 40,
+                                     "direction_ref": x_axis}]})
+    r4 = result(one)
+    read4, read4_code = steps(asm)
+    row4 = (read4.get("steps") or [{}])[0] if read4.get("steps") else {}
+    rep.add("DSM-04.step_one", "шаг на один компонент записан и прочитан обратно (1 шаг, 40 мм)",
+            "PASS" if (not one_code and r4.get("steps_count_after") == 1
+                       and read4.get("steps_count") == 1 and near(row4.get("distance_mm"), 40)
+                       and len(row4.get("component_refs") or []) == 1) else "FAIL",
+            f"после={r4.get('steps_count_after')} прочитано={read4.get('steps_count')} "
+            f"расстояние={row4.get('distance_mm')} ошибки={one_code or read4_code}")
+
+    # ===== DSM-05: разнесение доказано геометрией =====
+    during_rows, _c = components(asm)
+    during = {ref_of(row): translation(row) for row in during_rows}
+    moved = shift(assembled.get(first), during.get(first))
+    stayed = shift(assembled.get(second), during.get(second))
+    rep.add("DSM-05.exploded", "при включённом режиме компонент шага сдвинут ровно на расстояние шага",
+            "PASS" if (moved and near(moved[0], 40) and near(moved[1], 0) and near(moved[2], 0)
+                       and stayed and near(stayed[0], 0) and near(stayed[1], 0)) else "FAIL",
+            f"сдвиг_шага={moved} сдвиг_соседнего={stayed} (допуск 0.01 мм)")
+
+    # ===== DSM-06: выключение режима возвращает собранное =====
+    off, off_code = call("kompas_set_dismantle",
+                         {"document_id": asm, "expected_revision": revision(asm), "mode": False})
+    back_rows, _c = components(asm)
+    back = {ref_of(row): translation(row) for row in back_rows}
+    returned = shift(assembled.get(first), back.get(first))
+    rep.add("DSM-06.mode_off", "выключение режима возвращает собранное размещение",
+            "PASS" if (returned and near(returned[0], 0) and near(returned[1], 0)
+                       and near(returned[2], 0) and result(off).get("dismantle_mode") is False)
+            else "FAIL",
+            f"сдвиг_после_выключения={returned} режим={result(off).get('dismantle_mode')} "
+            f"ошибки={off_code}")
+
+    # ===== DSM-07: шаг на несколько компонентов =====
+    many, many_code = call("kompas_set_dismantle",
+                           {"document_id": asm, "expected_revision": revision(asm),
+                            "mode": True,
+                            "steps": [{"component_refs": [first, second], "distance_mm": 25,
+                                       "direction_ref": y_axis}]})
+    multi_rows, _c = components(asm)
+    multi = {ref_of(row): translation(row) for row in multi_rows}
+    shift_first = shift(assembled.get(first), multi.get(first))
+    shift_second = shift(assembled.get(second), multi.get(second))
+    read7, _c7 = steps(asm)
+    row7 = (read7.get("steps") or [{}])[0] if read7.get("steps") else {}
+    rep.add("DSM-07.step_many", "шаг на два компонента: оба сдвинуты на 25 мм по оси Y",
+            "PASS" if (not many_code and shift_first and shift_second
+                       and near(shift_first[1], 25) and near(shift_second[1], 25)
+                       and near(shift_first[0], 0) and near(shift_second[0], 0)) else "FAIL",
+            f"сдвиг_первого={shift_first} сдвиг_второго={shift_second} ошибки={many_code}")
+
+    # ===== DSM-08: чтение шага =====
+    rep.add("DSM-08.read_back", "шаг читается числом, компонентами и расстоянием; направление не читается",
+            "PASS" if (read7.get("steps_count") == 1 and len(row7.get("component_refs") or []) == 2
+                       and row7.get("component_count") == 2 and near(row7.get("distance_mm"), 25))
+            else "FAIL",
+            f"шагов={read7.get('steps_count')} компонентов={row7.get('component_count')} "
+            f"расстояние={row7.get('distance_mm')} режим={read7.get('dismantle_mode')}")
+    rep.add("DSM-08.direction_not_read", "направление шага обратно не читается - названо, а не выдано за PASS",
+            "UNKNOWN", "DirectionObject читается null, Vector приходит с ksVector3DUnknown и без "
+            "параметров: направление в этой версии write-only, строка приёмки этого не обещает")
+
+    # ===== DSM-09: удаление шага =====
+    delete, delete_code = call("kompas_set_dismantle",
+                               {"document_id": asm, "expected_revision": revision(asm),
+                                "delete_steps": [0]})
+    read9, _c9 = steps(asm)
+    after_delete_rows, _c = components(asm)
+    after_delete = {ref_of(row): translation(row) for row in after_delete_rows}
+    back9 = shift(assembled.get(first), after_delete.get(first))
+    rep.add("DSM-09.delete_step", "удаление шага: шагов 1 -> 0, компоненты вернулись в собранное",
+            "PASS" if (not delete_code and read9.get("steps_count") == 0
+                       and back9 and near(back9[0], 0) and near(back9[1], 0)) else "FAIL",
+            f"шагов={read9.get('steps_count')} сдвиг={back9} ошибки={delete_code}")
+
+    # ===== DSM-10: очистка =====
+    call("kompas_set_dismantle",
+         {"document_id": asm, "expected_revision": revision(asm), "mode": True,
+          "steps": [{"component_refs": [first], "distance_mm": 30, "direction_ref": x_axis},
+                    {"component_refs": [second], "distance_mm": 20, "direction_ref": y_axis}]})
+    _e, two_env, _r = client.tool("kompas_list_dismantle_steps", {"document_id": asm})
+    two_count = result(two_env).get("steps_count")
+    clear, clear_code = call("kompas_set_dismantle",
+                             {"document_id": asm, "expected_revision": revision(asm), "clear": True})
+    read10, _c10 = steps(asm)
+    rep.add("DSM-10.clear", "очистка удаляет все шаги (2 -> 0)",
+            "PASS" if (two_count == 2 and not clear_code and read10.get("steps_count") == 0)
+            else "FAIL",
+            f"до_очистки={two_count} после={read10.get('steps_count')} ошибки={clear_code}")
+
+    # ===== DSM-11: save -> close -> open =====
+    call("kompas_set_dismantle",
+         {"document_id": asm, "expected_revision": revision(asm), "mode": True,
+          "steps": [{"component_refs": [first], "distance_mm": 40, "direction_ref": x_axis}]})
+    asm_path = os.path.join(workdir, "dsm-assembly.a3d")
+    _e, save_env, _r = client.tool("kompas_save_document",
+                                   {"document_id": asm, "expected_revision": revision(asm),
+                                    "target_path": asm_path,
+                                    "operation_id": str(uuid.uuid4())})
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"}, timeout=120)
+    reopen, open_code = call("kompas_open_document",
+                             {"application_id": app_id, "path": asm_path, "access": "edit"})
+    asm2 = doc_id(reopen)
+    read11, read11_code = steps(asm2) if asm2 else ({}, "no_document")
+    row11 = (read11.get("steps") or [{}])[0] if read11.get("steps") else {}
+    rep.add("DSM-11.save_reopen", "шаг и расстояние переживают save -> close -> open",
+            "PASS" if (asm2 and read11.get("steps_count") == 1
+                       and near(row11.get("distance_mm"), 40)) else "FAIL",
+            f"шагов={read11.get('steps_count')} расстояние={row11.get('distance_mm')} "
+            f"режим={read11.get('dismantle_mode')} ошибки={open_code or read11_code}")
+    if asm2:
+        call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"},
+             timeout=120)
+
+    # ===== DSM-12: отказы =====
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    probe = doc_id(env)
+    _e, not_asm, _r = client.tool("kompas_set_dismantle",
+                                  {"document_id": probe,
+                                   "expected_revision": revision(probe), "mode": True,
+                                   "operation_id": str(uuid.uuid4())})
+    rep.add("DSM-12.not_assembly", "деталь вместо сборки отвергнута по виду документа",
+            "PASS" if error_code(not_asm) == "WRONG_DOCUMENT_KIND" else "FAIL",
+            f"код={error_code(not_asm)}")
+
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "assembly", "name": "DSM-REF"})
+    refs_asm = doc_id(env)
+    _e, ins, _r = client.tool("kompas_insert_component",
+                              {"document_id": refs_asm, "expected_revision": revision(refs_asm),
+                               "source_path": part_path, "fixed": False,
+                               "operation_id": str(uuid.uuid4())}, timeout=300)
+    refs_rows, _c = components(refs_asm) if refs_asm else ([], "no_document")
+    live = ref_of(refs_rows[0]) if refs_rows else None
+    aenv, acode = call("kompas_create_aux_geometry",
+                       {"document_id": refs_asm, "expected_revision": revision(refs_asm),
+                        "kind": "axis", "mode": "by_2_points",
+                        "point1_mm": [0, 0, 0], "point2_mm": [10, 0, 0], "name": "DSM-R"})
+    r_axis = result(aenv).get("reference_id")
+
+    _e, missing_env, _r = client.tool("kompas_set_dismantle",
+                                      {"document_id": refs_asm,
+                                       "expected_revision": revision(refs_asm), "mode": True,
+                                       "steps": [{"component_refs": ["component:does-not-exist"],
+                                                  "distance_mm": 10, "direction_ref": r_axis}],
+                                       "operation_id": str(uuid.uuid4())})
+    rep.add("DSM-12.missing_component", "несуществующая ссылка компонента отвергнута",
+            "PASS" if error_code(missing_env) in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL",
+            f"код={error_code(missing_env)}")
+
+    _e, bad_dir, _r = client.tool("kompas_set_dismantle",
+                                  {"document_id": refs_asm,
+                                   "expected_revision": revision(refs_asm), "mode": True,
+                                   "steps": [{"component_refs": [live], "distance_mm": 10,
+                                              "direction_ref": live}],
+                                   "operation_id": str(uuid.uuid4())})
+    rep.add("DSM-12.bad_direction", "компонент вместо направляющего объекта отвергнут",
+            "PASS" if error_code(bad_dir) == "INVALID_ARGUMENT" else "FAIL",
+            f"код={error_code(bad_dir)}")
+
+    _e, stale_env, _r = client.tool("kompas_set_dismantle",
+                                    {"document_id": refs_asm, "expected_revision": 9999,
+                                     "mode": True, "operation_id": str(uuid.uuid4())})
+    rep.add("DSM-12.stale_revision", "устаревшая ожидаемая ревизия отвергнута",
+            "PASS" if error_code(stale_env) == "REVISION_CONFLICT" else "FAIL",
+            f"код={error_code(stale_env)}")
+
+    # Вложенный компонент: подсборка вставляется в сборку, её компонент адреса не имеет.
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "assembly", "name": "DSM-SUB"})
+    sub = doc_id(env)
+    nested_ref, nested_note = None, "подсборка не создана"
+    if sub:
+        _e, _sins, _r = client.tool("kompas_insert_component",
+                                    {"document_id": sub, "expected_revision": revision(sub),
+                                     "source_path": part_path, "fixed": False,
+                                     "operation_id": str(uuid.uuid4())}, timeout=300)
+        sub_path = os.path.join(workdir, "dsm-sub.a3d")
+        call("kompas_save_document", {"document_id": sub,
+                                      "expected_revision": revision(sub),
+                                      "target_path": sub_path})
+        call("kompas_close_document", {"document_id": sub, "dirty_policy": "save"}, timeout=120)
+        _e, _nins, _r = client.tool("kompas_insert_component",
+                                    {"document_id": refs_asm,
+                                     "expected_revision": revision(refs_asm),
+                                     "source_path": sub_path, "fixed": False,
+                                     "operation_id": str(uuid.uuid4())}, timeout=300)
+        deep_rows, _c = components(refs_asm, recursive=True)
+        nested = [ref_of(row) for row in deep_rows if (row.get("depth") or 0) > 0]
+        nested_ref = nested[0] if nested else None
+        nested_note = f"вложенных={len(nested)}"
+    if nested_ref:
+        _e, nested_env, _r = client.tool("kompas_set_dismantle",
+                                         {"document_id": refs_asm,
+                                          "expected_revision": revision(refs_asm), "mode": True,
+                                          "steps": [{"component_refs": [nested_ref],
+                                                     "distance_mm": 10, "direction_ref": r_axis}],
+                                          "operation_id": str(uuid.uuid4())})
+        rep.add("DSM-12.nested_component", "вложенный компонент отвергнут, а не адресован по догадке",
+                "PASS" if error_code(nested_env) == "CAPABILITY_UNAVAILABLE" else "FAIL",
+                f"код={error_code(nested_env)} {nested_note}")
+    else:
+        rep.add("DSM-12.nested_component", "вложенный компонент отвергнут, а не адресован по догадке",
+                "UNKNOWN", f"вложенный компонент не получен: {nested_note}; строка не выдана за PASS")
+
+    final_refs, _c = steps(refs_asm)
+    rep.add("DSM-12.refusal_names_effect", "после отказов набор шагов не изменился",
+            "PASS" if final_refs.get("steps_count") == 0 else "FAIL",
+            f"шагов={final_refs.get('steps_count')}")
+    if refs_asm:
+        call("kompas_close_document", {"document_id": refs_asm, "dirty_policy": "discard"},
+             timeout=120)
+    if probe:
+        call("kompas_close_document", {"document_id": probe, "dirty_policy": "discard"},
+             timeout=120)
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -49240,6 +49628,7 @@ EXTRA_GROUP_CHECKS = {
     # и конфигурация, а не app_id.
     "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
     "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
+    "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
 }
 
 

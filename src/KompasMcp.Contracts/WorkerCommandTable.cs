@@ -216,6 +216,10 @@ public static class WorkerCommandTable
         // Deleting a component walks the mate collection AND asks the kernel (ObjectConstraints) first,
         // then re-reads the structure: one COM call per mate plus the rebuild.
         Cad(WorkerCommands.DeleteComponent, WorkerAction.ModelMutation, 240_000);
+        // Writing the steps is one COM call per component (Parts), plus one per step (Update) and the
+        // rebuild; reading them re-reads every step object.
+        Cad(WorkerCommands.SetDismantle, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.ListDismantleSteps, WorkerAction.Read, 240_000);
         // Interference makes one COM call per body pair, plus a second call per intersecting pair when
         // faces are asked for.
         Cad(WorkerCommands.CheckInterference, WorkerAction.Read, 240_000);

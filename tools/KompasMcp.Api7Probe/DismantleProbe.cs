@@ -33,6 +33,7 @@ internal sealed class DismantleProbe
     private KompasObject _app = null!;
     private ksDocument3D? _assembly5;
     private ksDocument3D? _reopened5;
+    private IAxis3D? _xAxis;
     private string _assemblyPath = string.Empty;
     private string _sourcePath = string.Empty;
 
@@ -66,6 +67,7 @@ internal sealed class DismantleProbe
             WriteStep(parameters);
             ReadBack(parameters);
             ModeAndGeometry(parameters);
+            Semantics(parameters);
             SaveReopen();
             DeleteStep();
         }
@@ -385,10 +387,11 @@ internal sealed class DismantleProbe
         var parts = Api5.SafeObject(() => live.Parts);
         step.Data["parts"] = Api5.RuntimeName(parts);
         step.Data["parts_count"] = parts is Array array ? array.Length : parts is null ? 0 : 1;
-        step.Data["distance"] = Api5.Raw(Api5.SafeDouble(() => live.Distance));
+        var distance = Api5.SafeDouble(() => live.Distance);
+        step.Data["distance"] = Api5.Raw(distance);
         step.Data["vector"] = DescribeVector(Api5.SafeObject(() => live.Vector));
         step.Data["direction_object"] = Api5.RuntimeName(Api5.SafeObject(() => live.DirectionObject));
-        if (step.Data["distance"] is double distance && Math.Abs(distance - StepDistance) < 1e-6
+        if (distance is not null && Math.Abs(distance.Value - StepDistance) < 1e-6
             && step.Data["parts_count"] is int count && count > 0)
         {
             step.Pass("Шаг читается: компоненты и расстояние те же, что записаны.");
@@ -466,6 +469,82 @@ internal sealed class DismantleProbe
         }
     }
 
+    /// <summary>The semantics the tool has to encode: what an empty step list does in the mode, whether
+    /// a step removal while the mode is on returns the placement, and what zero and negative distances
+    /// mean. History: docs/decisions/dismantle.md#probe</summary>
+    private void Semantics(IDismantleParameters parameters)
+    {
+        var step = _report.Begin("D.10", "Семантика режима: пустой список, удаление, знак расстояния",
+            "Что означает режим без шагов, удаление шага при включённом режиме и отрицательное расстояние?");
+        var document7 = Api5.SafeObject(() => _app.TransferInterface(_assembly5!, 2, 0)) as IKompasDocument3D;
+        var assembly = document7 as IAssemblyDocument;
+        var top = document7?.TopPart;
+        var components = Components(top, step);
+        if (assembly is null || top is null || components.Count < 2)
+        {
+            step.Fail("Сборка или компоненты не прочитаны.");
+            return;
+        }
+
+        var assembled = components.Select(c => Translation(top, c)).ToList();
+        step.Data["assembled"] = assembled.Select(Point).ToList();
+
+        // (1) mode on with the two steps from D.5/D.5c, then clear them: does the placement return?
+        assembly.DismantleMode = true;
+        _assembly5!.RebuildDocument();
+        step.Data["mode_on_with_steps"] = components.Select(c => Point(Translation(top, c))).ToList();
+        step.Data["clear"] = Api5.Raw(Api5.SafeBool(() => parameters.ClearDismantleParameters()));
+        _assembly5.RebuildDocument();
+        step.Data["after_clear_mode_on"] = components.Select(c => Point(Translation(top, c))).ToList();
+
+        // (2) a fresh step with distance 0 and then a negative distance on the X axis.
+        var axis = DirectionAxis(step);
+        step.Data["axis"] = Api5.RuntimeName(axis);
+        var target = components[0];
+        foreach (var distance in new[] { 0d, -30d })
+        {
+            if (Api5.SafeObject(() => parameters.AddDismantleStep()) is not IDismantleStep live)
+            {
+                step.Fail("Шаг не создан.");
+                return;
+            }
+
+            live.Parts = new object[] { target };
+            live.Distance = distance;
+            if (axis is IModelObject model)
+            {
+                live.DirectionObject = model;
+            }
+
+            step.Data["update_" + distance] = Api5.SafeInt(() => live.Update());
+            _assembly5.RebuildDocument();
+            step.Data["distance_read_" + distance] = Api5.Raw(Api5.SafeDouble(() => live.Distance));
+            step.Data["placement_" + distance] = Point(Translation(top, components[0]));
+            Api5.SafeObject(() => parameters.DeleteDismantleStep(0));
+            _assembly5.RebuildDocument();
+        }
+
+        // (3) mode off; one step is left in place so the save/reopen step has something to keep.
+        assembly.DismantleMode = false;
+        _assembly5.RebuildDocument();
+        step.Data["mode_off"] = components.Select(c => Point(Translation(top, c))).ToList();
+        if (Api5.SafeObject(() => parameters.AddDismantleStep()) is IDismantleStep kept)
+        {
+            kept.Parts = new object[] { target };
+            kept.Distance = StepDistance;
+            if (axis is IModelObject model)
+            {
+                kept.DirectionObject = model;
+            }
+
+            step.Data["kept_update"] = Api5.SafeInt(() => kept.Update());
+            _assembly5.RebuildDocument();
+        }
+
+        step.Data["count"] = Api5.SafeInt(() => parameters.DismantleStepsCount);
+        step.Unknown("Семантика записана; правила инструмента берутся из этих данных.");
+    }
+
     private void SaveReopen()
     {
         var step = _report.Begin("D.8", "Сохранение и переоткрытие: шаги и режим",
@@ -495,9 +574,12 @@ internal sealed class DismantleProbe
             step.Data["distance_after_reopen"] = live is null
                 ? null
                 : Api5.Raw(Api5.SafeDouble(() => live.Distance));
-            step.Data["parts_after_reopen"] = live is null
+            var partsAfterReopen = live is null ? null : Api5.SafeObject(() => live.Parts);
+            step.Data["parts_after_reopen"] = partsAfterReopen is null
                 ? null
-                : Api5.Raw(Api5.SafeObject(() => live.Parts) is Array array ? array.Length : (object?)null);
+                : partsAfterReopen is Array reopenedArray
+                    ? reopenedArray.Length
+                    : 1;
             if (step.Data["count_after_reopen"] is int count && count > 0 && live is not null)
             {
                 step.Pass("Шаг и режим пережили сохранение и переоткрытие.");
@@ -694,6 +776,13 @@ internal sealed class DismantleProbe
     /// History: docs/decisions/dismantle.md#probe</summary>
     private object? DirectionAxis(ProbeStep step, bool alongY = false)
     {
+        // MEASURED: a second axis through the same two points is not created, so the X axis is made once
+        // and reused; the Y axis is made separately. History: docs/decisions/dismantle.md#probe
+        if (!alongY && _xAxis is not null)
+        {
+            return _xAxis;
+        }
+
         var document7 = Api5.SafeObject(() => _app.TransferInterface(_assembly5!, 2, 0)) as IKompasDocument3D;
         if (document7?.TopPart is not IAuxiliaryGeomContainer auxiliary
             || document7.TopPart is not IModelContainer model)
@@ -724,6 +813,11 @@ internal sealed class DismantleProbe
             }
 
             step.Data["axis_update"] = Api5.Raw(Api5.SafeBool(() => axis.Update()));
+            if (!alongY)
+            {
+                _xAxis = axis;
+            }
+
             return axis;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)

@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 43,
-   "operations": 136,
+   "families": 44,
+   "operations": 137,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 214,
+   "modes_and_variants": 216,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -7963,6 +7963,71 @@
       "created_document_ids ответа несёт СЫРОЙ указатель COM («0x…»), а не идентификатор документа Хоста: адресуемый id — тот, который прибавился в kompas_list_documents (измерено на живом прогоне).",
       "Отказ импорта РЕГИСТРИРУЕТ документы внутри, хотя partial_effects равен false: обе попытки маршрута начинаются с Create, и details.trace отказа называет их id. В kompas_list_documents они не появляются (измерено).",
       "Импортированное тело приходит ОДНИМ признаком «Операция без истории:1» (kompas_list_features: type 79, dependencies пуст): редактируемой истории построения у него нет (измерено)."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "G8",
+   "title": "Мастер-геометрия: копия геометрии из файла другой детали",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "metadata": "kAPI7.tlb: ICopyGeometry : IModelObject (31 член), ICopiesGeometry, IModelContainer.CopiesGeometry",
+    "runtime": "измерено 21.10.2026 на build 24.0.0.2799: копия из сохранённой детали создаётся и остаётся связанной с источником; источник 10 -> 25 мм, Synhronise(), объём приёмника 80 000 -> 200 000 мм³"
+   },
+   "rule": "операция входит в модель только после IModelObject.Update(); успех подтверждается чтением тел, объёма и коллекции, а не BOOL вызова",
+   "next_step": "Группа --copy-geometry-only и профиль master-geometry-minimal-v1 пройдены; следующее - зачётный --all. Вне профиля остаются зеркальная копия, ContextObjects = true, локальные СК, компоновочная геометрия, ReplaceExternalFilesNames и удаление операции.",
+   "mcp_support": "kompas_copy_geometry / kompas_list_copies_geometry / kompas_synchronise_copy",
+   "route": "API7 IModelContainer.CopiesGeometry -> ICopiesGeometry.Add -> ICopyGeometry.ContextObjects=false -> AddInitialObjectsFromExternalDocument(IKompasDocument3D, ILocalCoordinateSystem, SafeArray из IModelObject) -> IModelObject.Update() -> RebuildDocument",
+   "operations": [
+    {
+     "id": "G8.copy_geometry",
+     "name": "Копия геометрии из файла другой детали",
+     "level": "mcp_verified",
+     "source_user_docs": "нет отдельной страницы пользователя: режим описан в справке SDK",
+     "source_sdk": "imodelcontainer_copiesgeometry.html, icopiesgeometry_add.html, icopiesgeometry_copygeometry.html, icopygeometry.html, icopygeometry_addinitialobjectsfromexternaldocument.html, icopygeometry_watchforsourcechange.html, icopygeometry_synhronise.html, icopygeometry_documentfilename.html, icopygeometry_contextobjects.html, imodelobject_update.html",
+     "api5": {
+      "found_in": "Bin\\kApi5.tlb",
+      "interfaces": [
+       "ksPart.BodyCollection (адрес тела источника)"
+      ],
+      "object_type": "o3d_CopyGeometry = 589"
+     },
+     "api7": {
+      "found_in": "Bin\\kAPI7.tlb",
+      "interfaces": [
+       "ICopyGeometry",
+       "ICopiesGeometry",
+       "IModelContainer",
+       "IModelObject"
+      ],
+      "members": [
+       "CopiesGeometry",
+       "Add",
+       "CopyGeometry[Index]",
+       "ContextObjects",
+       "AddInitialObjectsFromExternalDocument",
+       "AddInitialObjects",
+       "IsSuitableObject",
+       "IsInitialObject",
+       "DocumentFileName",
+       "WatchForSourceChange",
+       "Synhronise",
+       "Update"
+      ]
+     },
+     "modes": [
+      {
+       "id": "G8.copy_geometry.mode_body_from_file",
+       "name": "Тело источника из сохранённой детали .m3d",
+       "level": "mcp_verified"
+      },
+      {
+       "id": "G8.copy_geometry.mode_associativity",
+       "name": "Синхронизация с изменённым источником (Synhronise)",
+       "level": "mcp_verified"
+      }
      ]
     }
    ]

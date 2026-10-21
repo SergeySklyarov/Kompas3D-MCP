@@ -14585,6 +14585,210 @@
           }
         ]
       }
+    },
+    {
+      "operation_id": "G8.copy_geometry.mode_body_from_file",
+      "context": "part.single_body",
+      "catalog_ref": "G8",
+      "kind": "profile_mode",
+      "profile": "master-geometry-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_copy_geometry.json",
+      "adapter_route": "kompas_copy_geometry: API7 IModelContainer.CopiesGeometry -> Add -> ContextObjects=false -> AddInitialObjectsFromExternalDocument(источник как IKompasDocument3D, его СК, SafeArray из IModelObject) -> IModelObject.Update() -> RebuildDocument; объект источника - ksPart.BodyCollection().GetByIndex(0) либо GetDefaultEntity(1), оба через TransferInterface(ksAPI7Dual); подтверждение - тела и объём приёмника до и после плюс ICopiesGeometry.Count (imodelcontainer_copiesgeometry.html, icopiesgeometry_add.html, icopygeometry_addinitialobjectsfromexternaldocument.html, imodelobject_update.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "CG-01.discovery",
+        "CG-01.schema",
+        "CG-01.capabilities",
+        "CG-02.source",
+        "CG-02.receiver",
+        "CG-03.create",
+        "CG-03.list",
+        "CG-05.save_reopen",
+        "CG-06.missing_file",
+        "CG-06.outside_roots",
+        "CG-06.no_body",
+        "CG-06.stale_revision",
+        "CG-06.refusal_names_effect"
+      ],
+      "limitations": [
+        "Адресуются только два вида объектов источника: первое тело коллекции ksPart.BodyCollection и плоскость XoY. Эскиз, ось и произвольный объект источника документированного адреса через этот маршрут не получили.",
+        "Копируется ОДИН объект за вызов: массив исходных объектов принимает больше, но профиль ограничен одним - так адрес остаётся однозначным.",
+        "Автоматического обновления по WatchForSourceChange нет: справка его не обещает, признак только читается и пишется. Обновляет kompas_synchronise_copy.",
+        "Удаления операции в профиле нет: у ICopyGeometry документирован Destroy() массива, отдельного инструмента нет."
+      ],
+      "not_applicable_reasons": {
+        "edit": "правка параметров копии в профиль не входит: источник задаётся вызовом создания, DocumentFileName только для чтения",
+        "rebuild": "перестроение выполняет сама мутация (RebuildDocument внутри вызова), отдельного действия у режима нет",
+        "suppress_restore": "подавление операции копии в профиль не входит",
+        "delete_dependencies": "удаление операции в профиль не входит: документирован только Destroy() массива"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_copies_geometry"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_copy_geometry"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_copies_geometry"
+          },
+          {
+            "tool": "kompas_list_bodies"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_copy_geometry"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "G8.copy_geometry.mode_associativity",
+      "context": "part.single_body",
+      "catalog_ref": "G8",
+      "kind": "profile_mode",
+      "profile": "master-geometry-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_synchronise_copy.json",
+      "adapter_route": "kompas_synchronise_copy: ICopiesGeometry.CopyGeometry[Index] -> ICopyGeometry; файл по записанному DocumentFileName проверяется ДО вызова продукта; Synhronise() -> RebuildDocument -> тела и объём приёмника до и после (icopygeometry_synhronise.html, icopygeometry_documentfilename.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "CG-04.source_edited",
+        "CG-04.associativity",
+        "CG-05.save_reopen",
+        "CG-06.missing_file",
+        "CG-06.stale_revision"
+      ],
+      "limitations": [
+        "Synhronise() отвечает TRUE и при недоступном источнике (измерено: файл удалён, геометрия прежняя), поэтому отказ выносит Хост по пути, а инструмент проверяет файл до вызова продукта.",
+        "Уровень подтверждения синхронизации - call_returned: ожидаемый объём клиент задаёт сам, инструмент возвращает объём и тела до и после.",
+        "Изменение источника выполняется инструментами Хоста (kompas_update_feature по признаку выдавливания); правка признака переоткрытого документа читает семейство как null, поэтому группа ищет признак по наличию эскиза."
+      ],
+      "not_applicable_reasons": {
+        "edit": "правка параметров синхронизации в профиль не входит: единственный параметр - номер операции",
+        "rebuild": "перестроение выполняет сама мутация (RebuildDocument внутри вызова)",
+        "suppress_restore": "подавление копии в профиль не входит",
+        "delete_dependencies": "удаление операции в профиль не входит"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_copies_geometry"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_copy_geometry"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_copies_geometry"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_synchronise_copy"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_measure"
+          }
+        ]
+      }
     }
   ],
   "pending_families": [

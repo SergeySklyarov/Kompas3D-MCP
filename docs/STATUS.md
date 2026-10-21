@@ -14,21 +14,19 @@
 
 ## Текущее состояние
 
-- **Мастер-геометрия: маршрут найден, продукт не начат (наряд `OMEGA_G8_MASTER_GEOMETRY`, попытка 2,
-  21.10.2026, сдан, ждёт вердикта):** проба `--copy-geometry` доказала документированный маршрут
-  «Копии геометрии» целиком: адрес объекта чужого документа (тело из `ksPart.BodyCollection()` ->
-  `TransferInterface`; тело из `GetMainBody()` непригодно), затем `Add()` -> свойства ->
-  `AddInitialObjectsFromExternalDocument` -> **`IModelObject.Update()`** -> `RebuildDocument`. Без
-  `Update()` операция остаётся заготовкой (дерево приёмника пусто), с ним появляется строка
-  «Копирование:1», тело и объём 80 000 мм³. Ассоциативность измерена: источник 10 -> 25 мм,
-  `Synhronise()` = TRUE, объём приёмника 80 000 -> 200 000 мм³ (100x80x25, расхождение 0). Операция
-  переживает сохранение, закрытие и переоткрытие; при удалённом файле источника `Synhronise()` всё равно
-  отвечает TRUE и геометрия остаётся - значит отказ «источник не читается» решает Хост по `source_path`,
-  а не продукт. Инструменты `kompas_copy_geometry`, `kompas_list_copies_geometry`,
-  `kompas_synchronise_copy`, группа `--copy-geometry-only`, профиль `master-geometry-minimal-v1`,
-  `--all` и `contract-diff` - **не делались**: следующий шаг наряда. `docs/04_KOMPAS_API_NOTES.md`
-  §4.97, `docs/decisions/master-geometry.md`, отчёт `OMEGA_G8_MASTER_GEOMETRY_REPORT_20261021.md`,
-  доказательства `docs/acceptance/evidence/20261021-copy-geometry-939cf7d/`.
+- **Мастер-геометрия: продукт и группа приёмки готовы (наряд `OMEGA_G8_MASTER_GEOMETRY`, попытка 3,
+  21.10.2026, сдана):** три инструмента - `kompas_copy_geometry` (создание копии из сохранённой детали
+  `.m3d`, `object_kind` = `body` | `plane_xoy`), `kompas_list_copies_geometry` (чтение: номер, путь
+  источника, слежение, режимы) и `kompas_synchronise_copy` (обновление по источнику). Маршрут -
+  измеренный: `CopiesGeometry.Add()` -> `ContextObjects = false` ->
+  `AddInitialObjectsFromExternalDocument` -> **`IModelObject.Update()`** -> `RebuildDocument`; успех
+  подтверждается чтением тел и объёма, а не ответом вызова (уровень `geometry_checked`; у синхронизации -
+  `call_returned`, потому что `Synhronise()` отвечает TRUE и при удалённом источнике). Отказы до
+  КОМПАС: `DOCUMENT_NOT_FOUND`, `PATH_NOT_ALLOWED`, `REVISION_CONFLICT`, `NO_BODY`. Группа
+  `--copy-geometry-only`: 38 PASS / 0 FAIL / 2 UNKNOWN (автообновление по слежению справка не обещает;
+  удаления операции в профиле нет) - ассоциативность доказана строкой CG-04: источник 10 -> 25 мм,
+  объём приёмника 80 000 -> 200 000 мм³. `docs/04_KOMPAS_API_NOTES.md` §4.98,
+  `docs/decisions/master-geometry.md#tools`, отчёт `OMEGA_G8_MASTER_GEOMETRY_REPORT_20261021.md`.
 - **`compact` обслуживает весь реестр и стал режимом по умолчанию (наряд `CATALOG_COMPACT`, 21.10.2026,
   сдан, ждёт вердикта):** каждая операция `ToolCatalog.All` достижима: прямой набор
   (11 инструментов) публикуется, остальные вызываются через `kompas_run`. Список «переведённых» как

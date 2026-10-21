@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "profile_id": "master-geometry-minimal-v1",
+    "title": "Мастер-геометрия v24: копия геометрии из файла другой детали и синхронизация по источнику",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "21.10.2026",
+        "change": "профиль заведён нарядом OMEGA_G8_MASTER_GEOMETRY (шаг D #9, G8): создание копии из файла и синхронизация по источнику; уровни подняты по группе --copy-geometry-only"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E4": "Копия геометрии - шаг D таблицы G-пробелов, очередь E4"
+    }
+  },
+  "modes": [
+    {
+      "ref": "G8.copy_geometry.mode_body_from_file",
+      "title": "Копия геометрии из сохранённой детали: тело источника в приёмник",
+      "family": "G8",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: пластина 100x80x10 сохранена в файл, копия создана в пустой детали - тела 0 -> 1, объём 80 000 мм³, операция читается обратно с путём источника и признаком слежения, переживает save -> close -> open. Отказы до КОМПАС: несуществующий файл, путь вне корней, устаревшая ревизия, источник без тела."
+    },
+    {
+      "ref": "G8.copy_geometry.mode_associativity",
+      "title": "Ассоциативность: источник изменён инструментами Хоста, приёмник синхронизирован",
+      "family": "G8",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "suppress_restore",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Режим закрыт: выдавливание источника правится с 10 до 25 мм, файл сохраняется, kompas_synchronise_copy перечитывает приёмник - объём 80 000 -> 200 000 мм³ (100x80x25, расхождение 0). Источник, который не читается, отвергается до вызова продукта."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.api7.in_same_adapter",
+      "title": "API7 в основном коде: один адаптер, один владелец сеанса, одна STA-очередь",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen"
+      ],
+      "gap": "Копия строится через Api7Bridge.ContainerFor и TransferInterface(ksAPI7Dual): второй точки входа в API7 нет, кэш контейнера ключуется документом и ревизией. Проверяется группой --copy-geometry-only (CG-03, CG-05)."
+    }
+  ],
+  "explicitly_out_of_scope": [
+    "Зеркальная копия (MirrorCopy), ContextObjects = true, локальные СК (LocalCS), компоновочная геометрия (IsLayoutGeometry), ReplaceExternalFilesNames - режимы, документированные страницами ICopyGeometry, но не входящие в минимальный профиль.",
+    "Коллекции геометрии (ICollectionsGeometry / ByCollectionGeometry): измерено, что операция через них не появляется в дереве, поэтому маршрут не включён.",
+    "Автоматическое обновление по WatchForSourceChange и удаление операции: справка первого не обещает, для второго документирован только Destroy() массива.",
+    "Источник, отличный от сохранённой детали .m3d (сборка, чертёж, документ в памяти)."
+  ]
+}

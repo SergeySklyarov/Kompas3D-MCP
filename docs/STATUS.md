@@ -38,7 +38,9 @@
   13/13 PASS на двух пакетах с разными тегами во временном `-InstallRoot` и `-CodexHome`.
   `docs/decisions/host.md#update-notice`, `docs/02_TOOL_CONTRACTS.md`, три инструкции с разделом
   «Обновление», доказательства `docs/acceptance/evidence/20261021-update-7e2a78c/`. Зачётный `--all`
-  запускается на коммите кода `62e1e58` (`full_run.py start`); его итог - в следующей записи.
+  на `d1a0afb` (Release, дерево чистое): **PASS 1818 / NAMED 6 / UNKNOWN 3 / FAIL 0**, exit 0;
+  `compare-run-rows.py` против прежнего зачётного `5201f8d` - прибавились ровно шесть строк
+  `UN.01`-`UN.06` (все PASS), ни одна прежняя строка не потеряна и не разошлась.
 
 - **Пояснение `writable_roots` в документации поставки (наряд `TEXTS_WRITABLE_ROOTS`, 21.10.2026,
   сдан):** `docs/distribution/INSTALL.md` (шаг 2 ручной установки) и `docs/operator-guide/mcp-config.md`

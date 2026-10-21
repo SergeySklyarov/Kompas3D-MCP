@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -86,8 +86,10 @@ internal sealed class CopyGeometryProbe
             }
 
             ReadCollection(receiver.Value.Doc);
-            WatchAndReopen(receiver.Value.Doc);
+            // MEASURED: the save/reopen step closes the receiver, so the live pointer is spent by it;
+            // associativity runs first and the reopened file is then read for what it kept.
             Associativity(source.Value.Extrusion, accepted, receiver.Value.Doc);
+            WatchAndReopen(receiver.Value.Doc);
         }
         catch (Exception ex)
         {
@@ -131,7 +133,7 @@ internal sealed class CopyGeometryProbe
 
     /// <summary>The source part is a plate whose thickness is changed later: the associativity step
     /// needs an edit that changes the volume in a known direction.</summary>
-    private (ksDocument3D Doc, ksPart Part, ksEntity Extrusion)? BuildSource()
+    private (ksDocument3D Doc, ksPart Part, ksEntity? Extrusion)? BuildSource()
     {
         var step = _report.Begin("CG.2", "Источник: пластина 100x80x10 в файле",
             "Есть ли сохранённый файл, из которого можно копировать?");
@@ -154,15 +156,23 @@ internal sealed class CopyGeometryProbe
         _sourcePath = Path.Combine(_options.WorkDir, "g8-source.m3d");
         var saved = doc.SaveAs(_sourcePath);
 
-        // MEASURED: a document created by Document3D() is not the same thing as a file the product opened.
-        // The source is therefore closed and opened from disk before it is addressed.
-        var reopened = (ksDocument3D)_app.Document3D();
-        var openedFromDisk = Api5.SafeBool(() => reopened.Open(_sourcePath, true));
-        step.Data["source_reopened_from_disk"] = openedFromDisk;
-        if (openedFromDisk == true)
+        // MEASURED: Open() on a file this session already has open answers FALSE, so the source is closed
+        // first. The reopened document is what the product will see, so the feature is taken from its own
+        // tree: a feature pointer of the closed document is spent.
+        if (_options.CopyGeometryDiskSource)
         {
-            doc = reopened;
-            part = (ksPart)doc.GetPart(-1);
+            step.Data["source_closed"] = Api5.Raw(Api5.SafeBool(() => doc.close()));
+            var reopened = (ksDocument3D)_app.Document3D();
+            var openedFromDisk = Api5.SafeBool(() => reopened.Open(_sourcePath, true));
+            step.Data["source_reopened_from_disk"] = openedFromDisk;
+            if (openedFromDisk == true)
+            {
+                doc = reopened;
+                part = (ksPart)doc.GetPart(-1);
+                extrusion = Api5.ReadFeatures(part, step).Select(f => f.Entity)
+                    .FirstOrDefault(e => e is not null && e.type == Api5.BaseExtrusion);
+                step.Data["source_extrusion_from_tree"] = extrusion is not null;
+            }
         }
 
         _sourceDocument7 = TransferTo7Document(doc);
@@ -263,7 +273,7 @@ internal sealed class CopyGeometryProbe
     /// <summary>The decisive question of the order: is there a documented, stable address for an object
     /// of a foreign document? The page names the address: the source <c>IKompasDocument3D</c>, its
     /// <c>ILocalCoordinateSystem</c>, and the object itself as <c>IModelObject</c>.</summary>
-    private List<(string Name, IModelObject Object)>? Address(ksPart sourcePart, ksEntity extrusion,
+    private List<(string Name, IModelObject Object)>? Address(ksPart sourcePart, ksEntity? extrusion,
         ICopyGeometry operation, out LocalCoordinateSystem? externalCs, out IKompasDocument3D? externalDoc)
     {
         externalCs = null;
@@ -379,20 +389,29 @@ internal sealed class CopyGeometryProbe
         LocalCoordinateSystem? externalCs, List<(string Name, IModelObject Object)> objects,
         ksDocument3D receiverDoc)
     {
-        var step = _report.Begin("CG.6", "AddInitialObjectsFromExternalDocument",
-            "Принимает ли маршрут объект чужого документа и что возвращает?");
+        var step = _report.Begin("CG.6", "AddInitialObjectsFromExternalDocument + Update",
+            "Принимает ли маршрут объект чужого документа и вводит ли Update() операцию в модель?");
+        // DOC: icopygeometry.html - the hierarchy is IDispatch > IKompasAPIObject > IModelObject >
+        // ICopyGeometry, so the operation is an IModelObject. DOC: imodelobject_update.html - «Метод
+        // Update необходимо вызвать для объекта, свойства которого были изменены ... чтобы эти изменения
+        // вступили в силу». MEASURED: without Update the operation stays a draft - the add call answers
+        // TRUE and nothing reaches the tree; with it the tree gains the operation.
+        step.Data["operation_is_model_object"] = operation as IModelObject is not null;
         foreach (var candidate in objects)
         {
             try
             {
                 var result = operation.AddInitialObjectsFromExternalDocument(externalDoc!, externalCs!,
                     new object[] { candidate.Object });
+                var update = Api5.SafeBool(() => ((IModelObject)operation).Update());
+                step.Data["update_" + candidate.Name] = Api5.Raw(update);
                 receiverDoc.RebuildDocument();
                 var bodies = Api5.BodyCount((ksPart)receiverDoc.GetPart(-1));
                 var initial = Api5.SafeBool(() => operation.IsInitialObject(candidate.Object));
                 step.Data["returned_" + candidate.Name] = result;
                 step.Data["initial_" + candidate.Name] = Api5.Raw(initial);
-                step.Observe($"{candidate.Name}: возврат {result}, тел в приёмнике {bodies}, "
+                step.Observe($"{candidate.Name}: возврат {result}, Update()={Api5.Raw(update)}, "
+                    + $"тел в приёмнике {bodies}, "
                     + $"IsSuitableObject={Api5.Raw(Api5.SafeBool(() => operation.IsSuitableObject(candidate.Object)))}, "
                     + $"IsInitialObject={Api5.Raw(initial)}");
                 if (result && initial == true)
@@ -502,6 +521,7 @@ internal sealed class CopyGeometryProbe
         step.Data["cs"] = Api5.RuntimeName(cs);
         step.Data["returned"] = Api5.Raw(Api5.SafeBool(
             () => operation.AddInitialObjectsFromExternalDocument(opened, cs!, new object[] { model })));
+        step.Data["update"] = Api5.Raw(Api5.SafeBool(() => ((IModelObject)operation).Update()));
         step.Data["initial"] = Api5.Raw(Api5.SafeBool(() => operation.IsInitialObject(model)));
         step.Data["document_file_name"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
         receiverDoc.RebuildDocument();
@@ -569,6 +589,8 @@ internal sealed class CopyGeometryProbe
                 step.Data["by_collection_" + name] = Api5.Raw(Api5.SafeBool(() => operation.ByCollectionGeometry));
                 step.Data["add_" + name] = Api5.Raw(
                     Api5.SafeBool(() => operation.AddInitialObjects(new object[] { argument })));
+                step.Data["update_" + name] = Api5.Raw(
+                    Api5.SafeBool(() => ((IModelObject)operation).Update()));
                 receiverDoc.RebuildDocument();
                 var features = Api5.ReadFeatures((ksPart)receiverDoc.GetPart(-1), step)
                     .Select(f => f.Name).ToList();
@@ -649,8 +671,12 @@ internal sealed class CopyGeometryProbe
             step.Data["watch_read"] = Api5.Raw(Api5.SafeBool(() => live.WatchForSourceChange));
             receiverDoc.Save();
 
+            // MEASURED: Open() on a file this session already has open answers FALSE, so the receiver is
+            // closed first; without the close the reopen is never measured at all.
+            step.Data["volume_before_reopen"] = Api5.Volume((ksPart)receiverDoc.GetPart(-1));
+            step.Data["closed"] = Api5.Raw(Api5.SafeBool(() => receiverDoc.close()));
             var reopened = (ksDocument3D)_app.Document3D();
-            reopened.Open(_receiverPath, true);
+            step.Data["reopen_opened"] = Api5.Raw(Api5.SafeBool(() => reopened.Open(_receiverPath, true)));
             var reopenedContainer = Container(reopened);
             step.Data["container_after_reopen"] = Api5.RuntimeName(reopenedContainer);
             step.Data["collection_after_reopen"] = Api5.RuntimeName(
@@ -667,6 +693,10 @@ internal sealed class CopyGeometryProbe
             step.Data["watch_after_reopen"] = again is null
                 ? null
                 : Api5.Raw(Api5.SafeBool(() => again.WatchForSourceChange));
+            step.Data["volume_after_reopen"] = Api5.Volume((ksPart)reopened.GetPart(-1));
+            step.Data["bodies_after_reopen"] = RefreshedBodyCount(reopened);
+            step.Data["tree_after_reopen"] = Api5.ReadFeatures((ksPart)reopened.GetPart(-1), step)
+                .Select(f => f.Name).ToList();
             step.Observe("После reopen: DocumentFileName="
                 + Api5.Raw(again is null ? null : Api5.SafeObject(() => again.DocumentFileName))
                 + ", WatchForSourceChange="
@@ -688,12 +718,18 @@ internal sealed class CopyGeometryProbe
 
     /// <summary>The associativity claim of the order: the source changes, <c>Synhronise()</c> runs, the
     /// receiver's geometry changes the way the source change implies.</summary>
-    private void Associativity(ksEntity extrusion, IModelObject body, ksDocument3D receiverDoc)
+    private void Associativity(ksEntity? extrusion, IModelObject body, ksDocument3D receiverDoc)
     {
         var step = _report.Begin("CG.9", "Ассоциативность: источник изменился, приёмник синхронизирован",
             "Меняется ли геометрия приёмника так, как следует из изменения источника?");
         var before = Api5.Volume((ksPart)receiverDoc.GetPart(-1));
         step.Data["volume_before"] = before;
+
+        if (extrusion is null)
+        {
+            step.Unknown("Признак выдавливания источника в дереве не найден — менять нечем.");
+            return;
+        }
 
         if (Api5.SafeObject(() => extrusion.GetDefinition()) is not ksBaseExtrusionDefinition definition)
         {

@@ -778,6 +778,11 @@ public sealed class Options
     /// History: docs/decisions/probes.md#copy-geometry</summary>
     public bool CopyGeometry { get; private set; }
 
+    /// <summary><c>--copy-geometry-disk-source</c>: the same probe with the source closed and opened from
+    /// the saved file, which is the document the product will see. History:
+    /// docs/decisions/probes.md#copy-geometry</summary>
+    public bool CopyGeometryDiskSource { get; private set; }
+
     /// <summary><c>--mech-mates</c>: are «Механическая передача» and «Кулачок - толкатель» created by the
     /// documented API7 route, and is the LINK observable through a measured change of the driven
     /// component's placement (order <c>G4_MECHANICAL_MATES</c>, stage 0).
@@ -927,6 +932,7 @@ public sealed class Options
         var b5 = false;
         var sketchCopy = false;
         var copyGeometry = false;
+        var copyGeometryDiskSource = false;
         var mechanicalMates = false;
         var drafts = false;
         var draftsBaseEdit = false;
@@ -1034,6 +1040,10 @@ public sealed class Options
                     break;
                 case "--copy-geometry":
                     copyGeometry = true;
+                    break;
+                case "--copy-geometry-disk-source":
+                    copyGeometry = true;
+                    copyGeometryDiskSource = true;
                     break;
                 case "--mech-mates":
                     mechanicalMates = true;
@@ -1165,6 +1175,7 @@ public sealed class Options
             CollectControls = controls,
             SketchCopy = sketchCopy,
             CopyGeometry = copyGeometry,
+            CopyGeometryDiskSource = copyGeometryDiskSource,
             MechanicalMates = mechanicalMates,
             Drafts = drafts,
             DraftsBaseEdit = draftsBaseEdit,

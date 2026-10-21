@@ -30,6 +30,7 @@ internal sealed class CopyGeometryProbe
     private readonly Options _options;
     private KompasObject _app = null!;
     private IKompasDocument3D? _sourceDocument7;
+    private IModelObject? _bodyModel;
     private object? _factoryCollection;
     private int? _factoryCount;
     private string _sourcePath = string.Empty;
@@ -78,6 +79,11 @@ internal sealed class CopyGeometryProbe
             }
 
             ReadBack(operation, accepted, receiver.Value.Doc);
+            if (RefreshedBodyCount(receiver.Value.Doc) == 0)
+            {
+                AddThroughOpenDocument(receiver.Value.Doc);
+            }
+
             ReadCollection(receiver.Value.Doc);
             WatchAndReopen(receiver.Value.Doc);
             Associativity(source.Value.Extrusion, accepted, receiver.Value.Doc);
@@ -378,6 +384,7 @@ internal sealed class CopyGeometryProbe
                     + $"IsInitialObject={Api5.Raw(initial)}");
                 if (result && initial == true)
                 {
+                    _bodyModel = candidate.Object;
                     step.Data["accepted"] = candidate.Name;
                     step.Pass($"Объект «{candidate.Name}» принят и записан как исходный.");
                     return candidate.Object;
@@ -447,6 +454,58 @@ internal sealed class CopyGeometryProbe
 
     /// <summary>How the created operation is read back is a separate documented question: the page names
     /// an index or a name, and the interop exposes two indexers. Each form is tried and recorded.</summary>
+    /// <summary>DOC: <c>icopygeometry_opendocument.html</c> - «Открывает документ-источник на
+    /// редактирование». The first route used a document the probe created itself; here the source is the
+    /// one the operation opened, which is the product's own idea of the source.</summary>
+    private void AddThroughOpenDocument(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.7b", "Источник, открытый самой операцией",
+            "Даёт ли геометрию маршрут, в котором источник открывает OpenDocument?");
+        var collection = Container(receiverDoc)?.CopiesGeometry;
+        if (collection?.Add() is not ICopyGeometry operation)
+        {
+            step.Fail("Вторую операцию создать не удалось.");
+            return;
+        }
+
+        var opened = Api5.SafeObject(() => operation.OpenDocument(false, true)) as IKompasDocument3D;
+        step.Data["opened"] = Api5.RuntimeName(opened);
+        if (opened is null)
+        {
+            step.Fail("OpenDocument не дал IKompasDocument3D.");
+            return;
+        }
+
+        var model = _bodyModel;
+        step.Data["model"] = Api5.RuntimeName(model);
+        if (model is null)
+        {
+            step.Fail("Тело источника не было получено ранее.");
+            return;
+        }
+
+        step.Data["suitable"] = Api5.Raw(Api5.SafeBool(() => operation.IsSuitableObject(model)));
+        var cs = Api5.SafeObject(() => operation.GetExternalLocalCooordinateSystem(opened)) as LocalCoordinateSystem;
+        step.Data["cs"] = Api5.RuntimeName(cs);
+        step.Data["returned"] = Api5.Raw(Api5.SafeBool(
+            () => operation.AddInitialObjectsFromExternalDocument(opened, cs!, new object[] { model })));
+        step.Data["initial"] = Api5.Raw(Api5.SafeBool(() => operation.IsInitialObject(model)));
+        step.Data["document_file_name"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
+        receiverDoc.RebuildDocument();
+        step.Data["bodies_after"] = RefreshedBodyCount(receiverDoc);
+        step.Data["volume_after"] = Api5.Volume((ksPart)receiverDoc.GetPart(-1));
+        step.Observe($"После маршрута: тел {RefreshedBodyCount(receiverDoc)}, "
+            + $"объём {Api5.Num(Api5.Volume((ksPart)receiverDoc.GetPart(-1)))} мм³.");
+        if (RefreshedBodyCount(receiverDoc) > 0)
+        {
+            step.Pass("Геометрия появилась: тело в приёмнике есть.");
+        }
+        else
+        {
+            step.Fail("Тела в приёмнике нет и на этом маршруте.");
+        }
+    }
+
     private void ReadCollection(ksDocument3D receiverDoc)
     {
         var step = _report.Begin("CG.7a", "Чтение операции из коллекции: индекс или имя",

@@ -152,8 +152,20 @@ internal sealed class CopyGeometryProbe
 
         doc.RebuildDocument();
         _sourcePath = Path.Combine(_options.WorkDir, "g8-source.m3d");
-        _sourceDocument7 = TransferTo7Document(doc);
         var saved = doc.SaveAs(_sourcePath);
+
+        // MEASURED: a document created by Document3D() is not the same thing as a file the product opened.
+        // The source is therefore closed and opened from disk before it is addressed.
+        var reopened = (ksDocument3D)_app.Document3D();
+        var openedFromDisk = Api5.SafeBool(() => reopened.Open(_sourcePath, true));
+        step.Data["source_reopened_from_disk"] = openedFromDisk;
+        if (openedFromDisk == true)
+        {
+            doc = reopened;
+            part = (ksPart)doc.GetPart(-1);
+        }
+
+        _sourceDocument7 = TransferTo7Document(doc);
         step.Data["save_as"] = saved;
         step.Data["path"] = _sourcePath;
         step.Data["volume"] = Api5.Volume(part);

@@ -59,6 +59,9 @@
     {
       "id": "dep.api7.sections_interface",
       "title": "IDynamicCrossSectionsManager как дополнительный интерфейс IKompasDocument3D",
+      "catalog_refs": [
+        "G11.sections"
+      ],
       "required_actions": [
         "discover",
         "read",
@@ -72,7 +75,7 @@
     "Произвольная плоскость шага (ksDCSTByFreePlane, LocalCoordinateSystem - ILocalCoordinateSystem), зона (ksDCSTByZone) и граничные точки (ksDCSTByBorderPoints) - вне объёма наряда по его §1.",
     "Разрезы и сечения чертежа (ksCutLineParam, ksCreateSheetSectionView, ksAssociationViewParam.section) - отдельный домен, вне профиля.",
     "Удаление сечения в продукте: Delete() отвечает FALSE, хотя сечение удаляется, поэтому подтверждение возможно только счётчиком; инструмент удаления этим выпуском не заведён.",
-    "Второе сечение на документ: измерено, что AddDynamicCrossSection возвращает пусто и при существующем сечении, и после удаления первого.",
+    "Второе сечение: на детали AddDynamicCrossSection возвращает пусто и при существующем сечении, и после удаления первого; на сборке тот же вызов отдаёт объект и счётчик становится 2 (измерено группой, строка SEC-10 принимает оба исхода).",
     "Чтение направления шага числами: справка даёт только метод ReverseDirection() без обратного свойства; направление читается как признак IPlane3DByOffset.Direction."
   ]
 }

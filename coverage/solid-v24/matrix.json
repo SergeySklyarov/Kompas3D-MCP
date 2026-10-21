@@ -14983,6 +14983,240 @@
           }
         ]
       }
+    },
+    {
+      "operation_id": "G11.sections.create_read",
+      "context": "part",
+      "catalog_ref": "G11",
+      "kind": "profile_mode",
+      "profile": "sections-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_create_section.json",
+      "adapter_route": "kompas_create_section: API7 QI(IKompasDocument3D -> IDynamicCrossSectionsManager) -> AddDynamicCrossSection() -> AddStep(ksDCSTByOffsetPlane) -> Parameters -> QI(IDynamicCrossSectionStepParametersByOffsetPlane) -> OffsetPlane (IPlane3DByOffset) -> BasePlane / Offset / Direction -> ReverseDirection() -> IDynamicCrossSection.Update(); чтение - kompas_list_sections: DynamicCrossSectionsCount / DynamicCrossSection[i] / StepsCount / Step[j] / BuildingType / PlaneBuildingType / BasePlane.Name / Offset (idynamiccrosssectionsmanager.html, idynamiccrosssectionsmanager_adddynamiccrosssection.html, idynamiccrosssection_addstep.html, idynamiccrosssectionstepparametersbyoffsetplane.html, iplane3dbyoffset.html, ksapi_idynamiccrosssection_update.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "tests": [
+        "SEC-01.discovery",
+        "SEC-01.schema",
+        "SEC-02.create",
+        "SEC-03.read",
+        "SEC-07.reopen",
+        "SEC-08.reverse",
+        "SEC-09.assembly",
+        "SEC-10.second",
+        "SEC-11.not_3d",
+        "SEC-12.bad_plane",
+        "SEC-13.stale_revision"
+      ],
+      "limitations": [
+        "Вошёл только шаг смещённой плоскостью: у повёрнутой плоскости страницы дают полный маршрут записи, но второго сечения в документе не создать (AddDynamicCrossSection на детали возвращает пусто), поэтому второй вид шага пробой не подтверждён.",
+        "Направление шага читается как признак IPlane3DByOffset.Direction: справка даёт метод ReverseDirection() и не даёт обратного свойства у параметров шага.",
+        "Подтверждение записи берётся чтением обратно после IDynamicCrossSection.Update(): IPlane3DByOffset.Update() отвечает FALSE, хотя значения применяются (измерено).",
+        "Второе сечение: на детали AddDynamicCrossSection возвращает пусто, на сборке отдаёт объект и счётчик становится 2 - строка SEC-10 принимает оба исхода и требует, чтобы отказ был назван."
+      ],
+      "not_applicable_reasons": {
+        "edit": "правки шага в объёме режима нет: набор шагов задаётся при создании (steps), а повторное создание отвечает названным отказом; отдельного действия правки наряд не требовал",
+        "rebuild": "перестроение выполняет сама мутация (IDynamicCrossSection.Update() внутри вызова)",
+        "suppress_restore": "включение и выключение режима - действие строки G11.sections.mode_snapshot",
+        "delete_dependencies": "удаления сечения в продукте нет: Delete() отвечает FALSE, а сечение удаляется, поэтому подтверждать нечем, кроме счётчика; наряд удаление не требовал",
+        "geometry_validation": "сечение не меняет геометрию: численная проверка стоит у режима (SEC-05/SEC-06, доля различающихся байтов снимка)"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_sections"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_section"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_sections"
+          }
+        ]
+      },
+      "save_reopen_route": {
+        "mode": "all",
+        "routes": [
+          {
+            "tool": "kompas_save_document"
+          },
+          {
+            "tool": "kompas_open_document"
+          }
+        ]
+      },
+      "negative_tests_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_create_section"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "G11.sections.mode_snapshot",
+      "context": "part",
+      "catalog_ref": "G11",
+      "kind": "profile_mode",
+      "profile": "sections-minimal-v1",
+      "queue": "E4",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py"
+      ],
+      "parameters_schema": "schemas/kompas_set_section_mode.json",
+      "adapter_route": "kompas_set_section_mode: IDynamicCrossSectionsManager.DynamicCrossSectionModeOn (чтение и запись) -> чтение обратно тем же свойством; снимок - kompas_export_image (растр BMP, 200 dpi), сравнение - доля различающихся байтов несжатого растра (idynamiccrosssectionsmanager_dynamiccrosssectionmodeon.html, ksdynamiccrosssectionmodeon.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_applicable",
+        "suppress_restore": "verified",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "not_applicable",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "SEC-04.mode_on",
+        "SEC-05.snapshot_on",
+        "SEC-06.snapshot_off"
+      ],
+      "limitations": [
+        "Сечение - отображение: геометрия не меняется вовсе, поэтому единственное доказательство - растр. Порог «видно» - 1 % различающихся байтов несжатого BMP; измерено 11,5 % в режиме и 0 после выключения.",
+        "Снимок делает существующий kompas_export_image: отдельного инструмента снимка нет."
+      ],
+      "not_applicable_reasons": {
+        "edit": "режим - один признак: включение и есть правка, отдельного действия у него нет",
+        "rebuild": "перестроение не требуется: режим меняет отображение, а не модель",
+        "save_reopen": "сохранение режима группой не проверяется: перед сохранением режим выключен строкой SEC-06, поэтому SEC-07 читает mode=false; сохранение включённого режима измерено пробой (§4.100)",
+        "delete_dependencies": "удаление сечения вне продукта; строка G11.sections.create_read",
+        "negative_tests": "отказы проверены строкой G11.sections.create_read (SEC-10...SEC-13)"
+      },
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_section_mode"
+          }
+        ]
+      },
+      "create_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_section_mode"
+          }
+        ]
+      },
+      "read_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_list_sections"
+          }
+        ]
+      },
+      "suppress_restore_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_set_section_mode"
+          }
+        ]
+      },
+      "geometry_validation_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_export_image"
+          }
+        ]
+      }
+    },
+    {
+      "operation_id": "dep.api7.sections_interface",
+      "kind": "common_dependency",
+      "profile": "sections-minimal-v1",
+      "priority": "dependency_of",
+      "queue": null,
+      "context": "part",
+      "catalog_ref": "G11",
+      "catalog_refs": [
+        "G11.sections"
+      ],
+      "title": "IDynamicCrossSectionsManager как дополнительный интерфейс IKompasDocument3D",
+      "parameters_schema": null,
+      "adapter_route": "IDynamicCrossSectionsManager получается ТОЛЬКО документированным QueryInterface от перенесённого IKompasDocument3D (страница называет «Версия Компас v18.1»); работает и у детали, и у сборки. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом (idynamiccrosssectionsmanager.html, ksapi_idynamiccrosssectionsmanager.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_started",
+        "read": "verified",
+        "edit": "not_started",
+        "rebuild": "not_started",
+        "save_reopen": "verified",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "not_started",
+        "geometry_validation": "not_started"
+      },
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen"
+      ],
+      "tests": [
+        "SEC-01.discovery",
+        "SEC-03.read",
+        "SEC-07.reopen",
+        "SEC-11.not_3d"
+      ],
+      "evidence": [
+        "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs",
+        "scripts/mcp-smoke.py",
+        "docs/04_KOMPAS_API_NOTES.md"
+      ],
+      "limitations": [
+        "Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.",
+        "Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11."
+      ],
+      "acceptance": [
+        "интерфейс получается только QI от IKompasDocument3D и работает у детали и сборки",
+        "не ответил QI - названный отказ, а не молчаливое «сечений нет»"
+      ],
+      "required_of": [
+        "G11.sections.create_read",
+        "G11.sections.mode_snapshot"
+      ]
     }
   ],
   "pending_families": [

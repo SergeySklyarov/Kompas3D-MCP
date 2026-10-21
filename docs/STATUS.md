@@ -14,6 +14,28 @@
 
 ## Текущее состояние
 
+- **Динамическое сечение модели: три инструмента и группа приёмки (наряд `OMEGA_G11_SECTIONS`,
+  21.10.2026, сдан):** `kompas_create_section` (MUTATION: шаги, режим, закраска),
+  `kompas_set_section_mode` (MUTATION) и `kompas_list_sections` (READ). Маршрут документированный и
+  измеренный: `QI(IKompasDocument3D → IDynamicCrossSectionsManager)` → `AddDynamicCrossSection()` →
+  `AddStep(ksDCSTByOffsetPlane)` → `Parameters` → `QI(IDynamicCrossSectionStepParametersByOffsetPlane)` →
+  `OffsetPlane` (`IPlane3DByOffset`) → `BasePlane` / `Offset` / `Direction` → `ReverseDirection()` →
+  **`IDynamicCrossSection.Update()`**. `IPlane3DByOffset.Update()` отвечает `FALSE`, а значения
+  применяются — подтверждение берётся чтением обратно после обновления сечения.
+  **Сечение — отображение, а не геометрия, поэтому доказано снимком:** растр BMP 200 dpi в режиме
+  отличается от снимка без режима на 11,5 % байтов (порог приёмки 1 %), после выключения — на 0;
+  снимок делает существующий `kompas_export_image`. Читается обратно число сечений и шагов, вид шага,
+  опора, смещение и направление; `save → close → open` сохраняет сечение, смещение и режим. Отказы:
+  чертёж (`WRONG_DOCUMENT_KIND`), несуществующая плоскость (`STALE_REFERENCE`), устаревшая ревизия
+  (`REVISION_CONFLICT`), второе сечение (на детали `CAPABILITY_UNAVAILABLE`, на сборке счётчик 2 —
+  оба исхода названы). Профиль `sections-minimal-v1` закрыт (`acceptance-levels.py`: `COMPLETE`,
+  режимы 2/2, зависимости 1/1, `problems=[]`), семейство `G11` в каталоге. Зачётный `--all` на
+  `b747b8c` (Release, дерево чистое, 47 минут): **PASS 1812 / NAMED 6 / UNKNOWN 3 / FAIL 0**, exit 0;
+  сверка строк с принятым `8418acf` — 1807 → 1821, прежних строк не потеряно, разошлись только 14
+  новых `SEC-*`. `--self-test` 82/0, стражи 0/0/0. Вне профиля: повёрнутая и произвольная плоскости
+  шага, зона и граничные точки, удаление сечения, разрезы чертежа. `docs/decisions/sections.md`,
+  `docs/04_KOMPAS_API_NOTES.md` §4.100, отчёт `OMEGA_G11_SECTIONS_REPORT_20261021.md`, доказательства
+  `docs/acceptance/evidence/20261021-sections-b747b8c/`.
 - **Разнесённый вид сборки: два инструмента и группа приёмки (наряд `OMEGA_G9_DISMANTLE`, 21.10.2026,
   сдан):** `kompas_set_dismantle` (MUTATION: режим, шаги, удаление по номеру, очистка) и
   `kompas_list_dismantle_steps` (READ). Маршрут документированный и измеренный:

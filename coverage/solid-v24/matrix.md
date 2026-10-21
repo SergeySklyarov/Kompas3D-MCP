@@ -148,6 +148,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль sections-minimal-v1 — Динамическое сечение модели v24: шаг смещённой плоскостью, режим отображения и доказательство снимком
+
+- **обязательных_режимов:** 2
+- **режимов_закрыто:** 2
+- **общих_зависимостей:** 1
+- **зависимостей_закрыто:** 1
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** E4 2/2
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль sketch-bulk-minimal-v1 — Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24
 
 - **обязательных_режимов:** 3
@@ -210,19 +222,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 362
-- **строк_полностью_закрыто:** 175
-- **строк_с_каким_либо_прогрессом:** 191
-- **семейств_в_каталоге:** 45
+- **строк_каталога:** 365
+- **строк_полностью_закрыто:** 177
+- **строк_с_каким_либо_прогрессом:** 194
+- **семейств_в_каталоге:** 46
 - **семейств_без_строк:** 12
-- **операций:** 138
-- **режимов_и_вариантов:** 218
-- **применимых_действий:** 2970
-- **действий_verified:** 1169
-- **покрытие_действий:** 39.4%
-- **распределение_статусов:** {'not_started': 1800, 'verified': 1169, 'not_applicable': 650, 'implemented': 1}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 62, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 68, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 139
+- **режимов_и_вариантов:** 220
+- **применимых_действий:** 2990
+- **действий_verified:** 1182
+- **покрытие_действий:** 39.5%
+- **распределение_статусов:** {'not_started': 1807, 'verified': 1182, 'not_applicable': 660, 'implemented': 1}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 63, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 70, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -483,6 +495,19 @@
 | `dep.mate.revisions` | да | read, edit, negative_tests | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
 | `dep.mate.idempotency` | да | create, read, negative_tests | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
 | `dep.mate.save_reopen` | да | save_reopen, read | MATE.05.read, MATE.01.save_reopen |
+
+## Метрика 1 — обязательные режимы профиля `sections-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `G11.sections.create_read` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SEC-01.discovery, SEC-01.schema, SEC-02.create, SEC-03.read, SEC-07.reopen, SEC-08.reverse, SEC-09.assembly, SEC-10.second, SEC-11.not_3d, SEC-12.bad_plane, SEC-13.stale_revision |
+| `G11.sections.mode_snapshot` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | н/п | н/п | OK | SEC-04.mode_on, SEC-05.snapshot_on, SEC-06.snapshot_off |
+
+### Общие зависимости профиля `sections-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.api7.sections_interface` | да | discover, read, save_reopen | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
 
 ## Метрика 1 — обязательные режимы профиля `sketch-bulk-minimal-v1`
 
@@ -880,6 +905,8 @@
 | `G8.copy_geometry.mode_associativity` | G8 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | CG-04.source_edited, CG-04.associativity, CG-05.save_reopen, CG-06.missing_file, CG-06.stale_revision |
 | `G9.dismantle.mode_steps` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DSM-01.discovery, DSM-01.schema, DSM-02.setup, DSM-03.axis, DSM-04.step_one, DSM-08.read_back, DSM-11.save_reopen, DSM-12.not_assembly, DSM-12.missing_component, DSM-12.bad_direction, DSM-12.nested_component, DSM-12.stale_revision, DSM-12.refusal_names_effect |
 | `G9.dismantle.mode_exploded` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | OK | н/п | OK | DSM-03.axis, DSM-05.exploded, DSM-06.mode_off, DSM-07.step_many, DSM-09.delete_step, DSM-10.clear |
+| `G11.sections.create_read` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SEC-01.discovery, SEC-01.schema, SEC-02.create, SEC-03.read, SEC-07.reopen, SEC-08.reverse, SEC-09.assembly, SEC-10.second, SEC-11.not_3d, SEC-12.bad_plane, SEC-13.stale_revision |
+| `G11.sections.mode_snapshot` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | н/п | н/п | OK | SEC-04.mode_on, SEC-05.snapshot_on, SEC-06.snapshot_off |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -944,6 +971,7 @@
 | `dep.sketch_constraints.type_vocabulary` *(вне каталога)* | G6 | dependency_of | G6 | — | OK | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SKC.13.type_vocabulary, SKC.09.negative_tests |
 | `dep.sketch_constraints.state_agreement` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SKC.15.state_agreement |
 | `dep.sketch_constraints.no_silent_rewrite` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | SKC.10.geometry_validation, SKC.16.no_silent_rewrite |
+| `dep.api7.sections_interface` *(вне каталога)* | G11 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
 
 ## Ограничения и незакрытое
 
@@ -1559,6 +1587,14 @@
 - `G9.dismantle.mode_exploded` — закрыт целиком
   - Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.
   - Поворот шага не проверяется: справка не даёт документированного способа его задать.
+- `G11.sections.create_read` — закрыт целиком
+  - Вошёл только шаг смещённой плоскостью: у повёрнутой плоскости страницы дают полный маршрут записи, но второго сечения в документе не создать (AddDynamicCrossSection на детали возвращает пусто), поэтому второй вид шага пробой не подтверждён.
+  - Направление шага читается как признак IPlane3DByOffset.Direction: справка даёт метод ReverseDirection() и не даёт обратного свойства у параметров шага.
+  - Подтверждение записи берётся чтением обратно после IDynamicCrossSection.Update(): IPlane3DByOffset.Update() отвечает FALSE, хотя значения применяются (измерено).
+  - Второе сечение: на детали AddDynamicCrossSection возвращает пусто, на сборке отдаёт объект и счётчик становится 2 - строка SEC-10 принимает оба исхода и требует, чтобы отказ был назван.
+- `G11.sections.mode_snapshot` — закрыт целиком
+  - Сечение - отображение: геометрия не меняется вовсе, поэтому единственное доказательство - растр. Порог «видно» - 1 % различающихся байтов несжатого BMP; измерено 11,5 % в режиме и 0 после выключения.
+  - Снимок делает существующий kompas_export_image: отдельного инструмента снимка нет.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1730,6 +1766,9 @@
   - Число 2 у ksObjectConstraintsStateEnum означает «переопределён», а у ksConstraintsStateEnum — «недоопределён»: одно не выдаётся за другое.
 - `dep.sketch_constraints.no_silent_rewrite` — закрыт целиком
   - Измеренная дельта координат и угла публикуется в notes; сервер движение не отменяет, потому что отмена была бы второй, не запрошенной правкой.
+- `dep.api7.sections_interface` — не закрыт
+  - Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
+  - Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11.
 
 ## Расхождения каталога и матрицы (не блокирующие)
 

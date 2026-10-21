@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 45,
-   "operations": 138,
+   "families": 46,
+   "operations": 139,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 218,
+   "modes_and_variants": 220,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8090,6 +8090,75 @@
       {
        "id": "G9.dismantle.mode_exploded",
        "name": "Разнесение по матрице компонента и возврат в собранное",
+       "level": "mcp_verified"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "G11",
+   "title": "Динамическое сечение модели: шаг смещённой плоскостью, режим отображения и доказательство снимком",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "metadata": "kAPI7.tlb: IDynamicCrossSectionsManager (QI от IKompasDocument3D), IDynamicCrossSection, IDynamicCrossSectionStep, IDynamicCrossSectionStepParametersByOffsetPlane, IPlane3DByOffset; ksDynamicCrossSectionStepBuildingTypeEnum, ksCrossSectionPlaneBuildingTypeEnum",
+    "runtime": "измерено 21.10.2026 на build 24.0.0.2799: сечение и шаг входят в модель на IDynamicCrossSection.Update() (IPlane3DByOffset.Update() отвечает FALSE, а записанные значения применяются); растр BMP 200 dpi в режиме сечения отличается от снимка без режима на 11,5 % байтов, после выключения режима - на 0"
+   },
+   "rule": "сечение - отображение, а не геометрия: оно доказывается снимком (доля различающихся байтов несжатого BMP) и чтением обратно, а не возвращаемым значением Delete() или Update() плоскости",
+   "next_step": "Группа --sections-only и профиль sections-minimal-v1 пройдены. Вне профиля остаются повёрнутая и произвольная плоскости шага, зона и граничные точки (второй AddDynamicCrossSection на детали возвращает пусто), удаление сечения и разрезы чертежа.",
+   "mcp_support": "kompas_create_section / kompas_set_section_mode / kompas_list_sections",
+   "route": "API7 QI(IKompasDocument3D -> IDynamicCrossSectionsManager) -> AddDynamicCrossSection() -> AddStep(ksDCSTByOffsetPlane) -> Parameters (IKompasAPIObject) -> QI(IDynamicCrossSectionStepParametersByOffsetPlane) -> OffsetPlane (IPlane3DByOffset) -> BasePlane / Offset / Direction -> ReverseDirection() -> IDynamicCrossSection.Update(); режим - DynamicCrossSectionModeOn; чтение - DynamicCrossSectionsCount, DynamicCrossSection[i], StepsCount, Step[j], BuildingType, PlaneBuildingType, BasePlane.Name, Offset",
+   "operations": [
+    {
+     "id": "G11.sections",
+     "name": "Динамическое сечение детали и сборки",
+     "level": "mcp_verified",
+     "source_user_docs": "пользовательская справка КОМПАС не снималась: программный маршрут описан в справке SDK",
+     "source_sdk": "idynamiccrosssectionsmanager.html, idynamiccrosssectionsmanager_props.html, idynamiccrosssectionsmanager_methods.html, idynamiccrosssectionsmanager_dynamiccrosssectionscount.html, idynamiccrosssectionsmanager_dynamiccrosssection.html, idynamiccrosssectionsmanager_currentdynamiccrosssection.html, idynamiccrosssectionsmanager_adddynamiccrosssection.html, idynamiccrosssectionsmanager_dynamiccrosssectionmodeon.html, idynamiccrosssection.html, idynamiccrosssection_props.html, idynamiccrosssection_methods.html, idynamiccrosssection_stepscount.html, idynamiccrosssection_step.html, idynamiccrosssection_addstep.html, idynamiccrosssection_fillcutplanes.html, idynamiccrosssection_delete.html, idynamiccrosssectionstep.html, idynamiccrosssectionstep_props.html, idynamiccrosssectionstep_methods.html, idynamiccrosssectionstep_buildingtype.html, idynamiccrosssectionstep_parameters.html, idynamiccrosssectionstep_delete.html, idynamiccrosssectionstepparametersbyoffsetplane.html, idynamiccrosssectionstepparametersbyoffsetplane_props.html, idynamiccrosssectionstepparametersbyoffsetplane_methods.html, idynamiccrosssectionstepparametersbyoffsetplane_basestep.html, idynamiccrosssectionstepparametersbyoffsetplane_planebuildingtype.html, idynamiccrosssectionstepparametersbyoffsetplane_offsetplane.html, idynamiccrosssectionstepparametersbyoffsetplane_reversedirection.html, iplane3dbyoffset.html, iplane3dbyoffset_props.html, iplane3dbyoffset_baseplane.html, iplane3dbyoffset_offset.html, iplane3dbyoffset_direction.html, ksdynamiccrosssectionstepbuildingtypeenum.html, kscrosssectionplanebuildingtypeenum.html",
+     "api7": {
+      "found_in": "Bin\\kAPI7.tlb",
+      "interfaces": [
+       "IDynamicCrossSectionsManager",
+       "IDynamicCrossSection",
+       "IDynamicCrossSectionStep",
+       "IDynamicCrossSectionStepParametersByOffsetPlane",
+       "IPlane3DByOffset",
+       "IKompasDocument3D",
+       "IKompasAPIObject"
+      ],
+      "members": [
+       "DynamicCrossSectionsCount",
+       "DynamicCrossSection[Index]",
+       "CurrentDynamicCrossSection",
+       "AddDynamicCrossSection",
+       "DynamicCrossSectionModeOn",
+       "StepsCount",
+       "Step[Index]",
+       "AddStep",
+       "FillCutPlanes",
+       "Delete",
+       "BuildingType",
+       "Parameters",
+       "BaseStep",
+       "PlaneBuildingType",
+       "OffsetPlane",
+       "ReverseDirection",
+       "BasePlane",
+       "Offset",
+       "Direction",
+       "Update"
+      ]
+     },
+     "modes": [
+      {
+       "id": "G11.sections.create_read",
+       "name": "Сечение и шаг смещённой плоскостью: запись, чтение обратно, сохранение",
+       "level": "mcp_verified"
+      },
+      {
+       "id": "G11.sections.mode_snapshot",
+       "name": "Режим сечения виден на снимке и выключается обратно",
        "level": "mcp_verified"
       }
      ]

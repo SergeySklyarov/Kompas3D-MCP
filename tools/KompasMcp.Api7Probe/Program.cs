@@ -239,6 +239,11 @@ public static class Program
                 var copyGeometry = new CopyGeometryProbe(report, options);
                 pump.Run(() => copyGeometry.Run());
             }
+            else if (options.Dismantle)
+            {
+                var dismantle = new DismantleProbe(report, options);
+                pump.Run(() => dismantle.Run());
+            }
             else if (options.MechanicalMates)
             {
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
@@ -783,6 +788,12 @@ public sealed class Options
     /// docs/decisions/probes.md#copy-geometry</summary>
     public bool CopyGeometryDiskSource { get; private set; }
 
+    /// <summary><c>--dismantle</c>: exploded assembly — is a dismantle step writable through the
+    /// documented route, is the explosion visible to the documented placement read, and do the steps
+    /// survive save/reopen (order <c>OMEGA_G9_DISMANTLE</c>).
+    /// History: docs/decisions/dismantle.md#probe</summary>
+    public bool Dismantle { get; private set; }
+
     /// <summary><c>--mech-mates</c>: are «Механическая передача» and «Кулачок - толкатель» created by the
     /// documented API7 route, and is the LINK observable through a measured change of the driven
     /// component's placement (order <c>G4_MECHANICAL_MATES</c>, stage 0).
@@ -933,6 +944,7 @@ public sealed class Options
         var sketchCopy = false;
         var copyGeometry = false;
         var copyGeometryDiskSource = false;
+        var dismantle = false;
         var mechanicalMates = false;
         var drafts = false;
         var draftsBaseEdit = false;
@@ -1045,6 +1057,9 @@ public sealed class Options
                     copyGeometry = true;
                     copyGeometryDiskSource = true;
                     break;
+                case "--dismantle":
+                    dismantle = true;
+                    break;
                 case "--mech-mates":
                     mechanicalMates = true;
                     break;
@@ -1143,6 +1158,7 @@ public sealed class Options
             : union ? "disconnected-union"
             : b5 ? "b5-sweep-loft-shell"
             : sketchCopy ? "sketch-copy-project"
+            : dismantle ? "dismantle"
             : copyGeometry ? "copy-geometry"
             : repositionParams ? "reposition-params"
             : repositionRead ? "reposition-read"
@@ -1176,6 +1192,7 @@ public sealed class Options
             SketchCopy = sketchCopy,
             CopyGeometry = copyGeometry,
             CopyGeometryDiskSource = copyGeometryDiskSource,
+            Dismantle = dismantle,
             MechanicalMates = mechanicalMates,
             Drafts = drafts,
             DraftsBaseEdit = draftsBaseEdit,

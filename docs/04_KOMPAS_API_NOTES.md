@@ -7212,3 +7212,40 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 устаревшая ревизия (`REVISION_CONFLICT`), источник без адресуемого объекта (`NO_BODY`). Синхронизация
 отдельно проверяет существование файла по записанному `DocumentFileName`: `Synhronise()` при удалённом
 файле отвечает `TRUE` (§4.97), поэтому полагаться на него нельзя.
+
+### §4.99. Разнесённый вид сборки: запись шага и чем доказано разнесение (21.10.2026)
+
+**Маршрут.** `IDismantleParameters` - «дополнительный» интерфейс `IAssemblyDocument`, получается только
+`QueryInterface` (`idismantleparameters.html`, «Версия: Компас v20»): в .NET - приведением перенесённого
+документа `IAssemblyDocument` к `IDismantleParameters`. Шаг создаётся `AddDismantleStep()`
+(`idismantleparameters_adddismantlestep.html`), входы шага - свойства `Parts` (`VARIANT`, `SafeArray`
+`VT_ARRAY|VT_DISPATCH` из `IPart7`, чтение и запись), `Distance` (`double`, чтение и запись),
+`DirectionObject` (`IModelObject`, чтение и запись); `Vector` (`IVector3D`) - **только чтение**
+(`idismantlestep_vector.html`). Шаг входит в модель только после `Update()` (`ksapi_idismantlestep_update.html`):
+`DismantleStepsCount` до `Update()` - 0, после - 1. Удаление и очистка - `DeleteDismantleStep(Index)`,
+`ClearDismantleParameters()`.
+
+**Направление - объект, а не вектор.** Числового входа направления в справке нет; `DirectionObject`
+принимает `IModelObject`. Измерено: сборка со сдвинутым компонентом, шаг `Parts = [компонент]`,
+`Distance = 40`; запись `DirectionObject` плоскостью XoY/XoZ/YoZ, ребром компонента, гранью компонента и
+самим компонентом даёт **нулевое** смещение, а вспомогательная ось сборки
+(`IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)` → `IAxis3DBy2Points` → `Update()`) даёт смещение
+ровно `(40, 0, 0)` - по направлению оси и на расстояние шага. Шаг на два компонента с осью по Y и
+`Distance = 25` даёт `(0, 25, 0)` обоим. Смещения складываются: два шага (40 по X на первый компонент,
+25 по Y на оба) читаются как `(40, 25, 0)` и `(0, 25, 0)`.
+
+**Что читается обратно.** `DismantleStepsCount`, `DismantleStep[Index]`, `Parts` (один компонент
+приходит как `VT_DISPATCH`, несколько - как `SafeArray`), `Distance` - читаются и после сохранения и
+переоткрытия файла. `DirectionObject` после записи читается `null` при любом кандидате, `Vector`
+приходит объектом с `ParametersType = ksVector3DUnknown` и `Parameters = null`. Направление шага
+**чтением не подтверждается**; подтверждение разнесения - документированное чтение положения
+компонентов (`IPart7.GetSummMatrix`, тот же маршрут, что у `kompas_list_components`).
+
+**Режим.** `IAssemblyDocument.DismantleMode` (и `ksDocument3D.dismantleMode`) включает и выключает
+разнесённый вид; после `RebuildDocument` положение компонентов читается разнесённым, при `FALSE` -
+собранным, точно как до включения. Признак режима после сохранения и переоткрытия файла читается
+`FALSE` - режим не сохраняется, шаги сохраняются.
+
+**Габарит как доказательство не годится.** `ksBody.GetGabarit` у компонента отвечает в координатах
+самого компонента (оба компонента дают одинаковый габарит и в собранном, и в разнесённом виде), поэтому
+разнесение по габариту тела не видно; видно по `GetSummMatrix`.

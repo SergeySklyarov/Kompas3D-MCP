@@ -329,6 +329,18 @@ class Client:
             return next((t.get("inputSchema") for t in self.tools() if t.get("name") == name), None)
         return (self.describe(name) or {}).get("schema")
 
+    def description_of(self, name):
+        """Описание инструмента НА ПРОВОДЕ в этом режиме.
+
+        ЗАЧЕМ ОТДЕЛЬНЫЙ ВОПРОС. Строки, которые держат обещанное клиенту (ограничение в описании,
+        названные поля), не должны зависеть от режима каталога: в `compact` операция реестра не
+        публикуется, и `tools/list` о ней молчит, поэтому описание спрашивается у
+        `kompas_describe_operation` — тот же текст, что у прямого инструмента.
+        """
+        if name in self.published():
+            return next((t.get("description") or "" for t in self.tools() if t.get("name") == name), "")
+        return (self.describe(name) or {}).get("description") or ""
+
     def describe(self, name):
         """Ответ `kompas_describe_operation` для операции реестра (в `full` — None)."""
         if name not in self._describe:
@@ -15185,14 +15197,12 @@ def sketch_vertex_checks(client, rep, app_id, workdir):
     # ── SV.01.discover: инструмент и схема объявляют чтение точек ─────────────────────────────────
     tools = client.tools()
     names = sorted(t["name"] for t in tools)
-    schema = None
-    desc = ""
-    for entry in tools:
-        if entry["name"] == "kompas_list_sketch_entities":
-            schema = entry.get("inputSchema") or {}
-            # Описание инструмента лежит на САМОМ инструменте, а не внутри inputSchema: взяв его из
-            # схемы, строка мерила бы пустую строку и падала на верном ответе.
-            desc = entry.get("description") or ""
+    # Схема и описание спрашиваются у поставки В ЭТОМ РЕЖИМЕ, а не из `tools/list`: в `compact`
+    # операции реестра не публикуются, и список о них молчит — строка мерила бы пустую схему.
+    schema = client.schema_of("kompas_list_sketch_entities") or {}
+    # Описание инструмента лежит на САМОМ инструменте, а не внутри inputSchema: взяв его из
+    # схемы, строка мерила бы пустую строку и падала на верном ответе.
+    desc = client.description_of("kompas_list_sketch_entities")
     drift = None
     try:
         with open(os.path.join(ROOT, "schemas", "kompas_list_sketch_entities.json"),
@@ -15214,7 +15224,7 @@ def sketch_vertex_checks(client, rep, app_id, workdir):
             "points_mm/points_kind/start_mm/end_mm, through_points и свободные концы",
             "PASS" if (schema_matches and include_ok and names_ok
                        and listing_matches(client, names)) else "FAIL",
-            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема совпадает с "
+            f"инструментов={len(client.registry())} (ожидание {EXPECTED_TOOL_COUNT}); схема совпадает с "
             f"реестром={schema_matches}; include_points объявлено={include_ok}; описанием названо "
             f"{len(named)}/7 признаков {named}; тип include_points={include_schema.get('type')}",
             {"include_points": include_schema, "named_tokens": named})
@@ -42520,13 +42530,10 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
             close(doc)
         return rec
 
-    # Описание берётся из `tools/list` поставки, а не помнится списком: строка держит обещанное клиенту.
-    limit_named = False
-    for tool in (client.call("tools/list", {}) or {}).get("tools", []):
-        if tool.get("name") == "kompas_set_feature_suppressed":
-            text = tool.get("description") or ""
-            limit_named = "ПОСЛЕ СОХРАНЕНИЯ И ПЕРЕОТКРЫТИЯ" in text and "НЕЛЬЗЯ" in text
-            break
+    # Описание берётся у поставки в ЭТОМ режиме, а не помнится списком: строка держит обещанное
+    # клиенту, и в `compact` тот же текст приходит из `kompas_describe_operation`.
+    text = client.description_of("kompas_set_feature_suppressed")
+    limit_named = "ПОСЛЕ СОХРАНЕНИЯ И ПЕРЕОТКРЫТИЯ" in text and "НЕЛЬЗЯ" in text
 
     for name in SUPPRESS_REPEAT_SETUPS:
         rec = save_reopen_cycle(name, "SR-save-reopen-%s" % name)

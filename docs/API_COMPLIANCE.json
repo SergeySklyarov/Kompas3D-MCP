@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-21T09:03:09+02:00, часы машины +02:00",
+  "date": "2026-10-21T12:17:29+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -16,11 +16,11 @@
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
    "retrieved": "2026-10-21",
-   "pages_read": 145,
-   "routes_checked": 663,
+   "pages_read": 147,
+   "routes_checked": 672,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 659,
+    "wire": 667,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -45,9 +45,9 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 663,
-    "ok": 659,
-    "failed": 4,
+    "checked": 672,
+    "ok": 667,
+    "failed": 5,
     "not_verified": 0
    }
   },
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "f59a6caab5b018cd2b7a4b9987ba3fc29796f49d68616fa68a1a210a8b3e0e0e",
-   "host_dll_sha256": "8d29c333c43441f627756c99f839cb319b056a222a4f498256114f8e0010aafc",
+   "host_sha256": "11f62fd7f08fbff1f1265aad6a1b7bd7256474590b7f8b598398d32511e215d1",
+   "host_dll_sha256": "4d7d0c50c58527d4ee55fe228e5c280c7e3fdb5dda8d1db7e2cb0b656139bed6",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "1a31c9e94127ac0c29bc726d0ff1037fab31b6e7c73bb225ede8cc016eb1d15b",
-   "worker_dll_sha256": "1a9ecedd8ba1772315d6809ffba528846b88dcd0a3d1fb06e866242825a3c27b",
-   "adapter_sha256": "8b1ee867524483ab5afdc247c15dbaf8e2592c7ebf3023d3694402e22567bc18",
-   "source_commit": "7ec0fa9",
+   "worker_sha256": "df23115fd57b91086f7dfd54a653b33c036e261dc004da7b3a1ed8457d6c9e41",
+   "worker_dll_sha256": "fa22ef194e308bafbd4dcc4f37e1dd837ee1dc85c20edf0057272e5fc438d247",
+   "adapter_sha256": "41f6a260540572adc3f876827e1667af54e1b70ef7b508accf6f302d6ba37efa",
+   "source_commit": "50cdf22",
    "source_tree_dirty": false,
    "tools_count": 14,
-   "rows_complete_run": 1771,
+   "rows_complete_run": 0,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -89,7 +89,7 @@
   },
   "completeness": {
    "tools_on_wire": 14,
-   "schemas_on_disk": 100,
+   "schemas_on_disk": 102,
    "tools_with_schema": 11,
    "schemas_matching_wire_by_property_names": 11,
    "schemas_matching_wire_by_shape": 11,
@@ -132,32 +132,32 @@
     "absent": 10,
     "route_field": 4
    },
-   "matrix_rows": 193,
-   "catalog_modes_and_variants": 214,
-   "com_routes": 673,
+   "matrix_rows": 195,
+   "catalog_modes_and_variants": 216,
+   "com_routes": 682,
    "com_routes_by_assembly": {
-    "api7": 405,
+    "api7": 414,
     "api5": 258,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 659,
-   "com_routes_confirmed_over_wire": 659,
+   "com_routes_confirmed_by_documentation": 667,
+   "com_routes_confirmed_over_wire": 667,
    "com_routes_confirmed_from_mirror": 0,
-   "com_routes_unconfirmed": 4,
+   "com_routes_unconfirmed": 5,
    "com_routes_confirmed_by_name": 6,
    "documentation_column_complete": true,
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 189,
-   "rows_verified_without_any_linked_row": 2,
+   "rows_claiming_verified": 191,
+   "rows_verified_without_any_linked_row": 191,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 14,
-   "rows_actions_without_required_calls": 17,
-   "rows_status_lowered_by_unsupported_actions": 17,
-   "acceptance_rows": 1771,
-   "acceptance_calls_journal": 17026,
-   "acceptance_rows_with_call_window": 1771,
+   "rows_action_without_dedicated_row": 191,
+   "rows_actions_without_required_calls": 191,
+   "rows_status_lowered_by_unsupported_actions": 191,
+   "acceptance_rows": 0,
+   "acceptance_calls_journal": 0,
+   "acceptance_rows_with_call_window": 0,
    "required_of_mismatches_matrix_vs_profile": 10,
    "dependency_verdict_control_proved": null
   }
@@ -184,7 +184,7 @@
   },
   {
    "name": "kompas_capabilities",
-   "description_len": 1186,
+   "description_len": 1155,
    "properties_on_wire": 1,
    "required_on_wire": [],
    "additional_properties": false,
@@ -442,7 +442,9 @@
      "SM-08.thread.mode_outer_by_edge:save_reopen_route",
      "SM-08.thread.mode_inner_by_face:save_reopen_route",
      "SM-08.thread.mode_auto:save_reopen_route",
-     "SM-08.thread.mode_hand:save_reopen_route"
+     "SM-08.thread.mode_hand:save_reopen_route",
+     "G8.copy_geometry.mode_body_from_file:save_reopen_route",
+     "G8.copy_geometry.mode_associativity:save_reopen_route"
     ],
     "schema_field": [],
     "mcp_support": null,
@@ -847,6 +849,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -933,10 +939,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
      "Подтверждено": 40,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -1275,6 +1281,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -1361,10 +1371,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 51,
+    "members": 52,
     "counts": {
      "Подтверждено": 50,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -2299,6 +2309,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -2385,10 +2399,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 50,
+    "members": 51,
     "counts": {
      "Подтверждено": 49,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -2628,6 +2642,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -2714,10 +2732,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 37,
+    "members": 38,
     "counts": {
      "Подтверждено": 36,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -2912,6 +2930,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -2998,10 +3020,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 51,
+    "members": 52,
     "counts": {
      "Подтверждено": 50,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -3214,6 +3236,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -3300,10 +3326,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 51,
+    "members": 52,
     "counts": {
      "Подтверждено": 50,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -3502,6 +3528,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -3588,10 +3618,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 31,
+    "members": 32,
     "counts": {
      "Подтверждено": 30,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -4083,6 +4113,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -4169,10 +4203,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 27,
+    "members": 28,
     "counts": {
      "Подтверждено": 26,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -4396,6 +4430,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -4482,10 +4520,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
      "Подтверждено": 33,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -4636,6 +4674,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -4722,10 +4764,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 46,
     "counts": {
      "Подтверждено": 44,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -5058,6 +5100,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -5144,10 +5190,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 49,
+    "members": 50,
     "counts": {
      "Подтверждено": 48,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -5355,6 +5401,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -5441,10 +5491,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
      "Подтверждено": 32,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -5631,6 +5681,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -5717,10 +5771,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
      "Подтверждено": 39,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -5851,6 +5905,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -5937,10 +5995,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
      "Подтверждено": 39,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -6071,6 +6129,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -6157,10 +6219,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
      "Подтверждено": 39,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -6287,6 +6349,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -6373,10 +6439,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
      "Подтверждено": 39,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -6475,6 +6541,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -6561,10 +6631,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
      "Подтверждено": 32,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -6722,6 +6792,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -6808,10 +6882,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 46,
+    "members": 47,
     "counts": {
      "Подтверждено": 45,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -7023,6 +7097,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -7137,10 +7215,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 64,
+    "members": 65,
     "counts": {
      "Подтверждено": 62,
-     "не подтверждено": 2
+     "не подтверждено": 3
     }
    },
    "actions": {
@@ -7352,6 +7430,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -7466,10 +7548,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 64,
+    "members": 65,
     "counts": {
      "Подтверждено": 62,
-     "не подтверждено": 2
+     "не подтверждено": 3
     }
    },
    "actions": {
@@ -9350,6 +9432,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -9436,10 +9522,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 47,
+    "members": 48,
     "counts": {
      "Подтверждено": 46,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -9584,6 +9670,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -9670,10 +9760,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 45,
     "counts": {
      "Подтверждено": 43,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -9861,6 +9951,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -9947,10 +10041,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
      "Подтверждено": 39,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -10051,6 +10145,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -10137,10 +10235,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
      "Подтверждено": 32,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -10517,6 +10615,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Parts",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksPart.SetPlacement",
      "documentation": "Подтверждено"
     },
@@ -10527,7 +10629,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 6
+    "members": 7
    },
    "actions": {
     "discover": "verified",
@@ -10746,6 +10848,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -10832,10 +10938,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 25,
+    "members": 26,
     "counts": {
      "Подтверждено": 24,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -11516,6 +11622,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -11602,10 +11712,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
      "Подтверждено": 32,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -11808,6 +11918,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -11894,10 +12008,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 24,
+    "members": 25,
     "counts": {
      "Подтверждено": 23,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -12076,6 +12190,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -12162,9 +12280,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 24,
+    "members": 25,
     "counts": {
-     "не подтверждено": 2,
+     "не подтверждено": 3,
      "Подтверждено": 22
     }
    },
@@ -12276,6 +12394,10 @@
     {
      "member": "ksEntity.Update",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
     },
     {
      "member": "IDiametralDimension.Update",
@@ -12392,10 +12514,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 45,
     "counts": {
      "Подтверждено": 42,
-     "не подтверждено": 2
+     "не подтверждено": 3
     }
    },
    "actions": {
@@ -12927,6 +13049,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -13013,10 +13139,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 36,
     "counts": {
      "Подтверждено": 34,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -13102,6 +13228,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -13188,10 +13318,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 30,
+    "members": 31,
     "counts": {
      "Подтверждено": 29,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -13623,6 +13753,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -13709,10 +13843,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
      "Подтверждено": 31,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -13811,6 +13945,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -13897,10 +14035,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 36,
     "counts": {
      "Подтверждено": 34,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -13999,6 +14137,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -14085,10 +14227,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 36,
     "counts": {
      "Подтверждено": 34,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -14187,6 +14329,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -14273,10 +14419,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 36,
     "counts": {
      "Подтверждено": 34,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -14987,6 +15133,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -15073,10 +15223,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 46,
+    "members": 47,
     "counts": {
      "Подтверждено": 45,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -17969,6 +18119,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -18055,10 +18209,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
      "Подтверждено": 40,
-     "не подтверждено": 1
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -19583,6 +19737,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.DirectionObject",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDraftFromEdges.DirectionObject",
      "documentation": "Подтверждено"
     },
@@ -19605,6 +19763,10 @@
     {
      "member": "ksEntity.Update",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
     },
     {
      "member": "IDiametralDimension.Update",
@@ -19693,10 +19855,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 46,
     "counts": {
-     "Подтверждено": 43,
-     "не подтверждено": 1
+     "Подтверждено": 44,
+     "не подтверждено": 2
     }
    },
    "actions": {
@@ -20518,6 +20680,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
      "member": "IDiametralDimension.Update",
      "documentation": "Подтверждено"
     },
@@ -20604,10 +20770,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 59,
+    "members": 60,
     "counts": {
      "Подтверждено": 57,
-     "не подтверждено": 2
+     "не подтверждено": 3
     }
    },
    "actions": {
@@ -20716,6 +20882,254 @@
     "Synhronise() отвечает TRUE и при недоступном источнике (измерено: файл удалён, геометрия прежняя), поэтому отказ выносит Хост по пути, а инструмент проверяет файл до вызова продукта.",
     "Уровень подтверждения синхронизации - call_returned: ожидаемый объём клиент задаёт сам, инструмент возвращает объём и тела до и после.",
     "Изменение источника выполняется инструментами Хоста (kompas_update_feature по признаку выдавливания); правка признака переоткрытого документа читает семейство как null, поэтому группа ищет признак по наличию эскиза."
+   ]
+  },
+  {
+   "operation_id": "G9.dismantle.mode_steps",
+   "family": "G9",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "assembly.two_components",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_list_dismantle_steps",
+    "kompas_open_document",
+    "kompas_save_document",
+    "kompas_set_dismantle"
+   ],
+   "schemas": [
+    "schemas/kompas_set_dismantle.json"
+   ],
+   "declared_route": "kompas_set_dismantle: API7 QI(IAssemblyDocument -> IDismantleParameters) -> AddDismantleStep() -> Parts (SafeArray из IPart7) / Distance (double) / DirectionObject (IModelObject) -> IDismantleStep.Update() -> RebuildDocument; чтение - DismantleStepsCount / DismantleStep[i] / Parts / Distance (idismantleparameters.html, idismantleparameters_adddismantlestep.html, idismantlestep_parts.html, idismantlestep_distance.html, idismantlestep_directionobject.html, ksapi_idismantlestep_update.html)",
+   "com": [
+    {
+     "member": "IDismantleParameters.AddDismantleStep",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.DirectionObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDraftFromEdges.DirectionObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleParameters.DismantleStep",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleParameters.DismantleStepsCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Distance",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraint.distance",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Parts",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument2D1.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraint3D.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDrawingObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHole3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3DBy2Points.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFillet.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMirrorPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFeaturePattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Update",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "members": 34,
+    "counts": {
+     "Подтверждено": 32,
+     "не подтверждено": 2
+    }
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DSM-01.discovery",
+    "DSM-01.schema",
+    "DSM-02.setup",
+    "DSM-03.axis",
+    "DSM-04.step_one",
+    "DSM-08.read_back",
+    "DSM-11.save_reopen",
+    "DSM-12.not_assembly",
+    "DSM-12.missing_component",
+    "DSM-12.bad_direction",
+    "DSM-12.nested_component",
+    "DSM-12.stale_revision",
+    "DSM-12.refusal_names_effect"
+   ],
+   "limitations": [
+    "Направление шага задаётся ССЫЛКОЙ на вспомогательную ось сборки: справка даёт DirectionObject типа IModelObject и не даёт векторного входа. Плоскость, ребро, грань и сам компонент смещения не дают (измерено).",
+    "Направление обратно не читается: DirectionObject читается null, Vector приходит с ksVector3DUnknown и без параметров. Строка приёмки этого не обещает.",
+    "Правки шага нет: документированный интерфейс умеет добавлять, удалять по номеру и очищать, поэтому непустой набор шагов переписывается целиком.",
+    "Компоненты адресуются только на верхнем уровне: вложенный компонент отвергается CAPABILITY_UNAVAILABLE."
+   ]
+  },
+  {
+   "operation_id": "G9.dismantle.mode_exploded",
+   "family": "G9",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "assembly.two_components",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_list_components",
+    "kompas_list_dismantle_steps",
+    "kompas_set_dismantle"
+   ],
+   "schemas": [
+    "schemas/kompas_list_dismantle_steps.json"
+   ],
+   "declared_route": "компонент шага читается по IPart7.GetSummMatrix (тот же маршрут, что у kompas_list_components): при включённом DismantleMode перенос матрицы равен расстоянию шага вдоль оси направления; при выключенном - собранному размещению (ipart7_getsummmatrix.html, ksdocument3d_dismantlemode.html, idismantleparameters_deletedismantlestep.html, idismantleparameters_cleardismantleparameters.html)",
+   "com": [
+    {
+     "member": "IPart7.GetSummMatrix",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 1
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "verified",
+    "delete_dependencies": "verified",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DSM-03.axis",
+    "DSM-05.exploded",
+    "DSM-06.mode_off",
+    "DSM-07.step_many",
+    "DSM-09.delete_step",
+    "DSM-10.clear"
+   ],
+   "limitations": [
+    "Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.",
+    "Поворот шага не проверяется: справка не даёт документированного способа его задать."
    ]
   }
  ],
@@ -21168,6 +21582,16 @@
     "mcp_verified": 1
    },
    "mcp_support": "kompas_copy_geometry / kompas_list_copies_geometry / kompas_synchronise_copy"
+  },
+  {
+   "family": "G9",
+   "title": "Разнесённый вид сборки: режим, шаги разнесения и их чтение",
+   "catalog_level": "mcp_verified",
+   "operations": 1,
+   "operation_levels": {
+    "mcp_verified": 1
+   },
+   "mcp_support": "kompas_set_dismantle / kompas_list_dismantle_steps"
   }
  ],
  "com_routes": [
@@ -21877,6 +22301,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:578",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:736",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:869",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:118",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:255",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:666",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3827",
@@ -23082,6 +23507,244 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksBodyCollection"
+   }
+  },
+  {
+   "route": "IDismantleParameters.DismantleStepsCount",
+   "assembly": "api7",
+   "interface": "IDismantleParameters",
+   "declared_on": "IDismantleParameters",
+   "receiver_type": "IDismantleParameters",
+   "inherited": false,
+   "member": "DismantleStepsCount",
+   "kind": "property",
+   "signature": "prop Int32 DismantleStepsCount",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:121",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:287",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:34",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:54"
+   ],
+   "receivers": [
+    "parameters"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantleparameters_dismantlestepscount.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleParameters"
+   }
+  },
+  {
+   "route": "IDismantleParameters.DeleteDismantleStep",
+   "assembly": "api7",
+   "interface": "IDismantleParameters",
+   "declared_on": "IDismantleParameters",
+   "receiver_type": "IDismantleParameters",
+   "inherited": false,
+   "member": "DeleteDismantleStep",
+   "kind": "method",
+   "signature": "Boolean DeleteDismantleStep(Int32 Index)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:63"
+   ],
+   "receivers": [
+    "parameters"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantleparameters_deletedismantlestep.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleParameters"
+   }
+  },
+  {
+   "route": "IDismantleParameters.ClearDismantleParameters",
+   "assembly": "api7",
+   "interface": "IDismantleParameters",
+   "declared_on": "IDismantleParameters",
+   "receiver_type": "IDismantleParameters",
+   "inherited": false,
+   "member": "ClearDismantleParameters",
+   "kind": "method",
+   "signature": "Boolean ClearDismantleParameters()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:76",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:88"
+   ],
+   "receivers": [
+    "parameters"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantleparameters_cleardismantleparameters.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleParameters"
+   }
+  },
+  {
+   "route": "IDismantleParameters.AddDismantleStep",
+   "assembly": "api7",
+   "interface": "IDismantleParameters",
+   "declared_on": "IDismantleParameters",
+   "receiver_type": "IDismantleParameters",
+   "inherited": false,
+   "member": "AddDismantleStep",
+   "kind": "method",
+   "signature": "DismantleStep AddDismantleStep()",
+   "type": "DismantleStep",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:174"
+   ],
+   "receivers": [
+    "parameters"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantleparameters_adddismantlestep.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleParameters"
+   }
+  },
+  {
+   "route": "IDismantleStep.Parts",
+   "assembly": "api7",
+   "interface": "IDismantleStep",
+   "declared_on": "IDismantleStep",
+   "receiver_type": "IDismantleStep",
+   "inherited": false,
+   "member": "Parts",
+   "kind": "property",
+   "signature": "prop Object Parts",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:196",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:338"
+   ],
+   "receivers": [
+    "created",
+    "step"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantlestep_parts.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleStep"
+   }
+  },
+  {
+   "route": "IDismantleStep.Distance",
+   "assembly": "api7",
+   "interface": "IDismantleStep",
+   "declared_on": "IDismantleStep",
+   "receiver_type": "IDismantleStep",
+   "inherited": false,
+   "member": "Distance",
+   "kind": "property",
+   "signature": "prop Double Distance",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:197"
+   ],
+   "receivers": [
+    "created"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantlestep_distance.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleStep"
+   }
+  },
+  {
+   "route": "IDismantleStep.DirectionObject",
+   "assembly": "api7",
+   "interface": "IDismantleStep",
+   "declared_on": "IDismantleStep",
+   "receiver_type": "IDismantleStep",
+   "inherited": false,
+   "member": "DirectionObject",
+   "kind": "property",
+   "signature": "prop IModelObject DirectionObject",
+   "type": "IModelObject",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:198"
+   ],
+   "receivers": [
+    "created"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantlestep_directionobject.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleStep"
+   }
+  },
+  {
+   "route": "IDismantleStep.Update",
+   "assembly": "api7",
+   "interface": "IDismantleStep",
+   "declared_on": "IDismantleStep",
+   "receiver_type": "IDismantleStep",
+   "inherited": false,
+   "member": "Update",
+   "kind": "method",
+   "signature": "Int32 Update()",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:210"
+   ],
+   "receivers": [
+    "created"
+   ],
+   "documentation": {
+    "status": "не подтверждено",
+    "source": [],
+    "how": null,
+    "documented_on": null
+   }
+  },
+  {
+   "route": "IDismantleParameters.DismantleStep",
+   "assembly": "api7",
+   "interface": "IDismantleParameters",
+   "declared_on": "IDismantleParameters",
+   "receiver_type": "IDismantleParameters",
+   "inherited": false,
+   "member": "DismantleStep",
+   "kind": "property",
+   "signature": "prop DismantleStep DismantleStep",
+   "type": "DismantleStep",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:298"
+   ],
+   "receivers": [
+    "parameters"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idismantleparameters_dismantlestep.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDismantleParameters"
    }
   },
   {
@@ -39713,23 +40376,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": false,
-  "lag_seconds": -255.0,
+  "lag_seconds": -730.1,
   "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
   "reason": "измерение старше своего входа"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-98c622a/wire.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-324a984/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": false,
-  "lag_seconds": -252.1,
+  "lag_seconds": -905.8,
   "newest_input": "coverage/solid-v24/catalog.json",
   "reason": "измерение старше своего входа"
  },
@@ -39751,16 +40414,16 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 7450,
+  "total": 7499,
   "by_kind": {
-   "foreign-receiver": 6938,
-   "unknown": 414,
+   "foreign-receiver": 6982,
+   "unknown": 419,
    "unknown-member": 98
   },
   "by_reason": {
-   "head-not-declared": 6938,
-   "head-type-not-established": 185,
-   "head-type-not-com": 226,
+   "head-not-declared": 6982,
+   "head-type-not-established": 186,
+   "head-type-not-com": 230,
    "member-not-on-interface": 98,
    "chain-broken-on-com-type": 3
   },
@@ -39984,6 +40647,11 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:124:command.Steps.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:218:step.DistanceMm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:319:part",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:342:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:358:raw.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:48:command.FaceRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:139:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:162:ex.GetType()",
@@ -40162,12 +40830,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:52:command.SectionRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:53:command.SectionRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:57:target.Document",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:66:target.Document",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:72:target",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:127:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:176:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:194:command.Couplings",
-    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:201:command.Couplings"
+    "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:66:target.Document"
    ],
    "unknown-member": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:757:IModelObject.Points3D",
@@ -40484,6 +41147,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1363:child",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1366:child",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1369:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:319:part",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2723:format.Trim()",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:130:edge",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:133:edge",
@@ -40667,6 +41331,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:124:command.Steps.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:218:step.DistanceMm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:342:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:358:raw.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:48:command.FaceRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:139:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Draft.cs:162:ex.GetType()",
@@ -40856,11 +41524,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.cs:812:command.Kind",
     "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:89:name.Name",
     "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:293:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:232:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:306:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:524:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:587:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:646:ex.GetType()"
+    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:232:ex.GetType()"
    ],
    "member-not-on-interface": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:757:IModelObject.Points3D",
@@ -40985,6 +41649,11 @@
    "interface": "ICopiesGeometry",
    "member": "CopyGeometry",
    "site": "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:263"
+  },
+  {
+   "interface": "IDismantleParameters",
+   "member": "DismantleStep",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:298"
   },
   {
    "interface": "ILoft",
@@ -41396,6 +42065,7 @@
   "profiles_read": [
    "assemblies-minimal-v1.json",
    "assembly-interference-minimal-v1.json",
+   "dismantle-minimal-v1.json",
    "drafts-minimal-v1.json",
    "drawings-minimal-v1.json",
    "export-inertia-minimal-v1.json",
@@ -41580,213 +42250,648 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json",
-  "rows_claiming_verified": 189,
+  "source": "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json",
+  "rows_claiming_verified": 191,
   "rows_without_any_linked_row": [
-   "G8.copy_geometry.mode_associativity",
-   "G8.copy_geometry.mode_body_from_file"
-  ],
-  "rows_contradicted_by_fail": [],
-  "rows_action_without_dedicated_row": [
-   "DRW-07.section_view.create.simple",
-   "DRW-07.section_view.create.stepped",
-   "DRW-07.section_view.delete",
-   "DRW-07.section_view.read",
-   "DRW-07.section_view.rebuild",
-   "DRW-07.section_view.save_reopen",
-   "DRW-07.section_view.update",
-   "G8.copy_geometry.mode_associativity",
-   "G8.copy_geometry.mode_body_from_file",
-   "SM-08.thread.mode_auto",
-   "SM-08.thread.mode_hand",
-   "SM-08.thread.mode_inner_by_face",
-   "SM-12.draft_from_edges.mode_dir_by_object",
-   "SM-12.incline.mode_base_face_or_plane"
-  ],
-  "rows_actions_without_required_calls": [
+   "ASM-01.document.create_open",
+   "ASM-02.component.insert",
+   "ASM-03.structure.read",
+   "ASM-04.placement.set_read",
+   "ASM-05.component.replace",
+   "ASM-06.links.check",
+   "ASM-07.save_reopen",
+   "ASM-08.component.delete",
+   "AUX-IMAGE.raster_export",
+   "AUX-SKETCH.plane_and_profile_lifecycle",
+   "DRW-01.views.create_standard",
+   "DRW-02.views.list",
+   "DRW-03.dimension.add",
+   "DRW-03.dimension.add.diametral",
+   "DRW-03.dimension.add.linear",
+   "DRW-03.dimension.add.radial",
+   "DRW-04.title_block.set",
+   "DRW-05.export",
+   "DRW-06.technical_demand",
    "DRW-07.section_view.create.simple",
    "DRW-07.section_view.create.stepped",
    "DRW-07.section_view.delete",
    "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
    "DRW-07.section_view.read",
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
+   "EI-01.stl.export",
+   "EI-02.stl.tessellation",
+   "EI-03.inertia.central",
+   "EI-04.inertia.principal",
+   "EI-05.inertia.units",
    "G8.copy_geometry.mode_associativity",
    "G8.copy_geometry.mode_body_from_file",
+   "G9.dismantle.mode_exploded",
+   "G9.dismantle.mode_steps",
+   "INT-01.pairs.volumetric",
+   "INT-02.pairs.tangent",
+   "INT-03.pairs.faces",
+   "INT-04.gap.min_distance",
+   "MATE-01.mate.create",
+   "MATE-02.mate.read",
+   "MATE-03.mate.param_edit",
+   "MATE-04.mate.fixed",
+   "MATE-05.mate.delete",
+   "MATE-06.mate.placement_effect",
    "MATE-07.mate.create_transmission",
+   "SKB-01.limits",
+   "SKB-02.polyline_native",
+   "SKB-03.spline",
+   "SKC-01.geometric_types",
+   "SKC-02.dimension_types",
+   "SKC-03.read",
+   "SKC-04.delete",
+   "SKC-05.state_read",
+   "SM-02.base_extrusion.additional_body",
+   "SM-02.base_extrusion.blind",
+   "SM-02.base_extrusion.direction_negative",
+   "SM-02.boss_extrusion.blind",
+   "SM-02.boss_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.blind",
+   "SM-02.cut_extrusion.direction_symmetric",
+   "SM-02.cut_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.through",
+   "SM-02.material_toward",
+   "SM-03.base_rotated.axis_explicit",
+   "SM-03.base_rotated.full_turn",
+   "SM-03.base_rotated.partial_angle",
+   "SM-03.boss_rotated.full_turn",
+   "SM-03.cut_rotated.full_turn",
+   "SM-04.base.mode_orthogonal",
+   "SM-04.base.single_profile_flat_path",
+   "SM-05.base.mode_couplings",
+   "SM-05.base.parallel_sections_order",
+   "SM-07.native_hole.axis_by_face_normal",
+   "SM-07.native_hole.blind_flat_bottom",
+   "SM-07.native_hole.position_off_origin",
+   "SM-07.native_hole.through_counterbore",
+   "SM-07.native_hole.through_countersink",
+   "SM-07.native_hole.through_cylindrical",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
    "SM-08.thread.mode_inner_by_face",
+   "SM-08.thread.mode_outer_by_edge",
+   "SM-09.fillet.change_edge_set",
+   "SM-09.fillet.change_radius_in_place",
+   "SM-09.fillet.constant_radius_body_edges",
+   "SM-09.fillet.read_radius_back",
+   "SM-11.chamfer.mode_direction",
+   "SM-11.chamfer.mode_distance_angle",
+   "SM-11.chamfer.mode_two_distances",
    "SM-12.draft_from_edges.mode_dir_by_object",
+   "SM-12.draft_from_edges.mode_side",
    "SM-12.incline.mode_base_face_or_plane",
-   "STEP.import"
+   "SM-12.incline.mode_direction",
+   "SM-12.incline.mode_faces_group",
+   "SM-13.shell.mode_direction",
+   "SM-13.shell.mode_remove_faces",
+   "SM-13.shell.uniform_thickness",
+   "SM-15.intersect",
+   "SM-15.subtract",
+   "SM-15.union.explicit_target_and_tools",
+   "SM-15.union.mode_multi_tools",
+   "SM-15.union.mode_save_tools",
+   "SM-16.cut_by_plane.mode_side_removed",
+   "SM-16.split.mode_keep_parts",
+   "SM-16.split.plane_tool",
+   "SM-17.reposition.rotate_about_axis",
+   "SM-17.reposition.translate_by_vector",
+   "SM-18.grid.bodies",
+   "SM-18.grid.operations",
+   "SM-18.grid.rectangular_grid",
+   "SM-18.grid.single_row",
+   "SM-19.circular.angular_range",
+   "SM-19.circular.bodies",
+   "SM-19.circular.full_circle_no_duplicate",
+   "SM-19.circular.operations",
+   "SM-23.mirror_all.bodies_selection",
+   "SM-23.mirror_array.selected_operations",
+   "STEP.import",
+   "VB-01.variable.create",
+   "VB-02.feature_parameters.list",
+   "VB-03.parameter.bind",
+   "VB-04.parameter.unbind",
+   "VM-01.variables.read",
+   "VM-02.variable.set_value",
+   "VM-03.variable.set_expression",
+   "VM-04.material.read",
+   "VM-05.material.write",
+   "VM-06.mass.computed_via_measure",
+   "dep.api7.in_same_adapter",
+   "dep.assembly.component_address",
+   "dep.assembly.document_lifecycle",
+   "dep.assembly.idempotency",
+   "dep.assembly.revisions",
+   "dep.assembly.source_file",
+   "dep.bodies.multibody",
+   "dep.drawing.document_lifecycle",
+   "dep.drawing.export_file",
+   "dep.drawing.idempotency",
+   "dep.drawing.revisions",
+   "dep.drawing.source_file",
+   "dep.drawing.view_address",
+   "dep.ei.idempotency",
+   "dep.ei.path_policy",
+   "dep.ei.read_only_measure",
+   "dep.ei.triangle_count_from_file",
+   "dep.ei.units_system",
+   "dep.foundation",
+   "dep.interference.api7_measurer",
+   "dep.interference.component_address",
+   "dep.interference.distance_unit",
+   "dep.interference.face_address",
+   "dep.interference.read_only",
+   "dep.lifecycle.feature_cycle",
+   "dep.mate.component_insert",
+   "dep.mate.idempotency",
+   "dep.mate.object_address",
+   "dep.mate.revisions",
+   "dep.mate.save_reopen",
+   "dep.paths.flat",
+   "dep.pattern.associativity",
+   "dep.preserve_unknown",
+   "dep.refs.axes",
+   "dep.refs.edges_faces",
+   "dep.refs.planar_face",
+   "dep.refs.planes",
+   "dep.refs.points_axes",
+   "dep.selection.unambiguous",
+   "dep.sketch.entities",
+   "dep.sketch_bulk.entity_read_back",
+   "dep.sketch_bulk.limits_source",
+   "dep.sketch_bulk.profile_area_rule",
+   "dep.sketch_constraints.interop_presence",
+   "dep.sketch_constraints.no_silent_rewrite",
+   "dep.sketch_constraints.object_address",
+   "dep.sketch_constraints.state_agreement",
+   "dep.sketch_constraints.type_vocabulary",
+   "dep.sketches.enumeration",
+   "dep.units.confirm",
+   "dep.vb.idempotency",
+   "dep.vb.parameter_address",
+   "dep.vb.read_only_list",
+   "dep.vb.rebuild_document",
+   "dep.vb.units",
+   "dep.vm.idempotency",
+   "dep.vm.part_addressing",
+   "dep.vm.revisions",
+   "dep.vm.save_reopen",
+   "dep.vm.units"
+  ],
+  "rows_contradicted_by_fail": [],
+  "rows_action_without_dedicated_row": [
+   "ASM-01.document.create_open",
+   "ASM-02.component.insert",
+   "ASM-03.structure.read",
+   "ASM-04.placement.set_read",
+   "ASM-05.component.replace",
+   "ASM-06.links.check",
+   "ASM-07.save_reopen",
+   "ASM-08.component.delete",
+   "AUX-IMAGE.raster_export",
+   "AUX-SKETCH.plane_and_profile_lifecycle",
+   "DRW-01.views.create_standard",
+   "DRW-02.views.list",
+   "DRW-03.dimension.add",
+   "DRW-03.dimension.add.diametral",
+   "DRW-03.dimension.add.linear",
+   "DRW-03.dimension.add.radial",
+   "DRW-04.title_block.set",
+   "DRW-05.export",
+   "DRW-06.technical_demand",
+   "DRW-07.section_view.create.simple",
+   "DRW-07.section_view.create.stepped",
+   "DRW-07.section_view.delete",
+   "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
+   "DRW-07.section_view.read",
+   "DRW-07.section_view.rebuild",
+   "DRW-07.section_view.save_reopen",
+   "DRW-07.section_view.update",
+   "EI-01.stl.export",
+   "EI-02.stl.tessellation",
+   "EI-03.inertia.central",
+   "EI-04.inertia.principal",
+   "EI-05.inertia.units",
+   "G8.copy_geometry.mode_associativity",
+   "G8.copy_geometry.mode_body_from_file",
+   "G9.dismantle.mode_exploded",
+   "G9.dismantle.mode_steps",
+   "INT-01.pairs.volumetric",
+   "INT-02.pairs.tangent",
+   "INT-03.pairs.faces",
+   "INT-04.gap.min_distance",
+   "MATE-01.mate.create",
+   "MATE-02.mate.read",
+   "MATE-03.mate.param_edit",
+   "MATE-04.mate.fixed",
+   "MATE-05.mate.delete",
+   "MATE-06.mate.placement_effect",
+   "MATE-07.mate.create_transmission",
+   "SKB-01.limits",
+   "SKB-02.polyline_native",
+   "SKB-03.spline",
+   "SKC-01.geometric_types",
+   "SKC-02.dimension_types",
+   "SKC-03.read",
+   "SKC-04.delete",
+   "SKC-05.state_read",
+   "SM-02.base_extrusion.additional_body",
+   "SM-02.base_extrusion.blind",
+   "SM-02.base_extrusion.direction_negative",
+   "SM-02.boss_extrusion.blind",
+   "SM-02.boss_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.blind",
+   "SM-02.cut_extrusion.direction_symmetric",
+   "SM-02.cut_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.through",
+   "SM-02.material_toward",
+   "SM-03.base_rotated.axis_explicit",
+   "SM-03.base_rotated.full_turn",
+   "SM-03.base_rotated.partial_angle",
+   "SM-03.boss_rotated.full_turn",
+   "SM-03.cut_rotated.full_turn",
+   "SM-04.base.mode_orthogonal",
+   "SM-04.base.single_profile_flat_path",
+   "SM-05.base.mode_couplings",
+   "SM-05.base.parallel_sections_order",
+   "SM-07.native_hole.axis_by_face_normal",
+   "SM-07.native_hole.blind_flat_bottom",
+   "SM-07.native_hole.position_off_origin",
+   "SM-07.native_hole.through_counterbore",
+   "SM-07.native_hole.through_countersink",
+   "SM-07.native_hole.through_cylindrical",
+   "SM-08.thread.mode_auto",
+   "SM-08.thread.mode_hand",
+   "SM-08.thread.mode_inner_by_face",
+   "SM-08.thread.mode_outer_by_edge",
+   "SM-09.fillet.change_edge_set",
+   "SM-09.fillet.change_radius_in_place",
+   "SM-09.fillet.constant_radius_body_edges",
+   "SM-09.fillet.read_radius_back",
+   "SM-11.chamfer.mode_direction",
+   "SM-11.chamfer.mode_distance_angle",
+   "SM-11.chamfer.mode_two_distances",
+   "SM-12.draft_from_edges.mode_dir_by_object",
+   "SM-12.draft_from_edges.mode_side",
+   "SM-12.incline.mode_base_face_or_plane",
+   "SM-12.incline.mode_direction",
+   "SM-12.incline.mode_faces_group",
+   "SM-13.shell.mode_direction",
+   "SM-13.shell.mode_remove_faces",
+   "SM-13.shell.uniform_thickness",
+   "SM-15.intersect",
+   "SM-15.subtract",
+   "SM-15.union.explicit_target_and_tools",
+   "SM-15.union.mode_multi_tools",
+   "SM-15.union.mode_save_tools",
+   "SM-16.cut_by_plane.mode_side_removed",
+   "SM-16.split.mode_keep_parts",
+   "SM-16.split.plane_tool",
+   "SM-17.reposition.rotate_about_axis",
+   "SM-17.reposition.translate_by_vector",
+   "SM-18.grid.bodies",
+   "SM-18.grid.operations",
+   "SM-18.grid.rectangular_grid",
+   "SM-18.grid.single_row",
+   "SM-19.circular.angular_range",
+   "SM-19.circular.bodies",
+   "SM-19.circular.full_circle_no_duplicate",
+   "SM-19.circular.operations",
+   "SM-23.mirror_all.bodies_selection",
+   "SM-23.mirror_array.selected_operations",
+   "STEP.import",
+   "VB-01.variable.create",
+   "VB-02.feature_parameters.list",
+   "VB-03.parameter.bind",
+   "VB-04.parameter.unbind",
+   "VM-01.variables.read",
+   "VM-02.variable.set_value",
+   "VM-03.variable.set_expression",
+   "VM-04.material.read",
+   "VM-05.material.write",
+   "VM-06.mass.computed_via_measure",
+   "dep.api7.in_same_adapter",
+   "dep.assembly.component_address",
+   "dep.assembly.document_lifecycle",
+   "dep.assembly.idempotency",
+   "dep.assembly.revisions",
+   "dep.assembly.source_file",
+   "dep.bodies.multibody",
+   "dep.drawing.document_lifecycle",
+   "dep.drawing.export_file",
+   "dep.drawing.idempotency",
+   "dep.drawing.revisions",
+   "dep.drawing.source_file",
+   "dep.drawing.view_address",
+   "dep.ei.idempotency",
+   "dep.ei.path_policy",
+   "dep.ei.read_only_measure",
+   "dep.ei.triangle_count_from_file",
+   "dep.ei.units_system",
+   "dep.foundation",
+   "dep.interference.api7_measurer",
+   "dep.interference.component_address",
+   "dep.interference.distance_unit",
+   "dep.interference.face_address",
+   "dep.interference.read_only",
+   "dep.lifecycle.feature_cycle",
+   "dep.mate.component_insert",
+   "dep.mate.idempotency",
+   "dep.mate.object_address",
+   "dep.mate.revisions",
+   "dep.mate.save_reopen",
+   "dep.paths.flat",
+   "dep.pattern.associativity",
+   "dep.preserve_unknown",
+   "dep.refs.axes",
+   "dep.refs.edges_faces",
+   "dep.refs.planar_face",
+   "dep.refs.planes",
+   "dep.refs.points_axes",
+   "dep.selection.unambiguous",
+   "dep.sketch.entities",
+   "dep.sketch_bulk.entity_read_back",
+   "dep.sketch_bulk.limits_source",
+   "dep.sketch_bulk.profile_area_rule",
+   "dep.sketch_constraints.interop_presence",
+   "dep.sketch_constraints.no_silent_rewrite",
+   "dep.sketch_constraints.object_address",
+   "dep.sketch_constraints.state_agreement",
+   "dep.sketch_constraints.type_vocabulary",
+   "dep.sketches.enumeration",
+   "dep.units.confirm",
+   "dep.vb.idempotency",
+   "dep.vb.parameter_address",
+   "dep.vb.read_only_list",
+   "dep.vb.rebuild_document",
+   "dep.vb.units",
+   "dep.vm.idempotency",
+   "dep.vm.part_addressing",
+   "dep.vm.revisions",
+   "dep.vm.save_reopen",
+   "dep.vm.units"
+  ],
+  "rows_actions_without_required_calls": [
+   "ASM-01.document.create_open",
+   "ASM-02.component.insert",
+   "ASM-03.structure.read",
+   "ASM-04.placement.set_read",
+   "ASM-05.component.replace",
+   "ASM-06.links.check",
+   "ASM-07.save_reopen",
+   "ASM-08.component.delete",
+   "AUX-IMAGE.raster_export",
+   "AUX-SKETCH.plane_and_profile_lifecycle",
+   "DRW-01.views.create_standard",
+   "DRW-02.views.list",
+   "DRW-03.dimension.add",
+   "DRW-03.dimension.add.diametral",
+   "DRW-03.dimension.add.linear",
+   "DRW-03.dimension.add.radial",
+   "DRW-04.title_block.set",
+   "DRW-05.export",
+   "DRW-06.technical_demand",
+   "DRW-07.section_view.create.simple",
+   "DRW-07.section_view.create.stepped",
+   "DRW-07.section_view.delete",
+   "DRW-07.section_view.geometry_validation",
+   "DRW-07.section_view.negative_tests",
+   "DRW-07.section_view.read",
+   "DRW-07.section_view.rebuild",
+   "DRW-07.section_view.save_reopen",
+   "DRW-07.section_view.update",
+   "EI-01.stl.export",
+   "EI-02.stl.tessellation",
+   "EI-03.inertia.central",
+   "EI-04.inertia.principal",
+   "EI-05.inertia.units",
+   "G8.copy_geometry.mode_associativity",
+   "G8.copy_geometry.mode_body_from_file",
+   "G9.dismantle.mode_exploded",
+   "G9.dismantle.mode_steps",
+   "INT-01.pairs.volumetric",
+   "INT-02.pairs.tangent",
+   "INT-03.pairs.faces",
+   "INT-04.gap.min_distance",
+   "MATE-01.mate.create",
+   "MATE-02.mate.read",
+   "MATE-03.mate.param_edit",
+   "MATE-04.mate.fixed",
+   "MATE-05.mate.delete",
+   "MATE-06.mate.placement_effect",
+   "MATE-07.mate.create_transmission",
+   "SKB-01.limits",
+   "SKB-02.polyline_native",
+   "SKB-03.spline",
+   "SKC-01.geometric_types",
+   "SKC-02.dimension_types",
+   "SKC-03.read",
+   "SKC-04.delete",
+   "SKC-05.state_read",
+   "SM-02.base_extrusion.additional_body",
+   "SM-02.base_extrusion.blind",
+   "SM-02.base_extrusion.direction_negative",
+   "SM-02.boss_extrusion.blind",
+   "SM-02.boss_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.blind",
+   "SM-02.cut_extrusion.direction_symmetric",
+   "SM-02.cut_extrusion.explicit_target_body",
+   "SM-02.cut_extrusion.through",
+   "SM-02.material_toward",
+   "SM-03.base_rotated.axis_explicit",
+   "SM-03.base_rotated.full_turn",
+   "SM-03.base_rotated.partial_angle",
+   "SM-03.boss_rotated.full_turn",
+   "SM-03.cut_rotated.full_turn",
+   "SM-04.base.mode_orthogonal",
+   "SM-04.base.single_profile_flat_path",
+   "SM-05.base.mode_couplings",
+   "SM-05.base.parallel_sections_order",
+   "SM-07.native_hole.axis_by_face_normal",
+   "SM-07.native_hole.blind_flat_bottom",
+   "SM-07.native_hole.position_off_origin",
+   "SM-07.native_hole.through_counterbore",
+   "SM-07.native_hole.through_countersink",
+   "SM-07.native_hole.through_cylindrical",
+   "SM-08.thread.mode_auto",
+   "SM-08.thread.mode_hand",
+   "SM-08.thread.mode_inner_by_face",
+   "SM-08.thread.mode_outer_by_edge",
+   "SM-09.fillet.change_edge_set",
+   "SM-09.fillet.change_radius_in_place",
+   "SM-09.fillet.constant_radius_body_edges",
+   "SM-09.fillet.read_radius_back",
+   "SM-11.chamfer.mode_direction",
+   "SM-11.chamfer.mode_distance_angle",
+   "SM-11.chamfer.mode_two_distances",
+   "SM-12.draft_from_edges.mode_dir_by_object",
+   "SM-12.draft_from_edges.mode_side",
+   "SM-12.incline.mode_base_face_or_plane",
+   "SM-12.incline.mode_direction",
+   "SM-12.incline.mode_faces_group",
+   "SM-13.shell.mode_direction",
+   "SM-13.shell.mode_remove_faces",
+   "SM-13.shell.uniform_thickness",
+   "SM-15.intersect",
+   "SM-15.subtract",
+   "SM-15.union.explicit_target_and_tools",
+   "SM-15.union.mode_multi_tools",
+   "SM-15.union.mode_save_tools",
+   "SM-16.cut_by_plane.mode_side_removed",
+   "SM-16.split.mode_keep_parts",
+   "SM-16.split.plane_tool",
+   "SM-17.reposition.rotate_about_axis",
+   "SM-17.reposition.translate_by_vector",
+   "SM-18.grid.bodies",
+   "SM-18.grid.operations",
+   "SM-18.grid.rectangular_grid",
+   "SM-18.grid.single_row",
+   "SM-19.circular.angular_range",
+   "SM-19.circular.bodies",
+   "SM-19.circular.full_circle_no_duplicate",
+   "SM-19.circular.operations",
+   "SM-23.mirror_all.bodies_selection",
+   "SM-23.mirror_array.selected_operations",
+   "STEP.import",
+   "VB-01.variable.create",
+   "VB-02.feature_parameters.list",
+   "VB-03.parameter.bind",
+   "VB-04.parameter.unbind",
+   "VM-01.variables.read",
+   "VM-02.variable.set_value",
+   "VM-03.variable.set_expression",
+   "VM-04.material.read",
+   "VM-05.material.write",
+   "VM-06.mass.computed_via_measure",
+   "dep.api7.in_same_adapter",
+   "dep.assembly.component_address",
+   "dep.assembly.document_lifecycle",
+   "dep.assembly.idempotency",
+   "dep.assembly.revisions",
+   "dep.assembly.source_file",
+   "dep.bodies.multibody",
+   "dep.drawing.document_lifecycle",
+   "dep.drawing.export_file",
+   "dep.drawing.idempotency",
+   "dep.drawing.revisions",
+   "dep.drawing.source_file",
+   "dep.drawing.view_address",
+   "dep.ei.idempotency",
+   "dep.ei.path_policy",
+   "dep.ei.read_only_measure",
+   "dep.ei.triangle_count_from_file",
+   "dep.ei.units_system",
+   "dep.foundation",
+   "dep.interference.api7_measurer",
+   "dep.interference.component_address",
+   "dep.interference.distance_unit",
+   "dep.interference.face_address",
+   "dep.interference.read_only",
+   "dep.lifecycle.feature_cycle",
+   "dep.mate.component_insert",
+   "dep.mate.idempotency",
+   "dep.mate.object_address",
+   "dep.mate.revisions",
+   "dep.mate.save_reopen",
+   "dep.paths.flat",
+   "dep.pattern.associativity",
+   "dep.preserve_unknown",
+   "dep.refs.axes",
+   "dep.refs.edges_faces",
+   "dep.refs.planar_face",
+   "dep.refs.planes",
+   "dep.refs.points_axes",
+   "dep.selection.unambiguous",
+   "dep.sketch.entities",
+   "dep.sketch_bulk.entity_read_back",
+   "dep.sketch_bulk.limits_source",
+   "dep.sketch_bulk.profile_area_rule",
+   "dep.sketch_constraints.interop_presence",
+   "dep.sketch_constraints.no_silent_rewrite",
+   "dep.sketch_constraints.object_address",
+   "dep.sketch_constraints.state_agreement",
+   "dep.sketch_constraints.type_vocabulary",
+   "dep.sketches.enumeration",
+   "dep.units.confirm",
+   "dep.vb.idempotency",
+   "dep.vb.parameter_address",
+   "dep.vb.read_only_list",
+   "dep.vb.rebuild_document",
+   "dep.vb.units",
+   "dep.vm.idempotency",
+   "dep.vm.part_addressing",
+   "dep.vm.revisions",
+   "dep.vm.save_reopen",
+   "dep.vm.units"
   ],
   "guard_control": {
-   "must_refuse": {
-    "row": "СИНТЕТИЧЕСКАЯ (окно журнала [1, 2])",
-    "tool": "kompas_create_document",
-    "error": "INVALID_ARGUMENT",
-    "refused": true,
-    "reason": "нет ни одного вызова из kompas_create_, kompas_pattern_, kompas_insert_, kompas_add_, kompas_bind_, kompas_extrude, kompas_rotated, kompas_hole, kompas_fillet, kompas_chamfer, kompas_boolean, kompas_split, kompas_cut_by_plane, kompas_reposition, kompas_shell, kompas_loft, kompas_sweep, kompas_set_material, kompas_set_sketch_plane, kompas_set_variable"
-   },
-   "must_stay_silent": {
-    "row": "ASM.03.recursive_read",
-    "silent": true,
-    "reason": "подпись save_reopen выполнена настоящими вызовами"
-   },
-   "guard_proved": true,
+   "must_refuse": null,
+   "must_stay_silent": null,
+   "guard_proved": false,
    "note": "обе половины в ОДНОЙ постановке: синтетическая строка, чьё окно держит только вызов с кодом отказа, обязана быть отвергнута; строка, чьё окно держит настоящую пару save→open, обязана остаться без отказа"
   }
  },
  "calls_calibration": {
-  "positive": {
-   "create": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "delete_dependencies": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "discover": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "edit": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "geometry_validation": {
-    "rows": 10,
-    "derived": 0,
-    "missed": [
-     "B3M.01.geometry_validation",
-     "B3M.02.geometry_validation",
-     "B3M.03.geometry_validation",
-     "B3M.04.geometry_validation",
-     "B3M.05.geometry_validation",
-     "B3M.06.geometry_validation",
-     "B3M.07.geometry_validation",
-     "B3M.08.geometry_validation",
-     "B3M.09.geometry_validation",
-     "B3M.10.geometry_validation"
-    ]
-   },
-   "negative_tests": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "read": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "rebuild": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "save_reopen": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   },
-   "suppress_restore": {
-    "rows": 10,
-    "derived": 10,
-    "missed": []
-   }
-  },
-  "negative_foreign_derivations": {
-   "discover": {
-    "create": 10,
-    "edit": 10,
-    "negative_tests": 10,
-    "rebuild": 10,
-    "save_reopen": 10,
-    "suppress_restore": 10,
-    "delete_dependencies": 10
-   },
-   "edit": {
-    "create": 10
-   },
-   "geometry_validation": {
-    "create": 10,
-    "edit": 10,
-    "negative_tests": 10,
-    "rebuild": 10,
-    "save_reopen": 10,
-    "suppress_restore": 10,
-    "delete_dependencies": 10
-   },
-   "read": {
-    "create": 10,
-    "discover": 10,
-    "geometry_validation": 10,
-    "edit": 10,
-    "negative_tests": 10,
-    "rebuild": 10,
-    "save_reopen": 10,
-    "suppress_restore": 10,
-    "delete_dependencies": 10
-   }
-  }
+  "positive": {},
+  "negative_foreign_derivations": {}
  },
  "findings": [
   {
    "id": "F-01",
    "class": "несоответствие документации (член вызывается, страницы нет)",
    "severity": "высокая",
-   "statement": "4 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
+   "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json"
    ]
   },
   {
    "id": "F-02",
    "class": "подкласс F-01: страницы нет по ожидаемому адресу (HTTP 404)",
    "severity": "высокая",
-   "statement": "4 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
+   "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json"
    ]
   },
   {
    "id": "F-06",
    "class": "приписка (verified без связанной строки приёмки)",
    "severity": "высокая",
-   "statement": "2 строк(и): G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file",
+   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
    "fix": "связать строку с приёмкой или понизить заявку",
    "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
+    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
    ]
   },
   {
    "id": "F-07",
    "class": "заявка не подтверждена вызовами (отказ сторожа)",
    "severity": "средняя",
-   "statement": "17 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file, MATE-07.mate.create_transmission, SM-08.thread.mode_auto",
+   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
    "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
    "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
+    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
    ]
   },
   {
    "id": "F-08",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
+   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
+    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
    ]
   },
   {

@@ -14,6 +14,28 @@
 
 ## Текущее состояние
 
+- **Разнесённый вид сборки: два инструмента и группа приёмки (наряд `OMEGA_G9_DISMANTLE`, 21.10.2026,
+  сдан):** `kompas_set_dismantle` (MUTATION: режим, шаги, удаление по номеру, очистка) и
+  `kompas_list_dismantle_steps` (READ). Маршрут документированный и измеренный:
+  `QI(IAssemblyDocument → IDismantleParameters)` → `AddDismantleStep()` → `Parts` / `Distance` /
+  `DirectionObject` → **`IDismantleStep.Update()`** (до него шагов 0, после 1) → `RebuildDocument`.
+  **Направление задаётся ОБЪЕКТОМ:** справка даёт `DirectionObject` типа `IModelObject` и не даёт
+  векторного входа; плоскость, ребро, грань и сам компонент смещения не дают, а вспомогательная ось
+  сборки даёт смещение ровно на расстояние шага. **Направление обратно не читается**
+  (`DirectionObject` = `null`, `Vector` без параметров) — это названо в описании инструмента.
+  **Разнесение доказано геометрией:** при включённом режиме перенос матрицы компонента шага
+  (`IPart7.GetSummMatrix`, тот же маршрут, что у `kompas_list_components`) равен заданному (40 мм по X
+  для одного компонента, 25 мм по Y для двух), соседний компонент не сдвинут; выключение режима
+  возвращает собранное. Шаги переживают `save → close → open`; удаление шага и очистка возвращают
+  собранное. Профиль `dismantle-minimal-v1` закрыт (`acceptance-levels.py`: `problems=[]`,
+  `modes_open=[]`), семейство `G9` в каталоге. Зачётный `--all` на `8418acf` (Release, дерево чистое,
+  33 минуты): **PASS 1798 / NAMED 6 / UNKNOWN 3 / FAIL 0**, exit 0; сверка строк с принятым `4d5f624` —
+  1788 → 1807, прежних строк не потеряно, разошлись только 19 новых `DSM-*`. Тесты **1389/1389**,
+  `--self-test` 82/0, стражи 0/0/0. Вне профиля: поворот шага (справка не даёт способа задать),
+  разнесённый ассоциативный вид чертежа (`IAssociationView::ExplodedView`).
+  `docs/decisions/dismantle.md`, `docs/04_KOMPAS_API_NOTES.md` §4.99, отчёт
+  `OMEGA_G9_DISMANTLE_REPORT_20261021.md`, доказательства
+  `docs/acceptance/evidence/20261021-dismantle-8418acf/`.
 - **Режим каталога `full` удалён: каталог подаётся одним способом (наряд `CATALOG_FULL_REMOVAL`,
   21.10.2026, сдан):** настройки `catalog_mode` в файле конфигурации нет, `KOMPAS_MCP_CATALOG_MODE`
   не читается, `HostOptions.CatalogMode`/`ReadMode`/`NormalizeMode` удалены, ветка `full` в

@@ -272,8 +272,8 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
         $report.tools = $names.Count
         # INVARIANT: tools/list publishes the FIXED catalog, not one tool per registry operation, so it
         # is compared with the count the Host itself reports; the manifest counts SCHEMAS, i.e. the
-        # registry, and that number is compared with `operations`. One number for both said 14 against
-        # 105 and failed an install that was correct.
+        # registry, and that number is compared with `operations`. One number for both failed a correct
+        # install. History: docs/decisions/releases.md#install-layout
         $caps = Send "tools/call" @{ name = "kompas_capabilities"; arguments = @{} }
         $body = $caps.result.structuredContent.result
         $published = [int]$body.tool_count

@@ -14,6 +14,32 @@
 
 ## Текущее состояние
 
+- **Сообщение о новом выпуске и обновление установки (наряд `UPDATE_NOTICE`, 21.10.2026, сдан):**
+  Host сам узнаёт, что вышел более новый стабильный выпуск, и говорит об этом клиенту полем `update`
+  в ответе `kompas_health` (`status`: `up_to_date` / `available` / `unknown` / `disabled` / `pending`,
+  `current_version`, `latest_version`, `checked_utc`, `release_url`, `release_title`, `may_break` и
+  `how_to_update` при `available`, `reason` при `unknown`) и одной строкой в
+  `initialize.instructions` - только при `available` и только из итога ПРОШЛОЙ проверки. Источник -
+  `releases/latest` того же репозитория, что у установщика; тег обязан быть `vMAJOR.MINOR.PATCH`,
+  черновик и `prerelease` - не выпуск для сравнения. Проверка идёт в фоне после старта транспорта,
+  тайм-аут 5 с, не чаще раза в сутки, итог - `update-check.json` в каталоге `HostOptions.Default`
+  (`%TEMP%\kompas-mcp`), просроченный итог не используется (`pending` до конца новой проверки).
+  Выключатель - ключ `update_check` и `KOMPAS_MCP_UPDATE_CHECK=0`; выключено - запроса нет. Host
+  ничего не скачивает и не ставит. `may_break` следует правилу версий: смена MAJOR либо (при MAJOR 0)
+  MINOR. Установщик держит постоянную точку `<InstallRoot>\current` -> `versions\<тег>`: запись
+  клиента после обновления не меняется байт в байт, `-UseInstalled -Tag` переключает ту же точку,
+  запись старого вида переводится на `current` без `-ReplaceExistingEntry`. Попутно закрыты три
+  дефекта установки, найденные протоколом: `artifact_directory` в `New-LocalConfig` (ключа больше нет
+  в шаблоне - шаг 4 падал), сравнение `tools/list` с числом схем (14 против 105 после постоянного
+  каталога), удаление точки соединения через `Remove-Item` (шёл по ссылке и предлагал удалить
+  содержимое версии). Проверки: модульные тесты 1418/1418 (24 новых - сравнение версий, состояния,
+  файл итога), `--update-only` 6 строк PASS на Debug-сборке, `--self-test` 82/0, стражи
+  `long-comment-blocks.py` 0, `lint-dashes.py` 0, `check-evidence-links.py` 0, протокол установщика
+  13/13 PASS на двух пакетах с разными тегами во временном `-InstallRoot` и `-CodexHome`.
+  `docs/decisions/host.md#update-notice`, `docs/02_TOOL_CONTRACTS.md`, три инструкции с разделом
+  «Обновление», доказательства `docs/acceptance/evidence/20261021-update-7e2a78c/`. Зачётный `--all`
+  запускается на коммите кода `62e1e58` (`full_run.py start`); его итог - в следующей записи.
+
 - **Пояснение `writable_roots` в документации поставки (наряд `TEXTS_WRITABLE_ROOTS`, 21.10.2026,
   сдан):** `docs/distribution/INSTALL.md` (шаг 2 ручной установки) и `docs/operator-guide/mcp-config.md`
   (раздел «Куда сервер вправе писать») объясняют: корни записи - это `writable_roots` вместе с

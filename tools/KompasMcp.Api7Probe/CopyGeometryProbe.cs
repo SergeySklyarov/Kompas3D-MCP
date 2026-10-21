@@ -30,6 +30,8 @@ internal sealed class CopyGeometryProbe
     private readonly Options _options;
     private KompasObject _app = null!;
     private IKompasDocument3D? _sourceDocument7;
+    private object? _factoryCollection;
+    private int? _factoryCount;
     private string _sourcePath = string.Empty;
     private string _receiverPath = string.Empty;
 
@@ -76,6 +78,7 @@ internal sealed class CopyGeometryProbe
             }
 
             ReadBack(operation, accepted, receiver.Value.Doc);
+            ReadCollection(receiver.Value.Doc);
             WatchAndReopen(receiver.Value.Doc);
             Associativity(source.Value.Extrusion, accepted, receiver.Value.Doc);
         }
@@ -216,6 +219,8 @@ internal sealed class CopyGeometryProbe
 
             step.Observe("Add() → " + Api5.RuntimeName(created));
             step.Data["count_after"] = Api5.SafeInt(() => collection.Count);
+            _factoryCollection = collection;
+            _factoryCount = step.Data["count_after"] as int?;
             step.Data["document_file_name_empty"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
             step.Data["watch_default"] = Api5.Raw(Api5.SafeBool(() => operation.WatchForSourceChange));
             step.Data["context_objects_default"] = Api5.Raw(Api5.SafeBool(() => operation.ContextObjects));
@@ -275,6 +280,19 @@ internal sealed class CopyGeometryProbe
         // of that type; obj3dtype.html — o3d_body = 115. This is the documented list of model objects,
         // while a body taken from API5 GetMainBody answers IsSuitableObject=FALSE.
         var sourceContainer = _sourceDocument7?.TopPart as IModelContainer;
+        var objectsForms = new (string Name, object Argument)[]
+        {
+            ("enum ksObjectBody7", KompasAPIObjectTypeEnum.ksObjectBody7),
+            ("int 115", 115),
+            ("short 115", (short)115),
+            ("string 115", "115"),
+        };
+        step.Data["objects_forms"] = objectsForms.Select(f =>
+        {
+            var raw = Api5.SafeObject(() => sourceContainer!.Objects[f.Argument]);
+            var count = raw is IModelObjects list ? Api5.SafeInt(() => list.Count) : null;
+            return $"{f.Name}: {Api5.RuntimeName(raw)}/{Api5.Raw(count)}";
+        }).ToList();
         var bodiesOfSource = Api5.SafeObject(() => sourceContainer!.Objects[KompasAPIObjectTypeEnum.ksObjectBody7]) as IModelObjects;
         var bodiesCount = bodiesOfSource is null ? 0 : Api5.SafeInt(() => bodiesOfSource.Count) ?? 0;
         step.Data["object_type_enum_body_names"] = Enum.GetNames<KompasAPIObjectTypeEnum>()
@@ -413,6 +431,42 @@ internal sealed class CopyGeometryProbe
         {
             step.Fail("Тела в приёмнике нет — копия не создана.");
         }
+    }
+
+    /// <summary>How the created operation is read back is a separate documented question: the page names
+    /// an index or a name, and the interop exposes two indexers. Each form is tried and recorded.</summary>
+    private void ReadCollection(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.7a", "Чтение операции из коллекции: индекс или имя",
+            "Какая форма обращения к ICopiesGeometry отвечает?");
+        var collection = Container(receiverDoc)?.CopiesGeometry;
+        if (collection is null)
+        {
+            step.Fail("Коллекция не получена.");
+            return;
+        }
+
+        step.Data["count"] = Api5.SafeInt(() => collection.Count);
+        step.Data["count_same_instance"] = _factoryCollection is ICopiesGeometry same
+            ? Api5.SafeInt(() => same.Count)
+            : null;
+        step.Data["collection_same_instance"] = Api5.RuntimeName(_factoryCollection);
+        var forms = new (string Name, object Argument)[]
+        {
+            ("CopyGeometry[0]", 0),
+            ("CopyGeometry[1]", 1),
+            ("CopyGeometry[short 0]", (short)0),
+            ("CopyGeometry[\"0\"]", "0"),
+            ("CopyGeometry[\"1\"]", "1"),
+        };
+        foreach (var form in forms)
+        {
+            var raw = Api5.SafeObject(() => collection.CopyGeometry[form.Argument]);
+            step.Observe($"{form.Name} → {Api5.RuntimeName(raw)}");
+            step.Data[form.Name] = Api5.RuntimeName(raw);
+        }
+
+        step.Unknown("Формы записаны; отвечающая выбирается по наблюдению выше.");
     }
 
     private void WatchAndReopen(ksDocument3D receiverDoc)

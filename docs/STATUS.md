@@ -14,6 +14,24 @@
 
 ## Текущее состояние
 
+- **Режим каталога `full` удалён: каталог подаётся одним способом (наряд `CATALOG_FULL_REMOVAL`,
+  21.10.2026, сдан):** настройки `catalog_mode` в файле конфигурации нет, `KOMPAS_MCP_CATALOG_MODE`
+  не читается, `HostOptions.CatalogMode`/`ReadMode`/`NormalizeMode` удалены, ветка `full` в
+  `CompactCatalog` снята, поле `catalog_mode` из ответа `kompas_capabilities` убрано, текст инструкций
+  полного режима слит с единственными инструкциями. Старый ключ в конфигурации ведёт себя как любой
+  неизвестный - измерено (`scratch/probe-unknown-key.py`): Хост стартует, публикует 14 инструментов,
+  реестр отдаёт 100 операций, поля в ответе нет; ветки совместимости нет. Внутренний реестр, `schemas/`,
+  `find`/`describe`/`run` и 11 прямых инструментов не тронуты. Стражи размера: размер публикуемого
+  списка (измерено 22 687 символов, потолок 23 821 = +5 %) и точное число прямых инструментов 11; прежний
+  потолок 367 100 снят. Прибор: `--catalog-mode`, `apply_catalog_mode`, `DEFAULT_CATALOG_MODE`/
+  `CATALOG_MODES` и поле `catalog_mode` в `run.json` удалены, группа `CT` - один Хост, те же 10 строк;
+  `compare-run-rows.py` оставлен без поля. Зачётный `--all` на `4d5f624` (Release, дерево чистое,
+  33 минуты): **PASS 1780 / NAMED 6 / UNKNOWN 2 / FAIL 0**, exit 0; сверка строк с принятым `7ec0fa9` -
+  1788 = 1788, `diverged_rows` пуст, убыли строк нет. Тесты **1388/1388**, `--self-test` 82/0,
+  `--catalog-only` PASS 31 / FAIL 0, стражи 0/0/0. Удаление ломающее, но входит в невыпущенную
+  `0.10.0`. `docs/decisions/host.md#catalog-mode-removed`, отчёт
+  `CATALOG_FULL_REMOVAL_REPORT_20261021.md`, доказательства
+  `docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/`.
 - **Мастер-геометрия: продукт и группа приёмки готовы (наряд `OMEGA_G8_MASTER_GEOMETRY`, попытка 3,
   21.10.2026, сдана):** три инструмента - `kompas_copy_geometry` (создание копии из сохранённой детали
   `.m3d`, `object_kind` = `body` | `plane_xoy`), `kompas_list_copies_geometry` (чтение: номер, путь
@@ -37,11 +55,12 @@
   `direct` или `run`. `HostOptions.CatalogMode` по умолчанию `compact`; `full` снят нарядом
   `CATALOG_FULL_REMOVAL` (21.10.2026): ключ `catalog_mode`, переменная `KOMPAS_MCP_CATALOG_MODE` и
   поле `catalog_mode` в ответе удалены. Предел `limit` у
-  `kompas_find_operations` - размер реестра, а не литерал. `kompas_capabilities` в `compact` называет
-  `catalog_mode`, `tools`/`tool_count` и отдельно `operations`/`operations_via_run`. `docs/TOOLS.md`
+  `kompas_find_operations` - размер реестра, а не литерал. `kompas_capabilities` называет
+  `tools`/`tool_count` и отдельно `operations`/`operations_via_run` (поле `catalog_mode` снято нарядом
+  `CATALOG_FULL_REMOVAL`). `docs/TOOLS.md`
   получил столбец пути вызова из того же источника, что `reachable_via`. Прибор:
-  `mcp-smoke.py --catalog-mode full|compact` (по умолчанию `compact`), обёртка `kompas_run` - одно
-  место в каркасе (`Client.wire`), режим, набор и реестр клиент спрашивает у Хоста. Измерено на
+  `mcp-smoke.py` без выбора режима (флаг снят нарядом `CATALOG_FULL_REMOVAL`), обёртка `kompas_run` - одно
+  место в каркасе (`Client.wire`), набор и реестр клиент спрашивает у Хоста. Измерено на
   `370d878` (Release): тесты **1387/1387**, `--self-test` 82/0, `--emit-schemas` без изменений (схемы
   байт-в-байт), группа `--catalog-only` в `compact` **PASS 31 / FAIL 0**, группа `--extrusion-only`
   через `kompas_run` **PASS 47 / FAIL 0**, стражи 0/0/0. Зачётные `--all` в обоих режимах на одном

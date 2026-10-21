@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-20T21:27:21+02:00, часы машины +02:00",
+  "date": "2026-10-21T09:03:09+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -15,12 +15,12 @@
   "documentation_source": {
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
-   "retrieved": "2026-10-20",
-   "pages_read": 143,
-   "routes_checked": 650,
+   "retrieved": "2026-10-21",
+   "pages_read": 145,
+   "routes_checked": 663,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 646,
+    "wire": 659,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -45,8 +45,8 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 650,
-    "ok": 646,
+    "checked": 663,
+    "ok": 659,
     "failed": 4,
     "not_verified": 0
    }
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "a3e7ec4d81074ded94b640aed249f43cd2ae17c951fa7016ae0d5b9ca1a6a71b",
-   "host_dll_sha256": "0167d1ac4d08361d120ca6de528853becf540f77790c8f3e73eaf69b5262177a",
+   "host_sha256": "f59a6caab5b018cd2b7a4b9987ba3fc29796f49d68616fa68a1a210a8b3e0e0e",
+   "host_dll_sha256": "8d29c333c43441f627756c99f839cb319b056a222a4f498256114f8e0010aafc",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "7fd6954f4ec96a1db59182039e2c6de9b1627a470d3fbafdb2173161657ade59",
-   "worker_dll_sha256": "7b7cca6f27c700cb24ab8adf45c55e37277c4fdb1640661c2dbbe4d210051a73",
-   "adapter_sha256": "6a314fef678cf04ab7e99f9ad2c10e57fad72f8e1a53b1105d4b71f2b382bd88",
-   "source_commit": "7f60ea1",
-   "source_tree_dirty": true,
-   "tools_count": 97,
-   "rows_complete_run": 1756,
+   "worker_sha256": "1a31c9e94127ac0c29bc726d0ff1037fab31b6e7c73bb225ede8cc016eb1d15b",
+   "worker_dll_sha256": "1a9ecedd8ba1772315d6809ffba528846b88dcd0a3d1fb06e866242825a3c27b",
+   "adapter_sha256": "8b1ee867524483ab5afdc247c15dbaf8e2592c7ebf3023d3694402e22567bc18",
+   "source_commit": "7ec0fa9",
+   "source_tree_dirty": false,
+   "tools_count": 14,
+   "rows_complete_run": 1771,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -88,12 +88,16 @@
    "com_snapshot_check": "снапшот COM-маршрутов больше не отдельный файл: инвентарь строится в самом аудите (`api-audit-routes.py`) и сверяется по времени правки исходников адаптера"
   },
   "completeness": {
-   "tools_on_wire": 97,
-   "schemas_on_disk": 97,
-   "tools_with_schema": 97,
-   "schemas_matching_wire_by_property_names": 97,
-   "schemas_matching_wire_by_shape": 97,
-   "tools_without_matrix_presence": [],
+   "tools_on_wire": 14,
+   "schemas_on_disk": 100,
+   "tools_with_schema": 11,
+   "schemas_matching_wire_by_property_names": 11,
+   "schemas_matching_wire_by_shape": 11,
+   "tools_without_matrix_presence": [
+    "kompas_describe_operation",
+    "kompas_find_operations",
+    "kompas_run"
+   ],
    "tools_outside_profiles": [
     {
      "tool": "kompas_acquire_session",
@@ -116,10 +120,6 @@
      "reason": "состояние сервера (в том числе разрыв связи) - служебный отчёт"
     },
     {
-     "tool": "kompas_probe_units",
-     "reason": "калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания измерительных вызовов; измерительный прибор приёмки, а не режим (исполняется строкой DEP.DUN.01.geometry_validation)"
-    },
-    {
      "tool": "kompas_release_session",
      "reason": "освобождение сеанса - владение сеансом, а не режим"
     },
@@ -129,21 +129,19 @@
     }
    ],
    "presence_classes": {
-    "absent": 8,
-    "route_field": 38,
-    "route_field+schema_field": 34,
-    "schema_field": 17
+    "absent": 10,
+    "route_field": 4
    },
-   "matrix_rows": 191,
+   "matrix_rows": 193,
    "catalog_modes_and_variants": 214,
-   "com_routes": 660,
+   "com_routes": 673,
    "com_routes_by_assembly": {
-    "api7": 392,
+    "api7": 405,
     "api5": 258,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 646,
-   "com_routes_confirmed_over_wire": 646,
+   "com_routes_confirmed_by_documentation": 659,
+   "com_routes_confirmed_over_wire": 659,
    "com_routes_confirmed_from_mirror": 0,
    "com_routes_unconfirmed": 4,
    "com_routes_confirmed_by_name": 6,
@@ -151,16 +149,16 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 187,
-   "rows_verified_without_any_linked_row": 0,
+   "rows_claiming_verified": 189,
+   "rows_verified_without_any_linked_row": 2,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 12,
-   "rows_actions_without_required_calls": 15,
-   "rows_status_lowered_by_unsupported_actions": 15,
-   "acceptance_rows": 1756,
-   "acceptance_calls_journal": 16804,
-   "acceptance_rows_with_call_window": 1756,
-   "required_of_mismatches_matrix_vs_profile": 9,
+   "rows_action_without_dedicated_row": 14,
+   "rows_actions_without_required_calls": 17,
+   "rows_status_lowered_by_unsupported_actions": 17,
+   "acceptance_rows": 1771,
+   "acceptance_calls_journal": 17026,
+   "acceptance_rows_with_call_window": 1771,
+   "required_of_mismatches_matrix_vs_profile": 10,
    "dependency_verdict_control_proved": null
   }
  },
@@ -185,135 +183,8 @@
    }
   },
   {
-   "name": "kompas_add_dimension",
-   "description_len": 1161,
-   "properties_on_wire": 10,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "view_ref",
-    "dimension_type",
-    "point1",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_add_dimension.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-03.dimension.add:adapter_route",
-     "DRW-03.dimension.add:create_route",
-     "DRW-03.dimension.add:geometry_validation_route",
-     "DRW-03.dimension.add.linear:adapter_route",
-     "DRW-03.dimension.add.linear:create_route",
-     "DRW-03.dimension.add.linear:read_route",
-     "DRW-03.dimension.add.linear:geometry_validation_route",
-     "DRW-03.dimension.add.radial:adapter_route",
-     "DRW-03.dimension.add.radial:create_route",
-     "DRW-03.dimension.add.radial:read_route",
-     "DRW-03.dimension.add.radial:geometry_validation_route",
-     "DRW-03.dimension.add.diametral:adapter_route",
-     "DRW-03.dimension.add.diametral:create_route",
-     "DRW-03.dimension.add.diametral:read_route",
-     "DRW-03.dimension.add.diametral:geometry_validation_route"
-    ],
-    "schema_field": [
-     "DRW-03.dimension.add",
-     "DRW-03.dimension.add.linear",
-     "DRW-03.dimension.add.radial",
-     "DRW-03.dimension.add.diametral"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_bind_parameter",
-   "description_len": 1675,
-   "properties_on_wire": 8,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "feature_ref",
-    "parameter_name",
-    "expression",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_bind_parameter.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VB-03.parameter.bind:adapter_route",
-     "VB-03.parameter.bind:discover_route",
-     "VB-03.parameter.bind:create_route",
-     "VB-03.parameter.bind:edit_route",
-     "VB-04.parameter.unbind:adapter_route",
-     "VB-04.parameter.unbind:discover_route",
-     "VB-04.parameter.unbind:create_route",
-     "VB-04.parameter.unbind:edit_route",
-     "dep.vb.idempotency:adapter_route"
-    ],
-    "schema_field": [
-     "VB-03.parameter.bind",
-     "VB-04.parameter.unbind"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_boolean",
-   "description_len": 1442,
-   "properties_on_wire": 9,
-   "required_on_wire": [
-    "target_body_ref",
-    "tool_body_refs",
-    "operation",
-    "keep_tools",
-    "document_id",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_boolean.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-15.subtract",
-     "SM-15.intersect",
-     "SM-15.union.mode_save_tools",
-     "SM-15.union.mode_multi_tools",
-     "SM-15.union.explicit_target_and_tools"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
    "name": "kompas_capabilities",
-   "description_len": 929,
+   "description_len": 1186,
    "properties_on_wire": 1,
    "required_on_wire": [],
    "additional_properties": false,
@@ -328,96 +199,6 @@
     "mcp_support": null,
     "present": false,
     "modes": []
-   }
-  },
-  {
-   "name": "kompas_chamfer",
-   "description_len": 972,
-   "properties_on_wire": 10,
-   "required_on_wire": [
-    "edge_refs",
-    "expected_revision",
-    "mode",
-    "distance1_mm",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_chamfer.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-11.chamfer.mode_two_distances",
-     "SM-11.chamfer.mode_distance_angle",
-     "SM-11.chamfer.mode_direction"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_check_component_links",
-   "description_len": 271,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_check_component_links.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-03.structure.read:discover_route",
-     "ASM-06.links.check:adapter_route",
-     "ASM-06.links.check:discover_route",
-     "ASM-06.links.check:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_check_interference",
-   "description_len": 811,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_check_interference.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "INT-02.pairs.tangent:read_route",
-     "dep.interference.read_only:read_route"
-    ],
-    "schema_field": [
-     "INT-01.pairs.volumetric",
-     "INT-02.pairs.tangent",
-     "INT-03.pairs.faces"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
    }
   },
   {
@@ -472,35 +253,6 @@
    }
   },
   {
-   "name": "kompas_create_aux_geometry",
-   "description_len": 2179,
-   "properties_on_wire": 20,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "kind",
-    "mode",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_aux_geometry.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.refs.axes:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
    "name": "kompas_create_document",
    "description_len": 128,
    "properties_on_wire": 6,
@@ -530,479 +282,24 @@
    }
   },
   {
-   "name": "kompas_create_drawing_views",
-   "description_len": 1057,
-   "properties_on_wire": 12,
+   "name": "kompas_describe_operation",
+   "description_len": 154,
+   "properties_on_wire": 1,
    "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "source_path",
-    "x",
-    "y",
-    "operation_id"
+    "id"
    ],
    "additional_properties": false,
-   "schema_file": "schemas/kompas_create_drawing_views.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-01.views.create_standard:adapter_route",
-     "DRW-01.views.create_standard:create_route",
-     "dep.drawing.source_file:create_route"
-    ],
-    "schema_field": [
-     "DRW-01.views.create_standard"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_mate",
-   "description_len": 117,
-   "properties_on_wire": 17,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "constraint_type",
-    "first_component_ref",
-    "first_face_index",
-    "second_component_ref",
-    "second_face_index",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_mate.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "MATE-01.mate.create:adapter_route",
-     "MATE-01.mate.create:create_route",
-     "MATE-07.mate.create_transmission:adapter_route",
-     "MATE-07.mate.create_transmission:create_route",
-     "dep.mate.idempotency:create_route"
-    ],
-    "schema_field": [
-     "MATE-07.mate.create_transmission"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_section_view",
-   "description_len": 1372,
-   "properties_on_wire": 16,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "base_view_ref",
-    "mode",
-    "x",
-    "y",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_section_view.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-07.section_view.create.stepped:adapter_route",
-     "DRW-07.section_view.create.simple:adapter_route",
-     "DRW-07.section_view.negative_tests:adapter_route"
-    ],
-    "schema_field": [
-     "DRW-07.section_view.create.stepped",
-     "DRW-07.section_view.create.simple",
-     "DRW-07.section_view.read",
-     "DRW-07.section_view.update",
-     "DRW-07.section_view.delete",
-     "DRW-07.section_view.save_reopen",
-     "DRW-07.section_view.rebuild",
-     "DRW-07.section_view.geometry_validation",
-     "DRW-07.section_view.negative_tests"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_sketch",
-   "description_len": 666,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "plane",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_sketch.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
+   "schema_file": "schemas/kompas_describe_operation.json",
+   "schema_present": false,
+   "schema_property_names_match_wire": false,
+   "schema_shape_matches_wire": false,
    "presence": {
     "own_row": [],
     "route_field": [],
-    "schema_field": [
-     "AUX-SKETCH.plane_and_profile_lifecycle"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_sketch_constraint",
-   "description_len": 2638,
-   "properties_on_wire": 14,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "constraint_type",
-    "object_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_sketch_constraint.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.sketch_constraints.type_vocabulary:discover_route"
-    ],
-    "schema_field": [
-     "SKC-01.geometric_types",
-     "SKC-06.association_bisector"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_sketch_dimension",
-   "description_len": 1978,
-   "properties_on_wire": 10,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "object_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_sketch_dimension.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SKC-02.dimension_types"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_thread",
-   "description_len": 960,
-   "properties_on_wire": 14,
-   "required_on_wire": [
-    "document_id",
-    "pitch_mm",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_thread.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-08.thread.mode_outer_by_edge:adapter_route",
-     "SM-08.thread.mode_outer_by_edge:discover_route",
-     "SM-08.thread.mode_outer_by_edge:create_route",
-     "SM-08.thread.mode_outer_by_edge:negative_tests_route",
-     "SM-08.thread.mode_inner_by_face:adapter_route",
-     "SM-08.thread.mode_inner_by_face:discover_route",
-     "SM-08.thread.mode_inner_by_face:create_route",
-     "SM-08.thread.mode_inner_by_face:negative_tests_route",
-     "SM-08.thread.mode_auto:adapter_route",
-     "SM-08.thread.mode_auto:discover_route",
-     "SM-08.thread.mode_auto:create_route",
-     "SM-08.thread.mode_auto:negative_tests_route",
-     "SM-08.thread.mode_hand:adapter_route",
-     "SM-08.thread.mode_hand:discover_route",
-     "SM-08.thread.mode_hand:create_route",
-     "SM-08.thread.mode_hand:negative_tests_route"
-    ],
-    "schema_field": [
-     "SM-08.thread.mode_outer_by_edge",
-     "SM-08.thread.mode_inner_by_face",
-     "SM-08.thread.mode_auto",
-     "SM-08.thread.mode_hand"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_create_variable",
-   "description_len": 924,
-   "properties_on_wire": 9,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "name",
-    "value",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_create_variable.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VB-01.variable.create:adapter_route",
-     "VB-01.variable.create:discover_route",
-     "VB-01.variable.create:create_route",
-     "dep.vb.idempotency:adapter_route"
-    ],
-    "schema_field": [
-     "VB-01.variable.create"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_cut_by_plane",
-   "description_len": 609,
-   "properties_on_wire": 8,
-   "required_on_wire": [
-    "target_body_ref",
-    "plane",
-    "keep_side",
-    "document_id",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_cut_by_plane.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-16.cut_by_plane.mode_side_removed"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_delete_component",
-   "description_len": 922,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "component_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_delete_component.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-08.component.delete:adapter_route",
-     "ASM-08.component.delete:edit_route",
-     "ASM-08.component.delete:delete_dependencies_route",
-     "ASM-08.component.delete:negative_tests_route"
-    ],
     "schema_field": [],
     "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_delete_feature",
-   "description_len": 1549,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "feature_ref",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_delete_feature.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.lifecycle.feature_cycle:adapter_route",
-     "SM-12.incline.mode_faces_group:delete_dependencies_route",
-     "SM-12.incline.mode_base_face_or_plane:delete_dependencies_route",
-     "SM-12.incline.mode_direction:delete_dependencies_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:delete_dependencies_route",
-     "SM-12.draft_from_edges.mode_side:delete_dependencies_route",
-     "SM-08.thread.mode_outer_by_edge:delete_dependencies_route",
-     "SM-08.thread.mode_inner_by_face:delete_dependencies_route",
-     "SM-08.thread.mode_auto:delete_dependencies_route",
-     "SM-08.thread.mode_hand:delete_dependencies_route"
-    ],
-    "schema_field": [
-     "dep.lifecycle.feature_cycle"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_delete_mate",
-   "description_len": 149,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "mate_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_delete_mate.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "MATE-05.mate.delete:adapter_route",
-     "MATE-05.mate.delete:delete_dependencies_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_delete_section_view",
-   "description_len": 391,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "view_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_delete_section_view.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-07.section_view.delete:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_delete_sketch_constraint",
-   "description_len": 1148,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "object_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_delete_sketch_constraint.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SKC-04.delete"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
+    "present": false,
+    "modes": []
    }
   },
   {
@@ -1029,407 +326,24 @@
    }
   },
   {
-   "name": "kompas_draft",
-   "description_len": 985,
-   "properties_on_wire": 10,
+   "name": "kompas_find_operations",
+   "description_len": 221,
+   "properties_on_wire": 3,
    "required_on_wire": [
-    "document_id",
-    "face_refs",
-    "angle_deg",
-    "direction",
-    "expected_revision",
-    "operation_id"
+    "query"
    ],
    "additional_properties": false,
-   "schema_file": "schemas/kompas_draft.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-12.incline.mode_faces_group:adapter_route",
-     "SM-12.incline.mode_faces_group:create_route",
-     "SM-12.incline.mode_base_face_or_plane:adapter_route",
-     "SM-12.incline.mode_base_face_or_plane:create_route",
-     "SM-12.incline.mode_direction:adapter_route",
-     "SM-12.incline.mode_direction:create_route"
-    ],
-    "schema_field": [
-     "SM-12.incline.mode_faces_group",
-     "SM-12.incline.mode_base_face_or_plane",
-     "SM-12.incline.mode_direction"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_draft_from_edges",
-   "description_len": 842,
-   "properties_on_wire": 11,
-   "required_on_wire": [
-    "document_id",
-    "base_line_edge_refs",
-    "angle_deg",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_draft_from_edges.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-12.draft_from_edges.mode_dir_by_object:adapter_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:create_route",
-     "SM-12.draft_from_edges.mode_side:adapter_route",
-     "SM-12.draft_from_edges.mode_side:create_route"
-    ],
-    "schema_field": [
-     "SM-12.draft_from_edges.mode_dir_by_object",
-     "SM-12.draft_from_edges.mode_side"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_edit_sketch",
-   "description_len": 1354,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "mode",
-    "entities",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_edit_sketch.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "AUX-SKETCH.plane_and_profile_lifecycle:edit_route"
-    ],
-    "schema_field": [
-     "SKB-01.limits",
-     "SKB-02.polyline_native",
-     "SKB-03.spline"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_edit_sketch_entity",
-   "description_len": 979,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "address",
-    "action",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_edit_sketch_entity.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.sketch.entities:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_edit_view",
-   "description_len": 1467,
-   "properties_on_wire": 8,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "view_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_edit_view.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-01.views.create_standard:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_export_drawing",
-   "description_len": 1009,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "output_path",
-    "format",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_export_drawing.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-05.export:adapter_route",
-     "DRW-05.export:create_route",
-     "DRW-05.export:geometry_validation_route",
-     "dep.drawing.export_file:create_route",
-     "dep.drawing.export_file:read_route",
-     "DRW-07.section_view.geometry_validation:adapter_route"
-    ],
-    "schema_field": [
-     "DRW-05.export"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_export_image",
-   "description_len": 2515,
-   "properties_on_wire": 12,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "format",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_export_image.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "AUX-IMAGE.raster_export:read_route",
-     "AUX-IMAGE.raster_export:geometry_validation_route"
-    ],
-    "schema_field": [
-     "AUX-IMAGE.raster_export"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_export_step",
-   "description_len": 131,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "output_path",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_export_step.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.ei.idempotency:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_export_stl",
-   "description_len": 1120,
-   "properties_on_wire": 8,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "target_path",
-    "binary",
-    "max_edge_length_mm",
-    "normal_angle_deg",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_export_stl.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "EI-01.stl.export:adapter_route",
-     "EI-01.stl.export:discover_route",
-     "EI-01.stl.export:create_route",
-     "EI-01.stl.export:read_route",
-     "EI-02.stl.tessellation:adapter_route",
-     "EI-02.stl.tessellation:discover_route",
-     "EI-02.stl.tessellation:create_route",
-     "EI-02.stl.tessellation:read_route",
-     "dep.ei.idempotency:create_route"
-    ],
-    "schema_field": [
-     "EI-01.stl.export",
-     "EI-02.stl.tessellation"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_extrude",
-   "description_len": 3683,
-   "properties_on_wire": 11,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "operation",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_extrude.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-02.material_toward:adapter_route",
-     "SM-02.material_toward:discover_route",
-     "SM-02.material_toward:read_route",
-     "SM-02.material_toward:negative_tests_route"
-    ],
-    "schema_field": [
-     "SM-02.base_extrusion.blind",
-     "SM-02.cut_extrusion.through",
-     "SM-02.base_extrusion.additional_body",
-     "SM-02.base_extrusion.direction_negative",
-     "SM-02.boss_extrusion.blind",
-     "SM-02.boss_extrusion.explicit_target_body",
-     "SM-02.cut_extrusion.blind",
-     "SM-02.cut_extrusion.explicit_target_body",
-     "SM-02.cut_extrusion.direction_symmetric",
-     "SM-02.material_toward"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_fillet",
-   "description_len": 616,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "edge_refs",
-    "expected_revision",
-    "radius_mm",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_fillet.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
+   "schema_file": "schemas/kompas_find_operations.json",
+   "schema_present": false,
+   "schema_property_names_match_wire": false,
+   "schema_shape_matches_wire": false,
    "presence": {
     "own_row": [],
     "route_field": [],
-    "schema_field": [
-     "SM-09.fillet.constant_radius_body_edges"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_finish_sketch",
-   "description_len": 796,
-   "properties_on_wire": 4,
-   "required_on_wire": [
-    "sketch_ref",
-    "require_closed_profile",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_finish_sketch.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "AUX-SKETCH.plane_and_profile_lifecycle:adapter_route"
-    ],
     "schema_field": [],
     "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
+    "present": false,
+    "modes": []
    }
   },
   {
@@ -1464,211 +378,6 @@
    }
   },
   {
-   "name": "kompas_get_feature",
-   "description_len": 4465,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "feature_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_feature.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-09.fillet.read_radius_back:adapter_route",
-     "SM-02.material_toward:read_route",
-     "SM-12.incline.mode_faces_group:read_route",
-     "SM-12.incline.mode_base_face_or_plane:read_route",
-     "SM-12.incline.mode_direction:read_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:read_route",
-     "SM-12.draft_from_edges.mode_side:read_route",
-     "SM-08.thread.mode_outer_by_edge:read_route",
-     "SM-08.thread.mode_inner_by_face:read_route",
-     "SM-08.thread.mode_auto:read_route",
-     "SM-08.thread.mode_hand:read_route"
-    ],
-    "schema_field": [
-     "SM-09.fillet.read_radius_back"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_material",
-   "description_len": 1186,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_material.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VM-04.material.read:adapter_route",
-     "VM-04.material.read:discover_route",
-     "VM-04.material.read:read_route",
-     "VM-05.material.write:read_route",
-     "VM-06.mass.computed_via_measure:read_route",
-     "dep.vm.idempotency:read_route"
-    ],
-    "schema_field": [
-     "VM-04.material.read"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_pattern",
-   "description_len": 1086,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "feature_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_pattern.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.pattern.associativity:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_section_view",
-   "description_len": 884,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id",
-    "view_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_section_view.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-07.section_view.read:adapter_route",
-     "DRW-07.section_view.save_reopen:adapter_route",
-     "DRW-07.section_view.rebuild:adapter_route",
-     "DRW-07.section_view.geometry_validation:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_sketch_status",
-   "description_len": 2433,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "sketch_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_sketch_status.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SKC-05.state_read:adapter_route",
-     "dep.sketch_constraints.state_agreement:read_route"
-    ],
-    "schema_field": [
-     "SKC-05.state_read"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_technical_demand",
-   "description_len": 724,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_technical_demand.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-06.technical_demand:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_get_title_block",
-   "description_len": 651,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id",
-    "cell_ids"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_get_title_block.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-04.title_block.set:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
    "name": "kompas_health",
    "description_len": 108,
    "properties_on_wire": 2,
@@ -1687,663 +396,6 @@
     "mcp_support": null,
     "present": false,
     "modes": []
-   }
-  },
-  {
-   "name": "kompas_hole",
-   "description_len": 1526,
-   "properties_on_wire": 14,
-   "required_on_wire": [
-    "face_ref",
-    "expected_revision",
-    "mode",
-    "diameter_mm",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_hole.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-07.native_hole.through_cylindrical",
-     "SM-07.native_hole.blind_flat_bottom",
-     "SM-07.native_hole.through_counterbore",
-     "SM-07.native_hole.through_countersink",
-     "SM-07.native_hole.axis_by_face_normal",
-     "SM-07.native_hole.position_off_origin"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_import_step",
-   "description_len": 1055,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "application_id",
-    "input_path",
-    "desired_kind",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_import_step.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "STEP.import:adapter_route",
-     "STEP.import:create_route"
-    ],
-    "schema_field": [
-     "STEP.import"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_insert_component",
-   "description_len": 440,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "source_path",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_insert_component.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-02.component.insert:adapter_route",
-     "ASM-02.component.insert:create_route",
-     "dep.assembly.idempotency:create_route",
-     "dep.mate.component_insert:create_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_aux_geometry",
-   "description_len": 2361,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "include"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_aux_geometry.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.refs.planes:read_route",
-     "dep.refs.axes:read_route",
-     "dep.refs.points_axes:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_bodies",
-   "description_len": 594,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_bodies.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "EI-01.stl.export:geometry_validation_route",
-     "SM-02.material_toward:geometry_validation_route",
-     "STEP.import:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_components",
-   "description_len": 551,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_components.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-02.component.insert:read_route",
-     "ASM-03.structure.read:adapter_route",
-     "ASM-03.structure.read:read_route",
-     "ASM-04.placement.set_read:read_route",
-     "ASM-05.component.replace:read_route",
-     "dep.assembly.document_lifecycle:adapter_route",
-     "dep.assembly.source_file:adapter_route",
-     "dep.assembly.source_file:read_route",
-     "dep.assembly.component_address:adapter_route",
-     "dep.assembly.component_address:read_route",
-     "dep.assembly.revisions:adapter_route",
-     "dep.assembly.idempotency:adapter_route",
-     "dep.assembly.idempotency:read_route",
-     "MATE-06.mate.placement_effect:adapter_route",
-     "dep.interference.component_address:read_route",
-     "ASM-08.component.delete:discover_route",
-     "ASM-08.component.delete:read_route",
-     "ASM-08.component.delete:geometry_validation_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_dimensions",
-   "description_len": 1373,
-   "properties_on_wire": 4,
-   "required_on_wire": [
-    "document_id",
-    "view_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_dimensions.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-03.dimension.add:adapter_route",
-     "DRW-03.dimension.add:discover_route",
-     "DRW-03.dimension.add:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_documents",
-   "description_len": 93,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "application_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_documents.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-01.document.create_open:discover_route",
-     "ASM-04.placement.set_read:discover_route",
-     "ASM-05.component.replace:discover_route",
-     "ASM-07.save_reopen:discover_route",
-     "dep.assembly.document_lifecycle:discover_route",
-     "dep.assembly.component_address:discover_route",
-     "dep.assembly.revisions:discover_route",
-     "dep.assembly.idempotency:discover_route",
-     "MATE-01.mate.create:discover_route",
-     "MATE-02.mate.read:discover_route",
-     "MATE-03.mate.param_edit:discover_route",
-     "MATE-04.mate.fixed:discover_route",
-     "MATE-05.mate.delete:discover_route",
-     "MATE-06.mate.placement_effect:discover_route",
-     "MATE-07.mate.create_transmission:discover_route",
-     "dep.mate.object_address:discover_route",
-     "STEP.import:discover_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_drawing_views",
-   "description_len": 744,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_drawing_views.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-01.views.create_standard:read_route",
-     "DRW-02.views.list:adapter_route",
-     "DRW-02.views.list:discover_route",
-     "DRW-02.views.list:read_route",
-     "dep.drawing.source_file:read_route",
-     "dep.drawing.view_address:read_route",
-     "dep.drawing.idempotency:read_route"
-    ],
-    "schema_field": [
-     "DRW-02.views.list"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_feature_parameters",
-   "description_len": 861,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id",
-    "feature_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_feature_parameters.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VB-02.feature_parameters.list:adapter_route",
-     "VB-02.feature_parameters.list:discover_route",
-     "VB-02.feature_parameters.list:read_route",
-     "VB-03.parameter.bind:read_route",
-     "VB-04.parameter.unbind:read_route",
-     "dep.vb.parameter_address:adapter_route",
-     "dep.vb.read_only_list:adapter_route"
-    ],
-    "schema_field": [
-     "VB-02.feature_parameters.list"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_features",
-   "description_len": 409,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_features.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VB-02.feature_parameters.list:adapter_route",
-     "STEP.import:read_route",
-     "SM-12.incline.mode_faces_group:discover_route",
-     "SM-12.incline.mode_base_face_or_plane:discover_route",
-     "SM-12.incline.mode_direction:discover_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:discover_route",
-     "SM-12.draft_from_edges.mode_side:discover_route",
-     "SM-08.thread.mode_outer_by_edge:read_route",
-     "SM-08.thread.mode_inner_by_face:read_route",
-     "SM-08.thread.mode_auto:read_route",
-     "SM-08.thread.mode_hand:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_mates",
-   "description_len": 322,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_mates.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "MATE-01.mate.create:read_route",
-     "MATE-02.mate.read:adapter_route",
-     "MATE-02.mate.read:read_route",
-     "MATE-03.mate.param_edit:read_route",
-     "MATE-04.mate.fixed:read_route",
-     "MATE-05.mate.delete:read_route",
-     "MATE-06.mate.placement_effect:read_route",
-     "MATE-07.mate.create_transmission:read_route",
-     "dep.mate.object_address:read_route",
-     "dep.mate.component_insert:read_route",
-     "dep.mate.revisions:read_route",
-     "dep.mate.idempotency:read_route",
-     "dep.mate.save_reopen:read_route",
-     "ASM-08.component.delete:delete_dependencies_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_sketch_constraints",
-   "description_len": 2590,
-   "properties_on_wire": 4,
-   "required_on_wire": [
-    "sketch_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_sketch_constraints.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SKC-04.delete:read_route",
-     "dep.sketch_constraints.interop_presence:read_route",
-     "dep.sketch_constraints.type_vocabulary:read_route"
-    ],
-    "schema_field": [
-     "SKC-03.read"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_sketch_entities",
-   "description_len": 2066,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "sketch_ref"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_sketch_entities.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.sketch.entities:adapter_route",
-     "dep.sketch.entities:read_route",
-     "dep.sketch.entities:discover_route",
-     "dep.sketch_bulk.limits_source:read_route",
-     "SKC-05.state_read:geometry_validation_route",
-     "dep.sketch_constraints.object_address:read_route",
-     "dep.sketch_constraints.object_address:discover_route",
-     "dep.sketch_constraints.no_silent_rewrite:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_sketches",
-   "description_len": 1573,
-   "properties_on_wire": 2,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_sketches.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.sketches.enumeration:discover_route"
-    ],
-    "schema_field": [
-     "dep.sketches.enumeration"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_list_variables",
-   "description_len": 786,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_list_variables.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VM-01.variables.read:adapter_route",
-     "VM-01.variables.read:discover_route",
-     "VM-01.variables.read:read_route",
-     "VM-02.variable.set_value:read_route",
-     "VM-03.variable.set_expression:read_route",
-     "VB-01.variable.create:read_route",
-     "dep.vb.idempotency:read_route"
-    ],
-    "schema_field": [
-     "VM-01.variables.read"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_loft",
-   "description_len": 1458,
-   "properties_on_wire": 9,
-   "required_on_wire": [
-    "document_id",
-    "section_refs",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_loft.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-05.base.mode_couplings",
-     "SM-05.base.parallel_sections_order"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_measure",
-   "description_len": 1604,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "target_ref",
-    "properties"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_measure.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.bodies.multibody:read_route",
-     "ASM-02.component.insert:geometry_validation_route",
-     "ASM-04.placement.set_read:geometry_validation_route",
-     "ASM-05.component.replace:geometry_validation_route",
-     "ASM-07.save_reopen:geometry_validation_route",
-     "dep.assembly.component_address:geometry_validation_route",
-     "MATE-01.mate.create:geometry_validation_route",
-     "MATE-03.mate.param_edit:geometry_validation_route",
-     "MATE-06.mate.placement_effect:geometry_validation_route",
-     "dep.mate.component_insert:geometry_validation_route",
-     "VM-02.variable.set_value:geometry_validation_route",
-     "VM-03.variable.set_expression:geometry_validation_route",
-     "VM-06.mass.computed_via_measure:adapter_route",
-     "VM-06.mass.computed_via_measure:read_route",
-     "VM-06.mass.computed_via_measure:geometry_validation_route",
-     "VB-03.parameter.bind:rebuild_route",
-     "VB-03.parameter.bind:geometry_validation_route",
-     "VB-04.parameter.unbind:rebuild_route",
-     "VB-04.parameter.unbind:geometry_validation_route",
-     "EI-03.inertia.central:adapter_route",
-     "EI-03.inertia.central:discover_route",
-     "EI-03.inertia.central:read_route",
-     "EI-04.inertia.principal:adapter_route",
-     "EI-04.inertia.principal:discover_route",
-     "EI-04.inertia.principal:read_route",
-     "EI-05.inertia.units:adapter_route",
-     "EI-05.inertia.units:discover_route",
-     "EI-05.inertia.units:read_route",
-     "dep.ei.units_system:read_route",
-     "dep.ei.read_only_measure:adapter_route",
-     "SKC-04.delete:geometry_validation_route",
-     "SM-02.material_toward:geometry_validation_route",
-     "STEP.import:geometry_validation_route",
-     "SM-08.thread.mode_outer_by_edge:geometry_validation_route",
-     "SM-08.thread.mode_inner_by_face:geometry_validation_route",
-     "SM-08.thread.mode_auto:geometry_validation_route",
-     "SM-08.thread.mode_hand:geometry_validation_route"
-    ],
-    "schema_field": [
-     "VM-06.mass.computed_via_measure",
-     "EI-03.inertia.central",
-     "EI-04.inertia.principal",
-     "EI-05.inertia.units"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_measure_gap",
-   "description_len": 780,
-   "properties_on_wire": 4,
-   "required_on_wire": [
-    "document_id",
-    "object1",
-    "object2"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_measure_gap.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "INT-04.gap.min_distance:read_route",
-     "dep.interference.distance_unit:read_route"
-    ],
-    "schema_field": [
-     "INT-04.gap.min_distance"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
    }
   },
   {
@@ -2401,222 +453,6 @@
    }
   },
   {
-   "name": "kompas_pattern_circular",
-   "description_len": 1140,
-   "properties_on_wire": 25,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "copy_kind",
-    "source_refs",
-    "axis_point1_mm",
-    "axis_point2_mm",
-    "count2",
-    "step2_deg",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_pattern_circular.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-19.circular.full_circle_no_duplicate",
-     "SM-19.circular.angular_range",
-     "SM-19.circular.operations",
-     "SM-19.circular.bodies"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_pattern_grid",
-   "description_len": 1416,
-   "properties_on_wire": 28,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "copy_kind",
-    "source_refs",
-    "axis1_point1_mm",
-    "axis1_point2_mm",
-    "step1_mm",
-    "count1",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_pattern_grid.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-18.grid.single_row",
-     "SM-18.grid.rectangular_grid",
-     "SM-18.grid.operations",
-     "SM-18.grid.bodies"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_pattern_mirror",
-   "description_len": 1201,
-   "properties_on_wire": 15,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "mode",
-    "source_refs",
-    "plane",
-    "save_initial_objects",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_pattern_mirror.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-23.mirror_all.bodies_selection",
-     "SM-23.mirror_array.selected_operations"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_probe_units",
-   "description_len": 167,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "application_id",
-    "known_length_mm",
-    "known_radius_mm",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_probe_units.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": false,
-    "modes": []
-   }
-  },
-  {
-   "name": "kompas_read_topology",
-   "description_len": 164,
-   "properties_on_wire": 4,
-   "required_on_wire": [
-    "document_id",
-    "body_ref",
-    "include"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_read_topology.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "AUX-SKETCH.plane_and_profile_lifecycle:read_route",
-     "SM-13.shell.mode_remove_faces:adapter_route",
-     "dep.refs.planar_face:read_route",
-     "dep.refs.edges_faces:read_route",
-     "dep.bodies.multibody:read_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_rebuild",
-   "description_len": 593,
-   "properties_on_wire": 3,
-   "required_on_wire": [
-    "document_id",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_rebuild.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-08.component.delete:rebuild_route",
-     "SM-02.material_toward:rebuild_route",
-     "STEP.import:rebuild_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_rebuild_drawing_views",
-   "description_len": 876,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "view_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_rebuild_drawing_views.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-01.views.create_standard:adapter_route",
-     "DRW-07.section_view.rebuild:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
    "name": "kompas_release_session",
    "description_len": 1691,
    "properties_on_wire": 3,
@@ -2636,179 +472,24 @@
    }
   },
   {
-   "name": "kompas_replace_component",
-   "description_len": 225,
-   "properties_on_wire": 6,
+   "name": "kompas_run",
+   "description_len": 326,
+   "properties_on_wire": 2,
    "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "component_ref",
-    "source_path",
-    "operation_id"
+    "id"
    ],
    "additional_properties": false,
-   "schema_file": "schemas/kompas_replace_component.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-05.component.replace:adapter_route",
-     "ASM-05.component.replace:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_reposition",
-   "description_len": 2118,
-   "properties_on_wire": 11,
-   "required_on_wire": [
-    "target_body_ref",
-    "kind",
-    "document_id",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_reposition.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
+   "schema_file": "schemas/kompas_run.json",
+   "schema_present": false,
+   "schema_property_names_match_wire": false,
+   "schema_shape_matches_wire": false,
    "presence": {
     "own_row": [],
     "route_field": [],
-    "schema_field": [
-     "SM-17.reposition.translate_by_vector",
-     "SM-17.reposition.rotate_about_axis"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_resolve_selection",
-   "description_len": 385,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "body_ref",
-    "predicate",
-    "require_unique",
-    "limit"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_resolve_selection.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.selection.unambiguous:read_route"
-    ],
     "schema_field": [],
     "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_rotated",
-   "description_len": 2167,
-   "properties_on_wire": 12,
-   "required_on_wire": [
-    "sketch_ref",
-    "expected_revision",
-    "operation",
-    "angle_deg",
-    "axis_point1_mm",
-    "axis_point2_mm",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_rotated.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-03.base_rotated.full_turn",
-     "SM-03.base_rotated.partial_angle",
-     "SM-03.base_rotated.axis_explicit",
-     "SM-03.boss_rotated.full_turn",
-     "SM-03.cut_rotated.full_turn"
-    ],
-    "mcp_support": "string",
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_save_document",
-   "description_len": 128,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_save_document.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-01.document.create_open:adapter_route",
-     "ASM-03.structure.read:save_reopen_route",
-     "ASM-04.placement.set_read:save_reopen_route",
-     "ASM-05.component.replace:save_reopen_route",
-     "ASM-06.links.check:save_reopen_route",
-     "ASM-07.save_reopen:adapter_route",
-     "dep.assembly.component_address:save_reopen_route",
-     "dep.assembly.revisions:save_reopen_route",
-     "MATE-06.mate.placement_effect:save_reopen_route",
-     "MATE-07.mate.create_transmission:save_reopen_route",
-     "DRW-04.title_block.set:save_reopen_route",
-     "DRW-06.technical_demand:save_reopen_route",
-     "VM-02.variable.set_value:save_reopen_route",
-     "VM-03.variable.set_expression:save_reopen_route",
-     "VM-05.material.write:save_reopen_route",
-     "SKC-04.delete:save_reopen_route",
-     "ASM-08.component.delete:save_reopen_route",
-     "SM-02.material_toward:save_reopen_route",
-     "SM-12.incline.mode_faces_group:save_reopen_route",
-     "SM-12.incline.mode_base_face_or_plane:save_reopen_route",
-     "SM-12.incline.mode_direction:save_reopen_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:save_reopen_route",
-     "SM-12.draft_from_edges.mode_side:save_reopen_route",
-     "SM-08.thread.mode_outer_by_edge:save_reopen_route",
-     "SM-08.thread.mode_inner_by_face:save_reopen_route",
-     "SM-08.thread.mode_auto:save_reopen_route",
-     "SM-08.thread.mode_hand:save_reopen_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
+    "present": false,
+    "modes": []
    }
   },
   {
@@ -2828,498 +509,6 @@
     "mcp_support": null,
     "present": false,
     "modes": []
-   }
-  },
-  {
-   "name": "kompas_set_component_placement",
-   "description_len": 230,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "component_ref",
-    "transform",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_component_placement.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "ASM-04.placement.set_read:adapter_route",
-     "ASM-04.placement.set_read:edit_route",
-     "dep.assembly.revisions:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_feature_suppressed",
-   "description_len": 1608,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "feature_ref",
-    "expected_revision",
-    "suppressed",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_feature_suppressed.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.lifecycle.feature_cycle:adapter_route",
-     "SM-12.incline.mode_faces_group:suppress_restore_route",
-     "SM-12.incline.mode_base_face_or_plane:suppress_restore_route",
-     "SM-12.incline.mode_direction:suppress_restore_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:suppress_restore_route",
-     "SM-12.draft_from_edges.mode_side:suppress_restore_route",
-     "SM-08.thread.mode_outer_by_edge:suppress_restore_route",
-     "SM-08.thread.mode_inner_by_face:suppress_restore_route",
-     "SM-08.thread.mode_auto:suppress_restore_route",
-     "SM-08.thread.mode_hand:suppress_restore_route"
-    ],
-    "schema_field": [
-     "dep.lifecycle.feature_cycle"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_mate_fixed",
-   "description_len": 428,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "mate_ref",
-    "fixed",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_mate_fixed.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "MATE-04.mate.fixed:adapter_route",
-     "MATE-04.mate.fixed:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_mate_parameter",
-   "description_len": 68,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "mate_ref",
-    "param_value",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_mate_parameter.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "MATE-03.mate.param_edit:adapter_route",
-     "MATE-03.mate.param_edit:edit_route",
-     "dep.mate.revisions:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_material",
-   "description_len": 1183,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "material_name",
-    "density_kg_per_m3",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_material.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VM-05.material.write:adapter_route",
-     "VM-05.material.write:create_route",
-     "VM-05.material.write:edit_route",
-     "dep.vm.revisions:edit_route"
-    ],
-    "schema_field": [
-     "VM-05.material.write"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_sketch_plane",
-   "description_len": 2177,
-   "properties_on_wire": 6,
-   "required_on_wire": [
-    "document_id",
-    "sketch_ref",
-    "expected_revision",
-    "plane",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_sketch_plane.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "AUX-SKETCH.plane_and_profile_lifecycle:edit_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_technical_demand",
-   "description_len": 939,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "text",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_technical_demand.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-06.technical_demand:adapter_route",
-     "DRW-06.technical_demand:create_route",
-     "DRW-06.technical_demand:edit_route",
-     "DRW-06.technical_demand:read_route"
-    ],
-    "schema_field": [
-     "DRW-06.technical_demand"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_title_block",
-   "description_len": 712,
-   "properties_on_wire": 5,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "cells",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_title_block.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-04.title_block.set:adapter_route",
-     "DRW-04.title_block.set:edit_route",
-     "DRW-04.title_block.set:read_route",
-     "DRW-04.title_block.set:create_route"
-    ],
-    "schema_field": [
-     "DRW-04.title_block.set"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_set_variable",
-   "description_len": 1262,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "name",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_set_variable.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "VM-02.variable.set_value:adapter_route",
-     "VM-02.variable.set_value:create_route",
-     "VM-02.variable.set_value:edit_route",
-     "VM-03.variable.set_expression:adapter_route",
-     "VM-03.variable.set_expression:create_route",
-     "VM-03.variable.set_expression:edit_route"
-    ],
-    "schema_field": [
-     "VM-02.variable.set_value",
-     "VM-03.variable.set_expression"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_shell",
-   "description_len": 1100,
-   "properties_on_wire": 9,
-   "required_on_wire": [
-    "document_id",
-    "face_refs",
-    "thickness_mm",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_shell.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-13.shell.mode_remove_faces",
-     "SM-13.shell.mode_direction",
-     "SM-13.shell.uniform_thickness"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_split",
-   "description_len": 874,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "target_body_ref",
-    "plane",
-    "document_id",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_split.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-16.split.mode_keep_parts",
-     "SM-16.split.plane_tool"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_sweep",
-   "description_len": 1641,
-   "properties_on_wire": 7,
-   "required_on_wire": [
-    "sketch_ref",
-    "path_ref",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_sweep.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [],
-    "schema_field": [
-     "SM-04.base.mode_orthogonal",
-     "SM-04.base.single_profile_flat_path"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_update_feature",
-   "description_len": 4290,
-   "properties_on_wire": 53,
-   "required_on_wire": [
-    "feature_ref",
-    "expected_revision",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_update_feature.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "SM-09.fillet.change_edge_set:adapter_route",
-     "SM-12.incline.mode_faces_group:edit_route",
-     "SM-12.incline.mode_base_face_or_plane:edit_route",
-     "SM-12.incline.mode_direction:edit_route",
-     "SM-12.draft_from_edges.mode_dir_by_object:edit_route",
-     "SM-12.draft_from_edges.mode_side:adapter_route",
-     "SM-12.draft_from_edges.mode_side:edit_route",
-     "SM-08.thread.mode_outer_by_edge:edit_route",
-     "SM-08.thread.mode_outer_by_edge:negative_tests_route",
-     "SM-08.thread.mode_inner_by_face:edit_route",
-     "SM-08.thread.mode_inner_by_face:negative_tests_route",
-     "SM-08.thread.mode_auto:edit_route",
-     "SM-08.thread.mode_auto:negative_tests_route",
-     "SM-08.thread.mode_hand:edit_route",
-     "SM-08.thread.mode_hand:negative_tests_route"
-    ],
-    "schema_field": [
-     "SM-09.fillet.change_radius_in_place",
-     "SM-09.fillet.change_edge_set"
-    ],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field",
-     "schema_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_update_plane",
-   "description_len": 1246,
-   "properties_on_wire": 9,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "plane_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_update_plane.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "dep.refs.planes:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
-   }
-  },
-  {
-   "name": "kompas_update_section_view",
-   "description_len": 1058,
-   "properties_on_wire": 11,
-   "required_on_wire": [
-    "document_id",
-    "expected_revision",
-    "view_ref",
-    "operation_id"
-   ],
-   "additional_properties": false,
-   "schema_file": "schemas/kompas_update_section_view.json",
-   "schema_present": true,
-   "schema_property_names_match_wire": true,
-   "schema_shape_matches_wire": true,
-   "presence": {
-    "own_row": [],
-    "route_field": [
-     "DRW-07.section_view.update:adapter_route"
-    ],
-    "schema_field": [],
-    "mcp_support": null,
-    "present": true,
-    "modes": [
-     "route_field"
-    ]
    }
   }
  ],
@@ -3419,6 +608,10 @@
    "declared_route": "API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().BodyCollection().Add(тело) + directionType=2 + etThroughAll=1",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -3493,7 +686,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 18
+    "members": 19
    },
    "actions": {
     "discover": "verified",
@@ -3815,6 +1008,10 @@
    "declared_route": "API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksHTBase + DepthType=ksDTReachThrough; мост ksGetApplication7()/TransferInterface 5→7",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -3861,7 +1058,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 11
+    "members": 12
    },
    "actions": {
     "discover": "verified",
@@ -4381,6 +1578,10 @@
    "declared_route": "API5 o3d_bossExtrusion(25) + chooseType=3 + ChooseBodies().BodyCollection().Add(тело) + directionType=0/1 + SetSideParam(etBlind=0)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -4467,7 +1668,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 21
+    "members": 22
    },
    "actions": {
     "discover": "verified",
@@ -4524,6 +1725,10 @@
    "declared_route": "API5 o3d_bossExtrusion(25) + chooseType=3 + ChooseBodies().BodyCollection().Add(выбранное тело)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -4586,7 +1791,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 15
+    "members": 16
    },
    "actions": {
     "discover": "verified",
@@ -4636,6 +1841,10 @@
    ],
    "declared_route": "API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().BodyCollection().Add(тело) + directionType=0/1 + SetSideParam(etBlind=0)",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -4723,7 +1932,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 21
+    "members": 22
    },
    "actions": {
     "discover": "verified",
@@ -4776,6 +1985,10 @@
    ],
    "declared_route": "API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().BodyCollection().Add(выбранное тело)",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -4839,7 +2052,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 15
+    "members": 16
    },
    "actions": {
     "discover": "verified",
@@ -4969,6 +2182,10 @@
    ],
    "declared_route": "API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d_baseRotated=27) → QI(IRotated) → Profile (эскиз через TransferTo7) + Axis (ось по двум точкам) + Angle[true] + Direction → Update() → Api7Bridge.Rebuild; в API7 только через Api7Bridge, та же STA-очередь и владелец сеанса, что у API5",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -5168,9 +2385,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 49,
+    "members": 50,
     "counts": {
-     "Подтверждено": 48,
+     "Подтверждено": 49,
      "не подтверждено": 1
     }
    },
@@ -5347,6 +2564,10 @@
    "declared_route": "ось подаётся ДВУМЯ точками контракта (axis_point1_mm, axis_point2_mm) и строится в той же детали: IAuxiliaryGeomContainer (только через QI) → Axes3D.Add(o3d_axis2Points=10) → IAxis3DBy2Points.Point1/Point2 → Update() ПОСЛЕ обеих точек; сами точки лежат в другом контейнере — IModelContainer.Points3D",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -5493,9 +2714,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 37,
     "counts": {
-     "Подтверждено": 35,
+     "Подтверждено": 36,
      "не подтверждено": 1
     }
    },
@@ -5570,6 +2791,10 @@
    ],
    "declared_route": "API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d_bossRotated=28) → QI(IRotated) → Profile (эскиз через TransferTo7) + Axis (ось по двум точкам) + Angle[true] + Direction → IRotated1.OperationResult = ksOperationUnion → Update() → Api7Bridge.Rebuild; в API7 только через Api7Bridge, та же STA-очередь и владелец сеанса, что у API5. Приклейка к существующему телу ПРОИСХОДИТ (измерено F.10, подтверждено RO.17)",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -5773,9 +2998,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 50,
+    "members": 51,
     "counts": {
-     "Подтверждено": 49,
+     "Подтверждено": 50,
      "не подтверждено": 1
     }
    },
@@ -5869,6 +3094,10 @@
    "declared_route": "API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d_cutRotated=29) → QI(IRotated) → Profile + Axis + Angle[true] + Direction → IRotated1.OperationResult = ksOperationCut → Update() → Api7Bridge.Rebuild; снятие материала проверяется по знаку и величине изменения объёма, а не по коду возврата",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -6071,9 +3300,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 50,
+    "members": 51,
     "counts": {
-     "Подтверждено": 49,
+     "Подтверждено": 50,
      "не подтверждено": 1
     }
    },
@@ -6416,6 +3645,10 @@
    "declared_route": "API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksHTBase + DepthType=ksDTValue + EndFaceType=ksEFFlat; мост ksGetApplication7()/TransferInterface 5→7",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -6466,7 +3699,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 12
+    "members": 13
    },
    "actions": {
     "discover": "verified",
@@ -6537,6 +3770,10 @@
    "declared_route": "API7 IHoles3D.Add() + ksHTCounterbore + DepthType=ksDTReachThrough + ISpotfacingHoleParameters.SpotfacingDiameter/SpotfacingDepth; мост 5→7",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -6579,7 +3816,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 10
+    "members": 11
    },
    "actions": {
     "discover": "verified",
@@ -6643,6 +3880,10 @@
    "declared_route": "API7 IHoles3D.Add() + ksHTCountersinking + DepthType=ksDTReachThrough + ICountersinkHoleParameters.CountersinkType/CountersinkDiameter/CountersinkAngle; мост 5→7",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -6689,7 +3930,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 11
+    "members": 12
    },
    "actions": {
     "discover": "verified",
@@ -7299,6 +4540,10 @@
    "declared_route": "API7: IModelContainer.Fillets[i] -> IFillet.BaseObjects (чтение) и IFillet.BaseObjects = IModelObject[] (запись, ПОЛНАЯ замена набора) -> IFillet.Update() -> Api7Bridge.Rebuild. Опознание признака — по составу его собственных текущих входов через IModelObject.Reference (FindIndexByInputReferences); 0 или >=2 совпадений -> CAPABILITY_UNAVAILABLE до мутации. Найденный владелец обязан СОВПАСТЬ с feature_ref запроса, иначе CAPABILITY_UNAVAILABLE до мутации (FL21). Маршрут разветвляется по валюте предъявления: если все запрошенные рёбра уже входят в собственные входы признака, пишутся объекты ИЗ BaseObjects; иначе запрошенные рёбра тела переносятся 5->7 и предъявляются перенесёнными (опыт H2.4). ЖЁСТКОГО запрета предъявлять не-свои объекты НЕТ: прежде он стоял и оказался догадкой — снят 17.09.2026 замером (полосы ссылок СОСЕДНИЕ: вход 1073742308 против перенесённого ребра 1073742309). ПРЕЖНИЙ маршрут API5 (ksFilletDefinition.array() -> Clear() -> Add() -> entity.Update()) УДАЛЁН из адаптера 17.09.2026: он правку набора не даёт (набор схлопывается, edges_read_back=0, объём возвращается к пластине; исходные угловые рёбра — STALE_REFERENCE). ПРИЁМКА ПРОДУКТА ЗЕЛЁНАЯ (17.09.2026, позже): scripts/mcp-smoke.py --fillet-only даёт 46 строк, 0 FAIL — edit подтверждён FL10 (4->3, V=79942.0575041173 при эталоне 79942.05750411731, level=geometry_checked), а замена, повтор на независимом документе, save->close->reopen, адресация на двух скруглениях одного радиуса и отрицательные случаи — FL23/FL24/FL20/FL21/FL22/FL26/FL27. Корневой дефект был НЕ в маршруте и НЕ в валюте: base_object_refs отсутствовал в схеме kompas_update_feature, и Host отвергал вызов валидацией (additionalProperties: false) ещё до COM. Свойство опубликовано, валюта заработала. ГРАНИЦА: расширение набора по-прежнему невыразимо — см. ограничение о расширении.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -7347,11 +4592,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
@@ -7477,9 +4722,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 44,
+    "members": 45,
     "counts": {
-     "Подтверждено": 43,
+     "Подтверждено": 44,
      "не подтверждено": 1
     }
    },
@@ -7566,6 +4811,10 @@
    "declared_route": "API5 NewEntity(o3d_chamfer=33) + ksChamferDefinition.SetChamferParam(transfer,d1,d2) + array().Add(рёбра) + Create() + RebuildDocument()",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -7628,7 +4877,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 15
+    "members": 16
    },
    "actions": {
     "discover": "verified",
@@ -7696,6 +4945,10 @@
    ],
    "declared_route": "API7 IModelContainer.Chamfers.Add() + BaseObjects=object[] перенесённых рёбер + BuildingType=ksChamferSideAngle + Distance1 + Angle(градусы) + Update() + IPart7.RebuildModel(true); типизированные интерфейсы, LinkRegistry общий с API5",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -7891,9 +5144,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 48,
+    "members": 49,
     "counts": {
-     "Подтверждено": 47,
+     "Подтверждено": 48,
      "не подтверждено": 1
     }
    },
@@ -8302,6 +5555,10 @@
    "declared_route": "API7: IModelContainer (TransferInterface(document, ksAPI7Dual, 0)) → container.Booleans.Add() → QI(IBoolean) → BaseObject (перенесённая цель TransferTo7) + ModifyObjects[] (перенесённые инструменты) + BooleanType (ksUnion = 3 / ksDifference = 2 / ksIntersect = 1 — из перечисления, а не из каталога: каталог называл объединение нулём и ошибался) + SaveCopyModifyObjects → Update() → Api7Bridge.Rebuild(container, document). SaveCopyBaseObject выставляется явно в false: копия цели — отдельный режим SM-15.union.mode_save_base_copy вне обязательного объёма. Тип признака в дереве API5 — 69 (BooleanOperation). Правка вида — перезапись IBoolean.BooleanType вместе с Update() (B3.25, B3.26). ЧТЕНИЕ: IBoolean.BooleanType и IBoolean.SaveCopyModifyObjects, измерено BO.2–BO.5, BO.10 (с ПЕРЕОТКРЫТОГО файла) и BO.11 (читается ЗАПИСАННОЕ значение, а не исходное).",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -8460,9 +5717,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 39,
+    "members": 40,
     "counts": {
-     "Подтверждено": 38,
+     "Подтверждено": 39,
      "не подтверждено": 1
     }
    },
@@ -8518,6 +5775,10 @@
    "declared_route": "API7: IModelContainer (TransferInterface(document, ksAPI7Dual, 0)) → container.Booleans.Add() → QI(IBoolean) → BaseObject (перенесённая цель TransferTo7) + ModifyObjects[] (перенесённые инструменты) + BooleanType (ksUnion = 3 / ksDifference = 2 / ksIntersect = 1 — из перечисления, а не из каталога: каталог называл объединение нулём и ошибался) + SaveCopyModifyObjects → Update() → Api7Bridge.Rebuild(container, document). SaveCopyBaseObject выставляется явно в false: копия цели — отдельный режим SM-15.union.mode_save_base_copy вне обязательного объёма. Тип признака в дереве API5 — 69 (BooleanOperation). Правка вида — перезапись IBoolean.BooleanType вместе с Update() (B3.25, B3.26). ЧТЕНИЕ: IBoolean.BooleanType и IBoolean.SaveCopyModifyObjects, измерено BO.2–BO.5, BO.10 (с ПЕРЕОТКРЫТОГО файла) и BO.11 (читается ЗАПИСАННОЕ значение, а не исходное).",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -8676,9 +5937,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 39,
+    "members": 40,
     "counts": {
-     "Подтверждено": 38,
+     "Подтверждено": 39,
      "не подтверждено": 1
     }
    },
@@ -8734,6 +5995,10 @@
    "declared_route": "API7: IModelContainer (TransferInterface(document, ksAPI7Dual, 0)) → container.Booleans.Add() → QI(IBoolean) → BaseObject (перенесённая цель TransferTo7) + ModifyObjects[] (перенесённые инструменты) + BooleanType (ksUnion = 3 / ksDifference = 2 / ksIntersect = 1 — из перечисления, а не из каталога: каталог называл объединение нулём и ошибался) + SaveCopyModifyObjects → Update() → Api7Bridge.Rebuild(container, document). SaveCopyBaseObject выставляется явно в false: копия цели — отдельный режим SM-15.union.mode_save_base_copy вне обязательного объёма. Тип признака в дереве API5 — 69 (BooleanOperation). Правка вида — перезапись IBoolean.BooleanType вместе с Update() (B3.25, B3.26). ЧТЕНИЕ: IBoolean.BooleanType и IBoolean.SaveCopyModifyObjects, измерено BO.2–BO.5, BO.10 (с ПЕРЕОТКРЫТОГО файла) и BO.11 (читается ЗАПИСАННОЕ значение, а не исходное).",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -8892,9 +6157,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 39,
+    "members": 40,
     "counts": {
-     "Подтверждено": 38,
+     "Подтверждено": 39,
      "не подтверждено": 1
     }
    },
@@ -8946,6 +6211,10 @@
    "declared_route": "API7: IModelContainer (TransferInterface(document, ksAPI7Dual, 0)) → container.Booleans.Add() → QI(IBoolean) → BaseObject (перенесённая цель TransferTo7) + ModifyObjects[] (перенесённые инструменты) + BooleanType (ksUnion = 3 / ksDifference = 2 / ksIntersect = 1 — из перечисления, а не из каталога: каталог называл объединение нулём и ошибался) + SaveCopyModifyObjects → Update() → Api7Bridge.Rebuild(container, document). SaveCopyBaseObject выставляется явно в false: копия цели — отдельный режим SM-15.union.mode_save_base_copy вне обязательного объёма. Тип признака в дереве API5 — 69 (BooleanOperation). Правка вида — перезапись IBoolean.BooleanType вместе с Update() (B3.25, B3.26). ЧТЕНИЕ: IBoolean.BooleanType и IBoolean.SaveCopyModifyObjects, измерено BO.2–BO.5, BO.10 (с ПЕРЕОТКРЫТОГО файла) и BO.11 (читается ЗАПИСАННОЕ значение, а не исходное).",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -9104,9 +6373,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 39,
+    "members": 40,
     "counts": {
-     "Подтверждено": 38,
+     "Подтверждено": 39,
      "не подтверждено": 1
     }
    },
@@ -9157,6 +6426,10 @@
    ],
    "declared_route": "API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObjects = [опора, перенесённая в 7] → Update() → Api7Bridge.Rebuild. Тип признака в дереве API5 — 633 (SplitSolid). Правка опоры — перенос ТРЁХ ТОЧЕК СОБСТВЕННОЙ опоры признака (ISplitSolid.CutObjects), а не создание новой: измерено B3.21/B3.22. ЧТЕНИЕ: ISplitSolid.CutObjects отдаёт объект, отвечающий как IPlane3DBy3Points; читаются три точки построения, нормаль считается тем же правилом (p2 − p1) × (p3 − p1), что и при создании. Измерено новым шагом SP.10 пробы --split (прогон 95e24af18d694d2cb50890a99983376a, PASS 13 · FAIL 0): разделение при x = 10 читается как точки (10,0,0), (10,1,0), (10,0,1) и нормаль (1,0,0), а КОНТРОЛЬ при x = 15 — как (15,0,0), (15,1,0), (15,0,1). Контроль обязателен: чтение, отдающее одни и те же точки для РАЗНЫХ опор, — это константа, а не чтение.",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -9288,9 +6561,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 32,
      "не подтверждено": 1
     }
    },
@@ -9348,6 +6621,10 @@
    ],
    "declared_route": "API7: container.Cuts.Add() → QI(ICut) → BuildingType = ksCutByPlane + CutObject = [опора, перенесённая в 7] + Direction = сторона → Update() → Api7Bridge.Rebuild. Тип признака в дереве API5 — 50 (CutByPlane). Правка — перенос точек СОБСТВЕННОЙ опоры и/или перезапись ICut.Direction (B3.23/B3.24). ЧТЕНИЕ: ICut.CutObject даёт те же три точки построения, что и разделение, а ICut.Direction — сторону. Измерено шагом SP.10 на ОДНОЙ и той же опоре x = 10: Direction = true и Direction = false читаются по-разному, то есть сторона читается, а не выводится.",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -9531,9 +6808,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 46,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 45,
      "не подтверждено": 1
     }
    },
@@ -9602,6 +6879,10 @@
    "declared_route": "API7: container.BodyRepositions.Add() → QI(IBodyReposition) → RepositionBody = перенесённое тело + Position.OrientationType = ksEulerCorners → Position.LocalCSParameters → ILocalCSEulerParam (PrecessionAngle / NutationAngle / RotationAngle) + Position.ParameterType = ksPDisplace → Position.Parameters → IPoint3DParamDisplace (DX/DY/DZ) → Update() → Api7Bridge.Rebuild. Тип признака в дереве API5 — 79 (BodyRepositionFeature); НОМЕР СОЗДАНИЯ (569) с номером в дереве НЕ совпадает, и это измеренный факт, а не опечатка. Размещение собирается из контракта: перенос — из вектора; поворот — из точки оси, направления оси и угла, и переводится в тройку углов Эйлера доменным типом EulerOrientation (порядок PNR, градусы; вывод порядка и единиц — в B3_READ_LIMIT). МАТРИЧНЫЙ МАРШРУТ ЗАПИСИ ОСТАВЛЕН, И ЭТО ИСПРАВЛЕНИЕ ЛОЖНОГО ОТВЕТА, А НЕ ПОСЛАБЛЕНИЕ. Прежняя редакция писала Position.InitByMatrix3D(матрица 16), а ориентацию читала документированным членом ILocalCoordinateSystem.GetVector(ось) (ilocalcoordinatesystem_getvector.html, «доступно только для чтения»), и из неё ВЫВОДИЛИСЬ reposition_kind, reposition_axis_direction_mm и reposition_angle_deg. Измерено (проба --reposition-params, прогоны d706646257444c60a96c19d473a645a0 и a336120926fc4652a8bf737562568271): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5), а тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт ЕДИНИЧНУЮ матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже не восстанавливает чтение — сразу после открытия, после IModelObject.Update(), после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument все четыре чтения единичны (RP.23). Поэтому ЕДИНИЧНАЯ ОРИЕНТАЦИЯ ПЕРЕОТКРЫТОГО ПРИЗНАКА НЕ ОЗНАЧАЕТ ПЕРЕНОСА: прежняя редакция отдавала из неё reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА, и это ложный результат. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ. ЧТО ЧИТАЕТСЯ ПОСЛЕ ПЕРЕОТКРЫТИЯ. Документ хранит не матрицу, а ПАРАМЕТРЫ размещения, и читаются они ТЕМ ЖЕ маршрутом, которым записаны, — OrientationType + ILocalCSEulerParam и ParameterType + IPoint3DParamDisplace, — и БЕЗ ЕДИНОГО СЕТТЕРА перед чтением: сеттер подменил бы собственный режим признака режимом читающего, и признак, записанный матрицей, читался бы как режим углов. Так читаются reposition_kind, reposition_vector_mm (у переноса), reposition_axis_direction_mm и reposition_angle_deg (у поворота). Они переживают save → close → open и сверены с ОБЪЯВЛЕННЫМ ожиданием строками B3M.09.* и B3M.10.* на переоткрытом документе и со свежей ссылкой. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО, А НЕ УМОЛЧЕНО: reposition_axis_point_mm — документированного члена для точки оси нет ни у одного интерфейса цепочки, и сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение, поэтому восстанавливается представитель прямой, а не исходный вход. Публиковать представителя под именем входа значило бы подменить параметр операции его следствием, поэтому поле остаётся непубликуемым и НАЗВАННЫМ. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у такого признака OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. ГРАНИЦА, ИЗМЕРЕННАЯ РАНЬШЕ И НЕ ОТМЕНЁННАЯ: входные поля режима не читаются — B3_READ_LIMIT.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -9634,11 +6915,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
@@ -9856,9 +7137,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 63,
+    "members": 64,
     "counts": {
-     "Подтверждено": 61,
+     "Подтверждено": 62,
      "не подтверждено": 2
     }
    },
@@ -9927,6 +7208,10 @@
    "declared_route": "API7: container.BodyRepositions.Add() → QI(IBodyReposition) → RepositionBody = перенесённое тело + Position.OrientationType = ksEulerCorners → Position.LocalCSParameters → ILocalCSEulerParam (PrecessionAngle / NutationAngle / RotationAngle) + Position.ParameterType = ksPDisplace → Position.Parameters → IPoint3DParamDisplace (DX/DY/DZ) → Update() → Api7Bridge.Rebuild. Тип признака в дереве API5 — 79 (BodyRepositionFeature); НОМЕР СОЗДАНИЯ (569) с номером в дереве НЕ совпадает, и это измеренный факт, а не опечатка. Размещение собирается из контракта: перенос — из вектора; поворот — из точки оси, направления оси и угла, и переводится в тройку углов Эйлера доменным типом EulerOrientation (порядок PNR, градусы; вывод порядка и единиц — в B3_READ_LIMIT). МАТРИЧНЫЙ МАРШРУТ ЗАПИСИ ОСТАВЛЕН, И ЭТО ИСПРАВЛЕНИЕ ЛОЖНОГО ОТВЕТА, А НЕ ПОСЛАБЛЕНИЕ. Прежняя редакция писала Position.InitByMatrix3D(матрица 16), а ориентацию читала документированным членом ILocalCoordinateSystem.GetVector(ось) (ilocalcoordinatesystem_getvector.html, «доступно только для чтения»), и из неё ВЫВОДИЛИСЬ reposition_kind, reposition_axis_direction_mm и reposition_angle_deg. Измерено (проба --reposition-params, прогоны d706646257444c60a96c19d473a645a0 и a336120926fc4652a8bf737562568271): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5), а тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт ЕДИНИЧНУЮ матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже не восстанавливает чтение — сразу после открытия, после IModelObject.Update(), после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument все четыре чтения единичны (RP.23). Поэтому ЕДИНИЧНАЯ ОРИЕНТАЦИЯ ПЕРЕОТКРЫТОГО ПРИЗНАКА НЕ ОЗНАЧАЕТ ПЕРЕНОСА: прежняя редакция отдавала из неё reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА, и это ложный результат. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ. ЧТО ЧИТАЕТСЯ ПОСЛЕ ПЕРЕОТКРЫТИЯ. Документ хранит не матрицу, а ПАРАМЕТРЫ размещения, и читаются они ТЕМ ЖЕ маршрутом, которым записаны, — OrientationType + ILocalCSEulerParam и ParameterType + IPoint3DParamDisplace, — и БЕЗ ЕДИНОГО СЕТТЕРА перед чтением: сеттер подменил бы собственный режим признака режимом читающего, и признак, записанный матрицей, читался бы как режим углов. Так читаются reposition_kind, reposition_vector_mm (у переноса), reposition_axis_direction_mm и reposition_angle_deg (у поворота). Они переживают save → close → open и сверены с ОБЪЯВЛЕННЫМ ожиданием строками B3M.09.* и B3M.10.* на переоткрытом документе и со свежей ссылкой. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО, А НЕ УМОЛЧЕНО: reposition_axis_point_mm — документированного члена для точки оси нет ни у одного интерфейса цепочки, и сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение, поэтому восстанавливается представитель прямой, а не исходный вход. Публиковать представителя под именем входа значило бы подменить параметр операции его следствием, поэтому поле остаётся непубликуемым и НАЗВАННЫМ. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у такого признака OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. ГРАНИЦА, ИЗМЕРЕННАЯ РАНЬШЕ И НЕ ОТМЕНЁННАЯ: входные поля режима не читаются — B3_READ_LIMIT.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -9959,11 +7244,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
@@ -10181,9 +7466,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 63,
+    "members": 64,
     "counts": {
-     "Подтверждено": 61,
+     "Подтверждено": 62,
      "не подтверждено": 2
     }
    },
@@ -10252,6 +7537,10 @@
    "declared_route": "API7 IModelContainer.FeaturePatterns.Add(o3d_meshCopy=35) → QI(ILinearPattern); Count1/Step1/Direction1/Axis1. В дереве — тип 35.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -10314,7 +7603,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 15
+    "members": 16
    },
    "actions": {
     "discover": "verified",
@@ -10500,6 +7789,10 @@
    "declared_route": "FeaturePatterns.Add(o3d_BodiesMeshCopy=528) → QI(ILinearPattern). В дереве признак виден как «Массив по сетке:1» С ТИПОМ 528, а не 35 — тип копирования тел отличается от типа копирования операций, и это измерено деревом.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -10534,7 +7827,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 8
+    "members": 9
    },
    "actions": {
     "discover": "verified",
@@ -10584,6 +7877,10 @@
    ],
    "declared_route": "FeaturePatterns.Add(o3d_circularCopy=36) → QI(ICircularPattern); кольцевое направление — Count2/Step2 (градусы), радиальное — Count1/Step1. В дереве — тип 36.",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -10651,7 +7948,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 16
+    "members": 17
    },
    "actions": {
     "discover": "verified",
@@ -10824,6 +8121,10 @@
    "declared_route": "FeaturePatterns.Add(o3d_BodiesCircularCopy=529) → QI(ICircularPattern). В дереве признак виден как «Массив по концентрической сетке:1» С ТИПОМ 529, а не 36.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -10858,7 +8159,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 8
+    "members": 9
    },
    "actions": {
     "discover": "verified",
@@ -10909,6 +8210,10 @@
    "declared_route": "FeaturePatterns.Add(o3d_mirrorAllOperation=49) → QI(IMirrorPattern) + QI(IChooseBodies7){ChooseBodiesType, Bodies}. В дереве — тип 49.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -10955,7 +8260,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 11
+    "members": 12
    },
    "actions": {
     "discover": "verified",
@@ -12187,6 +9492,10 @@
    "declared_route": "API7: IModelContainer.Lofts.Add(o3d_bossLoft = 31) → ILoft.Sketchs (SAFEARRAY указателей IDispatch) → ILoft.Update() → RebuildModel(). В дереве — тип 31. Сечения переносятся в API7 тем же приёмом, что измерен на IChamfer.BaseObjects. Порядок массива — порядок соединения; чтение — из IModelContainer.Lofts (building/closed/section_count/couplings_count), а ССЫЛКИ НА СЕЧЕНИЯ выводятся из ksBaseLoftDefinition.Sketches() / ksBossLoftDefinition.Sketches() (справка ksbossloftdefinition_sketches.html), потому что иначе вход правки не переживает ни мутации, ни переоткрытия документа. ПРАВКА ВХОДА пишет набор В ОБА ХРАНИЛИЩА — сначала определение API5 (Sketchs() → ksEntityCollection, Clear()+Add()), затем ILoft.Sketchs, — и только тогда вызывает Update(): измерено пробой (шаг B5.21), что ОДНОГО ЧТЕНИЯ определения достаточно, чтобы владельцем ЧИСЛА сечений стало оно, и после этого запись только в ILoft отменяется первым же обновлением, а запись в оба хранилища применяется.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -12361,9 +9670,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 43,
+    "members": 44,
     "counts": {
-     "Подтверждено": 42,
+     "Подтверждено": 43,
      "не подтверждено": 1
     }
    },
@@ -12475,6 +9784,10 @@
    ],
    "declared_route": "API7: IModelContainer (TransferInterface(document, ksAPI7Dual, 0)) → container.Booleans.Add() → QI(IBoolean) → BaseObject (перенесённая цель TransferTo7) + ModifyObjects[] (перенесённые инструменты) + BooleanType (ksUnion = 3 / ksDifference = 2 / ksIntersect = 1 — из перечисления, а не из каталога: каталог называл объединение нулём и ошибался) + SaveCopyModifyObjects → Update() → Api7Bridge.Rebuild(container, document). SaveCopyBaseObject выставляется явно в false: копия цели — отдельный режим SM-15.union.mode_save_base_copy вне обязательного объёма. Тип признака в дереве API5 — 69 (BooleanOperation). Правка вида — перезапись IBoolean.BooleanType вместе с Update() (B3.25, B3.26). ЧТЕНИЕ: IBoolean.BooleanType и IBoolean.SaveCopyModifyObjects, измерено BO.2–BO.5, BO.10 (с ПЕРЕОТКРЫТОГО файла) и BO.11 (читается ЗАПИСАННОЕ значение, а не исходное).",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -12634,9 +9947,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 39,
+    "members": 40,
     "counts": {
-     "Подтверждено": 38,
+     "Подтверждено": 39,
      "не подтверждено": 1
     }
    },
@@ -12689,6 +10002,10 @@
    ],
    "declared_route": "API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObjects = [опора, перенесённая в 7] → Update() → Api7Bridge.Rebuild. Тип признака в дереве API5 — 633 (SplitSolid). Правка опоры — перенос ТРЁХ ТОЧЕК СОБСТВЕННОЙ опоры признака (ISplitSolid.CutObjects), а не создание новой: измерено B3.21/B3.22. ЧТЕНИЕ: ISplitSolid.CutObjects отдаёт объект, отвечающий как IPlane3DBy3Points; читаются три точки построения, нормаль считается тем же правилом (p2 − p1) × (p3 − p1), что и при создании. Измерено новым шагом SP.10 пробы --split (прогон 95e24af18d694d2cb50890a99983376a, PASS 13 · FAIL 0): разделение при x = 10 читается как точки (10,0,0), (10,1,0), (10,0,1) и нормаль (1,0,0), а КОНТРОЛЬ при x = 15 — как (15,0,0), (15,1,0), (15,0,1). Контроль обязателен: чтение, отдающее одни и те же точки для РАЗНЫХ опор, — это константа, а не чтение.",
    "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
     {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
@@ -12820,9 +10137,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 32,
      "не подтверждено": 1
     }
    },
@@ -12882,6 +10199,10 @@
    "declared_route": "FeaturePatterns.Add(o3d_mirrorOperation=48) → QI(IMirrorPattern); Plane + SaveInitialObjects. В дереве — тип 48. Плоскость задаётся ЯВНЫМ объектом, а не текущим выделением окна.",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -12932,7 +10253,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 12
+    "members": 13
    },
    "actions": {
     "discover": "verified",
@@ -14147,6 +11468,10 @@
    "declared_route": "kompas_create_mate: IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -14277,9 +11602,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 32,
      "не подтверждено": 1
     }
    },
@@ -14889,6 +12214,10 @@
    "declared_route": "kompas_create_mate, constraint_type=transmission: IPart7.MateConstraints -> IMateConstraints3D.Add(mc_Transmission) -> QueryInterface(IMate3DTransmission) -> BaseObject1/2 и RotationAxis1/2 = цилиндрические грани, MotionType1/2 = ksMMotionRotation, SetScale(Scale1, Scale2), Direction1/2 -> Update(); подтверждение - Valid и перечитывание параметров из модели",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -15063,9 +12392,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 43,
+    "members": 44,
     "counts": {
-     "Подтверждено": 41,
+     "Подтверждено": 42,
      "не подтверждено": 2
     }
    },
@@ -15542,6 +12871,10 @@
    "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html). Чтение перечня — kompas_list_dimensions: тот же ISymbols2DContainer → LineDimensions/RadialDimensions/DiametralDimensions → _get_*Dimension(VARIANT) → ILinedimension/IRadialDimension/IDiametralDimension (isymbols2dcontainer.html, ilinedimensions.html, iradialdimensions.html, idiametraldimensions.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -15680,9 +13013,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 34,
      "не подтверждено": 1
     }
    },
@@ -16422,6 +13755,10 @@
    "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -16560,9 +13897,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 34,
      "не подтверждено": 1
     }
    },
@@ -16606,6 +13943,10 @@
    "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -16744,9 +14085,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 34,
      "не подтверждено": 1
     }
    },
@@ -16790,6 +14131,10 @@
    "declared_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -16928,9 +14273,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 34,
      "не подтверждено": 1
     }
    },
@@ -18018,11 +15363,11 @@
    "declared_route": "API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании массив заполняется объектами указанного типа, содержащимися в компоненте» (kspart_entitycollection.html); тип «o3d_sketch 5 эскиз» → ksSketchDefinition / ISketch (obj3dtype.html). Тот же набор документирован в API7 (IModelContainer::Sketchs → ISketchs, isketchs.html), но взят маршрут API5: строка обязана нести тот же ksEntity, которым адресует эскиз остальной сервер, и эта коллекция ИЗМЕРЕНА на переоткрытом документе (проба L: два эскиза с читаемыми ksSketchDefinition после save → close → reopen).",
    "com": [
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
@@ -20544,6 +17889,10 @@
    "declared_route": "У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer (LineDimensions / DiametralDimensions / RadialDimensions / AngleDimensions) → Add() → интерфейс размера → IDrawingObject.Update(). У линейного вида значение двигает геометрию только через ksCAssociation; у трёх новых запрошенная ассоциация отвергается (Create=false), и связывает размер ОПОРНЫЙ объект (BaseObject / BaseObject1+BaseObject2).",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -20706,9 +18055,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 40,
+    "members": 41,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 1
     }
    },
@@ -21833,6 +19182,10 @@
    "declared_route": "kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add -> IIncline; Faces - одна грань или группа в ОДНОМ признаке; Plane(основание) -> Angle -> Direction, запись завершается обновлением объекта модели; подтверждение - объём и габарит тела (iinclines_add.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -21943,7 +19296,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 27
+    "members": 28
    },
    "actions": {
     "discover": "verified",
@@ -22162,6 +19515,10 @@
    "declared_route": "kompas_draft_from_edges: API7 IModelContainer.DraftsFromEdges -> IDraftsFromEdges.Add -> IDraftFromEdges; BaseLine (массив кривых), DirectionObject (плоскость/грань/ребро/ось), SideFace, Angle, Reverse -> IModelObject.Update; объект API7 адресуется по имени элемента дерева (idraftfromedges.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -22336,9 +19693,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 43,
+    "members": 44,
     "counts": {
-     "Подтверждено": 42,
+     "Подтверждено": 43,
      "не подтверждено": 1
     }
    },
@@ -22464,6 +19821,10 @@
    "declared_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -22542,7 +19903,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 19
+    "members": 20
    },
    "actions": {
     "discover": "verified",
@@ -22608,6 +19969,10 @@
    "declared_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -22686,7 +20051,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 19
+    "members": 20
    },
    "actions": {
     "discover": "verified",
@@ -22738,6 +20103,10 @@
    "declared_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -22816,7 +20185,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 19
+    "members": 20
    },
    "actions": {
     "discover": "verified",
@@ -22868,6 +20237,10 @@
    "declared_route": "kompas_create_thread: API7 IModelContainer -> IBody7.Threads -> IThreads.Add -> IThread; BaseObject (ребро цилиндра или цилиндрическая грань), InitialBorder/FinalBorder, IThreadsParameters.Diameter/Pitch, AutoDiameter, AutoLenght, Lenght, LeftThread; подтверждение - параметры, ПРОЧИТАННЫЕ из модели, и неизменный объём тела (ithreads_add.html, ithread_propers.html)",
    "com": [
     {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntityCollection.Add",
      "documentation": "Подтверждено"
     },
@@ -22946,7 +20319,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 19
+    "members": 20
    },
    "actions": {
     "discover": "verified",
@@ -22970,6 +20343,379 @@
     "Вид базового объекта читается ненадёжно: у обозначения, созданного по ребру, kompas_get_feature отвечает base_kind = face, тогда как ответ создания берёт вид базы из запроса. Измерено на живом признаке, причина не установлена - отчёт наряда, раздел о чтении базы.",
     "kompas_capabilities для нового инструмента живьём не проверялся; tools/list и совпадение схемы с реестром проверены группой --threads-only.",
     "Левая резьба прочитана как левая, соседняя без флага - как правая; правка left_hand false -> true прочитана из модели, объём прежний."
+   ]
+  },
+  {
+   "operation_id": "G8.copy_geometry.mode_body_from_file",
+   "family": "G8",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "part.single_body",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_copy_geometry",
+    "kompas_list_bodies",
+    "kompas_list_copies_geometry",
+    "kompas_measure",
+    "kompas_open_document",
+    "kompas_save_document"
+   ],
+   "schemas": [
+    "schemas/kompas_copy_geometry.json"
+   ],
+   "declared_route": "kompas_copy_geometry: API7 IModelContainer.CopiesGeometry -> Add -> ContextObjects=false -> AddInitialObjectsFromExternalDocument(источник как IKompasDocument3D, его СК, SafeArray из IModelObject) -> IModelObject.Update() -> RebuildDocument; объект источника - ksPart.BodyCollection().GetByIndex(0) либо GetDefaultEntity(1), оба через TransferInterface(ksAPI7Dual); подтверждение - тела и объём приёмника до и после плюс ICopiesGeometry.Count (imodelcontainer_copiesgeometry.html, icopiesgeometry_add.html, icopygeometry_addinitialobjectsfromexternaldocument.html, imodelobject_update.html)",
+   "com": [
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoints3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlanes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopyGeometry.AddInitialObjectsFromExternalDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.BodyCollection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksChooseBodies.BodyCollection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopyGeometry.ContextObjects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IModelContainer.CopiesGeometry",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopiesGeometry.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILineDimensions.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRadialDimensions.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDiametralDimensions.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILayoutSheets.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICoupling.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraints3D.Count",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IPlanes3D.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxes3D.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoints3D.Count",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPartCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFaceCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEdgeCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraintCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariableCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksViewProjectionCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.GetDefaultEntity",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument2D1.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "KompasObject.TransferInterface",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraint3D.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDrawingObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHole3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3DBy2Points.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFillet.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMirrorPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFeaturePattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Update",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "members": 59,
+    "counts": {
+     "Подтверждено": 57,
+     "не подтверждено": 2
+    }
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "CG-01.discovery",
+    "CG-01.schema",
+    "CG-01.capabilities",
+    "CG-02.source",
+    "CG-02.receiver",
+    "CG-03.create",
+    "CG-03.list",
+    "CG-05.save_reopen",
+    "CG-06.missing_file",
+    "CG-06.outside_roots",
+    "CG-06.no_body",
+    "CG-06.stale_revision",
+    "CG-06.refusal_names_effect"
+   ],
+   "limitations": [
+    "Адресуются только два вида объектов источника: первое тело коллекции ksPart.BodyCollection и плоскость XoY. Эскиз, ось и произвольный объект источника документированного адреса через этот маршрут не получили.",
+    "Копируется ОДИН объект за вызов: массив исходных объектов принимает больше, но профиль ограничен одним - так адрес остаётся однозначным.",
+    "Автоматического обновления по WatchForSourceChange нет: справка его не обещает, признак только читается и пишется. Обновляет kompas_synchronise_copy.",
+    "Удаления операции в профиле нет: у ICopyGeometry документирован Destroy() массива, отдельного инструмента нет."
+   ]
+  },
+  {
+   "operation_id": "G8.copy_geometry.mode_associativity",
+   "family": "G8",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "part.single_body",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_copy_geometry",
+    "kompas_list_copies_geometry",
+    "kompas_measure",
+    "kompas_open_document",
+    "kompas_save_document",
+    "kompas_synchronise_copy"
+   ],
+   "schemas": [
+    "schemas/kompas_synchronise_copy.json"
+   ],
+   "declared_route": "kompas_synchronise_copy: ICopiesGeometry.CopyGeometry[Index] -> ICopyGeometry; файл по записанному DocumentFileName проверяется ДО вызова продукта; Synhronise() -> RebuildDocument -> тела и объём приёмника до и после (icopygeometry_synhronise.html, icopygeometry_documentfilename.html)",
+   "com": [
+    {
+     "member": "ICopiesGeometry.CopyGeometry",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopyGeometry.DocumentFileName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IParametriticConstraint.Index",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument2D1.RebuildDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopyGeometry.Synhronise",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 6
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "CG-04.source_edited",
+    "CG-04.associativity",
+    "CG-05.save_reopen",
+    "CG-06.missing_file",
+    "CG-06.stale_revision"
+   ],
+   "limitations": [
+    "Synhronise() отвечает TRUE и при недоступном источнике (измерено: файл удалён, геометрия прежняя), поэтому отказ выносит Хост по пути, а инструмент проверяет файл до вызова продукта.",
+    "Уровень подтверждения синхронизации - call_returned: ожидаемый объём клиент задаёт сам, инструмент возвращает объём и тела до и после.",
+    "Изменение источника выполняется инструментами Хоста (kompas_update_feature по признаку выдавливания); правка признака переоткрытого документа читает семейство как null, поэтому группа ищет признак по наличию эскиза."
    ]
   }
  ],
@@ -23412,6 +21158,16 @@
     "mcp_verified": 1
    },
    "mcp_support": "kompas_import_step"
+  },
+  {
+   "family": "G8",
+   "title": "Мастер-геометрия: копия геометрии из файла другой детали",
+   "catalog_level": "mcp_verified",
+   "operations": 1,
+   "operation_levels": {
+    "mcp_verified": 1
+   },
+   "mcp_support": "kompas_copy_geometry / kompas_list_copies_geometry / kompas_synchronise_copy"
   }
  ],
  "com_routes": [
@@ -23695,6 +21451,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:291",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:305",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:410",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2205",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2331",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2728",
@@ -23731,6 +21488,7 @@
    "type": "Object",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:306",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:410",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2208",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2337",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:4003",
@@ -24364,11 +22122,13 @@
    "type": "Object",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:659",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:350",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:136",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:141"
    ],
    "receivers": [
-    "document.PartNow()"
+    "document.PartNow()",
+    "part"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -24822,6 +22582,509 @@
    }
   },
   {
+   "route": "IModelContainer.CopiesGeometry",
+   "assembly": "api7",
+   "interface": "IModelContainer",
+   "declared_on": "IModelContainer",
+   "receiver_type": "IModelContainer",
+   "inherited": false,
+   "member": "CopiesGeometry",
+   "kind": "property",
+   "signature": "prop CopiesGeometry CopiesGeometry",
+   "type": "CopiesGeometry",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:192",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:248",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:60"
+   ],
+   "receivers": [
+    "container"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelcontainer_copiesgeometry.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IModelContainer"
+   }
+  },
+  {
+   "route": "ICopiesGeometry.Add",
+   "assembly": "api7",
+   "interface": "ICopiesGeometry",
+   "declared_on": "ICopiesGeometry",
+   "receiver_type": "ICopiesGeometry",
+   "inherited": false,
+   "member": "Add",
+   "kind": "method",
+   "signature": "CopyGeometry Add()",
+   "type": "CopyGeometry",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:74"
+   ],
+   "receivers": [
+    "collection"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopiesgeometry_add.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopiesGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.ContextObjects",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "ContextObjects",
+   "kind": "property",
+   "signature": "prop Boolean ContextObjects",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:220",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:82"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_contextobjects.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.IsSuitableObject",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "IsSuitableObject",
+   "kind": "method",
+   "signature": "Boolean IsSuitableObject(IModelObject Object)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:83"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_issuitableobject.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.GetExternalLocalCooordinateSystem",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "GetExternalLocalCooordinateSystem",
+   "kind": "method",
+   "signature": "LocalCoordinateSystem GetExternalLocalCooordinateSystem(IKompasDocument3D ExternalDocument3D)",
+   "type": "LocalCoordinateSystem",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:88"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_getexternallocalcooordinatesystem.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.AddInitialObjectsFromExternalDocument",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "AddInitialObjectsFromExternalDocument",
+   "kind": "method",
+   "signature": "Boolean AddInitialObjectsFromExternalDocument(IKompasDocument3D ExternalDocument, LocalCoordinateSystem ExternalLocalCS, Object Objects)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:90"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_addinitialobjectsfromexternaldocument.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.WatchForSourceChange",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "WatchForSourceChange",
+   "kind": "property",
+   "signature": "prop Boolean WatchForSourceChange",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:101",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:219"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_watchforsourcechange.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopiesGeometry.Count",
+   "assembly": "api7",
+   "interface": "ICopiesGeometry",
+   "declared_on": "ICopiesGeometry",
+   "receiver_type": "ICopiesGeometry",
+   "inherited": false,
+   "member": "Count",
+   "kind": "property",
+   "signature": "prop Int32 Count",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:104",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:198",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:253"
+   ],
+   "receivers": [
+    "collection"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompascollection_count.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IKompasCollection"
+   }
+  },
+  {
+   "route": "ICopiesGeometry.CopyGeometry",
+   "assembly": "api7",
+   "interface": "ICopiesGeometry",
+   "declared_on": "ICopiesGeometry",
+   "receiver_type": "ICopiesGeometry",
+   "inherited": false,
+   "member": "CopyGeometry",
+   "kind": "property",
+   "signature": "prop CopyGeometry CopyGeometry",
+   "type": "CopyGeometry",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:208",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:263"
+   ],
+   "receivers": [
+    "collection"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopiesgeometry_copygeometry.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopiesGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.DocumentFileName",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "DocumentFileName",
+   "kind": "property",
+   "signature": "prop String DocumentFileName",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:218",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:268"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_documentfilename.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.MirrorCopy",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "MirrorCopy",
+   "kind": "property",
+   "signature": "prop Boolean MirrorCopy",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:221"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_mirrorcopy.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.ByCollectionGeometry",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "ByCollectionGeometry",
+   "kind": "property",
+   "signature": "prop Boolean ByCollectionGeometry",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:222"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_bycollectiongeometry.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ICopyGeometry.Synhronise",
+   "assembly": "api7",
+   "interface": "ICopyGeometry",
+   "declared_on": "ICopyGeometry",
+   "receiver_type": "ICopyGeometry",
+   "inherited": false,
+   "member": "Synhronise",
+   "kind": "method",
+   "signature": "Boolean Synhronise()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:281"
+   ],
+   "receivers": [
+    "operation"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icopygeometry_synhronise.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ICopyGeometry"
+   }
+  },
+  {
+   "route": "ksDocument3D.Open",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "Open",
+   "kind": "method",
+   "signature": "Boolean Open(String fileName, Boolean invisible)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:334",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:874"
+   ],
+   "receivers": [
+    "document",
+    "opened"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_open.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "ksDocument3D.GetPart",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "GetPart",
+   "kind": "method",
+   "signature": "Object GetPart(Int32 type)",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:348",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:417",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:832",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:899"
+   ],
+   "receivers": [
+    "document",
+    "source5"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_getpart.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "ksDocument3D.close",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "close",
+   "kind": "method",
+   "signature": "Boolean close()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:361",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:390",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:388",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1718",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:588"
+   ],
+   "receivers": [
+    "document",
+    "document.Document",
+    "source.Document5",
+    "source5"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "ksPart.BodyCollection",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "BodyCollection",
+   "kind": "method",
+   "signature": "Object BodyCollection()",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:404",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2203",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2329",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3979",
+    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1077",
+    "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1058",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1471"
+   ],
+   "receivers": [
+    "document.PartNow()",
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_bodycollection.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksBodyCollection.refresh",
+   "assembly": "api5",
+   "interface": "ksBodyCollection",
+   "declared_on": "ksBodyCollection",
+   "receiver_type": "ksBodyCollection",
+   "inherited": false,
+   "member": "refresh",
+   "kind": "method",
+   "signature": "Boolean refresh()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:409",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2204",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2330",
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3980",
+    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1078",
+    "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1059",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1474"
+   ],
+   "receivers": [
+    "bodies",
+    "collection"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbodycollection_refresh.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksBodyCollection"
+   }
+  },
+  {
    "route": "IModelContainer.Inclines",
    "assembly": "api7",
    "interface": "IModelContainer",
@@ -25204,7 +23467,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1263",
     "src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs:222",
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:347",
-    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:399"
+    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:403"
    ],
    "receivers": [
     "candidate",
@@ -27780,63 +26043,6 @@
    }
   },
   {
-   "route": "ksDocument3D.close",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "close",
-   "kind": "method",
-   "signature": "Boolean close()",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:388",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1718",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:588"
-   ],
-   "receivers": [
-    "document",
-    "document.Document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
-   "route": "ksDocument3D.GetPart",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "GetPart",
-   "kind": "method",
-   "signature": "Object GetPart(Int32 type)",
-   "type": "Object",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:417",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:832",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:899"
-   ],
-   "receivers": [
-    "document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_getpart.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
    "route": "ksFaceDefinition.EdgeCollection",
    "assembly": "api5",
    "interface": "ksFaceDefinition",
@@ -29758,70 +27964,6 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksSurface"
-   }
-  },
-  {
-   "route": "ksPart.BodyCollection",
-   "assembly": "api5",
-   "interface": "ksPart",
-   "declared_on": "ksPart",
-   "receiver_type": "ksPart",
-   "inherited": false,
-   "member": "BodyCollection",
-   "kind": "method",
-   "signature": "Object BodyCollection()",
-   "type": "Object",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2203",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2329",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3979",
-    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1077",
-    "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1058",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1471"
-   ],
-   "receivers": [
-    "document.PartNow()",
-    "part"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_bodycollection.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksPart"
-   }
-  },
-  {
-   "route": "ksBodyCollection.refresh",
-   "assembly": "api5",
-   "interface": "ksBodyCollection",
-   "declared_on": "ksBodyCollection",
-   "receiver_type": "ksBodyCollection",
-   "inherited": false,
-   "member": "refresh",
-   "kind": "method",
-   "signature": "Boolean refresh()",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2204",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2330",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3980",
-    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1078",
-    "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1059",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1474"
-   ],
-   "receivers": [
-    "bodies",
-    "collection"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbodycollection_refresh.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksBodyCollection"
    }
   },
   {
@@ -34224,8 +32366,7 @@
    "signature": "prop IModelObject BaseObject",
    "type": "IModelObject",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:114",
-    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:451"
+    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:114"
    ],
    "receivers": [
     "thread"
@@ -35322,32 +33463,6 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksPart"
-   }
-  },
-  {
-   "route": "ksDocument3D.Open",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "Open",
-   "kind": "method",
-   "signature": "Boolean Open(String fileName, Boolean invisible)",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:874"
-   ],
-   "receivers": [
-    "document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_open.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
    }
   },
   {
@@ -41598,25 +39713,25 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261020-api-audit-7f60ea1/routes.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
-  "fresh": true,
-  "lag_seconds": 1779.1,
+  "fresh": false,
+  "lag_seconds": -255.0,
   "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
-  "reason": "свеж"
+  "reason": "измерение старше своего входа"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261020-api-audit-7f60ea1/wire.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-98c622a/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
-  "fresh": true,
-  "lag_seconds": 1939.3,
-  "newest_input": "coverage/solid-v24/matrix.json",
-  "reason": "свеж"
+  "fresh": false,
+  "lag_seconds": -252.1,
+  "newest_input": "coverage/solid-v24/catalog.json",
+  "reason": "измерение старше своего входа"
  },
  "reflection_access": {
   "entries": [
@@ -41636,14 +39751,14 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 7383,
+  "total": 7450,
   "by_kind": {
-   "foreign-receiver": 6871,
+   "foreign-receiver": 6938,
    "unknown": 414,
    "unknown-member": 98
   },
   "by_reason": {
-   "head-not-declared": 6871,
+   "head-not-declared": 6938,
    "head-type-not-established": 185,
    "head-type-not-com": 226,
    "member-not-on-interface": 98,
@@ -42719,7 +40834,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:88:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:143:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:207:command.LeftHand",
-    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:425:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:429:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.ThreadEdit.cs:117:command.NominalDiameterMm",
     "src/KompasMcp.Api5Adapter/Api5Session.ThreadEdit.cs:122:command.PitchMm",
     "src/KompasMcp.Api5Adapter/Api5Session.ThreadEdit.cs:127:command.AutoDiameter",
@@ -42860,6 +40975,16 @@
    "interface": "IPart7",
    "member": "InstanceCount",
    "site": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:263"
+  },
+  {
+   "interface": "ICopiesGeometry",
+   "member": "CopyGeometry",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:208"
+  },
+  {
+   "interface": "ICopiesGeometry",
+   "member": "CopyGeometry",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:263"
   },
   {
    "interface": "ILoft",
@@ -43274,6 +41399,7 @@
    "drafts-minimal-v1.json",
    "drawings-minimal-v1.json",
    "export-inertia-minimal-v1.json",
+   "master-geometry-minimal-v1.json",
    "material-toward-minimal-v1.json",
    "mates-minimal-v1.json",
    "mechanical-core-v1.json",
@@ -43420,6 +41546,22 @@
    },
    {
     "operation_id": "dep.api7.in_same_adapter",
+    "profile": "master-geometry-minimal-v1.json",
+    "matrix_only": [
+     "SM-05.base.mode_couplings",
+     "SM-07.native_hole.blind_flat_bottom",
+     "SM-07.native_hole.through_counterbore",
+     "SM-07.native_hole.through_countersink",
+     "SM-07.native_hole.through_cylindrical",
+     "SM-11.chamfer.mode_distance_angle",
+     "SM-16.split.plane_tool",
+     "SM-17.reposition.translate_by_vector"
+    ],
+    "profile_only": [],
+    "reason": "состав потребителей зависимости расходится: профиль - источник"
+   },
+   {
+    "operation_id": "dep.api7.in_same_adapter",
     "profile": "threads-minimal-v1.json",
     "matrix_only": [
      "SM-05.base.mode_couplings",
@@ -43438,9 +41580,12 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/20261020-api-audit-7f60ea1/all-report.json",
-  "rows_claiming_verified": 187,
-  "rows_without_any_linked_row": [],
+  "source": "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json",
+  "rows_claiming_verified": 189,
+  "rows_without_any_linked_row": [
+   "G8.copy_geometry.mode_associativity",
+   "G8.copy_geometry.mode_body_from_file"
+  ],
   "rows_contradicted_by_fail": [],
   "rows_action_without_dedicated_row": [
    "DRW-07.section_view.create.simple",
@@ -43450,6 +41595,8 @@
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
+   "G8.copy_geometry.mode_associativity",
+   "G8.copy_geometry.mode_body_from_file",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
    "SM-08.thread.mode_inner_by_face",
@@ -43465,6 +41612,8 @@
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
+   "G8.copy_geometry.mode_associativity",
+   "G8.copy_geometry.mode_body_from_file",
    "MATE-07.mate.create_transmission",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
@@ -43597,7 +41746,7 @@
    "statement": "4 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-7f60ea1/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json"
    ]
   },
   {
@@ -43607,27 +41756,47 @@
    "statement": "4 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-7f60ea1/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-98c622a/routes.json"
    ]
   },
   {
    "id": "F-06",
-   "class": "заявка не подтверждена вызовами (отказ сторожа)",
-   "severity": "средняя",
-   "statement": "15 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
-   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
+   "class": "приписка (verified без связанной строки приёмки)",
+   "severity": "высокая",
+   "statement": "2 строк(и): G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file",
+   "fix": "связать строку с приёмкой или понизить заявку",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-7f60ea1/all-report.json"
+    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
    ]
   },
   {
    "id": "F-07",
+   "class": "заявка не подтверждена вызовами (отказ сторожа)",
+   "severity": "средняя",
+   "statement": "17 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file, MATE-07.mate.create_transmission, SM-08.thread.mode_auto",
+   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
+   "evidence": [
+    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
+   ]
+  },
+  {
+   "id": "F-08",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "12 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane",
+   "statement": "14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G8.copy_geometry.mode_associativity, G8.copy_geometry.mode_body_from_file, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "docs/acceptance/evidence/20261020-api-audit-7f60ea1/all-report.json"
+    "docs/acceptance/evidence/20261021-catalog-compact-d4232aa/all-run-full-smoke-report.json"
+   ]
+  },
+  {
+   "id": "F-20",
+   "class": "инструмент на проводе без присутствия в записях покрытия",
+   "severity": "средняя",
+   "statement": "3 инструмент(ов) не названы ни своей строкой, ни маршрутом, ни схемой: kompas_describe_operation, kompas_find_operations, kompas_run",
+   "fix": "назвать инструмент в маршруте строки, которая его исполняет, или объявить его вне покрытия режимов",
+   "evidence": [
+    "docs/acceptance/evidence/"
    ]
   }
  ],

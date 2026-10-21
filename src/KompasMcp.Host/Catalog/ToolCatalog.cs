@@ -572,19 +572,19 @@ public static class ToolCatalog
                         "Закрашивать плоскость разреза. Не задан - значение остаётся тем, что даёт "
                         + "модель."))),
                     ("steps", Sch.Nullable(Sch.Arr(
-                        Sch.ObjAll(
+                        Sch.Obj(
                             "Шаг сечения",
-                            new (string, JsonObject)[]
-                            {
+                            new[] { "plane" },
+                            Sch.Props(
                                 ("plane", PlaneSchema(
                                     "Плоскость шага: ИМЕННО ОДНО из двух — base (xy/xz/yz, при "
                                     + "необходимости со смещением offset_mm) ЛИБО reference на "
                                     + "существующую плоскость. Оба поля сразу или ни одного — "
                                     + "INVALID_ARGUMENT до обращения к ядру.")),
-                                ("reverse_direction", Sch.Bool(
+                                ("reverse_direction", Sch.Nullable(Sch.Bool(
                                     "Резать в обратную сторону той же плоскостью "
-                                    + "(ReverseDirection(), измерено: возвращает true).", false)),
-                            },
+                                    + "(ReverseDirection(), измерено: возвращает true). Не задано - "
+                                    + "направление остаётся тем, что даёт модель.", false)))),
                             "Один шаг: плоскость и направление разреза."),
                         "Шаги сечения. Не задано или пусто - сечение создаётся без шагов.", 0, 64)))),
                 WorkerCommands.CreateSection,

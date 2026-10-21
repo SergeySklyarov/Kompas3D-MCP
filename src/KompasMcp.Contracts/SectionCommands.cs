@@ -13,10 +13,10 @@ public sealed record SectionStepDto
     /// offset, or a reference to an existing plane.</summary>
     public required PlaneRefDto Plane { get; init; }
 
-    /// <summary>Cut the other way through the same plane. DOC:
-    /// <c>idynamiccrosssectionstepparametersbyoffsetplane_reversedirection.html</c> — <c>BOOL
+    /// <summary>Cut the other way through the same plane; <c>null</c> keeps the direction the model gives.
+    /// DOC: <c>idynamiccrosssectionstepparametersbyoffsetplane_reversedirection.html</c> — <c>BOOL
     /// ReverseDirection()</c>, a METHOD, not a property.</summary>
-    public bool ReverseDirection { get; init; }
+    public bool? ReverseDirection { get; init; }
 }
 
 /// <summary>Create a dynamic cross-section and optionally turn its display mode on.</summary>

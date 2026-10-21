@@ -70,13 +70,14 @@ public sealed partial class Api5Session
 
         if (section is null)
         {
-            // MEASURED: the second call in a session answered null both with a section present and after
-            // the only section was deleted. A section is not substituted for the refused one.
+            // MEASURED: on a part with a written step the call answers null (also after the first section
+            // was deleted); on an assembly a second section IS created. A section is never substituted.
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "AddDynamicCrossSection() не вернул IDynamicCrossSection: в этом документе сечение уже " +
-                "есть (измерено: второе сечение за сеанс не создаётся, в том числе после удаления " +
-                "первого). Создание второго сечения этим выпуском не поддерживается.",
+                "AddDynamicCrossSection() не вернул IDynamicCrossSection. Измерено: на детали с уже " +
+                "записанным шагом ядро отвечает пусто (и после удаления первого сечения тоже), на " +
+                "сборке второе сечение создаётся. Причину отказа ядро не называет, поэтому сечение не " +
+                "подставляется и не пересоздаётся молча.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
@@ -262,7 +263,7 @@ public sealed partial class Api5Session
             unverified.Add("plane_offset_unread — смещение плоскости не прочитано: запись не подтверждена");
         }
 
-        if (step.ReverseDirection)
+        if (step.ReverseDirection == true)
         {
             var reversed = Bool(() => byOffset.ReverseDirection());
             checks.Add(new NamedCheck("reverse_direction_returned", reversed == true, reversed?.ToString()));

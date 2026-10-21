@@ -49330,6 +49330,11 @@ def sections_checks(client, rep, app_id, workdir):
             return None
         return sum(1 for a, b in zip(left, right) if a != b) / len(left)
 
+    def why(env):
+        """Текст отказа рядом с кодом: без него FAIL не отличить от неверного ожидания."""
+        error = (env or {}).get("error") or {}
+        return str(error.get("message") or error)[:220]
+
     # ===== SEC-01: обнаружение =====
     registry = (client.catalog() or {}).get("registry") or []
     names = ("kompas_create_section", "kompas_set_section_mode", "kompas_list_sections")
@@ -49416,17 +49421,20 @@ def sections_checks(client, rep, app_id, workdir):
     # ===== SEC-07: save -> reopen =====
     reopen_errors = []
     if part:
-        _e, save_code = call("kompas_save_document", {"document_id": part,
+        save_env, save_code = call("kompas_save_document", {"document_id": part,
                                                     "expected_revision": revision(part),
                                                     "target_path": part_path})
         if save_code:
-            reopen_errors.append(save_code)
-        call("kompas_close_document", {"document_id": part,
-                                       "expected_revision": revision(part)})
+            reopen_errors.append("save:" + save_code + ":" + why(save_env))
+        close_env, close_code = call("kompas_close_document", {"document_id": part,
+                                                            "dirty_policy": "save"})
+        if close_code:
+            reopen_errors.append("close:" + close_code + ":" + why(close_env))
         opened_env, open_code = call("kompas_open_document", {"application_id": app_id,
-                                                              "path": part_path})
+                                                              "path": part_path,
+                                                              "access": "edit"})
         if open_code:
-            reopen_errors.append(open_code)
+            reopen_errors.append("open:" + open_code + ":" + why(opened_env))
         else:
             part = doc_id(opened_env) or part
     after, after_code = sections(part) if part else ({}, "no_document")
@@ -49473,16 +49481,23 @@ def sections_checks(client, rep, app_id, workdir):
     asm_read, _c = sections(asm) if asm else ({}, "no_document")
     rep.add("SEC-09.assembly", "сечение сборки создано тем же маршрутом",
             "PASS" if not asm_code and asm_read.get("sections_count") == 1 else "FAIL",
-            f"сечений={asm_read.get('sections_count')} ошибка={asm_code}")
+            f"сечений={asm_read.get('sections_count')} ошибка={asm_code} {why(asm_env)}")
 
     # ===== SEC-10: второе сечение отвергается =====
     second_env, second_code = call("kompas_create_section",
                                    {"document_id": asm, "expected_revision": revision(asm),
                                     "steps": [{"plane": {"base": "xy", "offset_mm": 5}}]}) \
         if asm else ({}, "no_document")
-    rep.add("SEC-10.second", "второе сечение отвергается CAPABILITY_UNAVAILABLE (измеренное ограничение)",
-            "PASS" if second_code == "CAPABILITY_UNAVAILABLE" else "FAIL",
-            f"код={second_code}")
+    # Измерено дважды и по-разному: на ДЕТАЛИ с записанным шагом второй AddDynamicCrossSection вернул
+    # пусто, на СБОРКЕ - отдал объект и счётчик стал 2. Поэтому строка принимает оба исхода и требует,
+    # чтобы отказ был НАЗВАН, а успех подтверждён счётчиком: молчаливая подмена не проходит.
+    second_count = result(second_env).get("sections_count_after")
+    second_ok = (second_code == "CAPABILITY_UNAVAILABLE"
+                 or (not second_code and second_count == 2))
+    rep.add("SEC-10.second",
+            "второе сечение: счётчик 2 либо названный отказ (измерены оба исхода)",
+            "PASS" if second_ok else "FAIL",
+            f"код={second_code} сечений={second_count} {why(second_env)}")
 
     # ===== SEC-11: не 3D-документ =====
     env, _c = call("kompas_create_document",
@@ -49515,7 +49530,7 @@ def sections_checks(client, rep, app_id, workdir):
         if part else ({}, "no_document")
     rep.add("SEC-13.stale_revision", "устаревший expected_revision отвергается REVISION_CONFLICT",
             "PASS" if stale_code == "REVISION_CONFLICT" else "FAIL",
-            f"код={stale_code}")
+            f"код={stale_code} {why(stale_env)}")
 
 
 def dismantle_checks(client, rep, app_id, workdir):

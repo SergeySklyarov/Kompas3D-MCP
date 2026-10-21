@@ -7136,3 +7136,50 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
   ребро, базовая грань определяется автоматически»). Форма, заданная при создании (ребро или грань), в
   модели не хранится, поэтому чтение отдаёт `base_kind = unknown`, а не вид определённой грани.
   Проверка `is IEdge`/`is IFace` для этого непригодна: грань-основание отвечает обоим приведениям.
+
+### §4.97. «Копия геометрии» из файла другой детали: адрес объекта, обязательный `Update()` и ассоциативность (живое измерение 21.10.2026, наряд `OMEGA_G8_MASTER_GEOMETRY`)
+
+**Страницы справки** сняты проводом в `reference/kompas-sdk-v24/docs-wire-20261021-copygeometry/`
+(`_fetch_docs_wire_20261021_copygeometry.py`): `imodelcontainer_copiesgeometry`, `icopiesgeometry_add`,
+`icopiesgeometry_copygeometry`, `icopygeometry`, `icopygeometry_addinitialobjectsfromexternaldocument`,
+`icopygeometry_addinitialobjects`, `icopygeometry_isinitialobject`, `icopygeometry_issuitableobject`,
+`icopygeometry_documentfilename`, `icopygeometry_watchforsourcechange`, `icopygeometry_synhronise`,
+`icopygeometry_getexternallocalcooordinatesystem`, `icopygeometry_externallocalcs`, `icopygeometry_localcs`,
+`icopygeometry_opendocument`, `icopygeometry_contextobjects`, `icopygeometry_bycollectiongeometry`,
+`icopygeometry_mirrorcopy`, `icopygeometry_clear`, `icopygeometry_destroy`, `imodelcontainer_objects`,
+`obj3dtype`, `imodelcontainer_collectionsgeometry`, `icollectionsgeometry_add`,
+`icollectionsgeometry_collectiongeometry`, `icollectiongeometry_geometry`, плюс `imodelobject_update`.
+`icopygeometry_propers` в справке отсутствует (404).
+
+- **Наследование.** `icopygeometry.html`, раздел «Иерархия»: `IDispatch` → `IKompasAPIObject` →
+  `IModelObject` → `ICopyGeometry`. То есть операция - 3D-объект, и общий шаг API7 «вызвать `Update()`
+  после изменения свойств или методов интерфейса» (`imodelobject_update.html`) к ней применим.
+- **Адрес объекта чужого документа.** `AddInitialObjectsFromExternalDocument(ExternalDocument,
+  ExternalLocalCS, Objects)` принимает документ-источник как `IKompasDocument3D`, СК как
+  `ILocalCoordinateSystem` (маршрут принимает `null` - `GetExternalLocalCooordinateSystem` для
+  источника отвечает `null`, и это не мешает) и массив `VT_ARRAY|VT_DISPATCH`. Пригодное тело берётся
+  документированным путём `ksPart.BodyCollection()` → `refresh()` → `GetByIndex(0)` →
+  `TransferInterface(…, ksAPI7Dual)`: `IsSuitableObject` = TRUE, вызов = TRUE, `IsInitialObject` =
+  TRUE. Тело из `ksPart.GetMainBody()` тем же маршрутом непригодно (`IsSuitableObject` = FALSE).
+  `DocumentFileName` - свойство только для чтения; путь источника проставляет сам вызов.
+- **Без `Update()` операции в модели нет.** `Add()` создаёт объект (`CopiesGeometry.Count` 0 → 1),
+  вызов принимает объект (`TRUE`, `IsInitialObject` = TRUE, `DocumentFileName` заполнен), но дерево
+  приёмника после перестройки содержит только «Начало координат», тел 0, а `CopiesGeometry.Count`
+  отвечает 0. После `IModelObject.Update()` (сразу после принятого вызова, до `RebuildDocument`) в
+  дереве появляется «Копирование:1», тел 1, объём 80 000 мм³, `Count` = 1. Это тот же исход, что
+  описан для других операций API7: объект остаётся заготовкой, пока не применён.
+- **Чтение операции из коллекции.** Отвечает индексер `ICopiesGeometry::CopyGeometry[Index]` с целым
+  или `short` индексом; строковая форма (`"0"`) и `[1]` при одной операции дают `null`.
+- **Ассоциативность.** `WatchForSourceChange` пишется и читается (`TRUE`); при `FALSE` и
+  `Synhronise()` = TRUE приёмник принимает изменение источника: толщина 10 → 25 мм даёт объём
+  80 000 → 200 000 мм³ (ожидание 100x80x25, расхождение 0). Без синхронизации приёмник не меняется.
+- **Сохранение и переоткрытие.** `Save()` → `close()` → `Open(путь, TRUE)` сохраняет операцию: `Count`
+  = 1, `DocumentFileName` тот же, `WatchForSourceChange` = TRUE, дерево «Копирование:1», объём тот же.
+  Без закрытия `Open()` того же файла отвечает `FALSE` - файл уже открыт сеансом.
+- **Не отвечает.** `IModelContainer.Objects(ObjType)` возвращает `null` на всех формах аргумента
+  (`ksObjectBody7`, `115`, `short 115`, `"115"`) и у источника, и у приёмника - документированный
+  перечень объектов этим интеропом не читается, поэтому «что появилось» измеряется деревом и объёмом.
+  `ICopyGeometry.OpenDocument(FALSE, TRUE)` отвечает `null`; `CollectionsGeometry.Add()` отдаёт
+  объект, `Geometry` пишется и читается, но `CollectionsGeometry.Count` остаётся 0, и на дерево это не
+  влияет. Признак выдавливания переоткрытого документа в дереве не находится (`Entity` = null), то есть
+  правку источника на открытом с диска документе этот маршрут чтения не даёт.

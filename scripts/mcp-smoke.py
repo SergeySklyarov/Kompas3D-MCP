@@ -1,4 +1,4 @@
-﻿"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
+"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
 
 The server side uses the official C# SDK for transport; this client speaks the wire format
 directly (newline-delimited JSON-RPC 2.0) on purpose: the assertions must be about OUR contract —
@@ -49727,6 +49727,66 @@ def sections_checks(client, rep, app_id, workdir):
     rep.add("SEC-12.bad_plane", "несуществующая ссылка на плоскость отвергается",
             "PASS" if bad_code in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL",
             f"код={bad_code}")
+
+    # ===== SEC-14: сечение сборки при включённом разнесённом виде (сценарий клиента) =====
+    # Сценарий клиентской приёмки поставки 0.10.0: три детали, разнесённый вид, плоскость xz 25 мм,
+    # mode в том же вызове. Измерено пробой: ядро отдаёт объект сечения, но сечение в модель не входит
+    # (счётчик 0, section.Update() = FALSE) при любых прочих факторах, а при выключенном режиме то же
+    # создаётся. Поэтому ожидание - НАЗВАННЫЙ отказ ДО записи и неизменённый счётчик, а не успех.
+    def next_rev(env, fallback):
+        """Ревизия из ответа вызова: `kompas_get_context` на сборке с разнесением ревизию не отдаёт."""
+        value = (env or {}).get("revision_after")
+        return value if isinstance(value, int) and value > 0 else fallback
+
+    env, _c = call("kompas_create_document",
+                   {"application_id": app_id, "kind": "assembly", "name": "SEC-DSM"})
+    dsm = doc_id(env)
+    dsm_rev = next_rev(env, 1)
+    dsm_ready = False
+    components = []
+    applied = {}
+    if dsm and part_path:
+        for origin in ([0.0, 0.0, 0.0], [60.0, 0.0, 0.0], [0.0, 60.0, 0.0]):
+            _e, ins, _r = client.tool("kompas_insert_component",
+                                      {"document_id": dsm, "expected_revision": dsm_rev,
+                                       "source_path": part_path, "fixed": False,
+                                       "transform": {"origin_mm": origin, "x_axis": [1, 0, 0],
+                                                     "y_axis": [0, 1, 0]},
+                                       "operation_id": str(uuid.uuid4())}, timeout=300)
+            dsm_rev = next_rev(ins, dsm_rev)
+        # без `operation_id`: чтение отвечает отказом на неизвестное поле, и список приходит пустым
+        _e2, listed, _r2 = client.tool("kompas_list_components", {"document_id": dsm})
+        components = (result(listed).get("components") or [])
+        first = components[0].get("component_ref") if components else None
+        axis_env, _c3 = call("kompas_create_aux_geometry",
+                             {"document_id": dsm, "expected_revision": dsm_rev,
+                              "kind": "axis", "mode": "by_2_points",
+                              "point1_mm": [0, 0, 0], "point2_mm": [10, 0, 0], "name": "SEC-X"})
+        axis = result(axis_env).get("reference_id")
+        dsm_rev = next_rev(axis_env, dsm_rev)
+        applied, applied_code = call("kompas_set_dismantle",
+                                     {"document_id": dsm, "expected_revision": dsm_rev,
+                                      "mode": True,
+                                      "steps": [{"component_refs": [first], "distance_mm": 40,
+                                                 "direction_ref": axis}]})
+        dsm_rev = next_rev(applied, dsm_rev)
+        dsm_ready = not applied_code and len(components) == 3
+    if dsm_ready:
+        scenario, scenario_code = call("kompas_create_section",
+                                       {"document_id": dsm, "expected_revision": dsm_rev,
+                                        "steps": [{"plane": {"base": "xz", "offset_mm": 25}}],
+                                        "mode": True})
+        after_read, _c4 = sections(dsm)
+        scenario_count = after_read.get("sections_count")
+    else:
+        scenario, scenario_code, scenario_count = {}, "setup_failed", None
+    rep.add("SEC-14.assembly_dismantled",
+            "сборка с разнесённым видом: названный отказ до записи, счётчик не изменился",
+            "PASS" if dsm_ready and scenario_code == "CAPABILITY_UNAVAILABLE"
+            and scenario_count == 0 else "FAIL",
+            f"код={scenario_code} сечений={scenario_count} сборка={bool(dsm)} "
+            f"компонентов={len(components) if dsm else 0} ревизия={dsm_rev} "
+            f"разнесение={'ok' if dsm_ready else 'нет'} {why(applied)} {why(scenario)}")
 
     # ===== SEC-13: устаревшая ревизия =====
     stale_env, stale_code = call("kompas_create_section",

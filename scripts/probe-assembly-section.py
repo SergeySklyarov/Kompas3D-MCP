@@ -55,6 +55,7 @@ class Session:
             cwd=os.path.expanduser("~"), bufsize=1,
         )
         self._lines = queue.Queue()
+        self.reads = set()
         threading.Thread(target=self._pump, daemon=True).start()
         self._next_id = 1
 
@@ -97,9 +98,19 @@ class Session:
 
     def tool(self, name, arguments, timeout=300):
         payload = dict(arguments)
-        payload.setdefault("operation_id", str(uuid.uuid4()))
+        if name not in self.reads:
+            payload.setdefault("operation_id", str(uuid.uuid4()))
         result = self.call("tools/call", {"name": name, "arguments": payload}, timeout=timeout)
-        return result.get("structuredContent") or result
+        envelope = result.get("structuredContent") or result
+        message = str(((envelope or {}).get("error") or {}).get("message") or "")
+        # MEASURED: a read tool refuses `operation_id` as an unknown field while a mutation requires
+        # it, and tools/list does not say which is which - the refusal names it, so it is learned here.
+        if "Неизвестное поле" in message and "operation_id" in payload:
+            self.reads.add(name)
+            payload.pop("operation_id", None)
+            result = self.call("tools/call", {"name": name, "arguments": payload}, timeout=timeout)
+            envelope = result.get("structuredContent") or result
+        return envelope
 
     def close(self):
         try:
@@ -198,9 +209,14 @@ def build_assembly(session, app, part_path, parts, dismantle):
                                  "transform": {"origin_mm": origin, "x_axis": [1, 0, 0],
                                                "y_axis": [0, 1, 0]}}, timeout=300)
         rev = rev_after(inserted, rev)
+        if code_of(inserted):
+            print("   вставка:", code_of(inserted),
+                  str(((inserted or {}).get("error") or {}).get("message") or "")[:160])
     first = None
     if dismantle:
-        rows = result_of(session.tool("kompas_list_components", {"document_id": asm})).get("components") or []
+        listed = session.tool("kompas_list_components", {"document_id": asm})
+        rows = result_of(listed).get("components") or []
+        print("   компонентов:", len(rows), code_of(listed) or "ok")
         raw = rows[0].get("component_ref") if rows else None
         first = raw.get("id") if isinstance(raw, dict) else raw
         axis = session.tool("kompas_create_aux_geometry",
@@ -208,6 +224,9 @@ def build_assembly(session, app, part_path, parts, dismantle):
                              "kind": "axis", "mode": "by_2_points",
                              "point1_mm": [0, 0, 0], "point2_mm": [10, 0, 0], "name": "PRB-X"})
         axis_ref = result_of(axis).get("reference_id")
+        if code_of(axis):
+            print("   ось:", code_of(axis),
+                  str(((axis or {}).get("error") or {}).get("message") or "")[:160])
         rev = rev_after(axis, rev)
         applied = session.tool("kompas_set_dismantle",
                                {"document_id": asm, "expected_revision": rev,
@@ -215,7 +234,9 @@ def build_assembly(session, app, part_path, parts, dismantle):
                                 "steps": [{"component_refs": [first], "distance_mm": 40,
                                            "direction_ref": axis_ref}]})
         rev = rev_after(applied, rev)
-        print("   разнесение:", code_of(applied) or "ok")
+        print("   разнесение:", code_of(applied) or "ok",
+              str(((applied or {}).get("error") or {}).get("message") or "")[:200],
+              json.dumps(((applied or {}).get("error") or {}).get("details") or {}, ensure_ascii=False)[:200])
     return asm, first, "ok", rev
 
 
@@ -290,13 +311,15 @@ def main():
             return 2
         print("приложение:", app)
 
+
         part_path, part_code = build_part(session, app)
         print("деталь:", part_code, part_path)
         if not part_path:
             return 2
 
+        only = argument("--only")
         rows = []
-        for variant in VARIANTS:
+        for variant in [item for item in VARIANTS if not only or item[0].startswith(only)]:
             row = run_variant(session, app, part_path, variant)
             rows.append(row)
             print("%-16s код=%-22s до=%s после=%s сечений=%s списком=%s" % (

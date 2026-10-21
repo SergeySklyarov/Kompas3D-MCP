@@ -49,7 +49,8 @@ public sealed partial class Api5Session
         var document = RequireDocument(command.DocumentId);
         RequireRevision(document, command.ExpectedRevision);
         var notes = new List<string>();
-        var (_, manager) = RequireSections(document, notes);
+        var (document7, manager) = RequireSections(document, notes);
+        RefuseDismantledAssembly(document7, notes);
         var checks = new List<NamedCheck>();
         var unverified = new List<string>();
 
@@ -175,6 +176,37 @@ public sealed partial class Api5Session
             rows,
             new VerificationDto(VerificationLevel.StructureChecked, checks, unverified),
             notes);
+    }
+
+    /// <summary>Refuse BEFORE the write when the assembly is shown dismantled.</summary>
+    /// <remarks>MEASURED: with the dismantle mode on, <c>AddDynamicCrossSection</c> returns an object and
+    /// <c>Update()</c> answers FALSE while the counter stays 0, so the section never reaches the model;
+    /// with the mode off the same call creates it. Number of parts, plane, offset, <c>mode</c>, fill and a
+    /// snapshot before changed nothing, so the mode is the condition. DOC: the v24 pages
+    /// <c>IDynamicCrossSectionsManager</c>, <c>IDynamicCrossSection</c> and <c>IDismantleParameters</c>
+    /// state no such condition. LIMIT: a section of a dismantled assembly, and the mode is not switched
+    /// off for the caller. History: docs/decisions/sections.md#assembly-section</remarks>
+    private static void RefuseDismantledAssembly(IKompasDocument3D document7, List<string> notes)
+    {
+        if (document7 is not IAssemblyDocument assembly || Bool(() => assembly.DismantleMode) != true)
+        {
+            return;
+        }
+
+        notes.Add("assembly_dismantled — сечение сборки с включённым разнесённым видом не создаётся");
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            "Сечение сборки с включённым разнесённым видом не создаётся: ядро отдаёт объект сечения, " +
+            "но в модели его нет (счётчик сечений 0, section.Update() = FALSE). Измерено: при " +
+            "выключенном режиме то же самое создаётся. Выключите разнесённый вид " +
+            "(kompas_set_dismantle с mode=false) и повторите: сервер не выключает режим за вызывающего.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?>
+            {
+                ["reason"] = "assembly_section_with_dismantle_mode",
+                ["dismantle_mode"] = true,
+                ["measured_sections_count_after"] = 0,
+            });
     }
 
     /// <summary>The offsets the call wrote, in step order: what the added row must read back.</summary>

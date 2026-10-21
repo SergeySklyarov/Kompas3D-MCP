@@ -1,4 +1,4 @@
-﻿# 4. Опыт API, исходные материалы и известные ошибки
+# 4. Опыт API, исходные материалы и известные ошибки
 
 > Исторические сведения: упоминания EH70 ниже описывают прежние эксперименты с API. Они не задают область применения MCP и не являются обязательными входами разработки или приёмки.
 
@@ -7284,3 +7284,30 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 `Plane` - `IPlane3DByAngle`) пробой не подтверждён и в продукт не вошёл.
 
 **Сохранение.** `save` → `reopen` сохраняет сечение, шаг, смещение и режим.
+
+## §4.95. Сечение сборки при включённом разнесённом виде НЕ создаётся: ядро отдаёт объект, а модель остаётся пустой (живое измерение 21.10.2026, наряд `SECTIONS_ASSEMBLY_FIX`)
+
+Клиентская приёмка поставки `publish-v0.10.0-f679843` получила `succeeded` при `sections_count_before 0`,
+`sections_count_after 0`, `sections []` и `section_update_returned = false`. Проба
+`scripts/probe-assembly-section.py` на синтетической сборке (плита 40 x 40 x 10, один или три
+экземпляра, ось `by_2_points`, шаг разнесения 40 мм) дала таблицу: решающий фактор один - включённый
+разнесённый вид.
+
+| Разнесение | Деталей | Плоскость | `mode` в вызове | Снимок до | Счётчик до → после | `Update()` |
+|---|---|---|---|---|---|---|
+| вкл | 3 | xz 25 | да | нет | 0 → 0 | FALSE |
+| **выкл** | 3 | xz 25 | да | нет | **0 → 1** | TRUE |
+| вкл | 1 | xz 25 | да | нет | 0 → 0 | FALSE |
+| вкл | 3 | xy 5 | да | нет | 0 → 0 | FALSE |
+| вкл | 3 | xz 25 | нет | нет | 0 → 0 | FALSE |
+| вкл | 3 | xz 25 | да | да | 0 → 0 | FALSE |
+| вкл | 3 | xy 5 + закраска | да | нет | 0 → 0 | FALSE |
+
+`AddDynamicCrossSection()` возвращает объект `IDynamicCrossSection`, `AddStep`, `OffsetPlane` и
+`IPlane3DByOffset` отвечают без отказа, `section.Update()` отвечает FALSE, счётчик не растёт, в модели
+ничего не остаётся (повторное чтение `DynamicCrossSectionsCount` = 0, `kompas_list_sections` пуст).
+Страницы `idynamiccrosssectionsmanager.html`, `idynamiccrosssection.html`,
+`idynamiccrosssection_addstep.html`, `idynamiccrosssectionstepparametersbyoffsetplane_*` и
+`idismantleparameters*.html` такого условия не называют, поэтому обход не искался: продукт отказывает
+ДО записи кодом `CAPABILITY_UNAVAILABLE` (`reason = assembly_section_with_dismantle_mode`) и советует
+выключить режим.

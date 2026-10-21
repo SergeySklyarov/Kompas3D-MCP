@@ -14,6 +14,32 @@
 
 ## Текущее состояние
 
+- **Сечение сборки: честный ответ и отказ до записи при разнесённом виде (наряд `SECTIONS_ASSEMBLY_FIX`,
+  22.10.2026, сдан):** `kompas_create_section` больше не отвечает `succeeded`, если сечение не появилось:
+  успех - только при счётчике `+1` и читаемом обратно шаге, иначе отказ `VERIFICATION_FAILED` с
+  `details` (`reason`, счётчики до и после, `section_update_returned`, вид и опора шага). Правило
+  вынесено в `KompasMcp.Domain.Geometry.SectionCreationRule` и держится модульным тестом.
+  **Причина отказа клиента измерена** пробой `scripts/probe-assembly-section.py` (7 вариантов): сечение
+  сборки при включённом разнесённом виде не создаётся - счётчик 0 → 0, `Update()` = FALSE, в модели
+  ничего не остаётся; число деталей, плоскость, смещение, `mode` в том же вызове, закраска и снимок до
+  вызова не влияют, при выключенном режиме тот же вызов сечение создаёт. Справка v24 этого условия не
+  называет, поэтому по наряду выбран отказ **до записи**: `CAPABILITY_UNAVAILABLE`, `reason =
+  assembly_section_with_dismantle_mode`, совет выключить режим (`kompas_set_dismantle`, `mode=false`);
+  за вызывающего режим не выключается, сечение не пересоздаётся. Ограничение - `LIMIT:` в коде,
+  `explicitly_out_of_scope` профиля `sections-minimal-v1` (ревизия 1.1), таблица факторов -
+  `docs/04_KOMPAS_API_NOTES.md` §4.97, решение - `docs/decisions/sections.md#assembly-section`.
+  **Ложные проверки** (ожидание передано, `passed` его не сравнивал) исправлены четыре:
+  `sections_count_after`, `plane_offset_written`, `steps_count_after`, `step_update_returned`; та же
+  форма найдена в `angle_read_back` и не тронута - вне наряда. Приёмка: строка
+  `SEC-14.assembly_dismantled` в `--sections-only` (ожидание - названный отказ и счётчик 0).
+  **Приборы:** `verify-client-entry.py` и `verify-delivery.py` пишут и читают `package-check.json` по
+  одному правилу `delivery-<стадия>` под постоянным корнем доказательств; входов в `scratch/` больше нет.
+  Проверки: build Release 0, тесты Release **1423/1423**, `--sections-only` **PASS 38 / FAIL 0**,
+  `--dismantle-only` **PASS 1326 / NAMED 3 / UNKNOWN 1 / FAIL 0**, `verify-delivery --self-test` 12/12,
+  `verify-client-entry --self-test` 9/9, стражи `long-comment-blocks`/`lint-dashes`/`check-evidence-links`
+  0/0/0. Зачётный `--all` на `47a6a3f` (Release, дерево чистое, 32 минуты): **PASS 1819 / NAMED 6 /
+  UNKNOWN 3 / FAIL 0**, exit 0 - против `f679843` (1818) прибавилась одна строка, `SEC-14`. Доказательства
+  `docs/acceptance/evidence/20261022-sections-fix-47a6a3f/`, отчёт `SECTIONS_ASSEMBLY_FIX_REPORT_20261021.md`.
 - **Сообщение о новом выпуске и обновление установки (наряд `UPDATE_NOTICE`, 21.10.2026, сдан):**
   Host сам узнаёт, что вышел более новый стабильный выпуск, и говорит об этом клиенту полем `update`
   в ответе `kompas_health` (`status`: `up_to_date` / `available` / `unknown` / `disabled` / `pending`,

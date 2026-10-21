@@ -30,6 +30,7 @@ internal sealed class CopyGeometryProbe
     private readonly Options _options;
     private KompasObject _app = null!;
     private IKompasDocument3D? _sourceDocument7;
+    private ksDocument3D? _sourceDoc5;
     private IModelObject? _bodyModel;
     private object? _factoryCollection;
     private int? _factoryCount;
@@ -89,6 +90,7 @@ internal sealed class CopyGeometryProbe
             // MEASURED: the save/reopen step closes the receiver, so the live pointer is spent by it;
             // associativity runs first and the reopened file is then read for what it kept.
             Associativity(source.Value.Extrusion, accepted, receiver.Value.Doc);
+            SourceGone(receiver.Value.Doc);
             WatchAndReopen(receiver.Value.Doc);
         }
         catch (Exception ex)
@@ -175,6 +177,7 @@ internal sealed class CopyGeometryProbe
             }
         }
 
+        _sourceDoc5 = doc;
         _sourceDocument7 = TransferTo7Document(doc);
         step.Data["save_as"] = saved;
         step.Data["path"] = _sourcePath;
@@ -651,6 +654,50 @@ internal sealed class CopyGeometryProbe
         }
 
         step.Unknown("Формы записаны; отвечающая выбирается по наблюдению выше.");
+    }
+
+    /// <summary>DOC: <c>icopygeometry_synhronise.html</c> - «Синхронизировать с источником». A product
+    /// whose source file is gone still answers something, and that answer is what the tool's refusal will
+    /// carry; it is measured rather than guessed. History: docs/decisions/master-geometry.md#source-gone
+    /// </summary>
+    private void SourceGone(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.10", "Источник недоступен: файл удалён",
+            "Что отвечает Synhronise(), когда файла источника больше нет?");
+        var part = (ksPart)receiverDoc.GetPart(-1);
+        step.Data["volume_before"] = Api5.Volume(part);
+
+        // The session holds the file open, so it is closed before the delete; the operation keeps its own
+        // binding to the path, which is exactly the state the tool will face.
+        step.Data["source_closed"] = Api5.Raw(Api5.SafeBool(() => _sourceDoc5!.close()));
+        try
+        {
+            File.Delete(_sourcePath);
+            step.Data["file_deleted"] = !File.Exists(_sourcePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            step.Data["file_deleted"] = false;
+            step.Observe("Файл источника удалить не удалось: " + ex.GetType().Name);
+        }
+
+        var operation = CopyOperation(receiverDoc);
+        if (operation is null)
+        {
+            step.Fail("Операция в приёмнике не найдена - синхронизировать нечего.");
+            return;
+        }
+
+        step.Data["synhronise"] = Api5.Raw(Api5.SafeBool(() => operation.Synhronise()));
+        receiverDoc.RebuildDocument();
+        step.Data["bodies_after"] = RefreshedBodyCount(receiverDoc);
+        step.Data["volume_after"] = Api5.Volume(part);
+        step.Data["tree_after"] = Api5.ReadFeatures(part, step).Select(f => f.Name).ToList();
+        step.Data["document_file_name"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
+        step.Observe($"После удаления источника: Synhronise={step.Data["synhronise"]}, тел "
+            + $"{RefreshedBodyCount(receiverDoc)}, объём {Api5.Num(Api5.Volume(part))} мм³, дерево "
+            + $"[{string.Join(", ", (List<string>)step.Data["tree_after"]!)}]");
+        step.Unknown("Ответ записан; код отказа для инструмента выбирается по наряду.");
     }
 
     private void WatchAndReopen(ksDocument3D receiverDoc)

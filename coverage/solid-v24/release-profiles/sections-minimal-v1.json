@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "profile_id": "sections-minimal-v1",
+    "title": "Динамическое сечение модели v24: шаг смещённой плоскостью, режим отображения и доказательство снимком",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "21.10.2026",
+        "change": "профиль заведён нарядом OMEGA_G11_SECTIONS (шаг D #11, G11): создание сечения и шага смещённой плоскостью, чтение обратно, режим отображения, доказательство снимком; уровни подняты по группе --sections-only"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E4": "Динамическое сечение модели - шаг D таблицы G-пробелов, очередь E4"
+    }
+  },
+  "modes": [
+    {
+      "ref": "G11.sections.create_read",
+      "title": "Сечение и шаг смещённой плоскостью: запись, чтение обратно, сохранение",
+      "family": "G11",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Сечение создаётся документированным маршрутом QI(IKompasDocument3D -> IDynamicCrossSectionsManager) -> AddDynamicCrossSection -> AddStep(ksDCSTByOffsetPlane) -> Parameters -> QI(ByOffsetPlane) -> OffsetPlane -> QI(IPlane3DByOffset) -> BasePlane/Offset, затем section.Update(); читается обратно число сечений и шагов, вид шага, способ построения плоскости, имя базовой плоскости, смещение и направление; переживает save -> close -> open. Отказы: не 3D-документ, несуществующая ссылка плоскости, устаревшая ревизия, второе сечение на документ."
+    },
+    {
+      "ref": "G11.sections.mode_snapshot",
+      "title": "Режим сечения виден на снимке и выключается обратно",
+      "family": "G11",
+      "queue": "E4",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Сечение - отображение, поэтому доказывается снимком: растр BMP при включённом режиме отличается от снимка без режима (измерено 11,5 % различающихся байтов, порог приёмки 1 %), выключение режима возвращает исходный снимок (0 различающихся байтов). Режим читается обратно после записи. Снимок снимает существующий kompas_export_image."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.api7.sections_interface",
+      "title": "IDynamicCrossSectionsManager как дополнительный интерфейс IKompasDocument3D",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen"
+      ],
+      "gap": "Интерфейс получается ТОЛЬКО документированным QI от IKompasDocument3D (страница называет «Версия Компас v18.1»); работает и у детали, и у сборки. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом. Проверяется группой --sections-only (SEC-01, SEC-11)."
+    }
+  ],
+  "explicitly_out_of_scope": [
+    "Повёрнутая плоскость шага (ksDCSTByRotatedPlane, Plane - IPlane3DByAngle): второй AddDynamicCrossSection в этой версии возвращает пусто, поэтому второй вид шага пробой не подтверждён и в продукт не вошёл.",
+    "Произвольная плоскость шага (ksDCSTByFreePlane, LocalCoordinateSystem - ILocalCoordinateSystem), зона (ksDCSTByZone) и граничные точки (ksDCSTByBorderPoints) - вне объёма наряда по его §1.",
+    "Разрезы и сечения чертежа (ksCutLineParam, ksCreateSheetSectionView, ksAssociationViewParam.section) - отдельный домен, вне профиля.",
+    "Удаление сечения в продукте: Delete() отвечает FALSE, хотя сечение удаляется, поэтому подтверждение возможно только счётчиком; инструмент удаления этим выпуском не заведён.",
+    "Второе сечение на документ: измерено, что AddDynamicCrossSection возвращает пусто и при существующем сечении, и после удаления первого.",
+    "Чтение направления шага числами: справка даёт только метод ReverseDirection() без обратного свойства; направление читается как признак IPlane3DByOffset.Direction."
+  ]
+}

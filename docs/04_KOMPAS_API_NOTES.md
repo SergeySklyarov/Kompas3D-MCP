@@ -7251,3 +7251,36 @@ API5 у него нет: `GetDefinition()` не даёт объекта, из к
 **Габарит как доказательство не годится.** `ksBody.GetGabarit` у компонента отвечает в координатах
 самого компонента (оба компонента дают одинаковый габарит и в собранном, и в разнесённом виде), поэтому
 разнесение по габариту тела не видно; видно по `GetSummMatrix`.
+
+### §4.100. Динамическое сечение модели: маршрут записи, видимость на снимке и одно сечение на документ (живое измерение 21.10.2026, наряд `OMEGA_G11_SECTIONS`)
+
+**Маршрут.** `IDynamicCrossSectionsManager` - «дополнительный» интерфейс `IKompasDocument3D`
+(`idynamiccrosssectionsmanager.html`, «Версия Компас v18.1»), получается только `QueryInterface`, то
+есть приведением перенесённого `IKompasDocument3D`; работает и у детали, и у сборки. Сечение создаётся
+`AddDynamicCrossSection()`, шаг - `AddStep(ksDynamicCrossSectionStepBuildingTypeEnum)`
+(`idynamiccrosssection_addstep.html`), входы шага - `BuildingType` и `Parameters` (`IKompasAPIObject`,
+только чтение), поэтому конкретный вид параметров получается приведением к
+`IDynamicCrossSectionStepParametersByOffsetPlane`. У него `BaseStep` (чтение и запись),
+`PlaneBuildingType` (`ksCrossSectionPlaneBuildingTypeEnum`, чтение и запись), `OffsetPlane` (**только
+чтение**, тип `IPlane3DByOffset`) и метод `ReverseDirection()` (`BOOL`, не свойство). Плоскость
+настраивается через собственный интерфейс объекта: `IPlane3DByOffset.BasePlane`, `.Offset`,
+`.Direction`.
+
+**Что измерено.** Сечение и шаг входят в модель; читаются обратно `DynamicCrossSectionsCount` = 1,
+`StepsCount` = 1, `BuildingType` = `ksDCSTByOffsetPlane`, `PlaneBuildingType` =
+`ksCrossSectionPlaneByModelPlane`, `BasePlane.Name` = «Плоскость XY», `Offset` = 5 мм. `ReverseDirection()`
+отвечает `TRUE`. `IPlane3DByOffset.Update()` при этом отвечает **`FALSE`**, а записанные значения
+применяются - применяет `IDynamicCrossSection.Update()`, поэтому подтверждение берётся чтением обратно
+после него, а не по возвращаемому значению плоскости.
+
+**Снимок сечение показывает - и в невидимом экземпляре.** Растр BMP (200 dpi, 1 759 446 байт) без
+режима, в режиме и после выключения: в режиме различается **11,5 %** байтов, после выключения - **0**.
+Сечение - отображение, поэтому единственное доказательство его наличия - снимок; геометрия не меняется
+вовсе.
+
+**Одно сечение на документ.** Второй `AddDynamicCrossSection()` вернул пусто и когда сечение уже было, и
+после удаления первого (`Delete()` при этом вернул `FALSE`, а счётчик стал 0 - удаление подтверждается
+счётчиком, не возвращаемым значением). Поэтому второй вид шага (повёрнутая плоскость, у которой
+`Plane` - `IPlane3DByAngle`) пробой не подтверждён и в продукт не вошёл.
+
+**Сохранение.** `save` → `reopen` сохраняет сечение, шаг, смещение и режим.

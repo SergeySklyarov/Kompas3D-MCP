@@ -803,6 +803,9 @@ RUN_GROUPS = (
     ("dismantle", "dismantle", "dismantle-acceptance.json",
      "Приёмка DSM: разнесённый вид сборки - режим, шаги, разнесение по матрице компонента, "
      "save -> reopen и отказы (наряд G9, профиль dismantle-minimal-v1)"),
+    ("sections", "sections", "sections-acceptance.json",
+     "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
+     "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -850,6 +853,7 @@ ALL_GROUPS_EXTRA = (
     ("catalog", ["--catalog-only"]),
     ("copy_geometry", ["--copy-geometry-only"]),
     ("dismantle", ["--dismantle-only"]),
+    ("sections", ["--sections-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -15928,6 +15932,9 @@ def main():
     # Домен РАЗНЕСЕНИЯ (наряд G9, профиль `dismantle-minimal-v1`): одна группа DSM на своём сеансе -
     # клетка матрицы обязана находиться по ИМЕНИ строки (`DSM.<NN>.<действие>`).
     dismantle_only = "--dismantle-only" in sys.argv
+    # Домен СЕЧЕНИЙ (наряд G11, профиль `sections-minimal-v1`): одна группа SEC на своём сеансе -
+    # клетка матрицы обязана находиться по ИМЕНИ строки (`SEC.<NN>.<действие>`).
+    sections_only = "--sections-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16072,6 +16079,7 @@ def main():
         "threads": threads_only,
         "copy_geometry": copy_geometry_only,
         "dismantle": dismantle_only,
+        "sections": sections_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -16652,6 +16660,14 @@ def main():
 
         if dismantle_only:
             dismantle_checks(client, rep, app_id, workdir)
+        if sections_only:
+            sections_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -49231,6 +49247,277 @@ def copy_geometry_checks(client, rep, app_id, workdir):
             "удаления копии нет")
 
 
+def sections_checks(client, rep, app_id, workdir):
+    """SEC-01…SEC-13 - динамическое сечение модели (наряд G11, профиль `sections-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Сечение - ОТОБРАЖЕНИЕ, а не геометрия, поэтому оно доказывается СНИМКОМ:
+    растровый снимок при включённом режиме отличается от снимка без режима, а выключение режима
+    возвращает исходный снимок. Мера - доля различающихся байтов несжатого BMP; порог `VISIBLE_SHARE`
+    назван здесь, а не выведен из ответа вызова. Чтение обратно доказывает, что записано то, что
+    просили: число сечений и шагов, вид шага, опора, смещение, направление.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Повёрнутая и произвольная плоскости, зона и граничные точки - вне объёма наряда:
+    второй `AddDynamicCrossSection` в этом выпуске возвращает пусто (измерено), поэтому второй вид шага
+    пробой не подтверждён. Удаления сечения в продукте нет: `Delete()` не подтверждает себя
+    возвращаемым значением, счётчик подтверждает.
+    """
+    import os
+
+    VISIBLE_SHARE = 0.01
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def plate(doc, name):
+        """Деталь 40x40x10 в файле `name` - по ней строится сечение."""
+        sk, _c = call("kompas_create_sketch", {"document_id": doc,
+                                               "expected_revision": revision(doc),
+                                               "plane": {"base": "xy"}})
+        sketch = result(sk).get("sketch_ref") or result(sk).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        call("kompas_edit_sketch", {"sketch_ref": sketch, "expected_revision": revision(doc),
+                                    "mode": "append",
+                                    "entities": [{"kind": "rectangle", "start_mm": [0, 0],
+                                                  "width_mm": 40, "height_mm": 40}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        _e, code = call("kompas_extrude", {"sketch_ref": sketch,
+                                           "expected_revision": revision(doc),
+                                           "operation": "base", "end_condition": "blind",
+                                           "depth_mm": 10, "direction": "positive"})
+        path = os.path.join(workdir, name)
+        _e2, saved = call("kompas_save_document", {"document_id": doc,
+                                                   "expected_revision": revision(doc),
+                                                   "target_path": path})
+        return path, code or saved
+
+    def sections(doc):
+        env, code = call("kompas_list_sections", {"document_id": doc})
+        return result(env), code
+
+    def snapshot(doc, label):
+        """Растр BMP в файл: несжатый формат, поэтому два снимка сравниваются побайтно."""
+        path = os.path.join(workdir, "sec-shot-" + label + ".bmp")
+        if os.path.exists(path):
+            os.remove(path)
+        env, code = call("kompas_export_image", {"document_id": doc,
+                                                 "expected_revision": revision(doc),
+                                                 "format": "bmp", "resolution": 200,
+                                                 "save_path": path,
+                                                 "return_image_content": False})
+        if code or not os.path.exists(path):
+            return None, code
+        with open(path, "rb") as handle:
+            return handle.read(), code
+
+    def share(left, right):
+        """Доля различающихся байтов; разная длина - разная картинка, а не измеренная разница."""
+        if not left or not right or len(left) != len(right):
+            return None
+        return sum(1 for a, b in zip(left, right) if a != b) / len(left)
+
+    # ===== SEC-01: обнаружение =====
+    registry = (client.catalog() or {}).get("registry") or []
+    names = ("kompas_create_section", "kompas_set_section_mode", "kompas_list_sections")
+    missing = [n for n in names if n not in registry]
+    rep.add("SEC-01.discovery", "три инструмента сечения есть в реестре каталога",
+            "PASS" if not missing else "FAIL",
+            f"в реестре={len(registry)}; нет={missing}")
+    entry = entry_of(client, "kompas_create_section")
+    props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    need = {"document_id", "expected_revision", "operation_id", "steps", "mode", "fill_cut_planes"}
+    rep.add("SEC-01.schema", "схема создания несёт шаги, режим и закраску",
+            "PASS" if entry is not None and not (need - set(props)) else "FAIL",
+            f"полей={props}")
+
+    # ===== SEC-02: деталь и сечение =====
+    env, _c = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    part = doc_id(env)
+    part_path, part_code = plate(part, "sec-part.m3d") if part else (None, "no_document")
+    created, created_code = call("kompas_create_section",
+                                 {"document_id": part,
+                                  "expected_revision": revision(part),
+                                  "steps": [{"plane": {"base": "xy", "offset_mm": 5},
+                                             "reverse_direction": False}]}) if part else ({}, "no_document")
+    created_result = result(created)
+    rep.add("SEC-02.create", "сечение детали создано и подтверждено счётчиком",
+            "PASS" if not created_code and created_result.get("sections_count_after") == 1 else "FAIL",
+            f"до={created_result.get('sections_count_before')} "
+            f"после={created_result.get('sections_count_after')} ошибка={created_code} деталь={part_code}")
+
+    # ===== SEC-03: чтение обратно =====
+    read, read_code = sections(part) if part else ({}, "no_document")
+    rows = read.get("sections") or []
+    step = ((rows[0].get("steps") or [{}])[0]) if rows else {}
+    ok_read = (not read_code and read.get("sections_count") == 1
+               and step.get("step_kind") == "ksDCSTByOffsetPlane"
+               and isinstance(step.get("offset_mm"), (int, float))
+               and abs(step["offset_mm"] - 5) <= 0.01)
+    rep.add("SEC-03.read", "чтение обратно: вид шага, опора и смещение 5 мм",
+            "PASS" if ok_read else "FAIL",
+            f"сечений={read.get('sections_count')} шагов={rows[0].get('steps_count') if rows else None} "
+            f"вид={step.get('step_kind')} опора={step.get('base_plane_name')} "
+            f"смещение={step.get('offset_mm')} направление={step.get('direction')} ошибка={read_code}")
+
+    # ===== SEC-04: режим =====
+    on, on_code = call("kompas_set_section_mode",
+                       {"document_id": part, "expected_revision": revision(part), "mode": True}) \
+        if part else ({}, "no_document")
+    rep.add("SEC-04.mode_on", "режим сечения включён и прочитан обратно",
+            "PASS" if not on_code and result(on).get("mode") is True else "FAIL",
+            f"режим={result(on).get('mode')} ошибка={on_code}")
+
+    # ===== SEC-05: снимок в режиме отличается =====
+    if part:
+        call("kompas_set_section_mode",
+             {"document_id": part, "expected_revision": revision(part), "mode": False})
+        base_shot, _c2 = snapshot(part, "off")
+        call("kompas_set_section_mode",
+             {"document_id": part, "expected_revision": revision(part), "mode": True})
+        on_shot, _c3 = snapshot(part, "on")
+    else:
+        base_shot = on_shot = None
+    visible = share(base_shot, on_shot)
+    rep.add("SEC-05.snapshot_on",
+            f"снимок в режиме отличается от снимка без режима (порог {VISIBLE_SHARE})",
+            "PASS" if visible is not None and visible > VISIBLE_SHARE else
+            ("UNKNOWN" if visible is None else "FAIL"),
+            f"доля_различий={visible} байт_без={len(base_shot) if base_shot else None} "
+            f"байт_в_режиме={len(on_shot) if on_shot else None}")
+
+    # ===== SEC-06: выключение возвращает исходный снимок =====
+    if part:
+        call("kompas_set_section_mode",
+             {"document_id": part, "expected_revision": revision(part), "mode": False})
+        back_shot, back_code = snapshot(part, "back")
+    else:
+        back_shot, back_code = None, "no_document"
+    back = share(base_shot, back_shot)
+    rep.add("SEC-06.snapshot_off",
+            f"после выключения режима снимок совпадает с исходным (порог {VISIBLE_SHARE})",
+            "PASS" if back is not None and back <= VISIBLE_SHARE else
+            ("UNKNOWN" if back is None else "FAIL"),
+            f"доля_различий={back} ошибка={back_code}")
+
+    # ===== SEC-07: save -> reopen =====
+    reopen_errors = []
+    if part:
+        _e, save_code = call("kompas_save_document", {"document_id": part,
+                                                    "expected_revision": revision(part),
+                                                    "target_path": part_path})
+        if save_code:
+            reopen_errors.append(save_code)
+        call("kompas_close_document", {"document_id": part,
+                                       "expected_revision": revision(part)})
+        opened_env, open_code = call("kompas_open_document", {"application_id": app_id,
+                                                              "path": part_path})
+        if open_code:
+            reopen_errors.append(open_code)
+        else:
+            part = doc_id(opened_env) or part
+    after, after_code = sections(part) if part else ({}, "no_document")
+    after_rows = after.get("sections") or []
+    after_step = ((after_rows[0].get("steps") or [{}])[0]) if after_rows else {}
+    rep.add("SEC-07.reopen", "сечение и смещение пережили save -> reopen",
+            "PASS" if not reopen_errors and after.get("sections_count") == 1
+            and isinstance(after_step.get("offset_mm"), (int, float))
+            and abs(after_step["offset_mm"] - 5) <= 0.01 else "FAIL",
+            f"сечений={after.get('sections_count')} смещение={after_step.get('offset_mm')} "
+            f"режим={after.get('mode')} ошибки={reopen_errors or after_code}")
+
+    # ===== SEC-08: направление ReverseDirection =====
+    env, _c = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    reverse_part = doc_id(env)
+    if reverse_part:
+        plate(reverse_part, "sec-reverse.m3d")
+    reversed_env, reversed_code = call("kompas_create_section",
+                                       {"document_id": reverse_part,
+                                        "expected_revision": revision(reverse_part),
+                                        "steps": [{"plane": {"base": "xy", "offset_mm": 3},
+                                                   "reverse_direction": True}]}) \
+        if reverse_part else ({}, "no_document")
+    rep.add("SEC-08.reverse", "сечение с reverse_direction создано без отказа",
+            "PASS" if not reversed_code
+            and result(reversed_env).get("sections_count_after") == 1 else "FAIL",
+            f"сечений={result(reversed_env).get('sections_count_after')} ошибка={reversed_code}")
+
+    # ===== SEC-09: сечение сборки =====
+    env, _c = call("kompas_create_document",
+                   {"application_id": app_id, "kind": "assembly", "name": "SEC"})
+    asm = doc_id(env)
+    if asm and part_path:
+        client.tool("kompas_insert_component",
+                    {"document_id": asm, "expected_revision": revision(asm),
+                     "source_path": part_path, "fixed": False,
+                     "transform": {"origin_mm": [0, 0, 0], "x_axis": [1, 0, 0],
+                                   "y_axis": [0, 1, 0]},
+                     "operation_id": str(uuid.uuid4())}, timeout=300)
+    asm_env, asm_code = call("kompas_create_section",
+                             {"document_id": asm, "expected_revision": revision(asm),
+                              "steps": [{"plane": {"base": "xy", "offset_mm": 5}}]}) \
+        if asm else ({}, "no_document")
+    asm_read, _c = sections(asm) if asm else ({}, "no_document")
+    rep.add("SEC-09.assembly", "сечение сборки создано тем же маршрутом",
+            "PASS" if not asm_code and asm_read.get("sections_count") == 1 else "FAIL",
+            f"сечений={asm_read.get('sections_count')} ошибка={asm_code}")
+
+    # ===== SEC-10: второе сечение отвергается =====
+    second_env, second_code = call("kompas_create_section",
+                                   {"document_id": asm, "expected_revision": revision(asm),
+                                    "steps": [{"plane": {"base": "xy", "offset_mm": 5}}]}) \
+        if asm else ({}, "no_document")
+    rep.add("SEC-10.second", "второе сечение отвергается CAPABILITY_UNAVAILABLE (измеренное ограничение)",
+            "PASS" if second_code == "CAPABILITY_UNAVAILABLE" else "FAIL",
+            f"код={second_code}")
+
+    # ===== SEC-11: не 3D-документ =====
+    env, _c = call("kompas_create_document",
+                   {"application_id": app_id, "kind": "drawing", "name": "SEC-DRW"})
+    drawing = doc_id(env)
+    drawing_env, drawing_code = call("kompas_create_section",
+                                     {"document_id": drawing,
+                                      "expected_revision": revision(drawing),
+                                      "steps": [{"plane": {"base": "xy"}}]}) \
+        if drawing else ({}, "no_document")
+    rep.add("SEC-11.not_3d", "чертёж отвергается названным кодом",
+            "PASS" if drawing_code in ("CAPABILITY_UNAVAILABLE", "INVALID_ARGUMENT",
+                                       "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"код={drawing_code}")
+
+    # ===== SEC-12: несуществующая плоскость =====
+    bad_env, bad_code = call("kompas_create_section",
+                             {"document_id": reverse_part,
+                              "expected_revision": revision(reverse_part),
+                              "steps": [{"plane": {"reference": "plane:nope"}}]}) \
+        if reverse_part else ({}, "no_document")
+    rep.add("SEC-12.bad_plane", "несуществующая ссылка на плоскость отвергается",
+            "PASS" if bad_code in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL",
+            f"код={bad_code}")
+
+    # ===== SEC-13: устаревшая ревизия =====
+    stale_env, stale_code = call("kompas_create_section",
+                                 {"document_id": part, "expected_revision": 99999,
+                                  "steps": [{"plane": {"base": "xy"}}]}) \
+        if part else ({}, "no_document")
+    rep.add("SEC-13.stale_revision", "устаревший expected_revision отвергается REVISION_CONFLICT",
+            "PASS" if stale_code == "REVISION_CONFLICT" else "FAIL",
+            f"код={stale_code}")
+
+
 def dismantle_checks(client, rep, app_id, workdir):
     """DSM-01…DSM-13 - разнесённый вид сборки (наряд G9, профиль `dismantle-minimal-v1`).
 
@@ -49627,6 +49914,7 @@ EXTRA_GROUP_CHECKS = {
     "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
     "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
+    "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
 }
 
 

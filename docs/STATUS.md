@@ -29,13 +29,13 @@
   чертёж (`WRONG_DOCUMENT_KIND`), несуществующая плоскость (`STALE_REFERENCE`), устаревшая ревизия
   (`REVISION_CONFLICT`), второе сечение (на детали `CAPABILITY_UNAVAILABLE`, на сборке счётчик 2 —
   оба исхода названы). Профиль `sections-minimal-v1` закрыт (`acceptance-levels.py`: `COMPLETE`,
-  режимы 2/2, зависимости 1/1, `problems=[]`), семейство `G11` в каталоге. Зачётный `--all` на
-  `b747b8c` (Release, дерево чистое, 47 минут): **PASS 1812 / NAMED 6 / UNKNOWN 3 / FAIL 0**, exit 0;
+  режимы 2/2, зависимости 1/1,   `problems=[]`), семейство `G11` в каталоге. Зачётный `--all` на
+  `5201f8d` (Release, дерево чистое, 36 минут): **PASS 1812 / NAMED 6 / UNKNOWN 3 / FAIL 0**, exit 0;
   сверка строк с принятым `8418acf` — 1807 → 1821, прежних строк не потеряно, разошлись только 14
   новых `SEC-*`. `--self-test` 82/0, стражи 0/0/0. Вне профиля: повёрнутая и произвольная плоскости
   шага, зона и граничные точки, удаление сечения, разрезы чертежа. `docs/decisions/sections.md`,
   `docs/04_KOMPAS_API_NOTES.md` §4.100, отчёт `OMEGA_G11_SECTIONS_REPORT_20261021.md`, доказательства
-  `docs/acceptance/evidence/20261021-sections-b747b8c/`.
+  `docs/acceptance/evidence/20261021-sections-5201f8d/`.
 - **Разнесённый вид сборки: два инструмента и группа приёмки (наряд `OMEGA_G9_DISMANTLE`, 21.10.2026,
   сдан):** `kompas_set_dismantle` (MUTATION: режим, шаги, удаление по номеру, очистка) и
   `kompas_list_dismantle_steps` (READ). Маршрут документированный и измеренный:

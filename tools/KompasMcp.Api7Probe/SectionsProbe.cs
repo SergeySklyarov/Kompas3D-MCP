@@ -73,8 +73,8 @@ internal sealed class SectionsProbe
             ReadBack(manager, section);
             Snapshots(manager, _part5!);
             SaveReopen();
-            DeleteSection(manager, section);
             RotatedPlaneRoute(manager);
+            DeleteSection(manager, section);
             AssemblyRoute();
         }
         catch (Exception ex)

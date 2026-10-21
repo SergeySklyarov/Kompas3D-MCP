@@ -258,6 +258,15 @@ public static class WorkerCommands
     public const string SetDismantle = "asm.set_dismantle";
     public const string ListDismantleSteps = "asm.list_dismantle_steps";
 
+    // ── block G11 "dynamic cross-sections" (profile sections-minimal-v1) ──
+    // model.create_section → SEC-01/SEC-02, model.set_section_mode → SEC-03, model.list_sections → SEC-04.
+    // All three rest on the documented QI(IKompasDocument3D → IDynamicCrossSectionsManager); a step's plane
+    // is an OBJECT handed out by the parameters (IPlane3DByOffset), because the interface has no numeric
+    // plane input.
+    public const string CreateSection = "model.create_section";
+    public const string SetSectionMode = "model.set_section_mode";
+    public const string ListSections = "model.list_sections";
+
     // ── block C2 "minimal mates" (profile mates-minimal-v1) ──
     // mate.create → MATE-01, mate.list → MATE-02, mate.set_parameter → MATE-03,
     // mate.set_fixed → MATE-04, mate.delete → MATE-05. MATE-06 (component placement after a mate)

@@ -542,6 +542,80 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // ===== dynamic cross-sections (block G11, profile sections-minimal-v1) =====
+            // Route measured from the help over the wire and from the installed type library: the manager
+            // is an ADDITIONAL interface of IKompasDocument3D, the step's plane is handed out by the
+            // parameters and configured through IPlane3DByOffset.
+            // History: docs/decisions/sections.md#catalog
+            Mutation("kompas_create_section", "Создать динамическое сечение модели",
+                "Создаёт динамическое сечение детали или сборки документированным "
+                + "QI(IKompasDocument3D → IDynamicCrossSectionsManager) → AddDynamicCrossSection → "
+                + "AddStep(ksDCSTByOffsetPlane) → Parameters → QI(ByOffsetPlane) → OffsetPlane → "
+                + "QI(IPlane3DByOffset) → BasePlane/Offset, затем section.Update(). Плоскость шага "
+                + "ЗАДАЁТСЯ ОБЪЕКТОМ: справка отдаёт OffsetPlane только для чтения, поэтому плоскость "
+                + "настраивается через её собственный интерфейс, а адрес опоры - тот же, что у эскиза: "
+                + "base (xy/xz/yz) со смещением offset_mm ЛИБО reference на существующую плоскость. "
+                + "ВИДЫ ШАГА: этим выпуском поддержан только шаг смещённой плоскостью; повёрнутая "
+                + "плоскость, произвольная плоскость, зона и граничные точки не входят. ОДНО СЕЧЕНИЕ НА "
+                + "ДОКУМЕНТ: измерено, что второй AddDynamicCrossSection возвращает пусто, в том числе "
+                + "после удаления первого, поэтому повтор отвергается CAPABILITY_UNAVAILABLE. СЕЧЕНИЕ - "
+                + "ОТОБРАЖЕНИЕ: при включённом режиме снимок kompas_export_image отличается от снимка "
+                + "без режима (измерено), а выключение режима возвращает исходный снимок. save → reopen "
+                + "сохраняет сечение и режим.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mode", Sch.Nullable(Sch.Bool(
+                        "Режим отображения сечения включён (true) или выключен (false). Не задан - режим "
+                        + "не меняется."))),
+                    ("fill_cut_planes", Sch.Nullable(Sch.Bool(
+                        "Закрашивать плоскость разреза. Не задан - значение остаётся тем, что даёт "
+                        + "модель."))),
+                    ("steps", Sch.Nullable(Sch.Arr(
+                        Sch.ObjAll(
+                            "Шаг сечения",
+                            new (string, JsonObject)[]
+                            {
+                                ("plane", PlaneSchema(
+                                    "Плоскость шага: ИМЕННО ОДНО из двух — base (xy/xz/yz, при "
+                                    + "необходимости со смещением offset_mm) ЛИБО reference на "
+                                    + "существующую плоскость. Оба поля сразу или ни одного — "
+                                    + "INVALID_ARGUMENT до обращения к ядру.")),
+                                ("reverse_direction", Sch.Bool(
+                                    "Резать в обратную сторону той же плоскостью "
+                                    + "(ReverseDirection(), измерено: возвращает true).", false)),
+                            },
+                            "Один шаг: плоскость и направление разреза."),
+                        "Шаги сечения. Не задано или пусто - сечение создаётся без шагов.", 0, 64)))),
+                WorkerCommands.CreateSection,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_section_mode", "Включить или выключить режим сечения модели",
+                "Включает и выключает отображение динамического сечения документированным "
+                + "IDynamicCrossSectionsManager.DynamicCrossSectionModeOn и подтверждает запись чтением "
+                + "обратно: несовпадение - CAPABILITY_UNAVAILABLE, а не «записано». Сам снимок снимает "
+                + "kompas_export_image: при включённом режиме он показывает сечение (измерено).",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mode", Sch.Bool("Режим сечения включён (true) или выключен (false)."))),
+                WorkerCommands.SetSectionMode,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_list_sections", "Сечения модели",
+                "Читает режим и динамические сечения документированным маршрутом "
+                + "DynamicCrossSectionsCount / DynamicCrossSection[i] / StepsCount / Step[j] / Parameters / "
+                + "OffsetPlane. Для каждого шага возвращаются вид шага, способ построения плоскости, имя "
+                + "базовой плоскости, смещение в мм и направление. Читается то, что записано: значения "
+                + "берутся из модели, а не из запроса. Виды шага, кроме смещённой плоскости, этим "
+                + "выпуском не создаются и в перечне не встречаются.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListSections,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             // ===== interference and gaps (block G1, profile assembly-interference-minimal-v1) =====
             // Routes measured from the help over the wire and from the installed type library; both
             // commands only READ, so neither declares operation_id.

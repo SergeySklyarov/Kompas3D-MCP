@@ -220,6 +220,11 @@ public static class WorkerCommandTable
         // rebuild; reading them re-reads every step object.
         Cad(WorkerCommands.SetDismantle, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.ListDismantleSteps, WorkerAction.Read, 240_000);
+        // A section step is one COM call per step plus the section update and the rebuild; reading walks
+        // every section, step and plane object.
+        Cad(WorkerCommands.CreateSection, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.SetSectionMode, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.ListSections, WorkerAction.Read, 240_000);
         // Interference makes one COM call per body pair, plus a second call per intersecting pair when
         // faces are asked for.
         Cad(WorkerCommands.CheckInterference, WorkerAction.Read, 240_000);

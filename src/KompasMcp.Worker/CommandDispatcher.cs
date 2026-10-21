@@ -420,6 +420,9 @@ public sealed class CommandDispatcher
             WorkerCommands.DeleteComponent => _sta.Run(() => DeleteComponent(request), "asm.delete_component", cancellationToken),
             WorkerCommands.SetDismantle => _sta.Run(() => SetDismantle(request), "asm.set_dismantle", cancellationToken),
             WorkerCommands.ListDismantleSteps => _sta.Run(() => ListDismantleSteps(request), "asm.list_dismantle_steps", cancellationToken),
+            WorkerCommands.CreateSection => _sta.Run(() => CreateSection(request), "model.create_section", cancellationToken),
+            WorkerCommands.SetSectionMode => _sta.Run(() => SetSectionMode(request), "model.set_section_mode", cancellationToken),
+            WorkerCommands.ListSections => _sta.Run(() => ListSections(request), "model.list_sections", cancellationToken),
             WorkerCommands.CheckInterference => _sta.Run(() => CheckInterference(request), "asm.check_interference", cancellationToken),
             WorkerCommands.MeasureGap => _sta.Run(() => MeasureGap(request), "asm.measure_gap", cancellationToken),
             WorkerCommands.ListMates => _sta.Run(() => ListMates(request), "mate.list", cancellationToken),
@@ -1578,6 +1581,25 @@ public sealed class CommandDispatcher
 
     private object? ListDismantleSteps(IpcFrame request) =>
         _session.ListDismantleSteps(Argument<ListDismantleStepsCommand>(request));
+
+    // The section writes the model (steps and mode), so it bumps the revision like every other mutation;
+    // reading it only READs.
+    private object? CreateSection(IpcFrame request)
+    {
+        var command = Argument<CreateSectionCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateSection(command), document);
+    }
+
+    private object? SetSectionMode(IpcFrame request)
+    {
+        var command = Argument<SetSectionModeCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetSectionMode(command), document);
+    }
+
+    private object? ListSections(IpcFrame request) =>
+        _session.ListSections(Argument<ListSectionsCommand>(request));
 
     // Both G1 commands only READ: they do not pass through TaggedAfter (no control copy, no revision
     // bump), exactly like the other read commands of the assembly domain.

@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 102.
+Всего инструментов: 105.
 
 | Инструмент | Путь вызова | Назначение | Что делает |
 |---|---|---|---|
@@ -36,6 +36,9 @@
 | `kompas_delete_component` | run | Удалить компонент сборки | Удаляет компонент ВЕРХНЕГО уровня из сборки документированным ksDocument3D.DeleteObject (страница «Удалить объект: деталь, операцию, сопряжение»). |
 | `kompas_set_dismantle` | run | Включить разнесённый вид и записать шаги разнесения | Включает и выключает разнесённый вид сборки (IAssemblyDocument.DismantleMode) и записывает шаги разнесения документированным QI(IAssemblyDocument → IDismantleParameters) → AddDismantleStep/Parts/Distance/DirectionObject → Update. |
 | `kompas_list_dismantle_steps` | run | Шаги разнесения сборки | Читает режим разнесённого вида и шаги разнесения документированным маршрутом DismantleStepsCount / DismantleStep[i] / Parts / Distance. |
+| `kompas_create_section` | run | Создать динамическое сечение модели | Создаёт динамическое сечение детали или сборки документированным QI(IKompasDocument3D → IDynamicCrossSectionsManager) → AddDynamicCrossSection → AddStep(ksDCSTByOffsetPlane) → Parameters → QI(ByOffsetPlane) → OffsetPlane →… |
+| `kompas_set_section_mode` | run | Включить или выключить режим сечения модели | Включает и выключает отображение динамического сечения документированным IDynamicCrossSectionsManager.DynamicCrossSectionModeOn и подтверждает запись чтением обратно: несовпадение - CAPABILITY_UNAVAILABLE, а не «записано». |
+| `kompas_list_sections` | run | Сечения модели | Читает режим и динамические сечения документированным маршрутом DynamicCrossSectionsCount / DynamicCrossSection[i] / StepsCount / Step[j] / Parameters / OffsetPlane. |
 | `kompas_check_interference` | run | Пересечения компонентов сборки | Проверяет тела компонентов сборки по парам документированным ksBody.CheckIntersectionWithBody и называет тип каждого пересечения по Intersection_Type (itBody - пересечение образует тело). |
 | `kompas_measure_gap` | run | Минимальное расстояние между компонентами | Измеряет минимальное расстояние (и угол, где он определён) между двумя компонентами сборки или их гранями документированным IMeasurement3D: справка прямо называет комбинации «тело и компонент», «компонент и компонент». |
 | `kompas_list_mates` | run | Сопряжения сборки | Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта, подтверждение Valid и - для передачи - MotionType/Scale/Direction. |

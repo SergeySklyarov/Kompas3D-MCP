@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-21T15:23:33+02:00, часы машины +02:00",
+  "date": "2026-10-21T19:45:44+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "91dbd14b64b15456150214ca4bcb093dbe013ad66bac59cbd0d2f8f9a8ca78c2",
-   "host_dll_sha256": "4c1e4f4c55739ebccc9e57c4ae7e1563425471eeedbcc660973d09363c2849dc",
+   "host_sha256": "45353e707461dbc091c2f4ce6fa566b6f698587a647210fbf97b37b888545619",
+   "host_dll_sha256": "e9f1028649085b7ed8a29e97709f8eaacd1444aca65a6d977f20329118ecce66",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "f9be455548380035030d3e9771db5f835fb549b7305fcbba90a0feac57acf749",
-   "worker_dll_sha256": "29850edecdf547d21216b825eb05cb4f4c7e67332e7acce5862e960e70c62a86",
-   "adapter_sha256": "64fb5182688668ec7a045b0a34d3dfc342fb1a7db3cb62283f48784796934ea6",
-   "source_commit": "5201f8d",
+   "worker_sha256": "c4210efe0c336dcc3b0716c075b1115e4f58261dc7d28532c5c737552a1c7756",
+   "worker_dll_sha256": "ab523612c4ab00a418ebf3f0c22450072370c25964ebe44d7b3bdec635b53569",
+   "adapter_sha256": "f95f49da05b6d719f768d7381683829a74d1165b1a150e38f6d113afb20f2c68",
+   "source_commit": "97b79b8",
    "source_tree_dirty": false,
    "tools_count": 14,
-   "rows_complete_run": 1821,
+   "rows_complete_run": 1827,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -155,9 +155,9 @@
    "rows_action_without_dedicated_row": 14,
    "rows_actions_without_required_calls": 18,
    "rows_status_lowered_by_unsupported_actions": 18,
-   "acceptance_rows": 1821,
-   "acceptance_calls_journal": 17247,
-   "acceptance_rows_with_call_window": 1821,
+   "acceptance_rows": 1827,
+   "acceptance_calls_journal": 17250,
+   "acceptance_rows_with_call_window": 1827,
    "required_of_mismatches_matrix_vs_profile": 11,
    "dependency_verdict_control_proved": null
   }
@@ -379,7 +379,7 @@
   },
   {
    "name": "kompas_health",
-   "description_len": 108,
+   "description_len": 236,
    "properties_on_wire": 2,
    "required_on_wire": [
     "detail"
@@ -41283,25 +41283,25 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
-  "fresh": false,
-  "lag_seconds": -1145.9,
-  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
-  "reason": "измерение старше своего входа"
+  "fresh": true,
+  "lag_seconds": 7312.5,
+  "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/KompasMcp.Api5Adapter.deps.json",
+  "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-b747b8c/wire.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-97b79b8/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
-  "fresh": false,
-  "lag_seconds": -159.4,
+  "fresh": true,
+  "lag_seconds": 15422.8,
   "newest_input": "coverage/solid-v24/matrix.json",
-  "reason": "измерение старше своего входа"
+  "reason": "свеж"
  },
  "reflection_access": {
   "entries": [
@@ -43178,7 +43178,7 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json",
+  "source": "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json",
   "rows_claiming_verified": 194,
   "rows_without_any_linked_row": [],
   "rows_contradicted_by_fail": [],
@@ -43342,7 +43342,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json"
    ]
   },
   {
@@ -43352,7 +43352,7 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json"
    ]
   },
   {
@@ -43362,7 +43362,7 @@
    "statement": "18 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto",
    "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json"
+    "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json"
    ]
   },
   {
@@ -43372,7 +43372,7 @@
    "statement": "14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json"
+    "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json"
    ]
   },
   {

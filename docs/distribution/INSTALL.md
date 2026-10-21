@@ -22,6 +22,28 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-KompasMcp.ps1 -Reg
 резервной копией `config.toml`. Подробно, вместе с ручным путём, обновлением, откатом и
 диагностикой: https://github.com/SergeySklyarov/Kompas3D-MCP/blob/main/docs/operator-guide/codex-setup.md
 
+## Обновление
+
+Тот же установщик, без `-Tag`: он ставит последний стабильный выпуск в `versions\<тег>` и
+переключает на него точку соединения `<InstallRoot>\current`, на которую указывает запись клиента.
+Поэтому запись клиента после обновления не меняется - в ней постоянный путь.
+
+    Install-KompasMcp.ps1 -RegisterCodex
+
+Новая версия заработает после перезапуска сервера в клиенте (в приложении - Restart, в IDE -
+Restart extension; CLI подхватит сам в новой сессии). Работающий Host старой версии обновление не
+трогает: он остаётся в своём каталоге `versions\<тег>` до перезапуска.
+
+Откат на уже установленную версию - `-UseInstalled -Tag <тег>`: каталог сверяется с манифестом, и
+переключается та же точка.
+
+    Install-KompasMcp.ps1 -UseInstalled -Tag v0.10.0 -RegisterCodex
+
+О доступном выпуске сервер сообщает сам: поле `update` в ответе `kompas_health` и одна строка в
+`initialize.instructions`. Проверка идёт в фоне, не чаще раза в сутки, и выключается ключом
+`update_check` или переменной `KOMPAS_MCP_UPDATE_CHECK=0`. Сервер ничего не скачивает и не ставит:
+обновление запускает пользователь или агент с его согласия.
+
 ## Установка вручную
 
 1. Распаковать архив в отдельный каталог версии. `KompasMcp.Host.exe` и `KompasMcp.Worker.exe`

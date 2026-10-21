@@ -17,7 +17,11 @@
     "Что сервер публикует в tools/list, ключом не выбирается: постоянный набор плюс",
     "kompas_find_operations, kompas_describe_operation и kompas_run, а КАЖДАЯ операция реестра",
     "вызывается через kompas_run. Прежний ключ catalog_mode удалён в 0.10.0: неизвестные ключи",
-    "сервер игнорирует, поэтому файл со старым ключом читается, но поведение не меняет."
+    "сервер игнорирует, поэтому файл со старым ключом читается, но поведение не меняет.",
+    "",
+    "update_check - единственный сетевой запрос, который сервер делает сам: раз в сутки GET на",
+    "api.github.com за последним стабильным выпуском, с User-Agent KompasMCP/<версия>. Пути, имена",
+    "пользователя и данные моделей не уходят. false (или KOMPAS_MCP_UPDATE_CHECK=0) - запроса нет."
   ],
   "read_only_roots": [
     "C:\\kompas-mcp\\read-only-models"
@@ -36,5 +40,6 @@
   "queue_capacity": 64,
   "sync_budget_ms": 40000,
   "operation_budget_ms": 120000,
-  "control_copy_directory": "C:\\kompas-mcp"
+  "control_copy_directory": "C:\\kompas-mcp",
+  "update_check": true
 }

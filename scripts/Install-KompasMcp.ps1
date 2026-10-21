@@ -193,7 +193,6 @@ function New-LocalConfig([string]$versionDir, [string]$configPath) {
     $dirs = @{
         sandbox = Join-Path $WorkRoot "sandbox"; export = Join-Path $WorkRoot "export"
         logs = Join-Path $InstallRoot "logs"; journal = Join-Path $InstallRoot "journal"
-        artifacts = Join-Path $InstallRoot "artifacts"
     }
     foreach ($d in @($dirs.Values) + $ro) {
         if (-not (Test-Path -LiteralPath $d)) {
@@ -209,7 +208,6 @@ function New-LocalConfig([string]$versionDir, [string]$configPath) {
     $template.log_path = Join-Path $dirs.logs "host.jsonl"
     $template.worker_log_path = Join-Path $dirs.logs "worker.jsonl"
     $template.journal_path = Join-Path $dirs.journal "operations.jsonl"
-    $template.artifact_directory = $dirs.artifacts
     $template.control_copy_directory = $InstallRoot
     $json = $template | ConvertTo-Json -Depth 5
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $configPath) | Out-Null
@@ -272,8 +270,20 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
         $list = Send "tools/list" @{}
         $names = @($list.result.tools | ForEach-Object { $_.name })
         $report.tools = $names.Count
-        if ($names.Count -eq [int]$manifest.tools_count) { Ok "tools/list: $($names.Count) инструментов (манифест: $($manifest.tools_count))" }
-        else { Bad "tools/list: $($names.Count), а в манифесте $($manifest.tools_count)"; $report.failed = $true }
+        # INVARIANT: tools/list publishes the FIXED catalog, not one tool per registry operation, so it
+        # is compared with the count the Host itself reports; the manifest counts SCHEMAS, i.e. the
+        # registry, and that number is compared with `operations`. One number for both said 14 against
+        # 105 and failed an install that was correct.
+        $caps = Send "tools/call" @{ name = "kompas_capabilities"; arguments = @{} }
+        $body = $caps.result.structuredContent.result
+        $published = [int]$body.tool_count
+        $operations = @($body.operations).Count
+        if (($names.Count -eq $published) -and ($operations -eq [int]$manifest.tools_count)) {
+            Ok "tools/list: $($names.Count) опубликованных, реестр $operations (манифест: $($manifest.tools_count))"
+        } else {
+            Bad "tools/list: $($names.Count) опубликованных при tool_count $published; реестр $operations, в манифесте $($manifest.tools_count)"
+            $report.failed = $true
+        }
         foreach ($tool in @("kompas_health", "kompas_session_status", "kompas_capabilities")) {
             $r = Send "tools/call" @{ name = $tool; arguments = @{} }
             $text = ($r.result.content | Where-Object { $_.type -eq "text" } | Select-Object -First 1).text
@@ -384,7 +394,10 @@ function Set-CurrentLink([string]$target) {
             Stop-Install "$currentLink существует и не является точкой соединения; удалите или переименуйте её сами, иначе переключение версии сделает её обычной папкой."
         }
         $previous = @($item.Target)[0]
-        Remove-Item -LiteralPath $currentLink -Force
+        # INVARIANT: a junction is removed with Directory.Delete, never with Remove-Item: the latter
+        # follows the link, asks whether to delete the CHILDREN OF THE VERSION, and would delete the
+        # version itself. The reparse point goes; the directory it names stays.
+        [IO.Directory]::Delete($currentLink, $false)
     }
     New-Item -ItemType Junction -Path $currentLink -Target $target | Out-Null
     return $previous

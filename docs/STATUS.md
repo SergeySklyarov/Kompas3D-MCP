@@ -14,6 +14,14 @@
 
 ## Текущее состояние
 
+- **Пояснение `writable_roots` в документации поставки (наряд `TEXTS_WRITABLE_ROOTS`, 21.10.2026,
+  сдан):** `docs/distribution/INSTALL.md` (шаг 2 ручной установки) и `docs/operator-guide/mcp-config.md`
+  (раздел «Куда сервер вправе писать») объясняют: корни записи - это `writable_roots` вместе с
+  `export_roots`, запись вне их отклоняется `PATH_NOT_ALLOWED` до обращения в КОМПАС, а
+  `read_only_roots` писать не позволяют. Чтобы сохранять в папку проекта, её корень добавляется в
+  `writable_roots` (пример JSON и `KOMPAS_MCP_WRITABLE_ROOTS` через `;`), а не копированием файлов из
+  песочницы; действующие корни отдаёт `kompas_capabilities`. Код продукта, контракт и схемы не
+  менялись, `--all` не требовался. Проверки: `lint-dashes.py` 0, `check-evidence-links.py` 0.
 - **Динамическое сечение модели: три инструмента и группа приёмки (наряд `OMEGA_G11_SECTIONS`,
   21.10.2026, сдан):** `kompas_create_section` (MUTATION: шаги, режим, закраска),
   `kompas_set_section_mode` (MUTATION) и `kompas_list_sections` (READ). Маршрут документированный и

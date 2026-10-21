@@ -15,7 +15,7 @@
 ## Текущее состояние
 
 - **`compact` обслуживает весь реестр и стал режимом по умолчанию (наряд `CATALOG_COMPACT`, 21.10.2026,
-  `taken` - идут два зачётных `--all`):** каждая операция `ToolCatalog.All` достижима: прямой набор
+  сдан, ждёт вердикта):** каждая операция `ToolCatalog.All` достижима: прямой набор
   (11 инструментов) публикуется, остальные вызываются через `kompas_run`. Список «переведённых» как
   литерал удалён - `CompactCatalog.ViaRun` выводится из реестра, отказ «существует, но не переведена»
   (`CAPABILITY_UNAVAILABLE`, `reachable_via = not_converted`) удалён как недостижимый, `Reach` отвечает
@@ -29,8 +29,12 @@
   `370d878` (Release): тесты **1387/1387**, `--self-test` 82/0, `--emit-schemas` без изменений (схемы
   байт-в-байт), группа `--catalog-only` в `compact` **PASS 31 / FAIL 0**, группа `--extrusion-only`
   через `kompas_run` **PASS 47 / FAIL 0**, стражи 0/0/0. Зачётные `--all` в обоих режимах на одном
-  чистом коммите - идут; `docs/decisions/host.md#catalog-compact-default`,
-  `docs/02_TOOL_CONTRACTS.md` §2.18, отчёт `CATALOG_COMPACT_REPORT_20261021.md`.
+  чистом коммите `d4232aa` (Release, дерево чистое): `compact` 30 минут - **PASS 1765 / NAMED 6 /
+  FAIL 0**, `full` 28 минут - **PASS 1765 / NAMED 6 / FAIL 0**, exit 0 у обоих; сверка строк
+  (`scripts/compare-run-rows.py`) - 1771 = 1771, `diverged_rows` пуст, то есть режим каталога не
+  изменил ни одной измеренной строки. `docs/decisions/host.md#catalog-compact-default`,
+  `docs/02_TOOL_CONTRACTS.md` §2.18, отчёт `CATALOG_COMPACT_REPORT_20261021.md`,
+  доказательства `docs/acceptance/evidence/20261021-catalog-compact-d4232aa/`.
 - **Механизм каталога: режим `compact` (наряд `CATALOG_MECHANISM_RESEARCH`, 21.10.2026, `accepted`):** размер `tools/list` больше не зависит от числа операций. Переключатель
   `catalog_mode: full | compact` в `kompas-mcp.json` (`KOMPAS_MCP_CATALOG_MODE`,
   `HostOptions.CatalogMode`); по умолчанию `full` и публикует ровно прежние 97 инструментов

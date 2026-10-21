@@ -34,8 +34,9 @@
   (11 инструментов) публикуется, остальные вызываются через `kompas_run`. Список «переведённых» как
   литерал удалён - `CompactCatalog.ViaRun` выводится из реестра, отказ «существует, но не переведена»
   (`CAPABILITY_UNAVAILABLE`, `reachable_via = not_converted`) удалён как недостижимый, `Reach` отвечает
-  `direct` или `run`. `HostOptions.CatalogMode` по умолчанию `compact`; `full` остаётся выбираемым на
-  выпуск `0.10.0` (`catalog_mode`, `KOMPAS_MCP_CATALOG_MODE`). Предел `limit` у
+  `direct` или `run`. `HostOptions.CatalogMode` по умолчанию `compact`; `full` снят нарядом
+  `CATALOG_FULL_REMOVAL` (21.10.2026): ключ `catalog_mode`, переменная `KOMPAS_MCP_CATALOG_MODE` и
+  поле `catalog_mode` в ответе удалены. Предел `limit` у
   `kompas_find_operations` - размер реестра, а не литерал. `kompas_capabilities` в `compact` называет
   `catalog_mode`, `tools`/`tool_count` и отдельно `operations`/`operations_via_run`. `docs/TOOLS.md`
   получил столбец пути вызова из того же источника, что `reachable_via`. Прибор:
@@ -50,7 +51,7 @@
   изменил ни одной измеренной строки. `docs/decisions/host.md#catalog-compact-default`,
   `docs/02_TOOL_CONTRACTS.md` §2.18, отчёт `CATALOG_COMPACT_REPORT_20261021.md`,
   доказательства `docs/acceptance/evidence/20261021-catalog-compact-d4232aa/`.
-- **Механизм каталога: режим `compact` (наряд `CATALOG_MECHANISM_RESEARCH`, 21.10.2026, `accepted`):** размер `tools/list` больше не зависит от числа операций. Переключатель
+- **Механизм каталога: режим `compact` (наряд `CATALOG_MECHANISM_RESEARCH`, 21.10.2026, `accepted`; переключатель снят нарядом `CATALOG_FULL_REMOVAL`):** размер `tools/list` больше не зависит от числа операций. Переключатель
   `catalog_mode: full | compact` в `kompas-mcp.json` (`KOMPAS_MCP_CATALOG_MODE`,
   `HostOptions.CatalogMode`); по умолчанию `full` и публикует ровно прежние 97 инструментов
   (`contract-diff` до/после - 0 ломок). В `compact` публикуются 11 прямых инструментов плюс

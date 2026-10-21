@@ -27,7 +27,7 @@
   assembly_section_with_dismantle_mode`, совет выключить режим (`kompas_set_dismantle`, `mode=false`);
   за вызывающего режим не выключается, сечение не пересоздаётся. Ограничение - `LIMIT:` в коде,
   `explicitly_out_of_scope` профиля `sections-minimal-v1` (ревизия 1.1), таблица факторов -
-  `docs/04_KOMPAS_API_NOTES.md` §4.97, решение - `docs/decisions/sections.md#assembly-section`.
+  `docs/04_KOMPAS_API_NOTES.md` §4.101, решение - `docs/decisions/sections.md#assembly-section`.
   **Ложные проверки** (ожидание передано, `passed` его не сравнивал) исправлены четыре:
   `sections_count_after`, `plane_offset_written`, `steps_count_after`, `step_update_returned`; та же
   форма найдена в `angle_read_back` и не тронута - вне наряда. Приёмка: строка

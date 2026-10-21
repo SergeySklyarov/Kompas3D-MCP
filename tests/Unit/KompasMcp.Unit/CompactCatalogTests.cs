@@ -71,16 +71,14 @@ public sealed class CompactCatalogTests
         Assert.Contains("kompas_extrude", nearest);
     }
 
-    /// <summary>The compact listing is the direct subset plus three tools, and it is the same list for
+    /// <summary>The published listing is the direct subset plus three tools, and it is the same list for
     /// any registry size: nothing per-operation is published.</summary>
-    /// <remarks>INVARIANT: <c>full</c> is the untouched catalog, so a client in the default mode sees
-    /// exactly what it saw before the mode existed.</remarks>
+    /// <remarks>INVARIANT: there is one listing; a mode switch over it no longer exists.</remarks>
     [Fact]
-    public void CompactListingIsFixedAndFullIsUntouched()
+    public void CompactListingIsFixed()
     {
-        var compact = CompactCatalog.Listing(CompactCatalog.CompactMode);
+        var compact = CompactCatalog.Listing();
         Assert.Equal(CompactCatalog.Direct.Count + CompactCatalog.Tools.Count, compact.Count);
-        Assert.Same(ToolCatalog.All, CompactCatalog.Listing(CompactCatalog.FullMode));
 
         var names = compact.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         Assert.Contains(CompactCatalog.FindTool, names);
@@ -91,16 +89,19 @@ public sealed class CompactCatalogTests
         Assert.True(compact.Count < ToolCatalog.All.Count / 4);
     }
 
-    /// <summary>Both instruction texts name only tools the client can call in that mode.</summary>
-    [Theory]
-    [InlineData(CompactCatalog.FullMode)]
-    [InlineData(CompactCatalog.CompactMode)]
-    public void InstructionsNamePublishedTools(string mode)
+    /// <summary>The instruction text names only tools the client can call: the published ones and the
+    /// registry ids it reaches through <c>kompas_run</c>.</summary>
+    /// <remarks>INVARIANT: a name outside those two sets is a name the model cannot call.
+    /// TEST: this test.</remarks>
+    [Fact]
+    public void InstructionsNameCallableTools()
     {
-        var published = CompactCatalog.Listing(mode).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (var name in Mentioned(CompactCatalog.Instructions(mode)))
+        var callable = CompactCatalog.Listing().Select(t => t.Name)
+            .Concat(ToolCatalog.All.Select(t => t.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var name in Mentioned(CompactCatalog.Instructions))
         {
-            Assert.Contains(name, published);
+            Assert.Contains(name, callable);
         }
     }
 
@@ -152,18 +153,17 @@ public sealed class CompactCatalogTests
         Assert.True(run.IsHostLocal);
     }
 
-    /// <summary>The size of the compact listing cannot grow with the registry: no operation name,
+    /// <summary>The size of the published listing cannot grow with the registry: no operation name,
     /// schema or description of an unconverted operation reaches it.</summary>
     /// <remarks>INVARIANT: the published text holds only the direct subset and the three catalog tools,
     /// so converting the remaining operations changes not one character of <c>tools/list</c>. The
     /// per-operation text lives in the ANSWERS of find/describe, which the client asks for one at a
-    /// time. MEASURED: the whole listing is 23 287 characters against 363 533 in <c>full</c>.
-    /// TEST: this test holds the negative half — a leaked operation name fails it.</remarks>
+    /// time. TEST: this test holds the negative half — a leaked operation name fails it.</remarks>
     [Fact]
     public void CompactListingCarriesNoOperation()
     {
         var text = JsonSerializer.Serialize(
-            McpToolFactory.CreateAll(CompactCatalog.Listing(CompactCatalog.CompactMode)), Wire);
+            McpToolFactory.CreateAll(CompactCatalog.Listing()), Wire);
         var direct = CompactCatalog.Direct.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         var leaked = ToolCatalog.All
             .Select(t => t.Name)
@@ -172,8 +172,8 @@ public sealed class CompactCatalogTests
 
         Assert.Empty(leaked);
 
-        var fullSize = JsonSerializer.Serialize(McpToolFactory.CreateAll(ToolCatalog.All), Wire).Length;
-        Assert.True(text.Length * 4 < fullSize, $"compact {text.Length} символов против full {fullSize}");
+        var registrySize = JsonSerializer.Serialize(McpToolFactory.CreateAll(ToolCatalog.All), Wire).Length;
+        Assert.True(text.Length * 4 < registrySize, $"список {text.Length} символов против реестра {registrySize}");
     }
 
     /// <summary>Every operation of the registry is reachable, and exactly one way: the direct subset by

@@ -4,24 +4,19 @@ using KompasMcp.Contracts.Schema;
 
 namespace KompasMcp.Host.Catalog;
 
-/// <summary>The <c>compact</c> presentation of the catalog: a fixed set of tools whose size does not
-/// grow with the number of operations.</summary>
+/// <summary>The presentation of the catalog: a fixed set of tools whose size does not grow with the
+/// number of operations.</summary>
 /// <remarks>INVARIANT: the operations are <see cref="ToolCatalog.All"/> and nothing else. A second list
 /// of operations would drift from the schemas the direct tools validate against, and the whole point of
-/// the compact mode is that ONE handler answers both paths.
+/// this catalog is that ONE handler answers both paths.
 /// History: docs/decisions/host.md#catalog-mechanism</remarks>
 public static class CompactCatalog
 {
-    /// <summary>Mode name in the configuration and in <c>kompas_capabilities</c>.</summary>
-    public const string FullMode = "full";
-
-    public const string CompactMode = "compact";
-
     public const string FindTool = "kompas_find_operations";
     public const string DescribeTool = "kompas_describe_operation";
     public const string RunTool = "kompas_run";
 
-    /// <summary>Tools published in <c>compact</c> beside the three catalog tools: a session cannot
+    /// <summary>Tools published beside the three catalog tools: a session cannot
     /// start, keep its context or hand itself back without them.</summary>
     /// <remarks>MEASURED: every session begins with connect and get_context and every mutation is
     /// followed by a fresh context, so these calls happen on every path and cost nothing to keep
@@ -107,15 +102,12 @@ public static class CompactCatalog
         ToolCatalog.All.Where(t => !DirectNames.Contains(t.Name, StringComparer.Ordinal))
             .Select(t => t.Name).ToArray();
 
-    /// <summary>The three tools <c>compact</c> adds. They are NOT in <see cref="ToolCatalog.All"/>:
-    /// <c>full</c> must publish exactly what it published before this change.</summary>
+    /// <summary>The three tools the catalog adds. They are NOT in <see cref="ToolCatalog.All"/>: the
+    /// registry answers operations only, and these three answer the catalog itself.</summary>
     public static IReadOnlyList<ToolDefinition> Tools { get; } = BuildTools();
 
-    /// <summary>What the Host publishes for a mode. <c>full</c> is the untouched catalog.</summary>
-    public static IReadOnlyList<ToolDefinition> Listing(string? mode) =>
-        string.Equals(mode, CompactMode, StringComparison.OrdinalIgnoreCase)
-            ? Direct.Concat(Tools).ToArray()
-            : ToolCatalog.All;
+    /// <summary>What the Host publishes in <c>tools/list</c>: the direct subset plus the three tools.</summary>
+    public static IReadOnlyList<ToolDefinition> Listing() => Direct.Concat(Tools).ToArray();
 
     public static bool IsCompactTool(string? name) =>
         name is FindTool or DescribeTool or RunTool;
@@ -127,8 +119,8 @@ public static class CompactCatalog
 
     /// <summary>How the client reaches the operation: directly or through <c>kompas_run</c>. Every
     /// registry entry is reachable, so there is no third answer.</summary>
-    /// <remarks>INVARIANT: the answer is one of two, because <c>compact</c> serves the whole registry.
-    /// A third value would tell a client an operation exists and cannot be called, which the mode
+    /// <remarks>INVARIANT: the answer is one of two, because this catalog serves the whole registry.
+    /// A third value would tell a client an operation exists and cannot be called, which it
     /// does not do. TEST: CompactCatalogTests.EveryOperationIsReachableExactlyOneWay.
     /// History: docs/decisions/host.md#catalog-mechanism</remarks>
     public static string Reach(string name) =>
@@ -238,17 +230,15 @@ public static class CompactCatalog
         return words;
     }
 
-    /// <summary>The instructions of the mode: in <c>compact</c> the client must learn the call order
-    /// find -> describe -> run, because the operation is no longer a tool name it can guess.</summary>
-    /// <remarks>INVARIANT: the text names only tools of the mode's own listing; a stale name would send
-    /// the model to a tool it cannot call. TEST: CompactCatalogTests.InstructionsNamePublishedTools.
-    /// History: docs/decisions/host.md#catalog-mechanism</remarks>
-    public static string Instructions(string? mode) =>
-        string.Equals(mode, CompactMode, StringComparison.OrdinalIgnoreCase)
-            ? CompactInstructions
-            : Program.Instructions;
+    /// <summary>The instructions of the one catalog: the client must learn the call order
+    /// find -> describe -> run, because an operation is an id and not a tool name it can guess.</summary>
+    /// <remarks>INVARIANT: the text names only tools the client can call - published ones, or registry
+    /// ids reached through <c>kompas_run</c>; a stale name would send the model nowhere.
+    /// TEST: CompactCatalogTests.InstructionsNameCallableTools.
+    /// History: docs/decisions/host.md#catalog-mode-removed</remarks>
+    public static string Instructions => InstructionsText;
 
-    private const string CompactInstructions = """
+    private const string InstructionsText = """
         Сервер управляет одним экземпляром КОМПАС-3D v24 через COM. Каталог здесь короткий и не растёт:
         операции вызываются по id, а не отдельными инструментами. Порядок работы:
         kompas_find_operations (найти по русскому слову или группе) → kompas_describe_operation
@@ -264,6 +254,34 @@ public static class CompactCatalog
         kompas_acquire_session). После захвата прежние document_id и revision недействительны.
         Каждая операция реестра достижима: kompas_find_operations и kompas_describe_operation
         называют путь вызова (direct - опубликованный инструмент, run - через kompas_run).
+
+        Типичные ошибки в этом сервере:
+        - Единицы — миллиметры и мм²/мм³. Другие единицы не принимаются и не пересчитываются.
+        - Ссылки и document_id привязаны к ревизии: любая мутация делает прежние ссылки устаревшими
+          (STALE_REFERENCE). Это защита, а не сбой: перечитайте kompas_get_context и ссылки заново,
+          а не повторяйте вызов с тем же expected_revision.
+        - Грань выбирается предикатом через kompas_resolve_selection (через kompas_run), а не
+          «первой» или «текущей». Два подходящих кандидата — отказ AMBIGUOUS_SELECTION; ослабьте
+          предикат, а не угадывайте. Неизвестное серверу поле предиката — тоже отказ
+          INVALID_ARGUMENT, а не молчание.
+        - Обычное объединение требует пересечения или общей поверхности тел (указание заказчика от
+          19.09.2026). Касание ребром, касание точкой и несвязные тела — честный отказ ядра, а не
+          ошибка сервера; не заменяйте это обходными построениями.
+        - verification.level в ответе говорит, что реально проверено. Уровень ниже ожидаемого —
+          повод перечитать модель (kompas_get_context, list/get/measure), а не повторять вызов:
+          повтор не поднимет уровень доказательства.
+        - Отказ мутации несёт ДВА разных признака, и они не противоречат друг другу: partial_effects
+          говорит, что отказ не гарантированно без последствий (снята контрольная копия, модель в
+          памяти КОМПАСа не откатывается), а feature_left_in_tree — только ИЗМЕРЕНИЕ по счётчику
+          признаков: остался ли в дереве признак, который клиент обязан удалить. Значение false у
+          второго НЕ отменяет partial_effects=true; что именно откачено, называет rollback_scope.
+        - Снимок (kompas_export_image через kompas_run) — вспомогательный канал, а не
+          доказательство. Проекция задаётся полем view по имени типа
+          (front/rear/up/down/left/right/isometric/dimetric), а не по локализованной подписи вида;
+          применённый вид подтверждается обратным чтением. Прежний вид возвращается после снимка, но
+          только если он восстановим (прочитан и его тип опубликован): в видимом окне до первого
+          SetCurrent он не читается, и вызов с keep_view=false отказывает VIEW_UNAVAILABLE, не меняя
+          вид окна. keep_view=true — согласие оставить запрошенную проекцию.
         """;
 
     /// <summary>Ids close to an unknown one, by common prefix and by shared words: a model that

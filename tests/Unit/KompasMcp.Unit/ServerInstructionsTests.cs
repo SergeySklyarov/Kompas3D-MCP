@@ -37,8 +37,11 @@ public class ServerInstructionsTests
     [Fact]
     public void Instructions_MentionOnlyToolsThatExist()
     {
-        var known = ToolCatalog.All.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        var mentioned = ToolNamesIn(Program.Instructions);
+        // The text names published tools AND registry ids reached through kompas_run: both are callable.
+        var known = CompactCatalog.Listing().Select(t => t.Name)
+            .Concat(ToolCatalog.All.Select(t => t.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        var mentioned = ToolNamesIn(CompactCatalog.Instructions);
 
         // A guard on the guard: if the regex silently matches nothing, the assertion below would pass
         // vacuously and prove nothing about the text.
@@ -46,7 +49,7 @@ public class ServerInstructionsTests
 
         foreach (var name in mentioned)
         {
-            Assert.True(known.Contains(name), $"Инструкции называют инструмент {name}, которого нет в ToolCatalog.All.");
+            Assert.True(known.Contains(name), $"Инструкции называют инструмент {name}, которого нет в каталоге.");
         }
     }
 
@@ -59,7 +62,7 @@ public class ServerInstructionsTests
             .Select(f => (string)f.GetRawConstantValue()!)
             .ToHashSet(StringComparer.Ordinal);
 
-        var mentioned = ErrorCodesIn(Program.Instructions);
+        var mentioned = ErrorCodesIn(CompactCatalog.Instructions);
         Assert.NotEmpty(mentioned);
 
         foreach (var code in mentioned)
@@ -73,7 +76,7 @@ public class ServerInstructionsTests
     {
         // The five subjects the order named. Each is checkable by a substring that cannot be produced by
         // accident, so a later edit that quietly drops one fails here rather than in the field.
-        var text = Program.Instructions;
+        var text = CompactCatalog.Instructions;
 
         Assert.Contains("миллиметр", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STALE_REFERENCE", text, StringComparison.Ordinal);

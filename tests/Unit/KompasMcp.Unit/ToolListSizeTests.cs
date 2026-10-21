@@ -6,26 +6,29 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The published <c>tools/list</c> has a size ceiling.</summary>
-/// <remarks>INVARIANT: the whole listing, serialized exactly as the Host sends it, stays under
-/// <see cref="CeilingChars"/> characters. The client pays for this text in EVERY session before it
-/// asks anything, and it competes with the model's own context: a listing that grows silently takes
-/// room from the work. The ceiling is the measured size after the descriptions were cut to the
-/// contract plus 10 %, so an honest addition passes and quiet accumulation does not.
-/// History: docs/decisions/host.md#tools-list-size-guard</remarks>
+/// <summary>The published <c>tools/list</c> has a size ceiling and a fixed number of direct tools.</summary>
+/// <remarks>INVARIANT: the listing, serialized exactly as the Host sends it, stays under
+/// <see cref="CeilingChars"/> characters, and it publishes exactly <see cref="DirectToolCount"/> direct
+/// tools beside the three catalog tools. The client pays for this text in EVERY session before it asks
+/// anything, and it competes with the model's own context: a listing that grows silently takes room from
+/// the work. History: docs/decisions/host.md#tools-list-size-guard</remarks>
 public sealed class ToolListSizeTests
 {
-    /// <summary>Measured size plus 10 %. MEASURED: the listing of 90 tools occupied 333 712 characters
-    /// after the shared definitions were pruned to the referenced ones and the eight largest
-    /// descriptions were cut to the contract. The same dump counted by a stdio client with spaced
-    /// separators gives 343 533: the 2.9 % is the separators alone, the text is the same, so the
-    /// ceiling is set from THIS instrument's measure.</summary>
-    private const int CeilingChars = 367_100;
+    /// <summary>Measured size plus 5 %: an honest addition passes, quiet accumulation does not.</summary>
+    /// <remarks>MEASURED: the listing of this commit occupies 22 687 characters, counted the way the
+    /// client reads it (see <see cref="Wire"/>). The ceiling is set from THIS instrument's measure: the
+    /// default encoder escapes every Cyrillic letter, so a differently encoded dump would guard a number
+    /// nobody pays for. History: docs/decisions/host.md#tools-list-size-guard</remarks>
+    private const int CeilingChars = 23_821;
+
+    /// <summary>How many direct tools the catalog publishes beside the three catalog tools.</summary>
+    /// <remarks>INVARIANT: the number is exact — growth is a deliberate edit of this test, not a silent
+    /// addition to the listing. History: docs/decisions/host.md#catalog-mechanism</remarks>
+    private const int DirectToolCount = 11;
 
     /// <summary>How the transport writes a listing: attribute-named properties, nulls omitted, and
     /// text counted the way the client reads it. MEASURED: the default encoder escapes every Cyrillic
-    /// letter as <c>\uXXXX</c>, which inflates the count 3.2 times; a JSON parser hands the model one
-    /// character per letter, so the escaped form would guard a number nobody pays for.</summary>
+    /// letter as <c>\uXXXX</c>, which inflates the count 3.2 times.</summary>
     private static readonly JsonSerializerOptions Wire = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -35,7 +38,7 @@ public sealed class ToolListSizeTests
     [Fact]
     public void PublishedListingStaysUnderTheCeiling()
     {
-        var tools = McpToolFactory.CreateAll(ToolCatalog.All);
+        var tools = McpToolFactory.CreateAll(CompactCatalog.Listing());
         var sizes = tools
             .Select(tool => (tool.Name, Size: JsonSerializer.Serialize(tool, Wire).Length))
             .OrderByDescending(row => row.Size)
@@ -46,6 +49,15 @@ public sealed class ToolListSizeTests
             $"tools/list занимает {total} символов при потолке {CeilingChars}. "
             + "Крупнейшие инструменты: "
             + string.Join("; ", sizes.Take(5).Select(row => $"{row.Name} {row.Size}")));
+    }
+
+    /// <summary>The direct subset is a fixed size: the listing cannot grow by publishing one more
+    /// operation as a tool.</summary>
+    [Fact]
+    public void DirectToolCountIsFixed()
+    {
+        Assert.Equal(DirectToolCount, CompactCatalog.Direct.Count);
+        Assert.Equal(DirectToolCount + CompactCatalog.Tools.Count, CompactCatalog.Listing().Count);
     }
 
     /// <summary>The guard must measure the listing the Host actually sends, not a look-alike: the

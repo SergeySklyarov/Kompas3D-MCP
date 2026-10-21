@@ -124,7 +124,7 @@ public static class Program
         builder.Services.AddMcpServer(serverOptions =>
         {
             serverOptions.ServerInfo = new Implementation { Name = ServerName, Title = "КОМПАС-3D MCP", Version = ServerVersion };
-            serverOptions.ServerInstructions = CompactCatalog.Instructions(options.CatalogMode);
+            serverOptions.ServerInstructions = CompactCatalog.Instructions;
 
             // The schemas in ToolCatalog are the contract: published verbatim and the same document the
             // Host validates against, so tools/list and validation cannot drift. The SDK-generated
@@ -132,7 +132,7 @@ public static class Program
             //
             // Capabilities starts null on a bare McpServerOptions, so the whole object is assigned.
             serverOptions.Capabilities = new ServerCapabilities { Tools = new ToolsCapability() };
-            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log, options);
+            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log);
             serverOptions.Handlers.CallToolHandler = async (request, cancellationToken) => await CallToolAsync(session, log, request, cancellationToken).ConfigureAwait(false);
         }).WithStdioServerTransport();
 
@@ -158,55 +158,6 @@ public static class Program
         return 0;
     }
 
-    /// <summary>The server instructions sent in the MCP handshake: call order, session ownership and the
-    /// pitfalls that most often make a call fail. Public so a unit test can assert that every tool name and
-    /// error code it mentions really exists.</summary>
-    /// <remarks>INVARIANT: the text names only tools present in <c>ToolCatalog.All</c> and only codes from
-    /// <c>ErrorCodes</c>; a stale name here would send the model to a tool it cannot call.
-    /// History: docs/decisions/host.md#instructions-pitfalls</remarks>
-    public const string Instructions = """
-        Сервер управляет одним экземпляром КОМПАС-3D v24 через COM. Порядок работы:
-        kompas_health → kompas_connect → kompas_create_document/kompas_open_document →
-        kompas_get_context (получить document_id и revision) → чтение (list/get/measure) →
-        мутация (ожидает operation_id и expected_revision) → перечитывание контекста → сохранение.
-        Ревизия отменяет выданные ранее ссылки: это не ошибка, а защита от правки устаревшей модели.
-        Исход исходных моделей доступен только для чтения; запись разрешена в настроенные песочницы.
-        Ответы содержат verification.level: он показывает, что реально проверено, а что нет.
-
-        Одновременно моделью работает только один сеанс. Если CAD-вызов ответил SESSION_NOT_ACQUIRED
-        или SESSION_OWNER_ACTIVE, сеанс занят или требует явного захвата: вызовите
-        kompas_session_status, освободите сеанс у владельца (kompas_release_session) и займите его
-        здесь (kompas_acquire_session). После захвата — новый контекст: kompas_connect и
-        kompas_get_context, прежние document_id и revision недействительны.
-
-        Типичные ошибки в этом сервере:
-        - Единицы — миллиметры и мм²/мм³. Другие единицы не принимаются и не пересчитываются.
-        - Ссылки и document_id привязаны к ревизии: любая мутация делает прежние ссылки устаревшими
-          (STALE_REFERENCE). Это защита, а не сбой: перечитайте kompas_get_context и ссылки заново,
-          а не повторяйте вызов с тем же expected_revision.
-        - Грань выбирается предикатом через kompas_resolve_selection, а не «первой» или «текущей».
-          Два подходящих кандидата — отказ AMBIGUOUS_SELECTION; ослабьте предикат, а не угадывайте.
-          Неизвестное серверу поле предиката — тоже отказ INVALID_ARGUMENT, а не молчание.
-        - Обычное объединение требует пересечения или общей поверхности тел (указание заказчика от
-          19.09.2026). Касание ребром, касание точкой и несвязные тела — честный отказ ядра, а не
-          ошибка сервера; не заменяйте это обходными построениями.
-        - verification.level в ответе говорит, что реально проверено. Уровень ниже ожидаемого —
-          повод перечитать модель (kompas_get_context, list/get/measure), а не повторять вызов:
-          повтор не поднимет уровень доказательства.
-        - Отказ мутации несёт ДВА разных признака, и они не противоречат друг другу: partial_effects
-          говорит, что отказ не гарантированно без последствий (снята контрольная копия, модель в
-          памяти КОМПАСа не откатывается), а feature_left_in_tree — только ИЗМЕРЕНИЕ по счётчику
-          признаков: остался ли в дереве признак, который клиент обязан удалить. Значение false у
-          второго НЕ отменяет partial_effects=true; что именно откачено, называет rollback_scope.
-        - Снимок (kompas_export_image) — вспомогательный канал, а не доказательство. Проекция
-          задаётся полем view по имени типа (front/rear/up/down/left/right/isometric/dimetric), а
-          не по локализованной подписи вида; применённый вид подтверждается обратным чтением.
-          Прежний вид возвращается после снимка, но только если он восстановим (прочитан и его
-          тип опубликован): в видимом окне до первого SetCurrent он не читается, и вызов с
-          keep_view=false отказывает VIEW_UNAVAILABLE, не меняя вид окна. keep_view=true —
-          согласие оставить запрошенную проекцию.
-        """;
-
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>
     /// <remarks>INVARIANT: the catalog does not depend on ownership. An earlier refusal arrived at
     /// <c>initialize</c>, leaving the second chat with ZERO tools. A refusal is not returned here either:
@@ -214,12 +165,12 @@ public static class Program
     /// so refusals travel in the call envelope (<see cref="CallToolAsync"/>). Ownership is neither taken
     /// nor refreshed here.
     /// History: docs/decisions/host.md#listtools-no-ownership</remarks>
-    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log, HostOptions options)
+    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
     {
         _ = request;
         _ = cancellationToken;
-        var published = CompactCatalog.Listing(options.CatalogMode);
-        log.Write("debug", "tools/list", new { tools = published.Count, catalog_mode = options.CatalogMode });
+        var published = CompactCatalog.Listing();
+        log.Write("debug", "tools/list", new { tools = published.Count });
 
         // The mapping lives in McpToolFactory so the size guard measures exactly this listing.
         // History: docs/decisions/host.md#tools-list-size-guard

@@ -78,13 +78,11 @@ public sealed class HostSession : IAsyncDisposable
 
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
-        // The compact mode's three tools are not catalog entries: one branch answers them, and
-        // kompas_run re-enters THIS method, so a call through it takes exactly the same path as a
-        // direct call — one handler, one validation, one journal. In `full` they are not published
-        // and therefore answer as an unknown tool, as before.
+        // The catalog's three tools are not catalog entries: one branch answers them, and kompas_run
+        // re-enters THIS method, so a call through it takes exactly the same path as a direct call —
+        // one handler, one validation, one journal.
         // History: docs/decisions/host.md#catalog-mechanism
-        if (CompactCatalog.IsCompactTool(toolName)
-            && string.Equals(_options.CatalogMode, CompactCatalog.CompactMode, StringComparison.Ordinal))
+        if (CompactCatalog.IsCompactTool(toolName))
         {
             return await InvokeCompactAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
         }
@@ -1471,25 +1469,20 @@ public sealed class HostSession : IAsyncDisposable
         }
 
         var node = (JsonObject)result.DeepClone();
-        var mode = options?.CatalogMode ?? CompactCatalog.CompactMode;
-        var published = CompactCatalog.Listing(mode);
+        var published = CompactCatalog.Listing();
 
-        // In `compact` the client must be able to tell the three statements apart: what is published,
-        // what exists in the registry, and what of that is reachable through kompas_run. One list for
-        // all three would tell a compact client it has 97 tools it cannot call.
-        node["catalog_mode"] = mode;
+        // The client must be able to tell three statements apart: what is published, what exists in the
+        // registry, and what of that is reached through kompas_run. One list for all three would tell a
+        // client it has 97 tools it cannot call.
         node["tools"] = new JsonArray(published.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
         node["tool_count"] = published.Count;
-        if (string.Equals(mode, CompactCatalog.CompactMode, StringComparison.Ordinal))
-        {
-            node["operations"] = new JsonArray(
-                ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
-            node["operations_via_run"] = new JsonArray(
-                CompactCatalog.ViaRun.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
-            node["operations_note"] =
-                "operations - весь реестр; каждая операция достижима: direct - опубликованным "
-                + "инструментом, run - через kompas_run (reachable_via в kompas_find_operations).";
-        }
+        node["operations"] = new JsonArray(
+            ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+        node["operations_via_run"] = new JsonArray(
+            CompactCatalog.ViaRun.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
+        node["operations_note"] =
+            "operations - весь реестр; каждая операция достижима: direct - опубликованным "
+            + "инструментом, run - через kompas_run (reachable_via в kompas_find_operations).";
 
         node["server_version"] = Program.ServerVersion;
 

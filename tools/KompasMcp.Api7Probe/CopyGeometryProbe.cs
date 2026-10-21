@@ -266,6 +266,7 @@ internal sealed class CopyGeometryProbe
         foreach (var (name, raw) in new (string, object?)[]
                  {
                      ("тело", Api5.SafeObject(() => sourcePart.GetMainBody())),
+                     ("тело из BodyCollection", Api5.SafeObject(() => BodyElement(sourcePart))),
                      ("выдавливание", extrusion),
                      ("плоскость XoY", Api5.SafeObject(() => sourcePart.GetDefaultEntity(PlaneXoy))),
                  })
@@ -404,26 +405,37 @@ internal sealed class CopyGeometryProbe
         // MEASURED: the call answers TRUE and the source name is recorded, yet the receiver still has no
         // body; the rebuild and, after it, Synhronise are tried one by one and each result is recorded.
         receiverDoc.RebuildDocument();
-        step.Data["bodies_after_rebuild"] = Api5.BodyCount(part);
+        step.Data["bodies_after_rebuild"] = RefreshedBodyCount(receiverDoc);
         step.Data["volume_after_rebuild"] = Api5.Volume(part);
-        step.Observe($"После перестройки: тел {Api5.BodyCount(part)}, объём {Api5.Num(Api5.Volume(part))} мм³.");
+        step.Observe($"После перестройки: тел {RefreshedBodyCount(receiverDoc)}, "
+            + $"объём {Api5.Num(Api5.Volume(part))} мм³.");
 
         if (Api5.BodyCount(part) == 0)
         {
             step.Data["synhronise_after_add"] = Api5.Raw(Api5.SafeBool(() => operation.Synhronise()));
             receiverDoc.RebuildDocument();
-            step.Data["bodies_after_synhronise"] = Api5.BodyCount(part);
+            step.Data["bodies_after_synhronise"] = RefreshedBodyCount(receiverDoc);
             step.Data["volume_after_synhronise"] = Api5.Volume(part);
-            step.Observe($"После Synhronise: тел {Api5.BodyCount(part)}, "
+            step.Observe($"После Synhronise: тел {RefreshedBodyCount(receiverDoc)}, "
                 + $"объём {Api5.Num(Api5.Volume(part))} мм³.");
         }
 
         step.Data["objects_by_type_receiver"] = CountByType(Container(receiverDoc));
-        step.Data["bodies"] = Api5.BodyCount(part);
+        try
+        {
+            var features = Api5.ReadFeatures(part, step);
+            step.Data["receiver_features"] = features.Select(f => f.Name).ToList();
+            step.Observe("Дерево приёмника: " + string.Join(", ", features.Select(f => f.Name)));
+        }
+        catch (Exception ex)
+        {
+            step.Data["receiver_features_error"] = ex.GetType().Name + ": " + ex.Message;
+        }
+        step.Data["bodies"] = RefreshedBodyCount(receiverDoc);
         step.Data["volume"] = Api5.Volume(part);
         step.Observe("Объекты приёмника по типам: "
             + string.Join(", ", CountByType(Container(receiverDoc)).Select(p => p.Key + "=" + p.Value)));
-        if (Api5.BodyCount(part) > 0)
+        if (RefreshedBodyCount(receiverDoc) > 0)
         {
             step.Pass("Геометрия в приёмнике есть: тело появилось.");
         }
@@ -446,6 +458,11 @@ internal sealed class CopyGeometryProbe
             return;
         }
 
+        var container = Container(receiverDoc);
+        step.Data["collections_geometry"] = Api5.RuntimeName(
+            Api5.SafeObject(() => container?.CollectionsGeometry));
+        step.Data["collections_geometry_count"] = Api5.SafeInt(
+            () => container!.CollectionsGeometry.Count);
         step.Data["count"] = Api5.SafeInt(() => collection.Count);
         step.Data["count_same_instance"] = _factoryCollection is ICopiesGeometry same
             ? Api5.SafeInt(() => same.Count)
@@ -620,6 +637,40 @@ internal sealed class CopyGeometryProbe
         }
 
         return result;
+    }
+
+    /// <summary>DOC: <c>ksPart.BodyCollection()</c> returns <c>ksBodyCollection</c>; the element is taken by
+    /// <c>GetByIndex</c> after <c>refresh()</c>, as the adapter does. GetMainBody is not used here because
+    /// its object answered IsSuitableObject=FALSE.</summary>
+    private static object? BodyElement(ksPart part)
+    {
+        if (part.BodyCollection() is not ksBodyCollection collection)
+        {
+            return null;
+        }
+
+        collection.refresh();
+        return collection.GetCount() > 0 ? collection.GetByIndex(0) : null;
+    }
+
+    /// <summary>INVARIANT: the body count is read after <c>refresh()</c>; a stale collection answers the
+    /// state before the rebuild, which is exactly the wrong number here.</summary>
+    private static int RefreshedBodyCount(ksDocument3D doc)
+    {
+        try
+        {
+            if (((ksPart)doc.GetPart(-1)).BodyCollection() is not ksBodyCollection collection)
+            {
+                return -1;
+            }
+
+            collection.refresh();
+            return collection.GetCount();
+        }
+        catch (Exception)
+        {
+            return -1;
+        }
     }
 
     private IModelContainer? Container(ksDocument3D doc) =>

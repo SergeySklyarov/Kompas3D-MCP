@@ -659,7 +659,7 @@ def file_sha256(path):
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread).
-EXPECTED_TOOL_COUNT = 102
+EXPECTED_TOOL_COUNT = 105
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из

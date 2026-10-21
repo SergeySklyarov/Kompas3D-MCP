@@ -26,7 +26,7 @@ Usage:
       [--config config/kompas-mcp.local.json] [--out scratch/mcp-smoke/delivery-b2-20260918/package-check.json]
 
 Без `--out` отчёт кладётся в каталог, НАЗВАННЫЙ ПО ИЗМЕРЕННОЙ ПОСТАВКЕ
-(`artifacts/publish-b4-20260920` → `scratch/mcp-smoke/delivery-b4-20260920/package-check.json`), потому
+(`artifacts/publish-b4-20260920` → `docs/acceptance/evidence/delivery-b4-20260920/package-check.json`), потому
 что паспорт поставки читает `package-check.json` из своего каталога: отчёт, положенный не туда,
 оставил бы в паспорте результат чужой поставки.
 """
@@ -251,6 +251,18 @@ def isolate_config(config, out):
     return shared_isolate_config(config, os.path.dirname(out), "delivery")
 
 
+def delivery_dir_name(stage):
+    """Evidence directory of a delivery stage: `delivery-<stage>`, one name for every instrument.
+
+    INVARIANT: the measurement, the client-entry check and the passport share ONE directory name.
+    MEASURED: this report went to `evidence/<stage>/` while every delivery directory on disk is
+    `evidence/delivery-<stage>/`, so `verify-client-entry.py` looked in a place nothing wrote to.
+    History: docs/decisions/tests.md#evidence-rebuild
+    """
+    stage = stage.rstrip("/\\")
+    return stage if stage.startswith("delivery-") else "delivery-" + stage
+
+
 def default_out(delivery):
     """Report path: derived from the delivery NAME, under the PERMANENT evidence root.
 
@@ -265,7 +277,8 @@ def default_out(delivery):
     name = os.path.basename(delivery.rstrip("/\\"))
     if name.startswith("publish-"):
         name = name[len("publish-"):]
-    return os.path.join(ROOT, "docs", "acceptance", "evidence", name, "package-check.json")
+    return os.path.join(ROOT, "docs", "acceptance", "evidence", delivery_dir_name(name),
+                        "package-check.json")
 
 
 def self_test():
@@ -338,7 +351,8 @@ def self_test():
 
     derived = default_out(os.path.join(ROOT, "artifacts", "publish-b4-20260920"))
     check("имя отчёта выводится из имени поставки",
-          derived.replace("\\", "/").endswith("docs/acceptance/evidence/b4-20260920/package-check.json"),
+          derived.replace("\\", "/").endswith(
+              "docs/acceptance/evidence/delivery-b4-20260920/package-check.json"),
           derived)
     check("отчёт проверки поставки не пишется в scratch/",
           "scratch" not in derived.replace("\\", "/").split("/"), derived)

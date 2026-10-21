@@ -32,7 +32,7 @@ B3 сверялась с паспортом B2, и проверка отказы
 записи за дефект своего операнда. Это второй прибор того же класса, что и `_build_api_compliance.py`
 (там паспорт читался безусловно и сборка падала `FileNotFoundError`).
 
-Теперь опознание поставки берётся ИЗМЕРЕНИЕМ (`scratch/mcp-smoke/delivery-<поставка>/package-check.json`,
+Теперь опознание поставки берётся ИЗМЕРЕНИЕМ (`docs/acceptance/evidence/delivery-<поставка>/package-check.json`),
 тот же вход, из которого паспорт строит свой блок `package`), а паспорт ЭТОЙ поставки используется,
 ЕСЛИ издан, — и ищется он ПО ХЕШУ Host.dll, а не по свежести файла. Расхождение паспорта с
 измерением — названный отказ (`E03b`), а не молчаливый выбор одного из двух.
@@ -122,11 +122,23 @@ def measurement_path_for(delivery_dir):
     """`package-check.json` этой поставки.
 
     Путь выводится ИЗ ИМЕНИ КАТАЛОГА ПОСТАВКИ тем же правилом, что у `scripts/verify-delivery.py`:
-    `artifacts/publish-<стадия>` → `scratch/mcp-smoke/delivery-<стадия>/package-check.json`.
+    `artifacts/publish-<стадия>` → `docs/acceptance/evidence/delivery-<стадия>/package-check.json`.
+
+    INVARIANT: this reads where `verify-delivery.py` WRITES, not where it used to write. MEASURED:
+    the report lives under the permanent evidence root since that instrument moved it there, so a
+    `scratch/mcp-smoke/...` path named a file nothing creates - and `scratch/` is cleaned anyway.
+    History: docs/decisions/tests.md#evidence-rebuild
     """
     name = os.path.basename(os.path.normpath(delivery_dir))
     stage = name[len("publish-"):] if name.startswith("publish-") else name
-    return os.path.join(ROOT, "scratch", "mcp-smoke", "delivery-" + stage, "package-check.json")
+    return os.path.join(ROOT, "docs", "acceptance", "evidence", delivery_dir_name(stage),
+                        "package-check.json")
+
+
+def delivery_dir_name(stage):
+    """Evidence directory of a delivery stage: `delivery-<stage>` - the same rule as the other
+    instrument, kept here rather than imported because both are standalone scripts."""
+    return stage if stage.startswith("delivery-") else "delivery-" + stage
 
 
 def passport_for_delivery(measurement):
@@ -273,6 +285,15 @@ def self_test():
           envelope.get("status") == "running" and waits == 4 and waited == 20.0,
           f"status={envelope.get('status')} waits={waits} waited={waited}")
     check("первый вызов и четыре повтора посчитаны", len(seen) == 5, f"вызовов={len(seen)}")
+
+    # The measurement is read from the PERMANENT evidence root, where `verify-delivery.py` writes it:
+    # a path under `scratch/` names a file nothing creates, and `scratch/` is cleaned.
+    measured = measurement_path_for(os.path.join(ROOT, "artifacts", "publish-v0.10.0-f679843"))
+    check("измерение поставки ищется в постоянном каталоге доказательств",
+          measured.replace("\\", "/").endswith(
+              "docs/acceptance/evidence/delivery-v0.10.0-f679843/package-check.json"), measured)
+    check("измерение поставки не ищется в scratch/",
+          "scratch" not in measured.replace("\\", "/").split("/"), measured)
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))

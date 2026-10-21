@@ -4,6 +4,7 @@ using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -134,11 +135,33 @@ public sealed partial class Api5Session
         }
 
         document.Document3D.RebuildDocument();
-        BumpRevision(document, "model.create_section");
 
         var after = Int(() => manager.DynamicCrossSectionsCount);
-        checks.Add(new NamedCheck("sections_count_after", after is not null, after?.ToString(),
-            command.Steps is null ? null : command.Steps.Count.ToString()));
+        var expectedCount = before is null ? (int?)null : before + 1;
+        checks.Add(new NamedCheck("sections_count_after", SectionCreationRule.GrewByOne(before, after),
+            after?.ToString(), expectedCount?.ToString(CultureInfo.InvariantCulture)));
+
+        var rows = ReadSections(manager, notes);
+        var expectedSteps = command.Steps?.Count ?? 0;
+        var added = before is not null && before < rows.Count ? rows[before.Value] : null;
+        var reason = SectionCreationRule.RefusalReason(before, after, WrittenOffsets(command.Steps),
+            added?.Steps.Select(step => step.OffsetMm).ToArray() ?? Array.Empty<double?>());
+        checks.Add(new NamedCheck("written_step_read_back",
+            added is not null && added.StepsCount == expectedSteps && reason is null,
+            added is null ? null : added.StepsCount.ToString(CultureInfo.InvariantCulture),
+            expectedSteps.ToString(CultureInfo.InvariantCulture)));
+
+        // INVARIANT: the model changed under the caller's revision, so the revision moves even when the
+        // call is refused below; a refusal with a stale revision would send the caller into a loop.
+        if (before is not null && after is not null && after != before)
+        {
+            BumpRevision(document, "model.create_section");
+        }
+
+        if (reason is not null)
+        {
+            throw SectionNotCreated(command, before, after, updated, rows, reason);
+        }
 
         // LIMIT: a snapshot is a raster and the section is display only, so "the section is visible" is
         // measured by the acceptance group, not by this call.
@@ -149,10 +172,61 @@ public sealed partial class Api5Session
             Bool(() => manager.DynamicCrossSectionModeOn),
             before ?? 0,
             after ?? 0,
-            ReadSections(manager, notes),
+            rows,
             new VerificationDto(VerificationLevel.StructureChecked, checks, unverified),
             notes);
     }
+
+    /// <summary>The offsets the call wrote, in step order: what the added row must read back.</summary>
+    private static double[] WrittenOffsets(IReadOnlyList<SectionStepDto>? steps) =>
+        (steps ?? Array.Empty<SectionStepDto>()).Select(step => step.Plane.OffsetMm).ToArray();
+
+    /// <summary>Named refusal of a section the model did not keep. DOC: nothing in the v24 help states a
+    /// condition under which <c>AddDynamicCrossSection</c> leaves the counter unchanged, so the refusal
+    /// carries the measurement instead of a guessed cause.</summary>
+    private static KompasContractException SectionNotCreated(
+        CreateSectionCommand command,
+        int? before,
+        int? after,
+        bool? updated,
+        IReadOnlyList<SectionRowDto> rows,
+        string reason)
+    {
+        var changed = before is not null && after is not null && after != before;
+        var message = changed
+            ? $"Сечение добавлено не полностью: счётчик сечений {before} → {after}, " +
+              "записанный шаг обратно не читается. В модели могло остаться сечение без шага; удалить его " +
+              "молча нельзя (Delete() не подтверждает себя), поэтому сверьте модель перед повтором."
+            : $"Сечение НЕ создано: счётчик сечений до записи {before?.ToString() ?? "null"}, после записи " +
+              $"{after?.ToString() ?? "null"}, section.Update() вернул {updated?.ToString() ?? "null"}. " +
+              "Модель не изменилась.";
+
+        return new KompasContractException(
+            ErrorCodes.VerificationFailed,
+            message,
+            RetryPolicy.ReacquireContext,
+            partialEffects: changed,
+            details: new Dictionary<string, object?>
+            {
+                ["reason"] = SectionCreationRule.Detail(reason, before, after),
+                ["sections_count_before"] = before,
+                ["sections_count_after"] = after,
+                ["section_update_returned"] = updated,
+                ["step_kind"] = command.Steps is { Count: > 0 } ? "ksDCSTByOffsetPlane" : null,
+                ["step_support"] = StepSupports(command),
+                ["sections"] = rows,
+            });
+    }
+
+    /// <summary>The support of each written step as text: the standard plane with its offset, or the
+    /// reference. A refusal must say WHICH cut the model did not keep.</summary>
+    private static string[] StepSupports(CreateSectionCommand command) =>
+        (command.Steps ?? Array.Empty<SectionStepDto>())
+        .Select(step => step.Plane.Base is { } standard
+            ? "base:" + standard.ToString().ToLowerInvariant() + " offset " +
+              step.Plane.OffsetMm.ToString("0.###", CultureInfo.InvariantCulture) + " mm"
+            : "reference:" + step.Plane.Reference)
+        .ToArray();
 
     /// <summary>Turn the section display mode on or off.</summary>
     public SetSectionModeResult SetSectionMode(SetSectionModeCommand command)
@@ -254,13 +328,18 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
+        // INVARIANT: the written offset is compared with the one read back, not merely read. MEASURED
+        // defect: the check passed on any value, so a step written at 25 mm and reading 0 mm was
+        // reported as written.
         var offset = Double(() => planeByOffset.Offset);
-        checks.Add(new NamedCheck("plane_offset_written", offset is not null,
+        var offsetWritten = offset is not null && Math.Abs(offset.Value - step.Plane.OffsetMm) <= 1e-6;
+        checks.Add(new NamedCheck("plane_offset_written", offsetWritten,
             offset?.ToString("0.###", CultureInfo.InvariantCulture),
             step.Plane.OffsetMm.ToString("0.###", CultureInfo.InvariantCulture)));
-        if (offset is null)
+        if (!offsetWritten)
         {
-            unverified.Add("plane_offset_unread — смещение плоскости не прочитано: запись не подтверждена");
+            unverified.Add("plane_offset_unconfirmed — прочитанное смещение плоскости не совпало с " +
+                           "записанным: шаг мог встать на другую плоскость");
         }
 
         if (step.ReverseDirection == true)

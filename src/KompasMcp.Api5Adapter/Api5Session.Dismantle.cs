@@ -120,8 +120,16 @@ public partial class Api5Session
 
         var after = Int(() => parameters.DismantleStepsCount);
         var steps = ReadSteps(parameters, document, top, notes);
-        checks.Add(new NamedCheck("steps_count_after", after is not null, after?.ToString(),
-            command.Steps is null ? null : command.Steps.Count.ToString()));
+        // INVARIANT: the counter is compared with what the call asked for. MEASURED defect: the check
+        // passed on any read value, so a call that wrote no step at all was reported as written.
+        // A rewrite clears the steps first (the documented interface cannot edit one), so a written
+        // list leaves exactly its own length.
+        var expectedCount = before is null ? (int?)null
+            : command.Clear || command.Steps is { Count: 0 } ? 0
+            : command.Steps is { Count: > 0 } written ? written.Count
+            : before - (command.DeleteSteps?.Count ?? 0);
+        checks.Add(new NamedCheck("steps_count_after", after is not null && after == expectedCount,
+            after?.ToString(), expectedCount?.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
         // LIMIT: the direction of a step cannot be read back (see DismantleStepRowDto), so the write of a
         // direction is confirmed by the measured placement change of an acceptance run, not here.
@@ -207,11 +215,15 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
+        // INVARIANT: the check names the ANSWER of Update(), so a FALSE must not pass it. MEASURED on
+        // sections: Update() can answer FALSE while the row is in the model, so a FALSE is named in the
+        // unverified aspects instead of refusing the call.
         var updated = Int(() => created.Update());
-        checks.Add(new NamedCheck("step_update_returned", updated is not null, updated?.ToString()));
-        if (updated is null)
+        checks.Add(new NamedCheck("step_update_returned", updated == 1, updated?.ToString(), "1"));
+        if (updated != 1)
         {
-            unverified.Add("step_update_unread — Update() шага не ответил: шаг мог не войти в модель");
+            unverified.Add("step_update_unconfirmed — Update() шага ответил " +
+                           (updated?.ToString() ?? "null") + ": шаг мог не войти в модель");
         }
 
         notes.Add("step_written — компонентов " + parts.Count + ", расстояние " +

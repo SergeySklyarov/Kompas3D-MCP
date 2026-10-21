@@ -13632,7 +13632,7 @@
         "discover": "verified",
         "create": "verified",
         "read": "verified",
-        "edit": "implemented",
+        "edit": "not_applicable",
         "rebuild": "not_applicable",
         "save_reopen": "verified",
         "suppress_restore": "verified",
@@ -13659,6 +13659,7 @@
         "Основание-плоскость z = 25 даёт объём 400000 при габарите X max = 104.408 (клинья компенсируются); основание, параллельное уклоняемой грани, и неплоская грань основания отвергаются."
       ],
       "not_applicable_reasons": {
+        "edit": "смена основания построенного уклона снята из объёма решением заказчика 21.10.2026: создание с основанием-гранью и с основанием-плоскостью проверено (DR-02/DR-04), а запрос правки отвергается CAPABILITY_UNAVAILABLE (draft_base_edit_unsupported) до записи модели - это держит строка DR.06; путь клиента - удалить признак и создать заново",
         "rebuild": "признак уклона листовой в дереве: правка параметров и есть перестроение (DR.06.edit, DR.10.from_edges_edit); перестроение вышестоящего признака в профиль не входит"
       },
       "discover_route": {
@@ -15216,6 +15217,60 @@
       "required_of": [
         "G11.sections.create_read",
         "G11.sections.mode_snapshot"
+      ]
+    },
+    {
+      "operation_id": "dep.api7.dismantle_interface",
+      "kind": "common_dependency",
+      "profile": "dismantle-minimal-v1",
+      "priority": "dependency_of",
+      "queue": null,
+      "context": "assembly",
+      "catalog_ref": "G9",
+      "catalog_refs": [
+        "G9.dismantle"
+      ],
+      "title": "IDismantleParameters как дополнительный интерфейс IAssemblyDocument",
+      "parameters_schema": null,
+      "adapter_route": "IDismantleParameters получается ТОЛЬКО документированным QueryInterface от IAssemblyDocument (страница называет «Версия: Компас v20»); второй точки входа нет. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом (idismantleparameters.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_started",
+        "read": "verified",
+        "edit": "not_started",
+        "rebuild": "not_started",
+        "save_reopen": "verified",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "not_started",
+        "geometry_validation": "not_started"
+      },
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen"
+      ],
+      "tests": [
+        "DSM-01.discovery",
+        "DSM-08.read_back",
+        "DSM-11.save_reopen"
+      ],
+      "evidence": [
+        "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs",
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261021-dismantle-8418acf/smoke-all-report.json"
+      ],
+      "limitations": [
+        "Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.",
+        "Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly."
+      ],
+      "acceptance": [
+        "интерфейс получается только QI от IAssemblyDocument и работает у сборки",
+        "не ответил QI - названный отказ, а не молчаливое «шагов нет»"
+      ],
+      "required_of": [
+        "G9.dismantle.mode_steps",
+        "G9.dismantle.mode_exploded"
       ]
     }
   ],

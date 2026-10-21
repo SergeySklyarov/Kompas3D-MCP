@@ -41,28 +41,24 @@
 - **обязательных_режимов:** 2
 - **режимов_закрыто:** 2
 - **общих_зависимостей:** 1
-- **зависимостей_закрыто:** 0
-- **профиль_закрыт:** нет
-- **готовность_процента:** 66.7%
+- **зависимостей_закрыто:** 1
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
 - **по_очередям:** E4 2/2
 - **открытые_режимы:** []
-- **открытые_зависимости:**
-  - `dep.api7.dismantle_interface (строки нет)`
+- **открытые_зависимости:** []
 
 ### профиль drafts-minimal-v1 — Уклоны граней v24: от основания и от базовой линии
 
 - **обязательных_режимов:** 5
-- **режимов_закрыто:** 4
+- **режимов_закрыто:** 5
 - **общих_зависимостей:** 6
-- **зависимостей_закрыто:** 4
-- **профиль_закрыт:** нет
-- **готовность_процента:** 72.7%
-- **по_очередям:** E1 4/5
-- **открытые_режимы:**
-  - `SM-12.incline.mode_base_face_or_plane`
-- **открытые_зависимости:**
-  - `dep.api7.in_same_adapter`
-  - `dep.units.confirm`
+- **зависимостей_закрыто:** 6
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** E1 5/5
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
 
 ### профиль drawings-minimal-v1 — Минимальные чертежи v24
 
@@ -222,17 +218,17 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 365
-- **строк_полностью_закрыто:** 177
-- **строк_с_каким_либо_прогрессом:** 194
+- **строк_каталога:** 366
+- **строк_полностью_закрыто:** 178
+- **строк_с_каким_либо_прогрессом:** 195
 - **семейств_в_каталоге:** 46
 - **семейств_без_строк:** 12
 - **операций:** 139
 - **режимов_и_вариантов:** 220
-- **применимых_действий:** 2990
-- **действий_verified:** 1182
+- **применимых_действий:** 2999
+- **действий_verified:** 1185
 - **покрытие_действий:** 39.5%
-- **распределение_статусов:** {'not_started': 1807, 'verified': 1182, 'not_applicable': 660, 'implemented': 1}
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1185, 'not_applicable': 661}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 63, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 70, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -290,14 +286,14 @@
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
-| `dep.api7.dismantle_interface` | нет | discover, read, save_reopen | — |
+| `dep.api7.dismantle_interface` | да | discover, read, save_reopen | DSM-01.discovery, DSM-08.read_back, DSM-11.save_reopen |
 
 ## Метрика 1 — обязательные режимы профиля `drafts-minimal-v1`
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `SM-12.incline.mode_faces_group` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.03.four_faces, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
-| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | код | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
+| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | н/п | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
 | `SM-12.incline.mode_direction` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
 | `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.08.from_edges_edge, DR.09.from_edges_chain, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
 | `SM-12.draft_from_edges.mode_side` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.09.from_edges_chain, DR.10.from_edges_edit, DR.11.reopen, DR.12.lifecycle, DR.14.refusals |
@@ -309,8 +305,8 @@
 | `dep.refs.planar_face` | да | discover, read, negative_tests | DEP.DPF.01.discover, DEP.DPF.04.geometry_validation, DEP.DPF.03.negative_tests, DEP.DPF.02.read |
 | `dep.refs.edges_faces` | да | discover, read, negative_tests | DEP.DEF.01.discover, DEP.DEF.03.negative_tests, DEP.DEF.02.read |
 | `dep.refs.planes` | да | discover, read, negative_tests | DEP.DPL.01.discover, DEP.DPL.06.negative_tests, DEP.DPL.05.save_reopen, DEP.DPL.02.create, DEP.DPL.04.edit, DEP.DPL.03.read |
-| `dep.api7.in_same_adapter` | нет | create, read, edit, negative_tests | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
-| `dep.units.confirm` | нет | create, read, geometry_validation | DEP.DUN.01.geometry_validation |
+| `dep.api7.in_same_adapter` | да | create, read, edit | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen, TH-02.create_outer, TH-04.create_inner |
+| `dep.units.confirm` | да | geometry_validation | DEP.DUN.01.geometry_validation |
 | `dep.lifecycle.feature_cycle` | да | read, edit, save_reopen, suppress_restore, delete_dependencies | L04, L05, L06, L07, L08, L09, L10, DEP.DLC.06.delete_dependencies, DEP.DLC.02.edit, DEP.DLC.07.negative_tests, DEP.DLC.01.read, DEP.DLC.03.rebuild, DEP.DLC.04.save_reopen, DEP.DLC.05.suppress_restore |
 
 ## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
@@ -701,7 +697,7 @@
 | `SM-11.chamfer.mode_corner_form` | SM-11 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-11.chamfer.mode_group_apply` | SM-11 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-12.incline.mode_faces_group` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.03.four_faces, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
-| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | код | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
+| `SM-12.incline.mode_base_face_or_plane` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | н/п | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.04.base_plane, DR.05.read, DR.06.edit, DR.14.refusals |
 | `SM-12.incline.mode_direction` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.02.one_face, DR.05.read, DR.06.edit, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
 | `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | practical_required | E1 | mcp_verified | OK | OK | OK | OK | н/п | OK | OK | OK | OK | OK | DR.01.discover, DR.PREP.bar, DR.07.from_edges_plane, DR.08.from_edges_edge, DR.09.from_edges_chain, DR.11.reopen, DR.12.lifecycle, DR.13.idempotency, DR.14.refusals |
 | `SM-12.draft_from_edges.mode_dir_by_vector` | SM-12 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -972,6 +968,7 @@
 | `dep.sketch_constraints.state_agreement` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SKC.15.state_agreement |
 | `dep.sketch_constraints.no_silent_rewrite` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | SKC.10.geometry_validation, SKC.16.no_silent_rewrite |
 | `dep.api7.sections_interface` *(вне каталога)* | G11 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
+| `dep.api7.dismantle_interface` *(вне каталога)* | G9 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | DSM-01.discovery, DSM-08.read_back, DSM-11.save_reopen |
 
 ## Ограничения и незакрытое
 
@@ -1232,7 +1229,7 @@
   - Направление вектором (Vector3D) и поверхность вращения вне профиля: контракт отвечает CAPABILITY_UNAVAILABLE с названием причины.
   - Многотельный контекст, компоненты сборки и исполнения не входят в профиль; грани разных тел в одном вызове отвергаются.
   - Одна грань даёт 382367.30 (inward) и 417632.70 (outward) при V0 = 400000; четыре боковые грани одним признаком - 325834.73 и 484529.01; признаков добавляется один.
-- `SM-12.incline.mode_base_face_or_plane` — не закрыт
+- `SM-12.incline.mode_base_face_or_plane` — закрыт целиком
   - Живой прогон 20.10.2026: группа --drafts-only на бинарях поставки artifacts/publish-sm12-20261020l - 15 строк, PASS 38 / FAIL 0; числа - в отчёте наряда.
   - Правка основания ПОСТРОЕННОГО уклона по ссылке не поддержана: продукт отвечает CAPABILITY_UNAVAILABLE (draft_base_edit_unsupported) до записи, путь клиента - удалить признак и создать заново.
   - Правка базовой линии, направляющего объекта и стороны уклона от базовой линии не поддержана: запрос такой правки - именованный отказ, а не молчаливое игнорирование поля.
@@ -1769,6 +1766,9 @@
 - `dep.api7.sections_interface` — не закрыт
   - Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
   - Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11.
+- `dep.api7.dismantle_interface` — не закрыт
+  - Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
+  - Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly.
 
 ## Расхождения каталога и матрицы (не блокирующие)
 

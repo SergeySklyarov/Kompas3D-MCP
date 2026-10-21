@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-21T19:45:44+02:00, часы машины +02:00",
+  "date": "2026-10-21T20:46:40+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -61,10 +61,10 @@
    "worker_sha256": "c4210efe0c336dcc3b0716c075b1115e4f58261dc7d28532c5c737552a1c7756",
    "worker_dll_sha256": "ab523612c4ab00a418ebf3f0c22450072370c25964ebe44d7b3bdec635b53569",
    "adapter_sha256": "f95f49da05b6d719f768d7381683829a74d1165b1a150e38f6d113afb20f2c68",
-   "source_commit": "97b79b8",
+   "source_commit": "25e65b4",
    "source_tree_dirty": false,
    "tools_count": 14,
-   "rows_complete_run": 1827,
+   "rows_complete_run": 1807,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -132,7 +132,7 @@
     "absent": 10,
     "route_field": 4
    },
-   "matrix_rows": 198,
+   "matrix_rows": 199,
    "catalog_modes_and_variants": 220,
    "com_routes": 693,
    "com_routes_by_assembly": {
@@ -149,16 +149,16 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 194,
-   "rows_verified_without_any_linked_row": 0,
+   "rows_claiming_verified": 195,
+   "rows_verified_without_any_linked_row": 3,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 14,
-   "rows_actions_without_required_calls": 18,
-   "rows_status_lowered_by_unsupported_actions": 18,
-   "acceptance_rows": 1827,
-   "acceptance_calls_journal": 17250,
-   "acceptance_rows_with_call_window": 1827,
-   "required_of_mismatches_matrix_vs_profile": 11,
+   "rows_action_without_dedicated_row": 17,
+   "rows_actions_without_required_calls": 20,
+   "rows_status_lowered_by_unsupported_actions": 20,
+   "acceptance_rows": 1807,
+   "acceptance_calls_journal": 17178,
+   "acceptance_rows_with_call_window": 1807,
+   "required_of_mismatches_matrix_vs_profile": 12,
    "dependency_verdict_control_proved": null
   }
  },
@@ -19682,7 +19682,7 @@
     "discover": "verified",
     "create": "verified",
     "read": "verified",
-    "edit": "implemented",
+    "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "verified",
     "suppress_restore": "verified",
@@ -21721,6 +21721,43 @@
    "limitations": [
     "Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.",
     "Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11."
+   ]
+  },
+  {
+   "operation_id": "dep.api7.dismantle_interface",
+   "family": "G9",
+   "queue": null,
+   "kind": "common_dependency",
+   "context": "assembly",
+   "catalog_level": null,
+   "tools": [],
+   "schemas": [],
+   "declared_route": "IDismantleParameters получается ТОЛЬКО документированным QueryInterface от IAssemblyDocument (страница называет «Версия: Компас v20»); второй точки входа нет. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом (idismantleparameters.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_started",
+    "read": "verified",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "verified",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [
+    "DSM-01.discovery",
+    "DSM-08.read_back",
+    "DSM-11.save_reopen"
+   ],
+   "limitations": [
+    "Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.",
+    "Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly."
    ]
   }
  ],
@@ -41283,23 +41320,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-25e65b4/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 7312.5,
+  "lag_seconds": 10820.0,
   "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/KompasMcp.Api5Adapter.deps.json",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-97b79b8/wire.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-25e65b4/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 15422.8,
+  "lag_seconds": 153.3,
   "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "свеж"
  },
@@ -43173,14 +43210,28 @@
     ],
     "profile_only": [],
     "reason": "состав потребителей зависимости расходится: профиль - источник"
+   },
+   {
+    "operation_id": "dep.api7.dismantle_interface",
+    "profile": "dismantle-minimal-v1.json",
+    "matrix_only": [
+     "G9.dismantle.mode_exploded",
+     "G9.dismantle.mode_steps"
+    ],
+    "profile_only": [],
+    "reason": "состав потребителей зависимости расходится: профиль - источник"
    }
   ],
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json",
-  "rows_claiming_verified": 194,
-  "rows_without_any_linked_row": [],
+  "source": "docs/acceptance/evidence/20261021-dismantle-8418acf/smoke-all-report.json",
+  "rows_claiming_verified": 195,
+  "rows_without_any_linked_row": [
+   "G11.sections.create_read",
+   "G11.sections.mode_snapshot",
+   "dep.api7.sections_interface"
+  ],
   "rows_contradicted_by_fail": [],
   "rows_action_without_dedicated_row": [
    "DRW-07.section_view.create.simple",
@@ -43190,13 +43241,16 @@
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
+   "G11.sections.create_read",
    "G11.sections.mode_snapshot",
    "G8.copy_geometry.mode_associativity",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
    "SM-08.thread.mode_inner_by_face",
    "SM-12.draft_from_edges.mode_dir_by_object",
-   "SM-12.incline.mode_base_face_or_plane"
+   "SM-12.incline.mode_base_face_or_plane",
+   "dep.api7.dismantle_interface",
+   "dep.api7.sections_interface"
   ],
   "rows_actions_without_required_calls": [
    "DRW-07.section_view.create.simple",
@@ -43207,6 +43261,7 @@
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
+   "G11.sections.create_read",
    "G11.sections.mode_snapshot",
    "G8.copy_geometry.mode_associativity",
    "MATE-07.mate.create_transmission",
@@ -43216,6 +43271,7 @@
    "SM-12.draft_from_edges.mode_dir_by_object",
    "SM-12.incline.mode_base_face_or_plane",
    "STEP.import",
+   "dep.api7.dismantle_interface",
    "dep.api7.sections_interface"
   ],
   "guard_control": {
@@ -43342,7 +43398,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-25e65b4/routes.json"
    ]
   },
   {
@@ -43352,27 +43408,37 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-97b79b8/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-25e65b4/routes.json"
    ]
   },
   {
    "id": "F-06",
-   "class": "заявка не подтверждена вызовами (отказ сторожа)",
-   "severity": "средняя",
-   "statement": "18 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto",
-   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
+   "class": "приписка (verified без связанной строки приёмки)",
+   "severity": "высокая",
+   "statement": "3 строк(и): G11.sections.create_read, G11.sections.mode_snapshot, dep.api7.sections_interface",
+   "fix": "связать строку с приёмкой или понизить заявку",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json"
+    "docs/acceptance/evidence/20261021-dismantle-8418acf/smoke-all-report.json"
    ]
   },
   {
    "id": "F-07",
+   "class": "заявка не подтверждена вызовами (отказ сторожа)",
+   "severity": "средняя",
+   "statement": "20 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission",
+   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
+   "evidence": [
+    "docs/acceptance/evidence/20261021-dismantle-8418acf/smoke-all-report.json"
+   ]
+  },
+  {
+   "id": "F-08",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
+   "statement": "17 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261021-152127-all-d1a0afb/smoke-all-report.json"
+    "docs/acceptance/evidence/20261021-dismantle-8418acf/smoke-all-report.json"
    ]
   },
   {

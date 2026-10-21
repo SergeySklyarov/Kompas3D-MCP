@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-21T19:45:44+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-21T20:46:40+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 150, маршрутов 683.
-- Измеряемая сборка: `release_build`, коммит `97b79b8`, дерево чистое; `KompasMcp.Host.dll` sha256 `e9f1028649085b7ed8a29e97709f8eaacd1444aca65a6d977f20329118ecce66`.
+- Измеряемая сборка: `release_build`, коммит `25e65b4`, дерево чистое; `KompasMcp.Host.dll` sha256 `e9f1028649085b7ed8a29e97709f8eaacd1444aca65a6d977f20329118ecce66`.
 
 ## 2. Сверка полноты
 
@@ -19,7 +19,7 @@
 | tools_with_schema | 11 |
 | schemas_matching_wire_by_property_names | 11 |
 | schemas_matching_wire_by_shape | 11 |
-| matrix_rows | 198 |
+| matrix_rows | 199 |
 | catalog_modes_and_variants | 220 |
 | com_routes | 693 |
 | com_routes_confirmed_by_documentation | 678 |
@@ -31,16 +31,16 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 12 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 194 |
-| rows_verified_without_any_linked_row | 0 |
+| rows_claiming_verified | 195 |
+| rows_verified_without_any_linked_row | 3 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 14 |
-| rows_actions_without_required_calls | 18 |
-| rows_status_lowered_by_unsupported_actions | 18 |
-| acceptance_rows | 1827 |
-| acceptance_calls_journal | 17250 |
-| acceptance_rows_with_call_window | 1827 |
-| required_of_mismatches_matrix_vs_profile | 11 |
+| rows_action_without_dedicated_row | 17 |
+| rows_actions_without_required_calls | 20 |
+| rows_status_lowered_by_unsupported_actions | 20 |
+| acceptance_rows | 1807 |
+| acceptance_calls_journal | 17178 |
+| acceptance_rows_with_call_window | 1807 |
+| required_of_mismatches_matrix_vs_profile | 12 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
@@ -69,7 +69,7 @@ COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 198.
+Всего строк матрицы: 199.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -271,6 +271,7 @@ COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-
 | `G11.sections.create_read` | G11 | mcp_verified | kompas_create_section, kompas_list_sections, kompas_open_document, kompas_save_document | kompas_create_section: API7 QI(IKompasDocument3D -> IDynamic | Не подтверждено |
 | `G11.sections.mode_snapshot` | G11 | mcp_verified | kompas_export_image, kompas_list_sections, kompas_set_section_mode | kompas_set_section_mode: IDynamicCrossSectionsManager.Dynami | Подтверждено |
 | `dep.api7.sections_interface` | G11 | None | - | IDynamicCrossSectionsManager получается ТОЛЬКО документирова | Не подтверждено |
+| `dep.api7.dismantle_interface` | G9 | None | - | IDismantleParameters получается ТОЛЬКО документированным Que | Не подтверждено |
 
 ### Пределы, названные матрицей у режимов
 
@@ -1066,6 +1067,9 @@ COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-
 - `dep.api7.sections_interface`:
   - Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
   - Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11.
+- `dep.api7.dismantle_interface`:
+  - Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
+  - Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly.
 
 ## 5. COM-маршруты адаптера
 
@@ -1787,19 +1791,27 @@ COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-
 
 Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
 
-### F-06 - заявка не подтверждена вызовами (отказ сторожа)
+### F-06 - приписка (verified без связанной строки приёмки)
+
+Серьёзность: высокая.
+
+3 строк(и): G11.sections.create_read, G11.sections.mode_snapshot, dep.api7.sections_interface
+
+Исправление: связать строку с приёмкой или понизить заявку
+
+### F-07 - заявка не подтверждена вызовами (отказ сторожа)
 
 Серьёзность: средняя.
 
-18 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto
+20 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
-### F-07 - пробел трассируемости (действие не названо строкой)
+### F-08 - пробел трассируемости (действие не названо строкой)
 
 Серьёзность: низкая.
 
-14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face
+17 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

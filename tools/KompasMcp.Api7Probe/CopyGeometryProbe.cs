@@ -82,6 +82,7 @@ internal sealed class CopyGeometryProbe
             if (RefreshedBodyCount(receiver.Value.Doc) == 0)
             {
                 AddThroughOpenDocument(receiver.Value.Doc);
+                AddThroughCollectionGeometry(receiver.Value.Doc);
             }
 
             ReadCollection(receiver.Value.Doc);
@@ -504,6 +505,79 @@ internal sealed class CopyGeometryProbe
         {
             step.Fail("Тела в приёмнике нет и на этом маршруте.");
         }
+    }
+
+    /// <summary>DOC: <c>imodelcontainer_collectionsgeometry.html</c>, <c>icollectionsgeometry_add.html</c>,
+    /// <c>icollectiongeometry_geometry.html</c> (VARIANT, read and write), and
+    /// <c>icopygeometry_bycollectiongeometry.html</c>. The question is whether these pieces form one
+    /// operation that reaches the model tree.</summary>
+    private void AddThroughCollectionGeometry(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.7c", "Коллекция геометрии и ByCollectionGeometry",
+            "Собирается ли из ICollectionGeometry и ICopyGeometry операция, видимая в дереве?");
+        var container = Container(receiverDoc);
+        var collections = Api5.SafeObject(() => container?.CollectionsGeometry) as ICollectionsGeometry;
+        step.Data["collections_geometry"] = Api5.RuntimeName(collections);
+        if (collections?.Add() is not ICollectionGeometry collection || _bodyModel is null)
+        {
+            step.Fail("Коллекция геометрии не создана.");
+            return;
+        }
+
+        step.Data["collection"] = Api5.RuntimeName(collection);
+        try
+        {
+            collection.Geometry = new object[] { _bodyModel };
+            step.Observe("Geometry записана; читается обратно: "
+                + Api5.RuntimeName(Api5.SafeObject(() => collection.Geometry)));
+        }
+        catch (COMException ex)
+        {
+            step.Observe("Запись Geometry отказала: " + HResult.Describe(ex));
+        }
+
+        step.Data["collections_count"] = Api5.SafeInt(() => collections.Count);
+
+        var copies = container?.CopiesGeometry;
+        foreach (var (name, argument) in new (string, object)[]
+                 {
+                     ("коллекция", collection),
+                     ("тело", _bodyModel),
+                 })
+        {
+            if (copies?.Add() is not ICopyGeometry operation)
+            {
+                step.Fail("Операцию создать не удалось.");
+                return;
+            }
+
+            try
+            {
+                operation.ByCollectionGeometry = true;
+                step.Data["by_collection_" + name] = Api5.Raw(Api5.SafeBool(() => operation.ByCollectionGeometry));
+                step.Data["add_" + name] = Api5.Raw(
+                    Api5.SafeBool(() => operation.AddInitialObjects(new object[] { argument })));
+                receiverDoc.RebuildDocument();
+                var features = Api5.ReadFeatures((ksPart)receiverDoc.GetPart(-1), step)
+                    .Select(f => f.Name).ToList();
+                step.Data["tree_" + name] = features;
+                step.Data["bodies_" + name] = RefreshedBodyCount(receiverDoc);
+                step.Observe($"{name}: дерево [{string.Join(", ", features)}], "
+                    + $"тел {RefreshedBodyCount(receiverDoc)}");
+                if (RefreshedBodyCount(receiverDoc) > 0)
+                {
+                    step.Pass("Геометрия появилась через коллекцию геометрии.");
+                    return;
+                }
+            }
+            catch (COMException ex)
+            {
+                step.Data["hresult_" + name] = HResult.Describe(ex);
+                step.Observe($"{name}: отказ {HResult.Describe(ex)}");
+            }
+        }
+
+        step.Fail("Ни один вариант не дал тела в приёмнике.");
     }
 
     private void ReadCollection(ksDocument3D receiverDoc)

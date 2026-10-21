@@ -40,6 +40,7 @@ public sealed class HostSession : IAsyncDisposable
     private readonly HostOptions _options;
     private readonly HostLog _log;
     private readonly HostOwnership _ownership;
+    private readonly UpdateCheck? _update;
     private readonly SemaphoreSlim _transition = new(1, 1);
     private readonly object _callGate = new();
 
@@ -60,11 +61,12 @@ public sealed class HostSession : IAsyncDisposable
     /// <summary>The argument fingerprint and the ready envelope recorded for one <c>operation_id</c>.</summary>
     private sealed record ReleaseReplay(string Fingerprint, ResultEnvelope<JsonNode?> Outcome);
 
-    public HostSession(HostOptions options, HostOwnership ownership, HostLog log)
+    public HostSession(HostOptions options, HostOwnership ownership, HostLog log, UpdateCheck? update = null)
     {
         _options = options;
         _ownership = ownership;
         _log = log;
+        _update = update;
     }
 
     /// <summary>Whether the tool belongs to session control.</summary>
@@ -118,7 +120,7 @@ public sealed class HostSession : IAsyncDisposable
             // History: docs/decisions/host.md#capabilities-catalog
             return string.Equals(tool.Name, CapabilitiesTool, StringComparison.Ordinal)
                 ? WithCapabilitiesCatalog(answer, _options)
-                : answer;
+                : WithUpdateNotice(answer);
         }
 
         if (!_ownership.IsOwner)
@@ -1508,6 +1510,22 @@ public sealed class HostSession : IAsyncDisposable
                 + "Ноль здесь означал бы «записей нет» — другое утверждение.";
         }
 
+        return envelope with { Result = node };
+    }
+
+    /// <summary>Adds the release notice to a <c>kompas_health</c> answer, whichever process produced it.</summary>
+    /// <remarks>INVARIANT: the field is built in the Host, so it is present even when no Worker runs, and
+    /// it comes from a snapshot — a health call never waits for the network.
+    /// History: docs/decisions/host.md#update-notice</remarks>
+    private ResultEnvelope<JsonNode?> WithUpdateNotice(ResultEnvelope<JsonNode?> envelope)
+    {
+        if (_update is null || envelope.Result is not JsonObject result)
+        {
+            return envelope;
+        }
+
+        var node = (JsonObject)result.DeepClone();
+        node["update"] = _update.ToJson();
         return envelope with { Result = node };
     }
 

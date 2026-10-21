@@ -46,6 +46,10 @@ public sealed class HostOptions
     /// <summary>Per-operation budget on the Worker side.</summary>
     public int OperationBudgetMs { get; init; } = 120_000;
 
+    /// <summary>Whether the Host asks GitHub once a day for a newer stable release. The only network
+    /// request the product makes on its own: one GET with <c>User-Agent: KompasMCP/&lt;version&gt;</c>.</summary>
+    public bool UpdateCheckEnabled { get; init; } = true;
+
     // LIMIT: `max_response_bytes`, `default_page_limit`, `max_page_limit`, `artifact_directory` and
     // `require_read_only_model_roots` were read from the configuration and applied NOWHERE - a promise
     // the product did not keep, and a documented one for the last of them (the operator guide promised
@@ -53,7 +57,7 @@ public sealed class HostOptions
     // response is the IPC frame (16 MB), and the list tools carry their own `limit` argument.
     // History: docs/decisions/host.md#unused-config-keys
 
-    private static string Default(params string[] parts)
+    internal static string Default(params string[] parts)
     {
         var root = Path.Combine(Path.GetTempPath(), "kompas-mcp");
         if (parts.Length == 0)
@@ -94,6 +98,7 @@ public sealed class HostOptions
             QueueCapacity = ReadInt(node, "queue_capacity") ?? 64,
             SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 40_000,
             OperationBudgetMs = ReadInt(node, "operation_budget_ms") ?? 120_000,
+            UpdateCheckEnabled = ReadBool(node, "update_check") ?? true,
         };
 
         return FromEnvironment(options);
@@ -102,7 +107,7 @@ public sealed class HostOptions
     private static HostOptions FromEnvironment(HostOptions options)
     {
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in new[] { "KOMPAS_MCP_CONFIG", "KOMPAS_MCP_READONLY_ROOTS", "KOMPAS_MCP_WRITABLE_ROOTS", "KOMPAS_MCP_EXPORT_ROOTS", "KOMPAS_MCP_WORKER_PATH" })
+        foreach (var name in new[] { "KOMPAS_MCP_CONFIG", "KOMPAS_MCP_READONLY_ROOTS", "KOMPAS_MCP_WRITABLE_ROOTS", "KOMPAS_MCP_EXPORT_ROOTS", "KOMPAS_MCP_WORKER_PATH", "KOMPAS_MCP_UPDATE_CHECK" })
         {
             var value = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(value))
@@ -132,6 +137,11 @@ public sealed class HostOptions
             QueueCapacity = options.QueueCapacity,
             SyncBudgetMs = options.SyncBudgetMs,
             OperationBudgetMs = options.OperationBudgetMs,
+            // "0"/"1" is the same pair the installer and the operator guide use; any other value keeps
+            // the configured one, so a typo cannot silently switch the request on or off.
+            UpdateCheckEnabled = overrides.TryGetValue("KOMPAS_MCP_UPDATE_CHECK", out var uc)
+                ? uc switch { "0" => false, "1" => true, _ => options.UpdateCheckEnabled }
+                : options.UpdateCheckEnabled,
         };
     }
 

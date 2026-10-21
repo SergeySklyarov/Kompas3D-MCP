@@ -104,7 +104,8 @@ public static class Program
         // Ownership comes only from an EXPLICIT `kompas_acquire_session` or a coordinated admission.
         // History: docs/decisions/host.md#ownership-model
         using var ownership = HostOwnership.Open(options.JournalPath);
-        await using var session = new HostSession(options, ownership, log);
+        var update = UpdateCheck.Open(options, log);
+        await using var session = new HostSession(options, ownership, log, update);
 
         var initialState = session.Status().Result as JsonObject;
         log.Write("info", "host waiting for session", new
@@ -124,7 +125,11 @@ public static class Program
         builder.Services.AddMcpServer(serverOptions =>
         {
             serverOptions.ServerInfo = new Implementation { Name = ServerName, Title = "КОМПАС-3D MCP", Version = ServerVersion };
-            serverOptions.ServerInstructions = CompactCatalog.Instructions;
+            // The release line is appended ONLY from the outcome already cached on disk: initialize must
+            // not wait for the background check. History: docs/decisions/host.md#update-notice
+            serverOptions.ServerInstructions = update.InstructionsLine is { } notice
+                ? CompactCatalog.Instructions + "\n" + notice
+                : CompactCatalog.Instructions;
 
             // The schemas in ToolCatalog are the contract: published verbatim and the same document the
             // Host validates against, so tools/list and validation cannot drift. The SDK-generated
@@ -144,6 +149,9 @@ public static class Program
 
         try
         {
+            // After the transport is set up and before the first frame is served: the request runs in
+            // the background, so no client call ever waits for it.
+            update.StartBackground();
             await host.RunAsync().ConfigureAwait(false);
         }
         finally

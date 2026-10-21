@@ -334,7 +334,13 @@ function Register-Codex([string]$hostExe, [string]$configPath) {
     if ($range) {
         $previous = $lines[$range[0]..($range[1] - 1)]
         $cmdLine = $previous | Where-Object { $_ -match '^\s*command\s*=' } | Select-Object -First 1
-        $ours = $cmdLine -and $cmdLine.ToLowerInvariant().Contains((Join-Path $InstallRoot "versions").ToLowerInvariant())
+        # INVARIANT: an entry written by an older installer names versions\<tag>, one written now names
+        # current; BOTH are ours, so an update rewrites the old entry to current without
+        # -ReplaceExistingEntry and keeps the same backup.
+        # History: docs/decisions/releases.md#install-layout
+        $lower = if ($cmdLine) { $cmdLine.ToLowerInvariant() } else { "" }
+        $ours = $lower.Contains((Join-Path $InstallRoot "versions").ToLowerInvariant()) -or
+                $lower.Contains($currentLink.ToLowerInvariant())
         if (-not $ours -and -not $ReplaceExistingEntry) {
             Say "  В $toml уже есть [mcp_servers.$ServerName] не из этой установки:"
             $previous | ForEach-Object { Say "    $_" }
@@ -364,6 +370,26 @@ function Register-Codex([string]$hostExe, [string]$configPath) {
     return $toml
 }
 
+# --- 5b. The permanent install path ----------------------------------------------------------
+
+function Set-CurrentLink([string]$target) {
+    # INVARIANT: <InstallRoot>\current is a junction, so the client entry names ONE path that survives
+    # every update, and a version switch needs no administrator rights and no rewrite of config.toml.
+    # A real directory at that path is not ours to delete: switching would silently turn it into a copy.
+    # Returns the previous target, or $null when the link did not exist yet.
+    $previous = $null
+    if (Test-Path -LiteralPath $currentLink) {
+        $item = Get-Item -LiteralPath $currentLink -Force
+        if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            Stop-Install "$currentLink существует и не является точкой соединения; удалите или переименуйте её сами, иначе переключение версии сделает её обычной папкой."
+        }
+        $previous = @($item.Target)[0]
+        Remove-Item -LiteralPath $currentLink -Force
+    }
+    New-Item -ItemType Junction -Path $currentLink -Target $target | Out-Null
+    return $previous
+}
+
 # --- main ------------------------------------------------------------------------------------
 
 Say "KompasMCP: установка выпуска ($Repo)"
@@ -377,6 +403,7 @@ if ($deps.Problems.Count -gt 0) {
 if ($CheckOnly) { Say ""; Say "Зависимости в порядке (-CheckOnly: дальше не иду)."; exit 0 }
 
 $versionsDir = Join-Path $InstallRoot "versions"
+$currentLink = Join-Path $InstallRoot "current"
 New-Item -ItemType Directory -Force -Path $versionsDir | Out-Null
 
 if ($UseInstalled) {
@@ -438,7 +465,7 @@ if ($UseInstalled) {
     }
 }
 
-$hostExe = Join-Path $versionDir "KompasMcp.Host.exe"
+$versionHost = Join-Path $versionDir "KompasMcp.Host.exe"
 Say "4. Конфигурация сервера"
 $configPath = Join-Path $InstallRoot "config\kompas-mcp.json"
 if (Test-Path -LiteralPath $configPath) {
@@ -458,22 +485,47 @@ if (-not $SkipSelfTest) {
     # INVARIANT: any step-5 failure reaches the operator as ОСТАНОВЛЕНО with the step named,
     # never as a bare script error that hides which step stopped the install.
     try {
-        $report = Invoke-SelfTest $hostExe $configPath $manifest
+        $report = Invoke-SelfTest $versionHost $configPath $manifest
     } catch {
         Stop-Install "шаг 5 (самопроверка) прерван ошибкой: $($_.Exception.Message)"
     }
     $selfTestFailed = [bool]$report.failed
-    if ($selfTestFailed) { Stop-Install "шаг 5 (самопроверка) не прошла; запись в Codex не делалась." }
+    if ($selfTestFailed) { Stop-Install "шаг 5 (самопроверка) не прошла; точка current не переключена, запись в Codex не делалась." }
+}
+
+Say "5b. Постоянный путь установки"
+$previousTarget = Set-CurrentLink $versionDir
+$hostExe = Join-Path $currentLink "KompasMcp.Host.exe"
+Ok "current -> $versionDir"
+
+if (-not $SkipSelfTest) {
+    # MEASURED: a junction is only a promise until the product itself runs through it. This second run
+    # starts Host and Worker by <InstallRoot>\current\... and asks kompas_health, so a link the Host
+    # cannot resolve is caught here instead of in the client. A failure returns the link to its
+    # previous target: a switched link over an unverified version would be worse than no update.
+    $viaCurrent = $null
+    try {
+        $viaCurrent = Invoke-SelfTest $hostExe $configPath $manifest
+    } catch {
+        if ($previousTarget) { Set-CurrentLink $previousTarget | Out-Null }
+        Stop-Install "запуск через current прерван ошибкой: $($_.Exception.Message); точка возвращена на $previousTarget"
+    }
+    if ([bool]$viaCurrent.failed) {
+        if ($previousTarget) { Set-CurrentLink $previousTarget | Out-Null }
+        Stop-Install "запуск через current не прошёл; точка возвращена на $previousTarget. Запись в Codex не делалась."
+    }
+    Ok "Host и Worker работают через current"
 }
 
 $toml = $null
 if ($RegisterCodex) { $toml = Register-Codex $hostExe $configPath }
 
-$state = [ordered]@{ tag = $Tag; host = $hostExe; config = $configPath; codex_config = $toml; server_name = $ServerName; installed_utc = (Get-Date).ToUniversalTime().ToString("o") }
+$state = [ordered]@{ tag = $Tag; current = $currentLink; versions = $versionDir; host = $hostExe; config = $configPath; codex_config = $toml; server_name = $ServerName; installed_utc = (Get-Date).ToUniversalTime().ToString("o") }
 [IO.File]::WriteAllText((Join-Path $InstallRoot "installed.json"), ($state | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Say ""
 Say "Готово: KompasMCP $Tag"
+Say "  Версия: $versionDir"
 Say "  Host:   $hostExe"
 Say "  Конфиг: $configPath"
 if ($toml) {

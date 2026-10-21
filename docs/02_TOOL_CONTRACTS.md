@@ -107,7 +107,7 @@ SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_ST
 
 | Инструмент | Вход сверх общих полей | Результат и условия |
 |---|---|---|
-| `kompas_health` | detail: minimal/diagnostic | Host жив, Worker состояние, очередь; без обращения к COM при busy |
+| `kompas_health` | detail: minimal/diagnostic | Host жив, Worker состояние, очередь; без обращения к COM при busy; поле `update` (см. ниже) |
 | `kompas_capabilities` | optional application_id | Реально поддержанные инструменты, API и ограничения |
 | `kompas_connect` | mode attach/launch, optional application_selector, `make_visible` | application_id, PID, ownership, version; launch только явно |
 | `kompas_disconnect` | application_id, close_owned_application=false | По умолчанию отсоединение, не закрытие документов |
@@ -124,6 +124,18 @@ SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_ST
 | `kompas_restore_checkpoint` | checkpoint_id, document_id, dirty_policy | Проверенный restore, новая ревизия; перечень затронутых файлов |
 
 `kompas_connect` и restore - мутации сеанса, тоже журналируются. Documents API должен различать чтение неизменённого файла и редактирование уже открытого пользователем документа. Не открывать второй экземпляр того же файла молча.
+
+**Поле `update` в ответе `kompas_health`** (новое необязательное поле, выпуск `0.10.0`). Собирается в
+Host, поэтому есть и без рабочего процесса. `status`: `up_to_date` | `available` | `unknown` |
+`disabled` | `pending` (`pending` - проверка ещё не завершилась и итога в файле нет). Поля:
+`current_version`, `latest_version` (если известна), `checked_utc`, `release_url`, `release_title`;
+`may_break` только при `available` - `true`, если меняется MAJOR либо (при MAJOR = 0) MINOR; `reason`
+при `unknown`; `how_to_update` при `available` - одна строка: запустить установщик выпуска без `-Tag`
+(он переключает `<InstallRoot>\current`), перезапустить сервер в клиенте, при `may_break` прочитать
+заметки выпуска по `release_url`. Host ничего не скачивает и не устанавливает. Проверка идёт в фоне,
+не чаще раза в сутки, и не задерживает `initialize`, `tools/list` и вызовы; `initialize.instructions`
+несёт одну строку «установлена X, доступна Y» только при `available`, из итога прошлой проверки.
+Выключатель - `update_check` (по умолчанию `true`) и `KOMPAS_MCP_UPDATE_CHECK` (`0`/`1`).
 
 **Видимость (`make_visible`).** Режим по умолчанию - невидимый: сервер не крадёт фокус (P0.4b).
 `make_visible=true` показывает экземпляр, и семантика зависит от его происхождения: `launch` -

@@ -103,16 +103,20 @@ def sync_budget_ms():
 
 
 class Client:
-    def __init__(self, host_exe, config):
+    def __init__(self, host_exe, config, env=None):
         args = [host_exe]
         if config:
             args += ["--config", config]
+        # `env` дописывается к окружению прибора: группе UN нужен свой источник проверки выпуска
+        # (`KOMPAS_MCP_UPDATE_FEED`) и выключатель, а общий os.environ она не трогает - иначе
+        # переменная пережила бы свою строку и попала бы в чужой Хост.
+        child_env = None if env is None else {**os.environ, **env}
         # Путь к исполняемому файлу и конфигурация хранятся: группа SD поднимает СВОИ процессы Хоста
         # тем же исполняемым файлом и той же конфигурацией, а не угадывает их.
         self.host_exe = host_exe
         self.config = config
         self.p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True, encoding="utf-8")
+                                  stderr=subprocess.PIPE, text=True, encoding="utf-8", env=child_env)
         self.n = 0
         self.log = []
         self.err_lines = []
@@ -806,6 +810,9 @@ RUN_GROUPS = (
     ("sections", "sections", "sections-acceptance.json",
      "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
      "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
+    ("update", "update", "update-acceptance.json",
+     "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
+     "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -854,6 +861,9 @@ ALL_GROUPS_EXTRA = (
     ("copy_geometry", ["--copy-geometry-only"]),
     ("dismantle", ["--dismantle-only"]),
     ("sections", ["--sections-only"]),
+    # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
+    # `initialize.instructions` можно увидеть только в процессе, поднятом ПОСЛЕ записи итога.
+    ("update", ["--update-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -16048,6 +16058,10 @@ def main():
     # одному на режим), потому что режим задаётся конфигурацией на старте процесса.
     catalog_only = "--catalog-only" in sys.argv
 
+    # Наряд UPDATE_NOTICE: сообщение о новом выпуске. Группа ведёт свои Хосты и не трогает КОМПАС:
+    # источник проверки подменён локальным файлом, сеть не нужна.
+    update_only = "--update-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -16100,6 +16114,7 @@ def main():
         "disconnect": disconnect_only,
         "shutdown": shutdown_only,
         "catalog": catalog_only,
+        "update": update_only,
     }
     # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
     # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.
@@ -16470,6 +16485,12 @@ def main():
             # Группа CT поднимает свои Хосты в двух режимах каталога: общий Хост прогона работает в
             # `full`, а сравнить ответы двух режимов можно только двумя процессами.
             catalog_checks(host, measured_config, workdir, rep)
+            return finish(rep, client)
+
+        if update_only:
+            # Группа UN: свои Хосты, свой файл итога проверки. КОМПАС не нужен и не запускается -
+            # `kompas_health` отвечает без рабочего процесса.
+            update_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
         # --- the vertical slice ------------------------------------------------------
@@ -48984,6 +49005,190 @@ def catalog_checks(host, config, workdir, rep):
         stop(probe)
 
 
+def update_checks(host, config, workdir, rep):
+    """UN.01…UN.06 — сообщение о новом выпуске без сети (наряд `UPDATE_NOTICE`).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. `kompas_health` называет, есть ли выпуск новее установленного, может
+    ли смена версии сломать контракт (`may_break`) и как обновиться; строка в
+    `initialize.instructions` появляется ТОЛЬКО при `available` и берётся из итога ПРОШЛОЙ проверки;
+    выключенная проверка не делает запроса и не пишет файл итога; битый ответ источника даёт
+    `unknown` с причиной, а не `up_to_date`.
+
+    ПОЧЕМУ ИСТОЧНИК - ФАЙЛ. `KOMPAS_MCP_UPDATE_FEED` подменяет адрес локальным файлом в форме ответа
+    `releases/latest`: ни один запрос наружу не уходит, и приёмка не зависит от того, что сейчас
+    опубликовано на GitHub. Настоящий адрес прибором не проверяется - это отдельное утверждение,
+    которое сеть делает недетерминированным.
+
+    ПОЧЕМУ СВОИ ХОСТЫ. Состояние складывается на старте процесса из файла итога, поэтому строку
+    `initialize.instructions` видно только в процессе, поднятом ПОСЛЕ записи итога. Свои Хосты также
+    держат файл итога отдельно от клиентского: перед каждой проверкой он удаляется (свежий итог
+    отменил бы запрос), а в конце удаляется снова - иначе выдуманный выпуск прожил бы сутки в
+    клиентском Хосте.
+    """
+    import json as _json
+    import tempfile
+
+    from localconfig import isolate_config
+
+    cache = os.path.join(tempfile.gettempdir(), "kompas-mcp", "update-check.json")
+    feed = os.path.join(workdir, "update-feed.json")
+
+    def clear_cache():
+        try:
+            os.remove(cache)
+        except OSError:
+            pass
+
+    def write_feed(text):
+        with open(feed, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def release(tag, draft=False, prerelease=False):
+        return _json.dumps({
+            "tag_name": tag,
+            "name": "Выпуск " + tag,
+            "html_url": "https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/" + tag,
+            "draft": draft,
+            "prerelease": prerelease,
+        }, ensure_ascii=False)
+
+    def open_host(env):
+        probe = Client(host, isolate_config(config, workdir, "un-update"), env=env)
+        init = probe.call("initialize", {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "mcp-smoke-un", "version": "0"}}, timeout=60)
+        probe.notify("notifications/initialized")
+        return probe, init
+
+    def stop(probe):
+        try:
+            if probe.p.stdin:
+                probe.p.stdin.close()
+        except OSError:
+            pass
+        try:
+            probe.p.wait(timeout=60)
+        except Exception:
+            probe.p.kill()
+
+    def health(probe, wait_s=20):
+        """Объект `update` из ответа kompas_health; ждёт конца фоновой проверки, если она идёт."""
+        deadline = time.time() + wait_s
+        answer = {}
+        while time.time() < deadline:
+            _e, env, _r = probe.tool("kompas_health", {}, timeout=120)
+            answer = ((env or {}).get("result") or {}).get("update") or {}
+            if answer.get("status") != "pending":
+                return answer
+            time.sleep(0.2)
+        return answer
+
+    # `Client.call` отдаёт УЖЕ результат (`reply["result"]`), а не конверт JSON-RPC: строка инструкций
+    # и версия берутся из него самого.
+    def version_of(init):
+        return ((init or {}).get("serverInfo") or {}).get("version") or ""
+
+    def instructions_of(init):
+        return (init or {}).get("instructions") or ""
+
+    try:
+        # --- UN.01/UN.06: холодный итог, источник называет выпуск новее установленного ----------
+        clear_cache()
+        write_feed(release("v999.0.0"))
+        started = time.time()
+        probe, init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed})
+        try:
+            probe.call("tools/list", {}, timeout=120)
+            warm_ms = int((time.time() - started) * 1000)
+            answer = health(probe)
+        finally:
+            stop(probe)
+
+        rep.add("UN.01",
+                "новый выпуск: status=available, may_break=true (смена MAJOR), how_to_update называет установщик",
+                "PASS" if (answer.get("status") == "available"
+                           and answer.get("may_break") is True
+                           and "установщик" in (answer.get("how_to_update") or "")
+                           and answer.get("latest_version") == "999.0.0") else "FAIL",
+                f"status={answer.get('status')} latest={answer.get('latest_version')} "
+                f"may_break={answer.get('may_break')} "
+                f"how_to_update={(answer.get('how_to_update') or '')[:80]}")
+
+        rep.add("UN.06",
+                "initialize и tools/list не ждут проверки: холодный итог, оба ответа уложились в 5 с",
+                "PASS" if warm_ms < 5000 else "FAIL",
+                f"initialize+tools/list заняли {warm_ms} мс при пустом файле итога")
+
+        # --- UN.02: строка в initialize.instructions второго Хоста --------------------------------
+        probe, init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed})
+        try:
+            line = instructions_of(init)
+        finally:
+            stop(probe)
+
+        rep.add("UN.02",
+                "available: initialize.instructions несёт строку «установлена X, доступна Y»",
+                "PASS" if ("доступна 999.0.0" in line and "kompas_health" in line) else "FAIL",
+                f"строка найдена: {'доступна 999.0.0' in line}; хвост инструкций: {line[-120:]}")
+
+        # --- UN.03: тот же выпуск - up_to_date без строки ----------------------------------------
+        clear_cache()
+        write_feed(release("v" + version_of(init)))
+        probe, _init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed})
+        try:
+            answer = health(probe)
+        finally:
+            stop(probe)
+        probe, init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed})
+        try:
+            line = instructions_of(init)
+        finally:
+            stop(probe)
+
+        rep.add("UN.03",
+                "тот же выпуск: status=up_to_date, how_to_update нет, строки в инструкциях нет",
+                "PASS" if (answer.get("status") == "up_to_date"
+                           and "how_to_update" not in answer
+                           and "доступна" not in line) else "FAIL",
+                f"status={answer.get('status')} how_to_update={'how_to_update' in answer} "
+                f"строка в инструкциях={'доступна' in line}")
+
+        # --- UN.04: выключатель ---------------------------------------------------------------
+        clear_cache()
+        probe, _init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed, "KOMPAS_MCP_UPDATE_CHECK": "0"})
+        try:
+            answer = health(probe)
+        finally:
+            stop(probe)
+
+        rep.add("UN.04",
+                "выключено: status=disabled, запроса нет (файл итога не создан)",
+                "PASS" if answer.get("status") == "disabled" and not os.path.exists(cache) else "FAIL",
+                f"status={answer.get('status')} файл итога создан={os.path.exists(cache)}")
+
+        # --- UN.05: битый ответ источника ------------------------------------------------------
+        clear_cache()
+        write_feed("{это не json")
+        probe, _init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed})
+        try:
+            answer = health(probe)
+        finally:
+            stop(probe)
+
+        rep.add("UN.05",
+                "битый ответ источника: status=unknown с причиной, а не up_to_date",
+                "PASS" if (answer.get("status") == "unknown"
+                           and (answer.get("reason") or "").strip()) else "FAIL",
+                f"status={answer.get('status')} reason={(answer.get('reason') or '')[:90]}")
+    finally:
+        # Выдуманный выпуск не должен пережить приёмку: файл итога читает клиентский Хост.
+        clear_cache()
+        try:
+            os.remove(feed)
+        except OSError:
+            pass
+
+
 def copy_geometry_checks(client, rep, app_id, workdir):
     """CG-01…CG-08 — «Копия геометрии» из файла другой детали (наряд G8, профиль
     `master-geometry-minimal-v1`).
@@ -49930,6 +50135,9 @@ EXTRA_GROUP_CHECKS = {
     "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
+    # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на
+    # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
+    "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),
 }
 
 

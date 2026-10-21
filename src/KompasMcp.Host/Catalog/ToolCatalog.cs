@@ -133,7 +133,8 @@ public static class ToolCatalog
         var tools = new List<ToolDefinition>
         {
             ReadOnly("kompas_health", "Состояние сервера",
-                "Жив ли Host, в каком состоянии Worker и очередь. К COM не обращается и отвечает, даже когда CAD-канал занят.",
+                "Жив ли Host, в каком состоянии Worker и очередь. К COM не обращается и отвечает, даже когда CAD-канал занят. "
+                + "Поле update называет, есть ли выпуск новее установленного, может ли смена версии сломать контракт (may_break) и как обновиться.",
                 Sch.Props(("detail", Sch.Enum("minimal — только состояния; diagnostic — добавает статистику COM-фильтра и окружение.", "minimal", "diagnostic"))),
                 WorkerCommands.Ping),
 

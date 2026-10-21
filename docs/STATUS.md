@@ -25,7 +25,9 @@
   КОМПАС: `DOCUMENT_NOT_FOUND`, `PATH_NOT_ALLOWED`, `REVISION_CONFLICT`, `NO_BODY`. Группа
   `--copy-geometry-only`: 38 PASS / 0 FAIL / 2 UNKNOWN (автообновление по слежению справка не обещает;
   удаления операции в профиле нет) - ассоциативность доказана строкой CG-04: источник 10 -> 25 мм,
-  объём приёмника 80 000 -> 200 000 мм³. `docs/04_KOMPAS_API_NOTES.md` §4.98,
+  объём приёмника 80 000 -> 200 000 мм³. Зачётный `--all` на `7ec0fa9`: PASS 1780 / NAMED 6 /
+  UNKNOWN 2 / FAIL 0, exit 0, дерево чистое. Профиль `master-geometry-minimal-v1` - COMPLETE.
+  `docs/04_KOMPAS_API_NOTES.md` §4.98,
   `docs/decisions/master-geometry.md#tools`, отчёт `OMEGA_G8_MASTER_GEOMETRY_REPORT_20261021.md`.
 - **`compact` обслуживает весь реестр и стал режимом по умолчанию (наряд `CATALOG_COMPACT`, 21.10.2026,
   сдан, ждёт вердикта):** каждая операция `ToolCatalog.All` достижима: прямой набор

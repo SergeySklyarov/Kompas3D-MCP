@@ -1,4 +1,4 @@
-namespace KompasMcp.Contracts;
+﻿namespace KompasMcp.Contracts;
 
 /// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes
 /// <c>ASM-01…ASM-07</c>).</summary> <remarks>INVARIANT: a component is a reference to a file, not a body: what leaves
@@ -200,3 +200,78 @@ public sealed record DeleteComponentResult(
     int ComponentsAfter,
     VerificationDto Verification,
     IReadOnlyList<string>? Warnings = null);
+
+/// <summary>One step of the exploded view: which components move, how far and along what.</summary>
+/// <remarks>DOC: <c>idismantlestep_parts.html</c> — <c>Parts</c> is a <c>SafeArray VT_ARRAY|VT_DISPATCH</c>
+/// of <c>IPart7</c>; <c>idismantlestep_distance.html</c> — <c>Distance</c> is a <c>double</c>;
+/// <c>idismantlestep_directionobject.html</c> — <c>DirectionObject</c> is an <c>IModelObject</c>, and
+/// <c>Vector</c> is read-only, so a direction is an OBJECT, not three numbers.
+/// History: docs/decisions/dismantle.md#probe</remarks>
+public sealed record DismantleStepDto
+{
+    /// <summary>Top-level components of this assembly, as <c>kompas_list_components</c> returns them.</summary>
+    public required IReadOnlyList<string> ComponentRefs { get; init; }
+
+    /// <summary>Shift in millimetres along the direction object. MEASURED: zero does not move, a negative
+    /// value moves the other way. History: docs/decisions/dismantle.md#probe</summary>
+    public required double DistanceMm { get; init; }
+
+    /// <summary>Reference to an auxiliary AXIS of this assembly: the only direction object the product
+    /// accepted in the measurement. A plane, an edge, a face and a component were all ignored.</summary>
+    public required string DirectionRef { get; init; }
+}
+
+/// <summary>Turn the exploded view on or off and write its steps.</summary>
+/// <remarks>INVARIANT: a step can be added, deleted and cleared — the documented interface has no «edit a
+/// step», so a rewrite is «delete all, then add», and the result says so.
+/// History: docs/decisions/dismantle.md#probe</remarks>
+public sealed record SetDismantleCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Exploded view on or off; <c>null</c> leaves the mode as it is.</summary>
+    public bool? Mode { get; init; }
+
+    /// <summary>Steps to write after the existing ones are removed. <c>null</c> keeps the existing steps,
+    /// an empty list clears them.</summary>
+    public IReadOnlyList<DismantleStepDto>? Steps { get; init; }
+
+    /// <summary>Remove every step through <c>ClearDismantleParameters()</c> and write nothing.</summary>
+    public bool Clear { get; init; }
+}
+
+/// <summary>Read the exploded view: the mode and the steps.</summary>
+public sealed record ListDismantleStepsCommand
+{
+    public required string DocumentId { get; init; }
+}
+
+/// <summary>One step as the model returned it.</summary>
+/// <remarks>LIMIT: the direction of a step is NOT returned. <c>DirectionObject</c> reads back <c>null</c>
+/// and <c>Vector</c> comes back with <c>ksVector3DUnknown</c> and no parameters, so the direction is
+/// write-only in this version — named here rather than replaced by a guess.
+/// History: docs/decisions/dismantle.md#probe</remarks>
+public sealed record DismantleStepRowDto(
+    int Index,
+    IReadOnlyList<string> ComponentRefs,
+    int ComponentCount,
+    double? DistanceMm);
+
+/// <summary>Result of reading the exploded view.</summary>
+public sealed record ListDismantleStepsResult(
+    bool? DismantleMode,
+    int StepsCount,
+    IReadOnlyList<DismantleStepRowDto> Steps,
+    string Route,
+    IReadOnlyList<string> Notes);
+
+/// <summary>Result of writing the exploded view: the steps as the model returns them after the write.</summary>
+public sealed record SetDismantleResult(
+    bool? DismantleMode,
+    int StepsCountBefore,
+    int StepsCountAfter,
+    IReadOnlyList<DismantleStepRowDto> Steps,
+    VerificationDto Verification,
+    IReadOnlyList<string> Notes);

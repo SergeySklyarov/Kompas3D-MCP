@@ -2,28 +2,28 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-21T12:17:29+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-21T15:23:33+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 147, маршрутов 672.
-- Измеряемая сборка: `release_build`, коммит `50cdf22`, дерево чистое; `KompasMcp.Host.dll` sha256 `4d7d0c50c58527d4ee55fe228e5c280c7e3fdb5dda8d1db7e2cb0b656139bed6`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 150, маршрутов 683.
+- Измеряемая сборка: `release_build`, коммит `5201f8d`, дерево чистое; `KompasMcp.Host.dll` sha256 `4c1e4f4c55739ebccc9e57c4ae7e1563425471eeedbcc660973d09363c2849dc`.
 
 ## 2. Сверка полноты
 
 | Показатель | Значение |
 |---|---|
 | tools_on_wire | 14 |
-| schemas_on_disk | 102 |
+| schemas_on_disk | 105 |
 | tools_with_schema | 11 |
 | schemas_matching_wire_by_property_names | 11 |
 | schemas_matching_wire_by_shape | 11 |
-| matrix_rows | 195 |
-| catalog_modes_and_variants | 216 |
-| com_routes | 682 |
-| com_routes_confirmed_by_documentation | 667 |
-| com_routes_confirmed_over_wire | 667 |
+| matrix_rows | 198 |
+| catalog_modes_and_variants | 220 |
+| com_routes | 693 |
+| com_routes_confirmed_by_documentation | 678 |
+| com_routes_confirmed_over_wire | 678 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 5 |
 | com_routes_confirmed_by_name | 6 |
@@ -31,22 +31,22 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 12 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 191 |
-| rows_verified_without_any_linked_row | 191 |
+| rows_claiming_verified | 194 |
+| rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 191 |
-| rows_actions_without_required_calls | 191 |
-| rows_status_lowered_by_unsupported_actions | 191 |
-| acceptance_rows | 0 |
-| acceptance_calls_journal | 0 |
-| acceptance_rows_with_call_window | 0 |
-| required_of_mismatches_matrix_vs_profile | 10 |
+| rows_action_without_dedicated_row | 14 |
+| rows_actions_without_required_calls | 18 |
+| rows_status_lowered_by_unsupported_actions | 18 |
+| acceptance_rows | 1821 |
+| acceptance_calls_journal | 17247 |
+| acceptance_rows_with_call_window | 1821 |
+| required_of_mismatches_matrix_vs_profile | 11 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 10, 'route_field': 4}.
-COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-twins': 10}.
+COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -69,7 +69,7 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 195.
+Всего строк матрицы: 198.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -268,6 +268,9 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 | `G8.copy_geometry.mode_associativity` | G8 | mcp_verified | kompas_copy_geometry, kompas_list_copies_geometry, kompas_measure, kompas_open_document, kompas_save_document, kompas_synchronise_copy | kompas_synchronise_copy: ICopiesGeometry.CopyGeometry[Index] | Подтверждено |
 | `G9.dismantle.mode_steps` | G9 | mcp_verified | kompas_list_dismantle_steps, kompas_open_document, kompas_save_document, kompas_set_dismantle | kompas_set_dismantle: API7 QI(IAssemblyDocument -> IDismantl | Не подтверждено |
 | `G9.dismantle.mode_exploded` | G9 | mcp_verified | kompas_list_components, kompas_list_dismantle_steps, kompas_set_dismantle | компонент шага читается по IPart7.GetSummMatrix (тот же марш | Подтверждено |
+| `G11.sections.create_read` | G11 | mcp_verified | kompas_create_section, kompas_list_sections, kompas_open_document, kompas_save_document | kompas_create_section: API7 QI(IKompasDocument3D -> IDynamic | Не подтверждено |
+| `G11.sections.mode_snapshot` | G11 | mcp_verified | kompas_export_image, kompas_list_sections, kompas_set_section_mode | kompas_set_section_mode: IDynamicCrossSectionsManager.Dynami | Подтверждено |
+| `dep.api7.sections_interface` | G11 | None | - | IDynamicCrossSectionsManager получается ТОЛЬКО документирова | Не подтверждено |
 
 ### Пределы, названные матрицей у режимов
 
@@ -1052,6 +1055,17 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 - `G9.dismantle.mode_exploded`:
   - Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.
   - Поворот шага не проверяется: справка не даёт документированного способа его задать.
+- `G11.sections.create_read`:
+  - Вошёл только шаг смещённой плоскостью: у повёрнутой плоскости страницы дают полный маршрут записи, но второго сечения в документе не создать (AddDynamicCrossSection на детали возвращает пусто), поэтому второй вид шага пробой не подтверждён.
+  - Направление шага читается как признак IPlane3DByOffset.Direction: справка даёт метод ReverseDirection() и не даёт обратного свойства у параметров шага.
+  - Подтверждение записи берётся чтением обратно после IDynamicCrossSection.Update(): IPlane3DByOffset.Update() отвечает FALSE, хотя значения применяются (измерено).
+  - Второе сечение: на детали AddDynamicCrossSection возвращает пусто, на сборке отдаёт объект и счётчик становится 2 - строка SEC-10 принимает оба исхода и требует, чтобы отказ был назван.
+- `G11.sections.mode_snapshot`:
+  - Сечение - отображение: геометрия не меняется вовсе, поэтому единственное доказательство - растр. Порог «видно» - 1 % различающихся байтов несжатого BMP; измерено 11,5 % в режиме и 0 после выключения.
+  - Снимок делает существующий kompas_export_image: отдельного инструмента снимка нет.
+- `dep.api7.sections_interface`:
+  - Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
+  - Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11.
 
 ## 5. COM-маршруты адаптера
 
@@ -1081,7 +1095,7 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 | `ksPart.SetPlacement` | api5 | method | `Boolean SetPlacement(Object placement)` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.UpdatePlacement` | api5 | method | `Boolean UpdatePlacement()` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.fixedComponent` | api5 | property | `prop Boolean fixedComponent` | 1 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 14 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 15 | Подтверждено | перечень интерфейса |
 | `ksPart.GetPlacement` | api5 | method | `Object GetPlacement()` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.fileName` | api5 | property | `prop String fileName` | 6 | Подтверждено | перечень интерфейса |
 | `ksPart.Update` | api5 | method | `Boolean Update()` | 3 | Подтверждено | перечень интерфейса |
@@ -1089,7 +1103,7 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 | `ksMateConstraint.GetBaseObj` | api5 | method | `Object GetBaseObj(Int16 number)` | 7 | Подтверждено | перечень интерфейса |
 | `IModelObject.Part` | api7 | property | `prop Part7 Part` | 1 | Подтверждено | перечень интерфейса |
 | `ksPart.name` | api5 | property | `prop String name` | 2 | Подтверждено | перечень интерфейса |
-| `ksPart.GetDefaultEntity` | api5 | method | `Object GetDefaultEntity(Int16 objType)` | 4 | Подтверждено | перечень интерфейса |
+| `ksPart.GetDefaultEntity` | api5 | method | `Object GetDefaultEntity(Int16 objType)` | 5 | Подтверждено | перечень интерфейса |
 | `IAuxiliaryGeomContainer.Planes3D` | api7 | property | `prop Planes3D Planes3D` | 3 | Подтверждено | перечень интерфейса |
 | `IAuxiliaryGeomContainer.Axes3D` | api7 | property | `prop Axes3D Axes3D` | 3 | Подтверждено | перечень интерфейса |
 | `IModelContainer.Points3D` | api7 | property | `prop Points3D Points3D` | 5 | Подтверждено | перечень интерфейса |
@@ -1429,6 +1443,20 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 | `IHatchParam.HatchAngle` | api7 | property | `prop Double HatchAngle` | 1 | Подтверждено | перечень интерфейса |
 | `IHatchParam.Style` | api7 | property | `prop Int32 Style` | 1 | Подтверждено | перечень интерфейса |
 | `IDrawingObject.Delete` | api7 | method | `Boolean Delete()` | 2 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionsManager.DynamicCrossSectionModeOn` | api7 | property | `prop Boolean DynamicCrossSectionModeOn` | 6 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionsManager.DynamicCrossSectionsCount` | api7 | property | `prop Int32 DynamicCrossSectionsCount` | 4 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionsManager.AddDynamicCrossSection` | api7 | method | `DynamicCrossSection AddDynamicCrossSection()` | 1 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSection.FillCutPlanes` | api7 | property | `prop Boolean FillCutPlanes` | 2 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSection.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSection.AddStep` | api7 | method | `DynamicCrossSectionStep AddStep(ksDynamicCrossSectionStepBuildingTypeE` | 1 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionStepParametersByOffsetPlane.OffsetPlane` | api7 | property | `prop Plane3DByOffset OffsetPlane` | 2 | Подтверждено | перечень интерфейса |
+| `IPlane3DByOffset.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 3 | Подтверждено | перечень интерфейса |
+| `IPlane3DByOffset.Offset` | api7 | property | `prop Double Offset` | 5 | Подтверждено | перечень интерфейса |
+| `IPlane3DByOffset.Direction` | api7 | property | `prop Boolean Direction` | 3 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionStepParametersByOffsetPlane.ReverseDirection` | api7 | method | `Boolean ReverseDirection()` | 1 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSectionsManager.DynamicCrossSection` | api7 | property | `prop DynamicCrossSection DynamicCrossSection` | 1 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSection.StepsCount` | api7 | property | `prop Int32 StepsCount` | 2 | Подтверждено | перечень интерфейса |
+| `IDynamicCrossSection.Step` | api7 | property | `prop DynamicCrossSectionStep Step` | 1 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEdit` | api7 | method | `FragmentDocument BeginEdit()` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEditEx` | api7 | method | `FragmentDocument BeginEditEx(Boolean ReadOnly)` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.EndEdit` | api7 | method | `Boolean EndEdit()` | 3 | Подтверждено | перечень интерфейса |
@@ -1540,9 +1568,6 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 | `IPoint3DParamDisplace.DZ` | api7 | property | `prop Double DZ` | 3 | Подтверждено | перечень интерфейса |
 | `IPoint3D.AssociationObject` | api7 | property | `prop IModelObject AssociationObject` | 1 | Подтверждено | перечень интерфейса |
 | `IPlanes3D.Add` | api7 | method | `IPlane3D Add(ksObj3dTypeEnum PlaneType)` | 2 | Подтверждено | перечень интерфейса |
-| `IPlane3DByOffset.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 2 | Подтверждено | перечень интерфейса |
-| `IPlane3DByOffset.Offset` | api7 | property | `prop Double Offset` | 3 | Подтверждено | перечень интерфейса |
-| `IPlane3DByOffset.Direction` | api7 | property | `prop Boolean Direction` | 2 | Подтверждено | перечень интерфейса |
 | `IPlane3D.Update` | api7 | method | `Boolean Update()` | 5 | Подтверждено | перечень интерфейса |
 | `IPlane3DByAngle.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 2 | Подтверждено | перечень интерфейса |
 | `IPlane3DByAngle.BaseLine` | api7 | property | `prop IModelObject BaseLine` | 3 | Подтверждено | перечень интерфейса |
@@ -1762,27 +1787,19 @@ COM-маршрутов по сборкам: {'api7': 414, 'api5': 258, 'adapter-
 
 Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
 
-### F-06 - приписка (verified без связанной строки приёмки)
-
-Серьёзность: высокая.
-
-191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list
-
-Исправление: связать строку с приёмкой или понизить заявку
-
-### F-07 - заявка не подтверждена вызовами (отказ сторожа)
+### F-06 - заявка не подтверждена вызовами (отказ сторожа)
 
 Серьёзность: средняя.
 
-191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list
+18 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
-### F-08 - пробел трассируемости (действие не названо строкой)
+### F-07 - пробел трассируемости (действие не названо строкой)
 
 Серьёзность: низкая.
 
-191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list
+14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

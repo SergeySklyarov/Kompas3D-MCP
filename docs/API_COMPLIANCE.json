@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-21T12:17:29+02:00, часы машины +02:00",
+  "date": "2026-10-21T15:23:33+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -16,11 +16,11 @@
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
    "retrieved": "2026-10-21",
-   "pages_read": 147,
-   "routes_checked": 672,
+   "pages_read": 150,
+   "routes_checked": 683,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 667,
+    "wire": 678,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -45,8 +45,8 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 672,
-    "ok": 667,
+    "checked": 683,
+    "ok": 678,
     "failed": 5,
     "not_verified": 0
    }
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "11f62fd7f08fbff1f1265aad6a1b7bd7256474590b7f8b598398d32511e215d1",
-   "host_dll_sha256": "4d7d0c50c58527d4ee55fe228e5c280c7e3fdb5dda8d1db7e2cb0b656139bed6",
+   "host_sha256": "91dbd14b64b15456150214ca4bcb093dbe013ad66bac59cbd0d2f8f9a8ca78c2",
+   "host_dll_sha256": "4c1e4f4c55739ebccc9e57c4ae7e1563425471eeedbcc660973d09363c2849dc",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "df23115fd57b91086f7dfd54a653b33c036e261dc004da7b3a1ed8457d6c9e41",
-   "worker_dll_sha256": "fa22ef194e308bafbd4dcc4f37e1dd837ee1dc85c20edf0057272e5fc438d247",
-   "adapter_sha256": "41f6a260540572adc3f876827e1667af54e1b70ef7b508accf6f302d6ba37efa",
-   "source_commit": "50cdf22",
+   "worker_sha256": "f9be455548380035030d3e9771db5f835fb549b7305fcbba90a0feac57acf749",
+   "worker_dll_sha256": "29850edecdf547d21216b825eb05cb4f4c7e67332e7acce5862e960e70c62a86",
+   "adapter_sha256": "64fb5182688668ec7a045b0a34d3dfc342fb1a7db3cb62283f48784796934ea6",
+   "source_commit": "5201f8d",
    "source_tree_dirty": false,
    "tools_count": 14,
-   "rows_complete_run": 0,
+   "rows_complete_run": 1821,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -89,7 +89,7 @@
   },
   "completeness": {
    "tools_on_wire": 14,
-   "schemas_on_disk": 102,
+   "schemas_on_disk": 105,
    "tools_with_schema": 11,
    "schemas_matching_wire_by_property_names": 11,
    "schemas_matching_wire_by_shape": 11,
@@ -132,16 +132,16 @@
     "absent": 10,
     "route_field": 4
    },
-   "matrix_rows": 195,
-   "catalog_modes_and_variants": 216,
-   "com_routes": 682,
+   "matrix_rows": 198,
+   "catalog_modes_and_variants": 220,
+   "com_routes": 693,
    "com_routes_by_assembly": {
-    "api7": 414,
+    "api7": 425,
     "api5": 258,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 667,
-   "com_routes_confirmed_over_wire": 667,
+   "com_routes_confirmed_by_documentation": 678,
+   "com_routes_confirmed_over_wire": 678,
    "com_routes_confirmed_from_mirror": 0,
    "com_routes_unconfirmed": 5,
    "com_routes_confirmed_by_name": 6,
@@ -149,16 +149,16 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 191,
-   "rows_verified_without_any_linked_row": 191,
+   "rows_claiming_verified": 194,
+   "rows_verified_without_any_linked_row": 0,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 191,
-   "rows_actions_without_required_calls": 191,
-   "rows_status_lowered_by_unsupported_actions": 191,
-   "acceptance_rows": 0,
-   "acceptance_calls_journal": 0,
-   "acceptance_rows_with_call_window": 0,
-   "required_of_mismatches_matrix_vs_profile": 10,
+   "rows_action_without_dedicated_row": 14,
+   "rows_actions_without_required_calls": 18,
+   "rows_status_lowered_by_unsupported_actions": 18,
+   "acceptance_rows": 1821,
+   "acceptance_calls_journal": 17247,
+   "acceptance_rows_with_call_window": 1821,
+   "required_of_mismatches_matrix_vs_profile": 11,
    "dependency_verdict_control_proved": null
   }
  },
@@ -444,7 +444,9 @@
      "SM-08.thread.mode_auto:save_reopen_route",
      "SM-08.thread.mode_hand:save_reopen_route",
      "G8.copy_geometry.mode_body_from_file:save_reopen_route",
-     "G8.copy_geometry.mode_associativity:save_reopen_route"
+     "G8.copy_geometry.mode_associativity:save_reopen_route",
+     "G9.dismantle.mode_steps:save_reopen_route",
+     "G11.sections.create_read:save_reopen_route"
     ],
     "schema_field": [],
     "mcp_support": null,
@@ -865,6 +867,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -939,9 +945,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 42,
+    "members": 43,
     "counts": {
-     "Подтверждено": 40,
+     "Подтверждено": 41,
      "не подтверждено": 2
     }
    },
@@ -1173,11 +1179,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -1297,6 +1303,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -1371,9 +1381,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 52,
+    "members": 53,
     "counts": {
-     "Подтверждено": 50,
+     "Подтверждено": 51,
      "не подтверждено": 2
     }
    },
@@ -2273,11 +2283,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -2323,6 +2333,10 @@
     {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
     },
     {
      "member": "IDrawingObject.Update",
@@ -2399,9 +2413,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 51,
+    "members": 52,
     "counts": {
-     "Подтверждено": 49,
+     "Подтверждено": 50,
      "не подтверждено": 2
     }
    },
@@ -2658,6 +2672,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -2732,9 +2750,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 38,
+    "members": 39,
     "counts": {
-     "Подтверждено": 36,
+     "Подтверждено": 37,
      "не подтверждено": 2
     }
    },
@@ -2890,11 +2908,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -2944,6 +2962,10 @@
     {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
     },
     {
      "member": "IDrawingObject.Update",
@@ -3020,9 +3042,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 52,
+    "members": 53,
     "counts": {
-     "Подтверждено": 50,
+     "Подтверждено": 51,
      "не подтверждено": 2
     }
    },
@@ -3196,11 +3218,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -3250,6 +3272,10 @@
     {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
     },
     {
      "member": "IDrawingObject.Update",
@@ -3326,9 +3352,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 52,
+    "members": 53,
     "counts": {
-     "Подтверждено": 50,
+     "Подтверждено": 51,
      "не подтверждено": 2
     }
    },
@@ -3544,6 +3570,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -3618,9 +3648,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 32,
+    "members": 33,
     "counts": {
-     "Подтверждено": 30,
+     "Подтверждено": 31,
      "не подтверждено": 2
     }
    },
@@ -4129,6 +4159,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -4203,9 +4237,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 28,
+    "members": 29,
     "counts": {
-     "Подтверждено": 26,
+     "Подтверждено": 27,
      "не подтверждено": 2
     }
    },
@@ -4446,6 +4480,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -4520,9 +4558,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 35,
+    "members": 36,
     "counts": {
-     "Подтверждено": 33,
+     "Подтверждено": 34,
      "не подтверждено": 2
     }
    },
@@ -4690,6 +4728,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -4764,9 +4806,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 46,
+    "members": 47,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 45,
      "не подтверждено": 2
     }
    },
@@ -5116,6 +5158,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -5190,9 +5236,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 50,
+    "members": 51,
     "counts": {
-     "Подтверждено": 48,
+     "Подтверждено": 49,
      "не подтверждено": 2
     }
    },
@@ -5271,11 +5317,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -5417,6 +5463,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -5491,9 +5541,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 2
     }
    },
@@ -5697,6 +5747,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -5771,9 +5825,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 2
     }
    },
@@ -5921,6 +5975,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -5995,9 +6053,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 2
     }
    },
@@ -6145,6 +6203,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -6219,9 +6281,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 2
     }
    },
@@ -6365,6 +6427,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -6439,9 +6505,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 2
     }
    },
@@ -6557,6 +6623,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -6631,9 +6701,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 2
     }
    },
@@ -6764,11 +6834,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -6806,6 +6876,10 @@
     {
      "member": "IMateConstraint3D.Update",
      "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
     },
     {
      "member": "IDrawingObject.Update",
@@ -6882,9 +6956,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 47,
+    "members": 48,
     "counts": {
-     "Подтверждено": 45,
+     "Подтверждено": 46,
      "не подтверждено": 2
     }
    },
@@ -7113,6 +7187,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -7215,9 +7293,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 65,
+    "members": 66,
     "counts": {
-     "Подтверждено": 62,
+     "Подтверждено": 63,
      "не подтверждено": 3
     }
    },
@@ -7446,6 +7524,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -7548,9 +7630,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 65,
+    "members": 66,
     "counts": {
-     "Подтверждено": 62,
+     "Подтверждено": 63,
      "не подтверждено": 3
     }
    },
@@ -9448,6 +9530,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -9522,9 +9608,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 48,
+    "members": 49,
     "counts": {
-     "Подтверждено": 46,
+     "Подтверждено": 47,
      "не подтверждено": 2
     }
    },
@@ -9686,6 +9772,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -9760,9 +9850,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 46,
     "counts": {
-     "Подтверждено": 43,
+     "Подтверждено": 44,
      "не подтверждено": 2
     }
    },
@@ -9967,6 +10057,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -10041,9 +10135,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 41,
+    "members": 42,
     "counts": {
-     "Подтверждено": 39,
+     "Подтверждено": 40,
      "не подтверждено": 2
     }
    },
@@ -10161,6 +10255,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -10235,9 +10333,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 2
     }
    },
@@ -10864,6 +10962,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -10938,9 +11040,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 26,
+    "members": 27,
     "counts": {
-     "Подтверждено": 24,
+     "Подтверждено": 25,
      "не подтверждено": 2
     }
    },
@@ -11638,6 +11740,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -11712,9 +11818,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 2
     }
    },
@@ -11934,6 +12040,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -12008,9 +12118,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 25,
+    "members": 26,
     "counts": {
-     "Подтверждено": 23,
+     "Подтверждено": 24,
      "не подтверждено": 2
     }
    },
@@ -12206,6 +12316,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -12280,10 +12394,10 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 25,
+    "members": 26,
     "counts": {
      "не подтверждено": 3,
-     "Подтверждено": 22
+     "Подтверждено": 23
     }
    },
    "actions": {
@@ -12412,6 +12526,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -12514,9 +12632,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 45,
+    "members": 46,
     "counts": {
-     "Подтверждено": 42,
+     "Подтверждено": 43,
      "не подтверждено": 3
     }
    },
@@ -13065,6 +13183,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -13139,9 +13261,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 37,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 35,
      "не подтверждено": 2
     }
    },
@@ -13244,6 +13366,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -13318,9 +13444,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 31,
+    "members": 32,
     "counts": {
-     "Подтверждено": 29,
+     "Подтверждено": 30,
      "не подтверждено": 2
     }
    },
@@ -13769,6 +13895,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -13843,9 +13973,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 33,
+    "members": 34,
     "counts": {
-     "Подтверждено": 31,
+     "Подтверждено": 32,
      "не подтверждено": 2
     }
    },
@@ -13961,6 +14091,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -14035,9 +14169,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 37,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 35,
      "не подтверждено": 2
     }
    },
@@ -14153,6 +14287,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -14227,9 +14365,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 37,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 35,
      "не подтверждено": 2
     }
    },
@@ -14345,6 +14483,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -14419,9 +14561,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 36,
+    "members": 37,
     "counts": {
-     "Подтверждено": 34,
+     "Подтверждено": 35,
      "не подтверждено": 2
     }
    },
@@ -15149,6 +15291,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -15223,9 +15369,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 47,
+    "members": 48,
     "counts": {
-     "Подтверждено": 45,
+     "Подтверждено": 46,
      "не подтверждено": 2
     }
    },
@@ -18135,6 +18281,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -18209,9 +18359,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 42,
+    "members": 43,
     "counts": {
-     "Подтверждено": 40,
+     "Подтверждено": 41,
      "не подтверждено": 2
     }
    },
@@ -18917,13 +19067,17 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Step",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksDocument3D.UpdateDocumentParam",
      "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 14
+    "members": 15
    },
    "actions": {
     "discover": "verified",
@@ -19408,11 +19562,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -19590,11 +19744,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ICut.Direction",
+     "member": "IPlane3DByOffset.Direction",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IPlane3DByOffset.Direction",
+     "member": "ICut.Direction",
      "documentation": "Подтверждено"
     },
     {
@@ -19781,6 +19935,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -19855,9 +20013,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 46,
+    "members": 47,
     "counts": {
-     "Подтверждено": 44,
+     "Подтверждено": 45,
      "не подтверждено": 2
     }
    },
@@ -20696,6 +20854,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -20770,9 +20932,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 60,
+    "members": 61,
     "counts": {
-     "Подтверждено": 57,
+     "Подтверждено": 58,
      "не подтверждено": 3
     }
    },
@@ -20967,6 +21129,10 @@
      "documentation": "не подтверждено"
     },
     {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "IDrawingObject.Update",
      "documentation": "Подтверждено"
     },
@@ -21041,9 +21207,9 @@
    ],
    "documentation": {
     "status": "Не подтверждено",
-    "members": 34,
+    "members": 35,
     "counts": {
-     "Подтверждено": 32,
+     "Подтверждено": 33,
      "не подтверждено": 2
     }
    },
@@ -21130,6 +21296,431 @@
    "limitations": [
     "Разнесение читается матрицей компонента: положение и габарит меняются, сама геометрия детали - нет.",
     "Поворот шага не проверяется: справка не даёт документированного способа его задать."
+   ]
+  },
+  {
+   "operation_id": "G11.sections.create_read",
+   "family": "G11",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "part",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_create_section",
+    "kompas_list_sections",
+    "kompas_open_document",
+    "kompas_save_document"
+   ],
+   "schemas": [
+    "schemas/kompas_create_section.json"
+   ],
+   "declared_route": "kompas_create_section: API7 QI(IKompasDocument3D -> IDynamicCrossSectionsManager) -> AddDynamicCrossSection() -> AddStep(ksDCSTByOffsetPlane) -> Parameters -> QI(IDynamicCrossSectionStepParametersByOffsetPlane) -> OffsetPlane (IPlane3DByOffset) -> BasePlane / Offset / Direction -> ReverseDirection() -> IDynamicCrossSection.Update(); чтение - kompas_list_sections: DynamicCrossSectionsCount / DynamicCrossSection[i] / StepsCount / Step[j] / BuildingType / PlaneBuildingType / BasePlane.Name / Offset (idynamiccrosssectionsmanager.html, idynamiccrosssectionsmanager_adddynamiccrosssection.html, idynamiccrosssection_addstep.html, idynamiccrosssectionstepparametersbyoffsetplane.html, iplane3dbyoffset.html, ksapi_idynamiccrosssection_update.html)",
+   "com": [
+    {
+     "member": "IDynamicCrossSectionsManager.AddDynamicCrossSection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.AddStep",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3DByOffset.BasePlane",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3DByAngle.BasePlane",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.BuildingType",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.BuildingType",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILoft.BuildingType",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.BuildingType",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.BuildingType",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IIncline.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPlaneOffsetDefinition.direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraint.direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3DByOffset.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3DByAngle.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Direction",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSectionsManager.DynamicCrossSection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSectionsManager.DynamicCrossSectionsCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IView.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFeature.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IModelObject.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPlaneOffsetDefinition.offset",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3DByOffset.Offset",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSectionStepParametersByOffsetPlane.OffsetPlane",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Parameters",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILocalCoordinateSystem.Parameters",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSectionStepParametersByOffsetPlane.ReverseDirection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.ReverseDirection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHatchParam.Step",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Step",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.StepsCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraint3D.Update",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDrawingObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHole3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3DBy2Points.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFillet.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMirrorPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFeaturePattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Update",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "members": 70,
+    "counts": {
+     "Подтверждено": 68,
+     "не подтверждено": 2
+    }
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SEC-01.discovery",
+    "SEC-01.schema",
+    "SEC-02.create",
+    "SEC-03.read",
+    "SEC-07.reopen",
+    "SEC-08.reverse",
+    "SEC-09.assembly",
+    "SEC-10.second",
+    "SEC-11.not_3d",
+    "SEC-12.bad_plane",
+    "SEC-13.stale_revision"
+   ],
+   "limitations": [
+    "Вошёл только шаг смещённой плоскостью: у повёрнутой плоскости страницы дают полный маршрут записи, но второго сечения в документе не создать (AddDynamicCrossSection на детали возвращает пусто), поэтому второй вид шага пробой не подтверждён.",
+    "Направление шага читается как признак IPlane3DByOffset.Direction: справка даёт метод ReverseDirection() и не даёт обратного свойства у параметров шага.",
+    "Подтверждение записи берётся чтением обратно после IDynamicCrossSection.Update(): IPlane3DByOffset.Update() отвечает FALSE, хотя значения применяются (измерено).",
+    "Второе сечение: на детали AddDynamicCrossSection возвращает пусто, на сборке отдаёт объект и счётчик становится 2 - строка SEC-10 принимает оба исхода и требует, чтобы отказ был назван."
+   ]
+  },
+  {
+   "operation_id": "G11.sections.mode_snapshot",
+   "family": "G11",
+   "queue": "E4",
+   "kind": "profile_mode",
+   "context": "part",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_export_image",
+    "kompas_list_sections",
+    "kompas_set_section_mode"
+   ],
+   "schemas": [
+    "schemas/kompas_set_section_mode.json"
+   ],
+   "declared_route": "kompas_set_section_mode: IDynamicCrossSectionsManager.DynamicCrossSectionModeOn (чтение и запись) -> чтение обратно тем же свойством; снимок - kompas_export_image (растр BMP, 200 dpi), сравнение - доля различающихся байтов несжатого растра (idynamiccrosssectionsmanager_dynamiccrosssectionmodeon.html, ksdynamiccrosssectionmodeon.html)",
+   "com": [
+    {
+     "member": "IDynamicCrossSectionsManager.DynamicCrossSectionModeOn",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 1
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "verified",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "SEC-04.mode_on",
+    "SEC-05.snapshot_on",
+    "SEC-06.snapshot_off"
+   ],
+   "limitations": [
+    "Сечение - отображение: геометрия не меняется вовсе, поэтому единственное доказательство - растр. Порог «видно» - 1 % различающихся байтов несжатого BMP; измерено 11,5 % в режиме и 0 после выключения.",
+    "Снимок делает существующий kompas_export_image: отдельного инструмента снимка нет."
+   ]
+  },
+  {
+   "operation_id": "dep.api7.sections_interface",
+   "family": "G11",
+   "queue": null,
+   "kind": "common_dependency",
+   "context": "part",
+   "catalog_level": null,
+   "tools": [],
+   "schemas": [],
+   "declared_route": "IDynamicCrossSectionsManager получается ТОЛЬКО документированным QueryInterface от перенесённого IKompasDocument3D (страница называет «Версия Компас v18.1»); работает и у детали, и у сборки. Не ответил QI - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом (idynamiccrosssectionsmanager.html, ksapi_idynamiccrosssectionsmanager.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_started",
+    "read": "verified",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "verified",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [
+    "SEC-01.discovery",
+    "SEC-03.read",
+    "SEC-07.reopen",
+    "SEC-11.not_3d"
+   ],
+   "limitations": [
+    "Интерфейс дополнительный: его нет в объявлении IKompasDocument3D, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.",
+    "Работает на документе детали и сборки; на чертеже QI не отвечает - это ожидаемый отказ SEC-11."
    ]
   }
  ],
@@ -21592,6 +22183,16 @@
     "mcp_verified": 1
    },
    "mcp_support": "kompas_set_dismantle / kompas_list_dismantle_steps"
+  },
+  {
+   "family": "G11",
+   "title": "Динамическое сечение модели: шаг смещённой плоскостью, режим отображения и доказательство снимком",
+   "catalog_level": "mcp_verified",
+   "operations": 1,
+   "operation_levels": {
+    "mcp_verified": 1
+   },
+   "mcp_support": "kompas_create_section / kompas_set_section_mode / kompas_list_sections"
   }
  ],
  "com_routes": [
@@ -22309,6 +22910,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:416",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:509",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:592",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:136",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:294",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:846",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:161"
@@ -22549,7 +23151,8 @@
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:659",
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:350",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:136",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:141"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:141",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:348"
    ],
    "receivers": [
     "document.PartNow()",
@@ -31992,6 +32595,392 @@
    }
   },
   {
+   "route": "IDynamicCrossSectionsManager.DynamicCrossSectionModeOn",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionsManager",
+   "declared_on": "IDynamicCrossSectionsManager",
+   "receiver_type": "IDynamicCrossSectionsManager",
+   "inherited": false,
+   "member": "DynamicCrossSectionModeOn",
+   "kind": "property",
+   "signature": "prop Boolean DynamicCrossSectionModeOn",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:122",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:123",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:149",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:168",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:178",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:33"
+   ],
+   "receivers": [
+    "manager"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionsmanager_dynamiccrosssectionmodeon.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionsManager"
+   }
+  },
+  {
+   "route": "IDynamicCrossSectionsManager.DynamicCrossSectionsCount",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionsManager",
+   "declared_on": "IDynamicCrossSectionsManager",
+   "receiver_type": "IDynamicCrossSectionsManager",
+   "inherited": false,
+   "member": "DynamicCrossSectionsCount",
+   "kind": "property",
+   "signature": "prop Int32 DynamicCrossSectionsCount",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:139",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:34",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:411",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:55"
+   ],
+   "receivers": [
+    "manager"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionsmanager_dynamiccrosssectionscount.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionsManager"
+   }
+  },
+  {
+   "route": "IDynamicCrossSectionsManager.AddDynamicCrossSection",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionsManager",
+   "declared_on": "IDynamicCrossSectionsManager",
+   "receiver_type": "IDynamicCrossSectionsManager",
+   "inherited": false,
+   "member": "AddDynamicCrossSection",
+   "kind": "method",
+   "signature": "DynamicCrossSection AddDynamicCrossSection()",
+   "type": "DynamicCrossSection",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:61"
+   ],
+   "receivers": [
+    "manager"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionsmanager_adddynamiccrosssection.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionsManager"
+   }
+  },
+  {
+   "route": "IDynamicCrossSection.FillCutPlanes",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSection",
+   "declared_on": "IDynamicCrossSection",
+   "receiver_type": "IDynamicCrossSection",
+   "inherited": false,
+   "member": "FillCutPlanes",
+   "kind": "property",
+   "signature": "prop Boolean FillCutPlanes",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:431",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:93"
+   ],
+   "receivers": [
+    "section"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssection_fillcutplanes.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSection"
+   }
+  },
+  {
+   "route": "IDynamicCrossSection.Update",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSection",
+   "declared_on": "IDynamicCrossSection",
+   "receiver_type": "IDynamicCrossSection",
+   "inherited": false,
+   "member": "Update",
+   "kind": "method",
+   "signature": "Boolean Update()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:110"
+   ],
+   "receivers": [
+    "section"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelobject_update.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IModelObject"
+   }
+  },
+  {
+   "route": "IDynamicCrossSection.AddStep",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSection",
+   "declared_on": "IDynamicCrossSection",
+   "receiver_type": "IDynamicCrossSection",
+   "inherited": false,
+   "member": "AddStep",
+   "kind": "method",
+   "signature": "DynamicCrossSectionStep AddStep(ksDynamicCrossSectionStepBuildingTypeEnum BuildingType)",
+   "type": "DynamicCrossSectionStep",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:208"
+   ],
+   "receivers": [
+    "section"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssection_addstep.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSection"
+   }
+  },
+  {
+   "route": "IDynamicCrossSectionStepParametersByOffsetPlane.OffsetPlane",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "declared_on": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "receiver_type": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "inherited": false,
+   "member": "OffsetPlane",
+   "kind": "property",
+   "signature": "prop Plane3DByOffset OffsetPlane",
+   "type": "Plane3DByOffset",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:231",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:456"
+   ],
+   "receivers": [
+    "byOffset"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionstepparametersbyoffsetplane_offsetplane.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionStepParametersByOffsetPlane"
+   }
+  },
+  {
+   "route": "IPlane3DByOffset.BasePlane",
+   "assembly": "api7",
+   "interface": "IPlane3DByOffset",
+   "declared_on": "IPlane3DByOffset",
+   "receiver_type": "IPlane3DByOffset",
+   "inherited": false,
+   "member": "BasePlane",
+   "kind": "property",
+   "signature": "prop IModelObject BasePlane",
+   "type": "IModelObject",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:243",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:250",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:356"
+   ],
+   "receivers": [
+    "byOffset",
+    "planeByOffset"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_baseplane.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IPlane3DByOffset"
+   }
+  },
+  {
+   "route": "IPlane3DByOffset.Offset",
+   "assembly": "api7",
+   "interface": "IPlane3DByOffset",
+   "declared_on": "IPlane3DByOffset",
+   "receiver_type": "IPlane3DByOffset",
+   "inherited": false,
+   "member": "Offset",
+   "kind": "property",
+   "signature": "prop Double Offset",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:244",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:257",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:251",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:354",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:434"
+   ],
+   "receivers": [
+    "byOffset",
+    "planeByOffset"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_offset.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IPlane3DByOffset"
+   }
+  },
+  {
+   "route": "IPlane3DByOffset.Direction",
+   "assembly": "api7",
+   "interface": "IPlane3DByOffset",
+   "declared_on": "IPlane3DByOffset",
+   "receiver_type": "IPlane3DByOffset",
+   "inherited": false,
+   "member": "Direction",
+   "kind": "property",
+   "signature": "prop Boolean Direction",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:245",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:252",
+    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:355"
+   ],
+   "receivers": [
+    "byOffset",
+    "planeByOffset"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_direction.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IPlane3DByOffset"
+   }
+  },
+  {
+   "route": "IDynamicCrossSectionStepParametersByOffsetPlane.ReverseDirection",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "declared_on": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "receiver_type": "IDynamicCrossSectionStepParametersByOffsetPlane",
+   "inherited": false,
+   "member": "ReverseDirection",
+   "kind": "method",
+   "signature": "Boolean ReverseDirection()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:268"
+   ],
+   "receivers": [
+    "byOffset"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionstepparametersbyoffsetplane_reversedirection.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionStepParametersByOffsetPlane"
+   }
+  },
+  {
+   "route": "IDynamicCrossSectionsManager.DynamicCrossSection",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSectionsManager",
+   "declared_on": "IDynamicCrossSectionsManager",
+   "receiver_type": "IDynamicCrossSectionsManager",
+   "inherited": false,
+   "member": "DynamicCrossSection",
+   "kind": "property",
+   "signature": "prop DynamicCrossSection DynamicCrossSection",
+   "type": "DynamicCrossSection",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:421"
+   ],
+   "receivers": [
+    "manager"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssectionsmanager_dynamiccrosssection.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSectionsManager"
+   }
+  },
+  {
+   "route": "IDynamicCrossSection.StepsCount",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSection",
+   "declared_on": "IDynamicCrossSection",
+   "receiver_type": "IDynamicCrossSection",
+   "inherited": false,
+   "member": "StepsCount",
+   "kind": "property",
+   "signature": "prop Int32 StepsCount",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:430",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:442"
+   ],
+   "receivers": [
+    "section"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssection_stepscount.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSection"
+   }
+  },
+  {
+   "route": "IDynamicCrossSection.Step",
+   "assembly": "api7",
+   "interface": "IDynamicCrossSection",
+   "declared_on": "IDynamicCrossSection",
+   "receiver_type": "IDynamicCrossSection",
+   "inherited": false,
+   "member": "Step",
+   "kind": "property",
+   "signature": "prop DynamicCrossSectionStep Step",
+   "type": "DynamicCrossSectionStep",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:446"
+   ],
+   "receivers": [
+    "section"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/idynamiccrosssection_step.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IDynamicCrossSection"
+   }
+  },
+  {
    "route": "ISketch.BeginEdit",
    "assembly": "api7",
    "interface": "ISketch",
@@ -35011,88 +36000,6 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "IPlanes3D"
-   }
-  },
-  {
-   "route": "IPlane3DByOffset.BasePlane",
-   "assembly": "api7",
-   "interface": "IPlane3DByOffset",
-   "declared_on": "IPlane3DByOffset",
-   "receiver_type": "IPlane3DByOffset",
-   "inherited": false,
-   "member": "BasePlane",
-   "kind": "property",
-   "signature": "prop IModelObject BasePlane",
-   "type": "IModelObject",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:250",
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:356"
-   ],
-   "receivers": [
-    "byOffset"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_baseplane.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IPlane3DByOffset"
-   }
-  },
-  {
-   "route": "IPlane3DByOffset.Offset",
-   "assembly": "api7",
-   "interface": "IPlane3DByOffset",
-   "declared_on": "IPlane3DByOffset",
-   "receiver_type": "IPlane3DByOffset",
-   "inherited": false,
-   "member": "Offset",
-   "kind": "property",
-   "signature": "prop Double Offset",
-   "type": "Double",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:251",
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:354",
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:434"
-   ],
-   "receivers": [
-    "byOffset"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_offset.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IPlane3DByOffset"
-   }
-  },
-  {
-   "route": "IPlane3DByOffset.Direction",
-   "assembly": "api7",
-   "interface": "IPlane3DByOffset",
-   "declared_on": "IPlane3DByOffset",
-   "receiver_type": "IPlane3DByOffset",
-   "inherited": false,
-   "member": "Direction",
-   "kind": "property",
-   "signature": "prop Boolean Direction",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:252",
-    "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:355"
-   ],
-   "receivers": [
-    "byOffset"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iplane3dbyoffset_direction.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IPlane3DByOffset"
    }
   },
   {
@@ -40376,24 +41283,24 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": false,
-  "lag_seconds": -730.1,
+  "lag_seconds": -1145.9,
   "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
   "reason": "измерение старше своего входа"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261021-api-audit-324a984/wire.json",
+  "source": "docs/acceptance/evidence/20261021-api-audit-b747b8c/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": false,
-  "lag_seconds": -905.8,
-  "newest_input": "coverage/solid-v24/catalog.json",
+  "lag_seconds": -159.4,
+  "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "измерение старше своего входа"
  },
  "reflection_access": {
@@ -40414,16 +41321,16 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 7499,
+  "total": 7564,
   "by_kind": {
-   "foreign-receiver": 6982,
-   "unknown": 419,
+   "foreign-receiver": 7039,
+   "unknown": 427,
    "unknown-member": 98
   },
   "by_reason": {
-   "head-not-declared": 6982,
+   "head-not-declared": 7039,
    "head-type-not-established": 186,
-   "head-type-not-com": 230,
+   "head-type-not-com": 238,
    "member-not-on-interface": 98,
    "chain-broken-on-com-type": 3
   },
@@ -41449,6 +42356,14 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:781:command.AxisPoint2Mm",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:790:command.AxisPoint1Mm",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:791:command.AxisPoint2Mm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:141:command.Steps.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:180:command.Mode",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:244:step.Plane",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:260:step.Plane.OffsetMm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:278:step.Plane",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:278:step.Plane",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:279:step.Plane.OffsetMm",
+    "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:453:step.BuildingType",
     "src/KompasMcp.Api5Adapter/Api5Session.Shell.cs:39:command.FaceRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Shell.cs:97:command.FaceRefs",
     "src/KompasMcp.Api5Adapter/Api5Session.Shell.cs:240:command.ThinDirection",
@@ -41516,15 +42431,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:562:command.DensityKgPerM3",
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:45:ex.GetType()",
     "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:54:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:69:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:92:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:155:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:714:document.Kind.ToString()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:726:application.Ownership.ToString()",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:812:command.Kind",
-    "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:89:name.Name",
-    "src/KompasMcp.Api5Adapter/KompasInteropResolver.cs:293:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:232:ex.GetType()"
+    "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:69:ex.GetType()"
    ],
    "member-not-on-interface": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:757:IModelObject.Points3D",
@@ -41669,6 +42576,16 @@
    "interface": "IRotated",
    "member": "Angle",
    "site": "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:720"
+  },
+  {
+   "interface": "IDynamicCrossSectionsManager",
+   "member": "DynamicCrossSection",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:421"
+  },
+  {
+   "interface": "IDynamicCrossSection",
+   "member": "Step",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:446"
   },
   {
    "interface": "IModelContainer",
@@ -42074,6 +42991,7 @@
    "mates-minimal-v1.json",
    "mechanical-core-v1.json",
    "mechanical-mates-minimal-v1.json",
+   "sections-minimal-v1.json",
    "sketch-bulk-minimal-v1.json",
    "sketch-constraints-minimal-v1.json",
    "threads-minimal-v1.json",
@@ -42245,603 +43163,176 @@
     ],
     "profile_only": [],
     "reason": "состав потребителей зависимости расходится: профиль - источник"
+   },
+   {
+    "operation_id": "dep.api7.sections_interface",
+    "profile": "sections-minimal-v1.json",
+    "matrix_only": [
+     "G11.sections.create_read",
+     "G11.sections.mode_snapshot"
+    ],
+    "profile_only": [],
+    "reason": "состав потребителей зависимости расходится: профиль - источник"
    }
   ],
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json",
-  "rows_claiming_verified": 191,
-  "rows_without_any_linked_row": [
-   "ASM-01.document.create_open",
-   "ASM-02.component.insert",
-   "ASM-03.structure.read",
-   "ASM-04.placement.set_read",
-   "ASM-05.component.replace",
-   "ASM-06.links.check",
-   "ASM-07.save_reopen",
-   "ASM-08.component.delete",
-   "AUX-IMAGE.raster_export",
-   "AUX-SKETCH.plane_and_profile_lifecycle",
-   "DRW-01.views.create_standard",
-   "DRW-02.views.list",
-   "DRW-03.dimension.add",
-   "DRW-03.dimension.add.diametral",
-   "DRW-03.dimension.add.linear",
-   "DRW-03.dimension.add.radial",
-   "DRW-04.title_block.set",
-   "DRW-05.export",
-   "DRW-06.technical_demand",
-   "DRW-07.section_view.create.simple",
-   "DRW-07.section_view.create.stepped",
-   "DRW-07.section_view.delete",
-   "DRW-07.section_view.geometry_validation",
-   "DRW-07.section_view.negative_tests",
-   "DRW-07.section_view.read",
-   "DRW-07.section_view.rebuild",
-   "DRW-07.section_view.save_reopen",
-   "DRW-07.section_view.update",
-   "EI-01.stl.export",
-   "EI-02.stl.tessellation",
-   "EI-03.inertia.central",
-   "EI-04.inertia.principal",
-   "EI-05.inertia.units",
-   "G8.copy_geometry.mode_associativity",
-   "G8.copy_geometry.mode_body_from_file",
-   "G9.dismantle.mode_exploded",
-   "G9.dismantle.mode_steps",
-   "INT-01.pairs.volumetric",
-   "INT-02.pairs.tangent",
-   "INT-03.pairs.faces",
-   "INT-04.gap.min_distance",
-   "MATE-01.mate.create",
-   "MATE-02.mate.read",
-   "MATE-03.mate.param_edit",
-   "MATE-04.mate.fixed",
-   "MATE-05.mate.delete",
-   "MATE-06.mate.placement_effect",
-   "MATE-07.mate.create_transmission",
-   "SKB-01.limits",
-   "SKB-02.polyline_native",
-   "SKB-03.spline",
-   "SKC-01.geometric_types",
-   "SKC-02.dimension_types",
-   "SKC-03.read",
-   "SKC-04.delete",
-   "SKC-05.state_read",
-   "SM-02.base_extrusion.additional_body",
-   "SM-02.base_extrusion.blind",
-   "SM-02.base_extrusion.direction_negative",
-   "SM-02.boss_extrusion.blind",
-   "SM-02.boss_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.blind",
-   "SM-02.cut_extrusion.direction_symmetric",
-   "SM-02.cut_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.through",
-   "SM-02.material_toward",
-   "SM-03.base_rotated.axis_explicit",
-   "SM-03.base_rotated.full_turn",
-   "SM-03.base_rotated.partial_angle",
-   "SM-03.boss_rotated.full_turn",
-   "SM-03.cut_rotated.full_turn",
-   "SM-04.base.mode_orthogonal",
-   "SM-04.base.single_profile_flat_path",
-   "SM-05.base.mode_couplings",
-   "SM-05.base.parallel_sections_order",
-   "SM-07.native_hole.axis_by_face_normal",
-   "SM-07.native_hole.blind_flat_bottom",
-   "SM-07.native_hole.position_off_origin",
-   "SM-07.native_hole.through_counterbore",
-   "SM-07.native_hole.through_countersink",
-   "SM-07.native_hole.through_cylindrical",
-   "SM-08.thread.mode_auto",
-   "SM-08.thread.mode_hand",
-   "SM-08.thread.mode_inner_by_face",
-   "SM-08.thread.mode_outer_by_edge",
-   "SM-09.fillet.change_edge_set",
-   "SM-09.fillet.change_radius_in_place",
-   "SM-09.fillet.constant_radius_body_edges",
-   "SM-09.fillet.read_radius_back",
-   "SM-11.chamfer.mode_direction",
-   "SM-11.chamfer.mode_distance_angle",
-   "SM-11.chamfer.mode_two_distances",
-   "SM-12.draft_from_edges.mode_dir_by_object",
-   "SM-12.draft_from_edges.mode_side",
-   "SM-12.incline.mode_base_face_or_plane",
-   "SM-12.incline.mode_direction",
-   "SM-12.incline.mode_faces_group",
-   "SM-13.shell.mode_direction",
-   "SM-13.shell.mode_remove_faces",
-   "SM-13.shell.uniform_thickness",
-   "SM-15.intersect",
-   "SM-15.subtract",
-   "SM-15.union.explicit_target_and_tools",
-   "SM-15.union.mode_multi_tools",
-   "SM-15.union.mode_save_tools",
-   "SM-16.cut_by_plane.mode_side_removed",
-   "SM-16.split.mode_keep_parts",
-   "SM-16.split.plane_tool",
-   "SM-17.reposition.rotate_about_axis",
-   "SM-17.reposition.translate_by_vector",
-   "SM-18.grid.bodies",
-   "SM-18.grid.operations",
-   "SM-18.grid.rectangular_grid",
-   "SM-18.grid.single_row",
-   "SM-19.circular.angular_range",
-   "SM-19.circular.bodies",
-   "SM-19.circular.full_circle_no_duplicate",
-   "SM-19.circular.operations",
-   "SM-23.mirror_all.bodies_selection",
-   "SM-23.mirror_array.selected_operations",
-   "STEP.import",
-   "VB-01.variable.create",
-   "VB-02.feature_parameters.list",
-   "VB-03.parameter.bind",
-   "VB-04.parameter.unbind",
-   "VM-01.variables.read",
-   "VM-02.variable.set_value",
-   "VM-03.variable.set_expression",
-   "VM-04.material.read",
-   "VM-05.material.write",
-   "VM-06.mass.computed_via_measure",
-   "dep.api7.in_same_adapter",
-   "dep.assembly.component_address",
-   "dep.assembly.document_lifecycle",
-   "dep.assembly.idempotency",
-   "dep.assembly.revisions",
-   "dep.assembly.source_file",
-   "dep.bodies.multibody",
-   "dep.drawing.document_lifecycle",
-   "dep.drawing.export_file",
-   "dep.drawing.idempotency",
-   "dep.drawing.revisions",
-   "dep.drawing.source_file",
-   "dep.drawing.view_address",
-   "dep.ei.idempotency",
-   "dep.ei.path_policy",
-   "dep.ei.read_only_measure",
-   "dep.ei.triangle_count_from_file",
-   "dep.ei.units_system",
-   "dep.foundation",
-   "dep.interference.api7_measurer",
-   "dep.interference.component_address",
-   "dep.interference.distance_unit",
-   "dep.interference.face_address",
-   "dep.interference.read_only",
-   "dep.lifecycle.feature_cycle",
-   "dep.mate.component_insert",
-   "dep.mate.idempotency",
-   "dep.mate.object_address",
-   "dep.mate.revisions",
-   "dep.mate.save_reopen",
-   "dep.paths.flat",
-   "dep.pattern.associativity",
-   "dep.preserve_unknown",
-   "dep.refs.axes",
-   "dep.refs.edges_faces",
-   "dep.refs.planar_face",
-   "dep.refs.planes",
-   "dep.refs.points_axes",
-   "dep.selection.unambiguous",
-   "dep.sketch.entities",
-   "dep.sketch_bulk.entity_read_back",
-   "dep.sketch_bulk.limits_source",
-   "dep.sketch_bulk.profile_area_rule",
-   "dep.sketch_constraints.interop_presence",
-   "dep.sketch_constraints.no_silent_rewrite",
-   "dep.sketch_constraints.object_address",
-   "dep.sketch_constraints.state_agreement",
-   "dep.sketch_constraints.type_vocabulary",
-   "dep.sketches.enumeration",
-   "dep.units.confirm",
-   "dep.vb.idempotency",
-   "dep.vb.parameter_address",
-   "dep.vb.read_only_list",
-   "dep.vb.rebuild_document",
-   "dep.vb.units",
-   "dep.vm.idempotency",
-   "dep.vm.part_addressing",
-   "dep.vm.revisions",
-   "dep.vm.save_reopen",
-   "dep.vm.units"
-  ],
+  "source": "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json",
+  "rows_claiming_verified": 194,
+  "rows_without_any_linked_row": [],
   "rows_contradicted_by_fail": [],
   "rows_action_without_dedicated_row": [
-   "ASM-01.document.create_open",
-   "ASM-02.component.insert",
-   "ASM-03.structure.read",
-   "ASM-04.placement.set_read",
-   "ASM-05.component.replace",
-   "ASM-06.links.check",
-   "ASM-07.save_reopen",
-   "ASM-08.component.delete",
-   "AUX-IMAGE.raster_export",
-   "AUX-SKETCH.plane_and_profile_lifecycle",
-   "DRW-01.views.create_standard",
-   "DRW-02.views.list",
-   "DRW-03.dimension.add",
-   "DRW-03.dimension.add.diametral",
-   "DRW-03.dimension.add.linear",
-   "DRW-03.dimension.add.radial",
-   "DRW-04.title_block.set",
-   "DRW-05.export",
-   "DRW-06.technical_demand",
    "DRW-07.section_view.create.simple",
    "DRW-07.section_view.create.stepped",
    "DRW-07.section_view.delete",
-   "DRW-07.section_view.geometry_validation",
-   "DRW-07.section_view.negative_tests",
    "DRW-07.section_view.read",
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
-   "EI-01.stl.export",
-   "EI-02.stl.tessellation",
-   "EI-03.inertia.central",
-   "EI-04.inertia.principal",
-   "EI-05.inertia.units",
+   "G11.sections.mode_snapshot",
    "G8.copy_geometry.mode_associativity",
-   "G8.copy_geometry.mode_body_from_file",
-   "G9.dismantle.mode_exploded",
-   "G9.dismantle.mode_steps",
-   "INT-01.pairs.volumetric",
-   "INT-02.pairs.tangent",
-   "INT-03.pairs.faces",
-   "INT-04.gap.min_distance",
-   "MATE-01.mate.create",
-   "MATE-02.mate.read",
-   "MATE-03.mate.param_edit",
-   "MATE-04.mate.fixed",
-   "MATE-05.mate.delete",
-   "MATE-06.mate.placement_effect",
-   "MATE-07.mate.create_transmission",
-   "SKB-01.limits",
-   "SKB-02.polyline_native",
-   "SKB-03.spline",
-   "SKC-01.geometric_types",
-   "SKC-02.dimension_types",
-   "SKC-03.read",
-   "SKC-04.delete",
-   "SKC-05.state_read",
-   "SM-02.base_extrusion.additional_body",
-   "SM-02.base_extrusion.blind",
-   "SM-02.base_extrusion.direction_negative",
-   "SM-02.boss_extrusion.blind",
-   "SM-02.boss_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.blind",
-   "SM-02.cut_extrusion.direction_symmetric",
-   "SM-02.cut_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.through",
-   "SM-02.material_toward",
-   "SM-03.base_rotated.axis_explicit",
-   "SM-03.base_rotated.full_turn",
-   "SM-03.base_rotated.partial_angle",
-   "SM-03.boss_rotated.full_turn",
-   "SM-03.cut_rotated.full_turn",
-   "SM-04.base.mode_orthogonal",
-   "SM-04.base.single_profile_flat_path",
-   "SM-05.base.mode_couplings",
-   "SM-05.base.parallel_sections_order",
-   "SM-07.native_hole.axis_by_face_normal",
-   "SM-07.native_hole.blind_flat_bottom",
-   "SM-07.native_hole.position_off_origin",
-   "SM-07.native_hole.through_counterbore",
-   "SM-07.native_hole.through_countersink",
-   "SM-07.native_hole.through_cylindrical",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
    "SM-08.thread.mode_inner_by_face",
-   "SM-08.thread.mode_outer_by_edge",
-   "SM-09.fillet.change_edge_set",
-   "SM-09.fillet.change_radius_in_place",
-   "SM-09.fillet.constant_radius_body_edges",
-   "SM-09.fillet.read_radius_back",
-   "SM-11.chamfer.mode_direction",
-   "SM-11.chamfer.mode_distance_angle",
-   "SM-11.chamfer.mode_two_distances",
    "SM-12.draft_from_edges.mode_dir_by_object",
-   "SM-12.draft_from_edges.mode_side",
-   "SM-12.incline.mode_base_face_or_plane",
-   "SM-12.incline.mode_direction",
-   "SM-12.incline.mode_faces_group",
-   "SM-13.shell.mode_direction",
-   "SM-13.shell.mode_remove_faces",
-   "SM-13.shell.uniform_thickness",
-   "SM-15.intersect",
-   "SM-15.subtract",
-   "SM-15.union.explicit_target_and_tools",
-   "SM-15.union.mode_multi_tools",
-   "SM-15.union.mode_save_tools",
-   "SM-16.cut_by_plane.mode_side_removed",
-   "SM-16.split.mode_keep_parts",
-   "SM-16.split.plane_tool",
-   "SM-17.reposition.rotate_about_axis",
-   "SM-17.reposition.translate_by_vector",
-   "SM-18.grid.bodies",
-   "SM-18.grid.operations",
-   "SM-18.grid.rectangular_grid",
-   "SM-18.grid.single_row",
-   "SM-19.circular.angular_range",
-   "SM-19.circular.bodies",
-   "SM-19.circular.full_circle_no_duplicate",
-   "SM-19.circular.operations",
-   "SM-23.mirror_all.bodies_selection",
-   "SM-23.mirror_array.selected_operations",
-   "STEP.import",
-   "VB-01.variable.create",
-   "VB-02.feature_parameters.list",
-   "VB-03.parameter.bind",
-   "VB-04.parameter.unbind",
-   "VM-01.variables.read",
-   "VM-02.variable.set_value",
-   "VM-03.variable.set_expression",
-   "VM-04.material.read",
-   "VM-05.material.write",
-   "VM-06.mass.computed_via_measure",
-   "dep.api7.in_same_adapter",
-   "dep.assembly.component_address",
-   "dep.assembly.document_lifecycle",
-   "dep.assembly.idempotency",
-   "dep.assembly.revisions",
-   "dep.assembly.source_file",
-   "dep.bodies.multibody",
-   "dep.drawing.document_lifecycle",
-   "dep.drawing.export_file",
-   "dep.drawing.idempotency",
-   "dep.drawing.revisions",
-   "dep.drawing.source_file",
-   "dep.drawing.view_address",
-   "dep.ei.idempotency",
-   "dep.ei.path_policy",
-   "dep.ei.read_only_measure",
-   "dep.ei.triangle_count_from_file",
-   "dep.ei.units_system",
-   "dep.foundation",
-   "dep.interference.api7_measurer",
-   "dep.interference.component_address",
-   "dep.interference.distance_unit",
-   "dep.interference.face_address",
-   "dep.interference.read_only",
-   "dep.lifecycle.feature_cycle",
-   "dep.mate.component_insert",
-   "dep.mate.idempotency",
-   "dep.mate.object_address",
-   "dep.mate.revisions",
-   "dep.mate.save_reopen",
-   "dep.paths.flat",
-   "dep.pattern.associativity",
-   "dep.preserve_unknown",
-   "dep.refs.axes",
-   "dep.refs.edges_faces",
-   "dep.refs.planar_face",
-   "dep.refs.planes",
-   "dep.refs.points_axes",
-   "dep.selection.unambiguous",
-   "dep.sketch.entities",
-   "dep.sketch_bulk.entity_read_back",
-   "dep.sketch_bulk.limits_source",
-   "dep.sketch_bulk.profile_area_rule",
-   "dep.sketch_constraints.interop_presence",
-   "dep.sketch_constraints.no_silent_rewrite",
-   "dep.sketch_constraints.object_address",
-   "dep.sketch_constraints.state_agreement",
-   "dep.sketch_constraints.type_vocabulary",
-   "dep.sketches.enumeration",
-   "dep.units.confirm",
-   "dep.vb.idempotency",
-   "dep.vb.parameter_address",
-   "dep.vb.read_only_list",
-   "dep.vb.rebuild_document",
-   "dep.vb.units",
-   "dep.vm.idempotency",
-   "dep.vm.part_addressing",
-   "dep.vm.revisions",
-   "dep.vm.save_reopen",
-   "dep.vm.units"
+   "SM-12.incline.mode_base_face_or_plane"
   ],
   "rows_actions_without_required_calls": [
-   "ASM-01.document.create_open",
-   "ASM-02.component.insert",
-   "ASM-03.structure.read",
-   "ASM-04.placement.set_read",
-   "ASM-05.component.replace",
-   "ASM-06.links.check",
-   "ASM-07.save_reopen",
-   "ASM-08.component.delete",
-   "AUX-IMAGE.raster_export",
-   "AUX-SKETCH.plane_and_profile_lifecycle",
-   "DRW-01.views.create_standard",
-   "DRW-02.views.list",
-   "DRW-03.dimension.add",
-   "DRW-03.dimension.add.diametral",
-   "DRW-03.dimension.add.linear",
-   "DRW-03.dimension.add.radial",
-   "DRW-04.title_block.set",
-   "DRW-05.export",
-   "DRW-06.technical_demand",
    "DRW-07.section_view.create.simple",
    "DRW-07.section_view.create.stepped",
    "DRW-07.section_view.delete",
    "DRW-07.section_view.geometry_validation",
-   "DRW-07.section_view.negative_tests",
    "DRW-07.section_view.read",
    "DRW-07.section_view.rebuild",
    "DRW-07.section_view.save_reopen",
    "DRW-07.section_view.update",
-   "EI-01.stl.export",
-   "EI-02.stl.tessellation",
-   "EI-03.inertia.central",
-   "EI-04.inertia.principal",
-   "EI-05.inertia.units",
+   "G11.sections.mode_snapshot",
    "G8.copy_geometry.mode_associativity",
-   "G8.copy_geometry.mode_body_from_file",
-   "G9.dismantle.mode_exploded",
-   "G9.dismantle.mode_steps",
-   "INT-01.pairs.volumetric",
-   "INT-02.pairs.tangent",
-   "INT-03.pairs.faces",
-   "INT-04.gap.min_distance",
-   "MATE-01.mate.create",
-   "MATE-02.mate.read",
-   "MATE-03.mate.param_edit",
-   "MATE-04.mate.fixed",
-   "MATE-05.mate.delete",
-   "MATE-06.mate.placement_effect",
    "MATE-07.mate.create_transmission",
-   "SKB-01.limits",
-   "SKB-02.polyline_native",
-   "SKB-03.spline",
-   "SKC-01.geometric_types",
-   "SKC-02.dimension_types",
-   "SKC-03.read",
-   "SKC-04.delete",
-   "SKC-05.state_read",
-   "SM-02.base_extrusion.additional_body",
-   "SM-02.base_extrusion.blind",
-   "SM-02.base_extrusion.direction_negative",
-   "SM-02.boss_extrusion.blind",
-   "SM-02.boss_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.blind",
-   "SM-02.cut_extrusion.direction_symmetric",
-   "SM-02.cut_extrusion.explicit_target_body",
-   "SM-02.cut_extrusion.through",
-   "SM-02.material_toward",
-   "SM-03.base_rotated.axis_explicit",
-   "SM-03.base_rotated.full_turn",
-   "SM-03.base_rotated.partial_angle",
-   "SM-03.boss_rotated.full_turn",
-   "SM-03.cut_rotated.full_turn",
-   "SM-04.base.mode_orthogonal",
-   "SM-04.base.single_profile_flat_path",
-   "SM-05.base.mode_couplings",
-   "SM-05.base.parallel_sections_order",
-   "SM-07.native_hole.axis_by_face_normal",
-   "SM-07.native_hole.blind_flat_bottom",
-   "SM-07.native_hole.position_off_origin",
-   "SM-07.native_hole.through_counterbore",
-   "SM-07.native_hole.through_countersink",
-   "SM-07.native_hole.through_cylindrical",
    "SM-08.thread.mode_auto",
    "SM-08.thread.mode_hand",
    "SM-08.thread.mode_inner_by_face",
-   "SM-08.thread.mode_outer_by_edge",
-   "SM-09.fillet.change_edge_set",
-   "SM-09.fillet.change_radius_in_place",
-   "SM-09.fillet.constant_radius_body_edges",
-   "SM-09.fillet.read_radius_back",
-   "SM-11.chamfer.mode_direction",
-   "SM-11.chamfer.mode_distance_angle",
-   "SM-11.chamfer.mode_two_distances",
    "SM-12.draft_from_edges.mode_dir_by_object",
-   "SM-12.draft_from_edges.mode_side",
    "SM-12.incline.mode_base_face_or_plane",
-   "SM-12.incline.mode_direction",
-   "SM-12.incline.mode_faces_group",
-   "SM-13.shell.mode_direction",
-   "SM-13.shell.mode_remove_faces",
-   "SM-13.shell.uniform_thickness",
-   "SM-15.intersect",
-   "SM-15.subtract",
-   "SM-15.union.explicit_target_and_tools",
-   "SM-15.union.mode_multi_tools",
-   "SM-15.union.mode_save_tools",
-   "SM-16.cut_by_plane.mode_side_removed",
-   "SM-16.split.mode_keep_parts",
-   "SM-16.split.plane_tool",
-   "SM-17.reposition.rotate_about_axis",
-   "SM-17.reposition.translate_by_vector",
-   "SM-18.grid.bodies",
-   "SM-18.grid.operations",
-   "SM-18.grid.rectangular_grid",
-   "SM-18.grid.single_row",
-   "SM-19.circular.angular_range",
-   "SM-19.circular.bodies",
-   "SM-19.circular.full_circle_no_duplicate",
-   "SM-19.circular.operations",
-   "SM-23.mirror_all.bodies_selection",
-   "SM-23.mirror_array.selected_operations",
    "STEP.import",
-   "VB-01.variable.create",
-   "VB-02.feature_parameters.list",
-   "VB-03.parameter.bind",
-   "VB-04.parameter.unbind",
-   "VM-01.variables.read",
-   "VM-02.variable.set_value",
-   "VM-03.variable.set_expression",
-   "VM-04.material.read",
-   "VM-05.material.write",
-   "VM-06.mass.computed_via_measure",
-   "dep.api7.in_same_adapter",
-   "dep.assembly.component_address",
-   "dep.assembly.document_lifecycle",
-   "dep.assembly.idempotency",
-   "dep.assembly.revisions",
-   "dep.assembly.source_file",
-   "dep.bodies.multibody",
-   "dep.drawing.document_lifecycle",
-   "dep.drawing.export_file",
-   "dep.drawing.idempotency",
-   "dep.drawing.revisions",
-   "dep.drawing.source_file",
-   "dep.drawing.view_address",
-   "dep.ei.idempotency",
-   "dep.ei.path_policy",
-   "dep.ei.read_only_measure",
-   "dep.ei.triangle_count_from_file",
-   "dep.ei.units_system",
-   "dep.foundation",
-   "dep.interference.api7_measurer",
-   "dep.interference.component_address",
-   "dep.interference.distance_unit",
-   "dep.interference.face_address",
-   "dep.interference.read_only",
-   "dep.lifecycle.feature_cycle",
-   "dep.mate.component_insert",
-   "dep.mate.idempotency",
-   "dep.mate.object_address",
-   "dep.mate.revisions",
-   "dep.mate.save_reopen",
-   "dep.paths.flat",
-   "dep.pattern.associativity",
-   "dep.preserve_unknown",
-   "dep.refs.axes",
-   "dep.refs.edges_faces",
-   "dep.refs.planar_face",
-   "dep.refs.planes",
-   "dep.refs.points_axes",
-   "dep.selection.unambiguous",
-   "dep.sketch.entities",
-   "dep.sketch_bulk.entity_read_back",
-   "dep.sketch_bulk.limits_source",
-   "dep.sketch_bulk.profile_area_rule",
-   "dep.sketch_constraints.interop_presence",
-   "dep.sketch_constraints.no_silent_rewrite",
-   "dep.sketch_constraints.object_address",
-   "dep.sketch_constraints.state_agreement",
-   "dep.sketch_constraints.type_vocabulary",
-   "dep.sketches.enumeration",
-   "dep.units.confirm",
-   "dep.vb.idempotency",
-   "dep.vb.parameter_address",
-   "dep.vb.read_only_list",
-   "dep.vb.rebuild_document",
-   "dep.vb.units",
-   "dep.vm.idempotency",
-   "dep.vm.part_addressing",
-   "dep.vm.revisions",
-   "dep.vm.save_reopen",
-   "dep.vm.units"
+   "dep.api7.sections_interface"
   ],
   "guard_control": {
-   "must_refuse": null,
-   "must_stay_silent": null,
-   "guard_proved": false,
+   "must_refuse": {
+    "row": "СИНТЕТИЧЕСКАЯ (окно журнала [1, 2])",
+    "tool": "kompas_create_document",
+    "error": "INVALID_ARGUMENT",
+    "refused": true,
+    "reason": "нет ни одного вызова из kompas_create_, kompas_pattern_, kompas_insert_, kompas_add_, kompas_bind_, kompas_extrude, kompas_rotated, kompas_hole, kompas_fillet, kompas_chamfer, kompas_boolean, kompas_split, kompas_cut_by_plane, kompas_reposition, kompas_shell, kompas_loft, kompas_sweep, kompas_set_material, kompas_set_sketch_plane, kompas_set_variable"
+   },
+   "must_stay_silent": {
+    "row": "ASM.03.recursive_read",
+    "silent": true,
+    "reason": "подпись save_reopen выполнена настоящими вызовами"
+   },
+   "guard_proved": true,
    "note": "обе половины в ОДНОЙ постановке: синтетическая строка, чьё окно держит только вызов с кодом отказа, обязана быть отвергнута; строка, чьё окно держит настоящую пару save→open, обязана остаться без отказа"
   }
  },
  "calls_calibration": {
-  "positive": {},
-  "negative_foreign_derivations": {}
+  "positive": {
+   "create": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "delete_dependencies": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "discover": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "edit": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "geometry_validation": {
+    "rows": 10,
+    "derived": 0,
+    "missed": [
+     "B3M.01.geometry_validation",
+     "B3M.02.geometry_validation",
+     "B3M.03.geometry_validation",
+     "B3M.04.geometry_validation",
+     "B3M.05.geometry_validation",
+     "B3M.06.geometry_validation",
+     "B3M.07.geometry_validation",
+     "B3M.08.geometry_validation",
+     "B3M.09.geometry_validation",
+     "B3M.10.geometry_validation"
+    ]
+   },
+   "negative_tests": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "read": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "rebuild": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "save_reopen": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   },
+   "suppress_restore": {
+    "rows": 10,
+    "derived": 10,
+    "missed": []
+   }
+  },
+  "negative_foreign_derivations": {
+   "discover": {
+    "create": 10,
+    "edit": 10,
+    "negative_tests": 10,
+    "rebuild": 10,
+    "save_reopen": 10,
+    "suppress_restore": 10,
+    "delete_dependencies": 10
+   },
+   "edit": {
+    "create": 10
+   },
+   "geometry_validation": {
+    "create": 10,
+    "edit": 10,
+    "negative_tests": 10,
+    "rebuild": 10,
+    "save_reopen": 10,
+    "suppress_restore": 10,
+    "delete_dependencies": 10
+   },
+   "read": {
+    "create": 10,
+    "discover": 10,
+    "geometry_validation": 10,
+    "edit": 10,
+    "negative_tests": 10,
+    "rebuild": 10,
+    "save_reopen": 10,
+    "suppress_restore": 10,
+    "delete_dependencies": 10
+   }
+  }
  },
  "findings": [
   {
@@ -42851,7 +43342,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json"
    ]
   },
   {
@@ -42861,37 +43352,27 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261021-api-audit-324a984/routes.json"
+    "docs/acceptance/evidence/20261021-api-audit-b747b8c/routes.json"
    ]
   },
   {
    "id": "F-06",
-   "class": "приписка (verified без связанной строки приёмки)",
-   "severity": "высокая",
-   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
-   "fix": "связать строку с приёмкой или понизить заявку",
+   "class": "заявка не подтверждена вызовами (отказ сторожа)",
+   "severity": "средняя",
+   "statement": "18 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto",
+   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
    "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
+    "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json"
    ]
   },
   {
    "id": "F-07",
-   "class": "заявка не подтверждена вызовами (отказ сторожа)",
-   "severity": "средняя",
-   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
-   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
-   "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
-   ]
-  },
-  {
-   "id": "F-08",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "191 строк(и): ASM-01.document.create_open, ASM-02.component.insert, ASM-03.structure.read, ASM-04.placement.set_read, ASM-05.component.replace, ASM-06.links.check, ASM-07.save_reopen, ASM-08.component.delete, AUX-IMAGE.raster_export, AUX-SKETCH.plane_and_profile_lifecycle, DRW-01.views.create_standard, DRW-02.views.list",
+   "statement": "14 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "docs/acceptance/evidence/20261021-catalog-full-removal-4d5f624/all-run.json"
+    "scratch/mcp-smoke/runs/20261021-121038-all-b747b8c/smoke-all-report.json"
    ]
   },
   {

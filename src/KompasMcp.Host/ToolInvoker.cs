@@ -155,8 +155,10 @@ public sealed class ToolInvoker : IAsyncDisposable
     /// form, so a client copying the side out of the answer would be refused by our own vocabulary. The two
     /// spellings are ONE request, and the folded form is what the journal records, so a retry with either
     /// spelling replays the same operation instead of conflicting.
+    /// INVARIANT: the fold runs on EVERY path that validates arguments, including <c>kompas_run</c>, whose
+    /// arguments arrive nested under <c>args</c> and are validated before the re-entry.
     /// History: docs/decisions/host.md#material-toward-input</remarks>
-    private static void FoldMaterialTowardMinus(JsonObject arguments)
+    internal static void FoldMaterialTowardMinus(JsonObject arguments)
     {
         if (arguments["material_toward"] is JsonValue value
             && value.TryGetValue<string>(out var word)

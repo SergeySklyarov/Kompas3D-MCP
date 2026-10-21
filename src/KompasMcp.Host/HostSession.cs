@@ -235,6 +235,10 @@ public sealed class HostSession : IAsyncDisposable
         // refusal for "exists but not converted" is gone with the prototype.
         // History: docs/decisions/host.md#catalog-mechanism
         var args = arguments["args"] as JsonObject ?? new JsonObject();
+        // The fold that a direct call gets from the invoker's own validation must happen HERE too:
+        // this schema check runs before the re-entry, so without it the same argument would be
+        // refused through kompas_run and accepted directly.
+        ToolInvoker.FoldMaterialTowardMinus(args);
         var violations = JsonSchemaValidator.Validate(operation.InputSchema, args);
         if (violations.Count > 0)
         {

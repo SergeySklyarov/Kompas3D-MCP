@@ -234,6 +234,11 @@ public static class Program
                 var sketchCopy = new SketchCopyProjectProbe(report, options);
                 pump.Run(() => sketchCopy.Run());
             }
+            else if (options.CopyGeometry)
+            {
+                var copyGeometry = new CopyGeometryProbe(report, options);
+                pump.Run(() => copyGeometry.Run());
+            }
             else if (options.MechanicalMates)
             {
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
@@ -767,6 +772,12 @@ public sealed class Options
     /// <c>SKETCH_COPY_PROJECT_RESEARCH</c>). History: docs/decisions/probes.md#sketch-copy-project</summary>
     public bool SketchCopy { get; private set; }
 
+    /// <summary><c>--copy-geometry</c>: «Копия геометрии» from another part's file — the documented
+    /// address of a foreign object, <c>WatchForSourceChange</c>, <c>Synhronise</c> and a measured
+    /// associativity change (order <c>OMEGA_G8_MASTER_GEOMETRY</c>).
+    /// History: docs/decisions/probes.md#copy-geometry</summary>
+    public bool CopyGeometry { get; private set; }
+
     /// <summary><c>--mech-mates</c>: are «Механическая передача» and «Кулачок - толкатель» created by the
     /// documented API7 route, and is the LINK observable through a measured change of the driven
     /// component's placement (order <c>G4_MECHANICAL_MATES</c>, stage 0).
@@ -915,6 +926,7 @@ public sealed class Options
         var union = false;
         var b5 = false;
         var sketchCopy = false;
+        var copyGeometry = false;
         var mechanicalMates = false;
         var drafts = false;
         var draftsBaseEdit = false;
@@ -1020,6 +1032,9 @@ public sealed class Options
                 case "--sketch-copy":
                     sketchCopy = true;
                     break;
+                case "--copy-geometry":
+                    copyGeometry = true;
+                    break;
                 case "--mech-mates":
                     mechanicalMates = true;
                     break;
@@ -1118,6 +1133,7 @@ public sealed class Options
             : union ? "disconnected-union"
             : b5 ? "b5-sweep-loft-shell"
             : sketchCopy ? "sketch-copy-project"
+            : copyGeometry ? "copy-geometry"
             : repositionParams ? "reposition-params"
             : repositionRead ? "reposition-read"
             : cutArea ? "cut-area"
@@ -1148,6 +1164,7 @@ public sealed class Options
             KeepRunning = keep,
             CollectControls = controls,
             SketchCopy = sketchCopy,
+            CopyGeometry = copyGeometry,
             MechanicalMates = mechanicalMates,
             Drafts = drafts,
             DraftsBaseEdit = draftsBaseEdit,

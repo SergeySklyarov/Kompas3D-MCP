@@ -1,0 +1,602 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Kompas6API5;
+using Kompas6Constants;
+using Kompas6Constants3D;
+using KompasAPI7;
+
+namespace KompasMcp.Api7Probe;
+
+/// <summary>Probe CG — copying geometry from another part's file into a part and keeping the copy
+/// associatively tied to its source (order <c>OMEGA_G8_MASTER_GEOMETRY</c>).</summary>
+/// <remarks>DOC: <c>imodelcontainer_copiesgeometry.html</c> — <c>IModelContainer.CopiesGeometry</c>,
+/// read-only; <c>icopiesgeometry_add.html</c> — <c>Add()</c> returns <c>ICopyGeometry</c>;
+/// <c>icopygeometry_addinitialobjectsfromexternaldocument.html</c> — the address of a foreign object is
+/// a live <c>IKompasDocument3D</c> plus an <c>ILocalCoordinateSystem</c> of that document plus a
+/// <c>SafeArray VT_ARRAY|VT_DISPATCH</c> of <c>IModelObject</c>;
+/// <c>icopygeometry_getexternallocalcooordinatesystem.html</c> — «Версия КОМПАС v22»;
+/// <c>icopygeometry_synhronise.html</c>, <c>icopygeometry_watchforsourcechange.html</c>.
+/// INVARIANT: the copy is confirmed by reading the receiver's geometry and the operation back, never by
+/// the BOOL the call returned. History: docs/decisions/probes.md#copy-geometry</remarks>
+internal sealed class CopyGeometryProbe
+{
+    private const short PlaneXoy = 1;
+    private const double Width = 100d;
+    private const double Height = 80d;
+    private const double Thickness = 10d;
+    private const double ThicknessAfter = 25d;
+
+    private readonly ProbeReport _report;
+    private readonly Options _options;
+    private KompasObject _app = null!;
+    private IKompasDocument3D? _sourceDocument7;
+    private string _sourcePath = string.Empty;
+    private string _receiverPath = string.Empty;
+
+    public CopyGeometryProbe(ProbeReport report, Options options)
+    {
+        _report = report;
+        _options = options;
+    }
+
+    public void Run()
+    {
+        Launch();
+        if (_app is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var source = BuildSource();
+            var receiver = BuildReceiver();
+            if (source is null || receiver is null)
+            {
+                return;
+            }
+
+            var operation = Factory(receiver.Value.Doc);
+            if (operation is null)
+            {
+                return;
+            }
+
+            var objects = Address(source.Value.Part, source.Value.Extrusion, operation,
+                out var externalCs, out var externalDoc);
+            if (objects is null)
+            {
+                return;
+            }
+
+            var accepted = AddFromFile(operation, externalDoc, externalCs, objects, receiver.Value.Doc);
+            if (accepted is null)
+            {
+                return;
+            }
+
+            ReadBack(operation, accepted, receiver.Value.Doc);
+            WatchAndReopen(receiver.Value.Doc);
+            Associativity(source.Value.Extrusion, accepted, receiver.Value.Doc);
+        }
+        catch (Exception ex)
+        {
+            var crash = _report.Begin("CG.X", "Необработанное исключение пробы CG");
+            crash.Fail("Зонд упал: " + ex.GetType().Name + ": " + ex.Message);
+            crash.Errors.Add(ex.ToString());
+        }
+        finally
+        {
+            Shutdown();
+        }
+    }
+
+    private void Launch()
+    {
+        var step = _report.Begin("CG.1", "Свой невидимый экземпляр", "Зонд управляет сеансом один?");
+        try
+        {
+            var before = Process.GetProcessesByName("KOMPAS").Select(p => (uint)p.Id).ToArray();
+            var type = Type.GetTypeFromProgID("KOMPAS.Application.5", throwOnError: false)
+                       ?? throw new InvalidOperationException("ProgID KOMPAS.Application.5 не зарегистрирован.");
+            _app = (KompasObject)Activator.CreateInstance(type)!;
+            _app.Visible = false;
+            var created = Process.GetProcessesByName("KOMPAS").Select(p => (uint)p.Id).ToArray().Except(before).ToArray();
+            if (created.Length != 1)
+            {
+                step.Fail($"Новых процессов: {created.Length} — сеанс не атрибутируется.");
+                return;
+            }
+
+            _options.ProcessId = (int)created[0];
+            step.Data["pid"] = created[0];
+            step.Pass("Экземпляр запущен и атрибутирован диффом процессов.");
+        }
+        catch (Exception ex)
+        {
+            _app = null!;
+            step.Fail("Запуск не удался: " + ex.Message);
+        }
+    }
+
+    /// <summary>The source part is a plate whose thickness is changed later: the associativity step
+    /// needs an edit that changes the volume in a known direction.</summary>
+    private (ksDocument3D Doc, ksPart Part, ksEntity Extrusion)? BuildSource()
+    {
+        var step = _report.Begin("CG.2", "Источник: пластина 100x80x10 в файле",
+            "Есть ли сохранённый файл, из которого можно копировать?");
+        var doc = (ksDocument3D)_app.Document3D();
+        if (doc.Create(true, true) != true)
+        {
+            step.Fail("Документ-источник не создан.");
+            return null;
+        }
+
+        var part = (ksPart)doc.GetPart(-1);
+        var extrusion = Api5.BasePlate(part, Width, Height, Thickness, step, "cg-src");
+        if (extrusion is null)
+        {
+            step.Fail("Пластина не построена.");
+            return null;
+        }
+
+        doc.RebuildDocument();
+        _sourcePath = Path.Combine(_options.WorkDir, "g8-source.m3d");
+        _sourceDocument7 = TransferTo7Document(doc);
+        var saved = doc.SaveAs(_sourcePath);
+        step.Data["save_as"] = saved;
+        step.Data["path"] = _sourcePath;
+        step.Data["volume"] = Api5.Volume(part);
+        step.Data["bodies"] = Api5.BodyCount(part);
+        if (saved == true && Api5.BodyCount(part) == 1)
+        {
+            step.Pass($"Источник сохранён, тело одно, объём {Api5.Num(Api5.Volume(part))} мм³.");
+            return (doc, part, extrusion);
+        }
+
+        step.Fail("Источник не сохранён или тело не одно.");
+        return null;
+    }
+
+    private (ksDocument3D Doc, ksPart Part)? BuildReceiver()
+    {
+        var step = _report.Begin("CG.3", "Приёмник: пустая деталь в файле",
+            "Куда копировать и что читать до копирования?");
+        var doc = (ksDocument3D)_app.Document3D();
+        if (doc.Create(true, true) != true)
+        {
+            step.Fail("Документ-приёмник не создан.");
+            return null;
+        }
+
+        var part = (ksPart)doc.GetPart(-1);
+        _receiverPath = Path.Combine(_options.WorkDir, "g8-receiver.m3d");
+        var saved = doc.SaveAs(_receiverPath);
+        step.Data["save_as"] = saved;
+        step.Data["path"] = _receiverPath;
+        step.Data["bodies"] = Api5.BodyCount(part);
+        step.Data["volume"] = Api5.Volume(part);
+        if (saved == true && Api5.BodyCount(part) == 0)
+        {
+            step.Pass("Приёмник сохранён пустым: тел 0.");
+            return (doc, part);
+        }
+
+        step.Fail("Приёмник не сохранён или в нём уже есть тело.");
+        return null;
+    }
+
+    private ICopyGeometry? Factory(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.4", "Фабрика копий геометрии доступна живьём",
+            "Отдаёт ли контейнер ICopiesGeometry и создаётся ли операция по Add()?");
+        try
+        {
+            if (Container(receiverDoc) is not IModelContainer container)
+            {
+                step.Fail("TransferInterface(документ → API7) не дал IModelContainer.");
+                return null;
+            }
+
+            var collection = container.CopiesGeometry;
+            if (collection is null)
+            {
+                step.Fail("IModelContainer.CopiesGeometry → null.");
+                return null;
+            }
+
+            step.Data["count_before"] = Api5.SafeInt(() => collection.Count);
+            var created = collection.Add();
+            if (created is not ICopyGeometry operation)
+            {
+                step.Fail("CopiesGeometry.Add() не отдал объект, отвечающий QI(ICopyGeometry): "
+                    + Api5.RuntimeName(created));
+                return null;
+            }
+
+            step.Observe("Add() → " + Api5.RuntimeName(created));
+            step.Data["count_after"] = Api5.SafeInt(() => collection.Count);
+            step.Data["document_file_name_empty"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
+            step.Data["watch_default"] = Api5.Raw(Api5.SafeBool(() => operation.WatchForSourceChange));
+            step.Data["context_objects_default"] = Api5.Raw(Api5.SafeBool(() => operation.ContextObjects));
+            step.Data["mirror_default"] = Api5.Raw(Api5.SafeBool(() => operation.MirrorCopy));
+
+            // MEASURED: ContextObjects defaults to TRUE («работа в контексте», i.e. objects of THIS
+            // document); the external-file route needs FALSE, otherwise every foreign object answers
+            // IsSuitableObject=FALSE.
+            operation.ContextObjects = false;
+            step.Data["context_objects_written"] = Api5.Raw(Api5.SafeBool(() => operation.ContextObjects));
+            step.Pass("Коллекция и Add() работают; операция создана пустой.");
+            return operation;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or NullReferenceException)
+        {
+            step.Fail("Маршрут фабрики отказал: " + HResult.Describe(ex));
+            return null;
+        }
+    }
+
+    /// <summary>The decisive question of the order: is there a documented, stable address for an object
+    /// of a foreign document? The page names the address: the source <c>IKompasDocument3D</c>, its
+    /// <c>ILocalCoordinateSystem</c>, and the object itself as <c>IModelObject</c>.</summary>
+    private List<(string Name, IModelObject Object)>? Address(ksPart sourcePart, ksEntity extrusion,
+        ICopyGeometry operation, out LocalCoordinateSystem? externalCs, out IKompasDocument3D? externalDoc)
+    {
+        externalCs = null;
+        externalDoc = null;
+        var step = _report.Begin("CG.5", "Адрес объекта чужого документа",
+            "Принимает ли документированный маршрут объект источника и как он называется?");
+
+        // Which collections the container itself offers: the body taken from API5 GetMainBody is not
+        // suitable, so the candidate list is widened to what IModelContainer publishes.
+        step.Data["container_members"] = typeof(IModelContainer).GetProperties()
+            .Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        step.Data["model_objects_members"] = typeof(IModelObjects).GetMembers()
+            .Where(m => m.MemberType is System.Reflection.MemberTypes.Method
+                or System.Reflection.MemberTypes.Property)
+            .Select(m => m.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList();
+        step.Data["model_object_members"] = typeof(IModelObject).GetProperties()
+            .Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var candidates = new List<(string Name, object? Api5, IModelObject? Api7, bool? Suitable)>();
+        foreach (var (name, raw) in new (string, object?)[]
+                 {
+                     ("тело", Api5.SafeObject(() => sourcePart.GetMainBody())),
+                     ("выдавливание", extrusion),
+                     ("плоскость XoY", Api5.SafeObject(() => sourcePart.GetDefaultEntity(PlaneXoy))),
+                 })
+        {
+            var seven = TransferTo7(raw);
+            candidates.Add((name, raw, seven, seven is null
+                ? null
+                : Api5.SafeBool(() => operation.IsSuitableObject(seven))));
+        }
+
+        // DOC: imodelcontainer_objects.html — `Objects = iObject.Objects(ObjType)` returns the 3D objects
+        // of that type; obj3dtype.html — o3d_body = 115. This is the documented list of model objects,
+        // while a body taken from API5 GetMainBody answers IsSuitableObject=FALSE.
+        var sourceContainer = _sourceDocument7?.TopPart as IModelContainer;
+        var bodiesOfSource = Api5.SafeObject(() => sourceContainer!.Objects[KompasAPIObjectTypeEnum.ksObjectBody7]) as IModelObjects;
+        var bodiesCount = bodiesOfSource is null ? 0 : Api5.SafeInt(() => bodiesOfSource.Count) ?? 0;
+        step.Data["object_type_enum_body_names"] = Enum.GetNames<KompasAPIObjectTypeEnum>()
+            .Where(n => n.Contains("body", StringComparison.OrdinalIgnoreCase)).ToList();
+        step.Data["source_objects_by_type"] = CountByType(sourceContainer);
+        step.Data["source_objects_body"] = Api5.RuntimeName(bodiesOfSource);
+        step.Data["source_objects_body_count"] = bodiesCount;
+        for (var i = 0; i < bodiesCount; i++)
+        {
+            var index = i;
+            if (Api5.SafeObject(() => bodiesOfSource![index]) is not IModelObject model)
+            {
+                continue;
+            }
+
+            var type = Api5.SafeObject(() => model.ModelObjectType);
+            candidates.Add(($"Objects[115][{index}] {type}", model, model,
+                Api5.SafeBool(() => operation.IsSuitableObject(model))));
+        }
+
+        foreach (var candidate in candidates)
+        {
+            step.Observe($"{candidate.Name}: API5 {Api5.RuntimeName(candidate.Api5)} → API7 "
+                + $"{Api5.RuntimeName(candidate.Api7)}, IsSuitableObject={Api5.Raw(candidate.Suitable)}");
+        }
+
+        step.Data["candidates"] = candidates
+            .Select(c => $"{c.Name}:{Api5.RuntimeName(c.Api7)}:{Api5.Raw(c.Suitable)}")
+            .ToList();
+
+        // The external document pointer is the second half of the address. It is taken from the live
+        // source document, because the documented route asks for IKompasDocument3D, not for a path.
+        var document7 = _sourceDocument7;
+        externalDoc = document7;
+        step.Data["external_document"] = Api5.RuntimeName(document7);
+        if (document7 is null)
+        {
+            step.Fail("Документ-источник не удалось получить как IKompasDocument3D — адрес неполон.");
+            return null;
+        }
+
+        externalCs = Api5.SafeObject(() => operation.GetExternalLocalCooordinateSystem(document7)) as LocalCoordinateSystem;
+        step.Data["external_cs"] = Api5.RuntimeName(externalCs);
+
+        var addressable = candidates
+            .Where(c => c.Api7 is not null)
+            .Select(c => (c.Name, Object: c.Api7!))
+            .ToList();
+        step.Data["addressable"] = addressable.Select(c => c.Name).ToList();
+        if (addressable.Count == 0)
+        {
+            step.Fail("Ни один объект источника не передался в API7 как IModelObject — адреса нет.");
+            return null;
+        }
+
+        // IsSuitableObject is recorded, not obeyed: with the source not yet attached the product answers
+        // FALSE for every foreign object, so a FALSE here is not yet a verdict about the object.
+        step.Pass($"Адрес собран: документ-источник + его СК ({Api5.RuntimeName(externalCs)}) + "
+            + $"объект как IModelObject; кандидатов {addressable.Count}.");
+        return addressable;
+    }
+
+    private IModelObject? AddFromFile(ICopyGeometry operation, IKompasDocument3D? externalDoc,
+        LocalCoordinateSystem? externalCs, List<(string Name, IModelObject Object)> objects,
+        ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.6", "AddInitialObjectsFromExternalDocument",
+            "Принимает ли маршрут объект чужого документа и что возвращает?");
+        foreach (var candidate in objects)
+        {
+            try
+            {
+                var result = operation.AddInitialObjectsFromExternalDocument(externalDoc!, externalCs!,
+                    new object[] { candidate.Object });
+                receiverDoc.RebuildDocument();
+                var bodies = Api5.BodyCount((ksPart)receiverDoc.GetPart(-1));
+                var initial = Api5.SafeBool(() => operation.IsInitialObject(candidate.Object));
+                step.Data["returned_" + candidate.Name] = result;
+                step.Data["initial_" + candidate.Name] = Api5.Raw(initial);
+                step.Observe($"{candidate.Name}: возврат {result}, тел в приёмнике {bodies}, "
+                    + $"IsSuitableObject={Api5.Raw(Api5.SafeBool(() => operation.IsSuitableObject(candidate.Object)))}, "
+                    + $"IsInitialObject={Api5.Raw(initial)}");
+                if (result && initial == true)
+                {
+                    step.Data["accepted"] = candidate.Name;
+                    step.Pass($"Объект «{candidate.Name}» принят и записан как исходный.");
+                    return candidate.Object;
+                }
+            }
+            catch (COMException ex)
+            {
+                step.Data["hresult_" + candidate.Name] = HResult.Describe(ex);
+                step.Observe($"{candidate.Name}: отказ {HResult.Describe(ex)}");
+            }
+        }
+
+        step.Fail("Ни один объект источника не принят: адрес не разрешается.");
+        return null;
+    }
+
+    private void ReadBack(ICopyGeometry operation, IModelObject body, ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.7", "Что читается обратно и что появилось в приёмнике",
+            "Скопировалась ли геометрия и записался ли адрес источника?");
+        var part = (ksPart)receiverDoc.GetPart(-1);
+        step.Data["document_file_name"] = Api5.Raw(Api5.SafeObject(() => operation.DocumentFileName));
+        step.Data["is_initial_object"] = Api5.Raw(Api5.SafeBool(() => operation.IsInitialObject(body)));
+
+        // MEASURED: the call answers TRUE and the source name is recorded, yet the receiver still has no
+        // body; the rebuild and, after it, Synhronise are tried one by one and each result is recorded.
+        receiverDoc.RebuildDocument();
+        step.Data["bodies_after_rebuild"] = Api5.BodyCount(part);
+        step.Data["volume_after_rebuild"] = Api5.Volume(part);
+        step.Observe($"После перестройки: тел {Api5.BodyCount(part)}, объём {Api5.Num(Api5.Volume(part))} мм³.");
+
+        if (Api5.BodyCount(part) == 0)
+        {
+            step.Data["synhronise_after_add"] = Api5.Raw(Api5.SafeBool(() => operation.Synhronise()));
+            receiverDoc.RebuildDocument();
+            step.Data["bodies_after_synhronise"] = Api5.BodyCount(part);
+            step.Data["volume_after_synhronise"] = Api5.Volume(part);
+            step.Observe($"После Synhronise: тел {Api5.BodyCount(part)}, "
+                + $"объём {Api5.Num(Api5.Volume(part))} мм³.");
+        }
+
+        step.Data["objects_by_type_receiver"] = CountByType(Container(receiverDoc));
+        step.Data["bodies"] = Api5.BodyCount(part);
+        step.Data["volume"] = Api5.Volume(part);
+        step.Observe("Объекты приёмника по типам: "
+            + string.Join(", ", CountByType(Container(receiverDoc)).Select(p => p.Key + "=" + p.Value)));
+        if (Api5.BodyCount(part) > 0)
+        {
+            step.Pass("Геометрия в приёмнике есть: тело появилось.");
+        }
+        else
+        {
+            step.Fail("Тела в приёмнике нет — копия не создана.");
+        }
+    }
+
+    private void WatchAndReopen(ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.8", "Слежение за источником: запись, чтение, сохранение, переоткрытие",
+            "Переживает ли операция сохранение и читается ли признак слежения после reopen?");
+        try
+        {
+            var current = Api5.SafeObject(() => CopyOperation(receiverDoc));
+            if (current is not ICopyGeometry live)
+            {
+                step.Fail("После Add() операция не находится по индексу 0.");
+                return;
+            }
+
+            live.WatchForSourceChange = true;
+            step.Data["watch_written"] = true;
+            step.Data["watch_read"] = Api5.Raw(Api5.SafeBool(() => live.WatchForSourceChange));
+            receiverDoc.Save();
+
+            var reopened = (ksDocument3D)_app.Document3D();
+            reopened.Open(_receiverPath, true);
+            var reopenedContainer = Container(reopened);
+            step.Data["container_after_reopen"] = Api5.RuntimeName(reopenedContainer);
+            step.Data["collection_after_reopen"] = Api5.RuntimeName(
+                Api5.SafeObject(() => reopenedContainer?.CopiesGeometry));
+            step.Data["count_raw_after_reopen"] = Api5.SafeInt(
+                () => reopenedContainer!.CopiesGeometry.Count);
+            var again = CopyOperation(reopened) as ICopyGeometry;
+            step.Data["count_after_reopen"] = again is null
+                ? null
+                : Api5.SafeInt(() => Container(reopened)!.CopiesGeometry.Count);
+            step.Data["document_file_name_after_reopen"] = again is null
+                ? null
+                : Api5.Raw(Api5.SafeObject(() => again.DocumentFileName));
+            step.Data["watch_after_reopen"] = again is null
+                ? null
+                : Api5.Raw(Api5.SafeBool(() => again.WatchForSourceChange));
+            step.Observe("После reopen: DocumentFileName="
+                + Api5.Raw(again is null ? null : Api5.SafeObject(() => again.DocumentFileName))
+                + ", WatchForSourceChange="
+                + Api5.Raw(again is null ? null : Api5.SafeBool(() => again.WatchForSourceChange)));
+            if (again is not null)
+            {
+                step.Pass("Операция пережила сохранение и читается с переоткрытого файла.");
+            }
+            else
+            {
+                step.Fail("После reopen операция не найдена.");
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            step.Fail("Сохранение/переоткрытие отказало: " + HResult.Describe(ex));
+        }
+    }
+
+    /// <summary>The associativity claim of the order: the source changes, <c>Synhronise()</c> runs, the
+    /// receiver's geometry changes the way the source change implies.</summary>
+    private void Associativity(ksEntity extrusion, IModelObject body, ksDocument3D receiverDoc)
+    {
+        var step = _report.Begin("CG.9", "Ассоциативность: источник изменился, приёмник синхронизирован",
+            "Меняется ли геометрия приёмника так, как следует из изменения источника?");
+        var before = Api5.Volume((ksPart)receiverDoc.GetPart(-1));
+        step.Data["volume_before"] = before;
+
+        if (Api5.SafeObject(() => extrusion.GetDefinition()) is not ksBaseExtrusionDefinition definition)
+        {
+            step.Fail("Определение источника не получено — изменить его нечем.");
+            return;
+        }
+
+        definition.SetSideParam(true, 0 /* etBlind */, ThicknessAfter, 0d, false);
+        var updated = Api5.SafeBool(() => extrusion.Update());
+        step.Data["source_update"] = updated;
+
+        if (CopyOperation(receiverDoc) is not ICopyGeometry live)
+        {
+            step.Fail("Операция в приёмнике не найдена перед синхронизацией.");
+            return;
+        }
+
+        live.WatchForSourceChange = false;
+        var synchronised = Api5.SafeBool(() => live.Synhronise());
+        step.Data["synhronise"] = synchronised;
+        receiverDoc.RebuildDocument();
+
+        var after = Api5.Volume((ksPart)receiverDoc.GetPart(-1));
+        step.Data["volume_after"] = after;
+        var expected = Width * Height * ThicknessAfter;
+        step.Data["volume_expected"] = expected;
+        step.Observe($"Объём приёмника: до {Api5.Num(before)}, после {Api5.Num(after)}, "
+            + $"ожидается {Api5.Num(expected)} мм³.");
+        if (after is not null && Math.Abs(after.Value - expected) < expected * 0.01)
+        {
+            step.Pass("Приёмник принял изменение источника: объём равен ожидаемому.");
+        }
+        else
+        {
+            step.Fail("Объём приёмника не стал ожидаемым — ассоциативность не доказана.");
+        }
+    }
+
+    private void Shutdown()
+    {
+        var step = _report.Begin("CG.Z", "Завершение сеанса", "Осиротевший процесс остаётся?");
+        try
+        {
+            if (_options.KeepRunning)
+            {
+                step.Unknown("--keep: экземпляр оставлен открытым.");
+                return;
+            }
+
+            _app.Quit();
+            var pid = _options.ProcessId;
+            var gone = pid == 0 || SpinWait.SpinUntil(
+                () => Process.GetProcessesByName("KOMPAS").All(p => p.Id != pid), TimeSpan.FromSeconds(20));
+            if (gone)
+            {
+                step.Pass("Процесс завершился.");
+            }
+            else
+            {
+                step.Fail("Процесс остался после Quit().");
+            }
+        }
+        catch (Exception ex)
+        {
+            step.Fail("Завершение отказало: " + ex.Message);
+        }
+    }
+
+    /// <summary>Counts the container's objects by documented type: <c>Objects(ObjType)</c> is the only
+    /// documented list of model objects, so "what appeared" is measured type by type.</summary>
+    private Dictionary<string, int> CountByType(IModelContainer? container)
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (container is null)
+        {
+            return result;
+        }
+
+        foreach (var type in Enum.GetValues<KompasAPIObjectTypeEnum>())
+        {
+            var count = Api5.SafeInt(() => (container.Objects[type] as IModelObjects)!.Count);
+            if (count is > 0)
+            {
+                result[type.ToString()] = count.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private IModelContainer? Container(ksDocument3D doc) =>
+        _app.TransferInterface(doc, 2 /* ksAPI7Dual */, 0) is IKompasDocument3D document7
+            ? document7.TopPart as IModelContainer
+            : null;
+
+    private ICopyGeometry? CopyOperation(ksDocument3D doc)
+    {
+        try
+        {
+            var collection = Container(doc)?.CopiesGeometry;
+            if (collection is null || Api5.SafeInt(() => collection.Count) is not > 0)
+            {
+                return null;
+            }
+
+            // Two indexers exist: ICopiesGeometry::CopyGeometry[Index] («по индексу или по имени») and the
+            // inherited IModelObjects indexer. Which one answers is measured, not assumed.
+            return Api5.SafeObject(() => collection.CopyGeometry[0]) as ICopyGeometry
+                ?? Api5.SafeObject(() => ((IModelObjects)collection)[0]) as ICopyGeometry;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private IKompasDocument3D? TransferTo7Document(object? source) =>
+        Api5.SafeObject(() => _app.TransferInterface(source, 2, 0)) as IKompasDocument3D;
+
+    private IModelObject? TransferTo7(object? source) =>
+        Api5.SafeObject(() => _app.TransferInterface(source, 2 /* ksAPI7Dual */, 0)) as IModelObject;
+}

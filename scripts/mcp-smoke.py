@@ -664,7 +664,7 @@ def file_sha256(path):
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread).
-EXPECTED_TOOL_COUNT = 97
+EXPECTED_TOOL_COUNT = 100
 
 # Режим каталога прибора (наряд CATALOG_COMPACT). По умолчанию — тот же, что у Хоста по умолчанию:
 # `compact`. Режим попадает в КОПИЮ конфигурации прогона, поэтому Хост поднимается именно в нём.
@@ -822,6 +822,9 @@ RUN_GROUPS = (
     ("catalog", "catalog", "catalog-acceptance.json",
      "Приёмка CT: механизм каталога — режим compact постоянен по размеру, find/describe/run, отказы "
      "по имени поля, full не изменился (наряд CATALOG_MECHANISM_RESEARCH)"),
+    ("copy_geometry", "copy-geometry", "copy-geometry-acceptance.json",
+     "Приёмка CG: копия геометрии из файла другой детали — создание, чтение, ассоциативность, "
+     "save -> reopen и названные отказы (наряд G8, профиль master-geometry-minimal-v1)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -867,6 +870,7 @@ ALL_GROUPS_EXTRA = (
     # Группа CT тоже ведёт свои Хосты: режим каталога задаётся конфигурацией на старте, а общий Хост
     # прогона поднят в `full`. Свежий общий сеанс ей не нужен.
     ("catalog", ["--catalog-only"]),
+    ("copy_geometry", ["--copy-geometry-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -15953,6 +15957,7 @@ def main():
     # Домен РЕЗЬБЫ (наряд G10, профиль `threads-minimal-v1`): одна группа TH на своём сеансе — клетка
     # матрицы обязана находиться по ИМЕНИ строки (`TH.<NN>.<действие>`), а не по номеру в общем потоке.
     threads_only = "--threads-only" in sys.argv
+    copy_geometry_only = "--copy-geometry-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16095,6 +16100,7 @@ def main():
         "drafts": drafts_only,
         "interference": interference_only,
         "threads": threads_only,
+        "copy_geometry": copy_geometry_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -16663,6 +16669,14 @@ def main():
 
         if drafts_only:
             drafts_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if copy_geometry_only:
+            copy_geometry_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -49003,6 +49017,269 @@ def catalog_checks(host, config, workdir, rep):
         stop(full)
 
 
+def copy_geometry_checks(client, rep, app_id, workdir):
+    """CG-01…CG-08 — «Копия геометрии» из файла другой детали (наряд G8, профиль
+    `master-geometry-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Копия создаётся из сохранённого файла, читается обратно, ПЕРЕЖИВАЕТ
+    save -> close -> open и остаётся связанной с источником: источник правится инструментами Хоста,
+    `kompas_synchronise_copy` обновляет приёмник, и объём приёмника становится равным ожидаемому из
+    правки источника. Подтверждение - объём и тела, ПРОЧИТАННЫЕ из модели, а не ответ вызова.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Автоматического обновления по слежению (`WatchForSourceChange`) и удаления
+    операции: справка автообновления не обещает, а отдельного инструмента удаления в профиле нет,
+    поэтому обе строки помечены UNKNOWN с причиной, а не PASS.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def near(value, expected, tolerance=1.0):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def volume(doc):
+        rows = bodies(doc)
+        if not rows:
+            return None
+        ref = rows[0].get("body_ref")
+        ref = ref.get("id") if isinstance(ref, dict) else ref
+        _e, env, _r = client.tool("kompas_measure", {"target_ref": ref, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def copies(doc):
+        _e, env, _r = client.tool("kompas_list_copies_geometry", {"document_id": doc})
+        rows = result(env).get("rows")
+        return rows if isinstance(rows, list) else []
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def plate(doc, depth):
+        """Пластина 100x80 с выдавливанием `depth` - постановка источника."""
+        sk, _c = call("kompas_create_sketch",
+                      {"document_id": doc, "expected_revision": revision(doc),
+                       "plane": {"base": "xy"}})
+        sketch = result(sk).get("sketch_ref") or result(sk).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        call("kompas_edit_sketch", {"sketch_ref": sketch, "expected_revision": revision(doc),
+                                    "mode": "append",
+                                    "entities": [{"kind": "rectangle", "start_mm": [0, 0],
+                                                  "width_mm": 100, "height_mm": 80}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        _e, code = call("kompas_extrude", {"sketch_ref": sketch,
+                                           "expected_revision": revision(doc),
+                                           "operation": "base", "end_condition": "blind",
+                                           "depth_mm": depth, "direction": "positive"})
+        return code
+
+    # ===== CG-01: обнаружение =====
+    names = [t.get("name") for t in client.tools()]
+    # Режим каталога по умолчанию `compact`: в tools/list его 14 инструментов, поэтому полнота
+    # проверяется РЕЕСТРОМ из kompas_capabilities, а не длиной списка.
+    registry = (client.catalog() or {}).get("registry") or []
+    missing = [n for n in ("kompas_copy_geometry", "kompas_list_copies_geometry",
+                           "kompas_synchronise_copy") if n not in registry]
+    rep.add("CG-01.discovery", "три инструмента копии геометрии есть в реестре каталога",
+            "PASS" if not missing else "FAIL",
+            f"в tools/list={len(names)}; в реестре={len(registry)}; нет={missing}")
+    entry = entry_of(client, "kompas_copy_geometry")
+    props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    need = {"document_id", "expected_revision", "operation_id", "source_path"}
+    rep.add("CG-01.schema", "схема создания несёт адрес источника и ожидание ревизии",
+            "PASS" if entry is not None and not (need - set(props)) else "FAIL",
+            f"полей={props}")
+    _e, capenv, _r = client.tool("kompas_capabilities", {})
+    cap_text = json.dumps(capenv, ensure_ascii=False)
+    rep.add("CG-01.capabilities", "kompas_capabilities называет инструменты копии",
+            "PASS" if "kompas_copy_geometry" in cap_text else "FAIL",
+            f"capabilities={len(cap_text)} символов")
+
+    # ===== CG-02: источник и приёмник =====
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    src = doc_id(env)
+    src_code = plate(src, 10) if src else "no_document"
+    src_path = os.path.join(workdir, "cg-source.m3d")
+    senv, senv_code = call("kompas_save_document",
+                               {"document_id": src, "expected_revision": revision(src),
+                                "target_path": src_path, "operation_id": str(uuid.uuid4())})
+    rep.add("CG-02.source", "источник: пластина 100x80x10 сохранена в файл",
+            "PASS" if near(volume(src), 80000.0) and os.path.exists(src_path) else "FAIL",
+            f"volume={volume(src)} path={src_path} error={src_code or senv_code}")
+
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    dst = doc_id(env)
+    dst_path = os.path.join(workdir, "cg-receiver.m3d")
+    denv, denv_code = call("kompas_save_document",
+                               {"document_id": dst, "expected_revision": revision(dst),
+                                "target_path": dst_path, "operation_id": str(uuid.uuid4())})
+    rep.add("CG-02.receiver", "приёмник: пустая деталь сохранена в файл",
+            "PASS" if dst and len(bodies(dst)) == 0 and os.path.exists(dst_path) else "FAIL",
+            f"bodies={len(bodies(dst))} path={dst_path} error={denv_code}")
+
+    # ===== CG-03: создание копии из файла =====
+    cp, code = call("kompas_copy_geometry", {"document_id": dst,
+                                             "expected_revision": revision(dst),
+                                             "source_path": src_path})
+    r3 = result(cp)
+    rep.add("CG-03.create", "копия создана из файла: тело и объём приёмника прочитаны",
+            "PASS" if (not code and r3.get("bodies_after") == 1
+                       and near(r3.get("volume_after_mm3"), 80000.0)
+                       and near(volume(dst), 80000.0)) else "FAIL",
+            f"bodies={r3.get('bodies_after')} volume={r3.get('volume_after_mm3')} "
+            f"measured={volume(dst)} error={code}")
+    rows = copies(dst)
+    rep.add("CG-03.list", "операция читается обратно: путь источника и слежение",
+            "PASS" if (len(rows) == 1
+                       and str(rows[0].get("source_path", "")).lower().endswith("cg-source.m3d")
+                       and rows[0].get("watch_for_source_change") is True) else "FAIL",
+            f"строк={len(rows)} source={rows[0].get('source_path') if rows else None} "
+            f"watch={rows[0].get('watch_for_source_change') if rows else None}")
+
+    # ===== CG-04: ассоциативность =====
+    oenv, oenv_code = call("kompas_open_document",
+                               {"application_id": app_id, "path": src_path, "access": "edit"})
+    opened = doc_id(oenv)
+    feats = []
+    if opened:
+        _e, fenv, _r = client.tool("kompas_list_features", {"document_id": opened})
+        rows = result(fenv)
+        # MEASURED: у переоткрытого документа семейство выдавливания читается как null, поэтому
+        # признак ищется по семейству, а при его отсутствии - по наличию эскиза (у выдавливания он есть).
+        all_rows = rows if isinstance(rows, list) else []
+        feats = [x for x in all_rows if str(x.get("family", "")).endswith("extrusion")]             or [x for x in all_rows if x.get("sketch_ref")]
+    fref = feats[0].get("feature_ref") if feats else None
+    fref = fref.get("id") if isinstance(fref, dict) else fref
+    if fref:
+        up, up_code = call("kompas_update_feature", {"feature_ref": fref,
+                                                     "expected_revision": revision(opened),
+                                                     "depth_mm": 25})
+    else:
+        up, up_code = None, "no_extrusion"
+    if opened:
+        call("kompas_save_document", {"document_id": opened,
+                                             "expected_revision": revision(opened),
+                                             "operation_id": str(uuid.uuid4())})
+    rep.add("CG-04.source_edited", "источник изменён инструментами Хоста: 10 -> 25 мм, сохранён",
+            "PASS" if not up_code and near(volume(opened), 200000.0) else "FAIL",
+            f"volume={volume(opened) if opened else None} error={up_code or error_code(up)}")
+    if opened:
+        call("kompas_close_document", {"document_id": opened, "dirty_policy": "save"},
+                    timeout=120)
+
+    sy, sy_code = call("kompas_synchronise_copy", {"document_id": dst,
+                                                   "expected_revision": revision(dst),
+                                                   "copy_index": 0})
+    r5 = result(sy)
+    rep.add("CG-04.associativity", "приёмник принял изменение источника: объём равен ожидаемому",
+            "PASS" if (not sy_code and near(r5.get("volume_after_mm3"), 200000.0)
+                       and near(volume(dst), 200000.0)) else "FAIL",
+            f"volume_after={r5.get('volume_after_mm3')} measured={volume(dst)} "
+            f"synhronise={r5.get('synhronise_returned')} error={sy_code}")
+
+    # ===== CG-05: сохранение и переоткрытие приёмника =====
+    rv, rv_code = call("kompas_save_document",
+                             {"document_id": dst, "expected_revision": revision(dst),
+                              "operation_id": str(uuid.uuid4())})
+    call("kompas_close_document", {"document_id": dst, "dirty_policy": "save"}, timeout=120)
+    reopen, open_code = call("kompas_open_document",
+                                 {"application_id": app_id, "path": dst_path, "access": "edit"})
+    dst2 = doc_id(reopen)
+    rows2 = copies(dst2) if dst2 else []
+    rep.add("CG-05.save_reopen", "операция и связь переживают save -> close -> open",
+            "PASS" if (dst2 and len(rows2) == 1
+                       and str(rows2[0].get("source_path", "")).lower().endswith("cg-source.m3d")
+                       and near(volume(dst2), 200000.0)) else "FAIL",
+            f"строк={len(rows2)} volume={volume(dst2) if dst2 else None} error={rv_code}")
+    if dst2:
+        call("kompas_close_document", {"document_id": dst2, "dirty_policy": "discard"},
+                    timeout=120)
+
+    # ===== CG-06: отказы =====
+    _e, env, _r = client.tool("kompas_create_document",
+                              {"application_id": app_id, "kind": "part",
+                               "operation_id": str(uuid.uuid4())})
+    probe = doc_id(env)
+    rev = revision(probe)
+    _e, miss, _r = client.tool("kompas_copy_geometry",
+                               {"document_id": probe, "expected_revision": rev,
+                                "source_path": os.path.join(workdir, "cg-absent.m3d"),
+                                "operation_id": str(uuid.uuid4())})
+    rep.add("CG-06.missing_file", "несуществующий файл источника отвергнут до КОМПАС",
+            "PASS" if error_code(miss) == "DOCUMENT_NOT_FOUND" else "FAIL",
+            f"code={error_code(miss)}")
+
+    outside_path = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "win.ini")
+    _e, outside, _r = client.tool("kompas_copy_geometry",
+                                  {"document_id": probe, "expected_revision": rev,
+                                   "source_path": outside_path,
+                                   "operation_id": str(uuid.uuid4())})
+    rep.add("CG-06.outside_roots", "путь вне разрешённых корней отвергнут политикой",
+            "PASS" if error_code(outside) == "PATH_NOT_ALLOWED" else "FAIL",
+            f"path={outside_path} code={error_code(outside)}")
+
+    empty_path = os.path.join(workdir, "cg-empty-source.m3d")
+    _e, eenv, _r = client.tool("kompas_create_document",
+                               {"application_id": app_id, "kind": "part",
+                                "operation_id": str(uuid.uuid4())})
+    empty = doc_id(eenv)
+    call("kompas_save_document",
+                {"document_id": empty, "expected_revision": revision(empty),
+                 "target_path": empty_path, "operation_id": str(uuid.uuid4())})
+    call("kompas_close_document", {"document_id": empty, "dirty_policy": "save"},
+                timeout=120)
+    _e, nobody, _r = client.tool("kompas_copy_geometry",
+                                 {"document_id": probe, "expected_revision": rev,
+                                  "source_path": empty_path,
+                                  "operation_id": str(uuid.uuid4())})
+    rep.add("CG-06.no_body", "источник без тела: адрес объекта не разрешился",
+            "PASS" if error_code(nobody) == "NO_BODY" else "FAIL",
+            f"code={error_code(nobody)}")
+
+    _e, stale, _r = client.tool("kompas_copy_geometry",
+                                {"document_id": probe, "expected_revision": 9999,
+                                 "source_path": src_path,
+                                 "operation_id": str(uuid.uuid4())})
+    rep.add("CG-06.stale_revision", "устаревшая ожидаемая ревизия отвергнута",
+            "PASS" if error_code(stale) == "REVISION_CONFLICT" else "FAIL",
+            f"code={error_code(stale)}")
+    rep.add("CG-06.refusal_names_effect", "после отказов документ не изменился",
+            "PASS" if len(bodies(probe)) == 0 and not copies(probe) else "FAIL",
+            f"тел={len(bodies(probe))} копий={len(copies(probe))}")
+    if probe:
+        call("kompas_close_document", {"document_id": probe, "dirty_policy": "discard"},
+                    timeout=120)
+
+    # ===== CG-07: что в профиль не входит =====
+    rep.add("CG-07.auto_update", "автоматического обновления по слежению справка не обещает",
+            "UNKNOWN", "WatchForSourceChange читается и пишется; обещания автообновления в справке "
+            "нет, поэтому строка не выдаётся за PASS")
+    rep.add("CG-07.delete_operation", "удаление операции в профиль не входит",
+            "UNKNOWN", "у ICopyGeometry документирован Destroy() массива; отдельного инструмента "
+            "удаления копии нет")
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -49027,6 +49304,7 @@ EXTRA_GROUP_CHECKS = {
     # Группа CT ведёт свои Хосты в двух режимах каталога, поэтому ей нужен путь к исполняемому файлу
     # и конфигурация, а не app_id.
     "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
+    "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
 }
 
 

@@ -131,6 +131,9 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.ListFeatures, WorkerAction.Read);
         Cad(WorkerCommands.ListSketches, WorkerAction.Read);
         Cad(WorkerCommands.ListBodies, WorkerAction.Read);
+        Cad(WorkerCommands.ListCopiesGeometry, WorkerAction.Read);
+        Cad(WorkerCommands.CopyGeometry, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.SynchroniseCopy, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.Measure, WorkerAction.Read);
         Cad(WorkerCommands.ResolveSelection, WorkerAction.Read);
         Cad(WorkerCommands.ReadTopology, WorkerAction.Read);

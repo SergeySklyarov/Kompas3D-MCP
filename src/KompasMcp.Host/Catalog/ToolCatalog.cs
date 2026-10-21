@@ -3444,6 +3444,59 @@ public static class ToolCatalog
                 WorkerCommands.DeleteSketchConstraint,
                 requiresDocument: false,
                 requiresRevision: true),
+
+            // ===== master geometry (order OMEGA_G8_MASTER_GEOMETRY, profile master-geometry-minimal-v1) =====
+            // The route was measured before it was written: the operation reaches the tree only after
+            // IModelObject.Update(), and the copy is confirmed by re-reading bodies/volume.
+            // History: docs/decisions/master-geometry.md#copy-route
+            ReadOnly("kompas_list_copies_geometry", "Копии геометрии",
+                "Операции «Копия геометрии» документа: номер (его принимают мутации), путь источника, "
+                + "признак слежения за источником и режимы. Читается маршрутом "
+                + "IModelContainer.CopiesGeometry → ICopiesGeometry.CopyGeometry[Index]. Путь источника "
+                + "только для чтения: он записан вызовом создания и свойством не меняется. Номер — "
+                + "ПОЗИЦИЯ в коллекции, а не адрес: после создания и удаления операций он сдвигается. "
+                + "Ответ — {rows, route, notes}; пустой rows означает «копий нет».",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListCopiesGeometry,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            Mutation("kompas_copy_geometry", "Копия геометрии из файла",
+                "Создаёт операцию «Копия геометрии» из сохранённой детали .m3d: геометрия источника "
+                + "копируется в документ и остаётся связанной с ним. object_kind = body копирует первое "
+                + "тело источника, plane_xoy — плоскость XoY (оба адреса измерены; другие объекты не "
+                + "адресуются документированным маршрутом). Успех подтверждается ЧТЕНИЕМ: тела и объём "
+                + "приёмника до и после плюс операция в коллекции, а не ответ вызова. Синхронизация НЕ "
+                + "автоматическая: слежение лишь помечает связь, обновляет её kompas_synchronise_copy. "
+                + "source_path проходит те же правила корней, что открытие документа.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("source_path", Sch.Str(
+                        "Абсолютный путь к файлу детали-источника внутри разрешённого корня.", maxLength: 512)),
+                    ("object_kind", Sch.Nullable(Sch.Enum(
+                        "Что копировать: body — первое тело источника (по умолчанию), plane_xoy — плоскость XoY.",
+                        "body", "plane_xoy"))),
+                    ("watch_for_source_change", Sch.Nullable(Sch.Bool(
+                        "Записать признак слежения за источником. По умолчанию true; синхронизацию он не "
+                        + "выполняет.", true)))),
+                WorkerCommands.CopyGeometry,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_synchronise_copy", "Синхронизировать копию",
+                "Обновляет копию по источнику (Synhronise) и перечитывает приёмник: тела и объём до и "
+                + "после. Источник, который не читается, отвергается ДО вызова продукта — измерено, что "
+                + "Synhronise отвечает TRUE и при удалённом файле источника. Ответ продукта не доказывает, "
+                + "что приёмник принял изменение: сверяйте объём до и после.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("copy_index", Sch.Nullable(Sch.Int(
+                        "Номер операции из kompas_list_copies_geometry. По умолчанию 0.", 0, 10_000)))),
+                WorkerCommands.SynchroniseCopy,
+                requiresDocument: true,
+                requiresRevision: true),
         };
 
         foreach (var tool in tools)

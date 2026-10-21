@@ -85,6 +85,8 @@ public static class CompactCatalog
         ["kompas_measure"] = "inspection", ["kompas_measure_gap"] = "inspection",
         ["kompas_read_topology"] = "inspection", ["kompas_list_bodies"] = "inspection",
         ["kompas_resolve_selection"] = "inspection",
+        ["kompas_copy_geometry"] = "master", ["kompas_list_copies_geometry"] = "master",
+        ["kompas_synchronise_copy"] = "master",
         ["kompas_export_step"] = "file", ["kompas_export_stl"] = "file",
         ["kompas_export_image"] = "file", ["kompas_import_step"] = "file",
     };

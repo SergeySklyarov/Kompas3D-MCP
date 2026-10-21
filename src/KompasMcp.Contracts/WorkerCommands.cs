@@ -1,4 +1,4 @@
-namespace KompasMcp.Contracts.Ipc;
+﻿namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Command names on the Host→Worker pipe. Adding a command means adding a handler in the Worker; an unhandled
 /// name fails as CAPABILITY_UNAVAILABLE rather than being ignored.</summary>
@@ -36,6 +36,21 @@ public static class WorkerCommands
     /// History: docs/decisions/adapter-sketch.md#sketch-enumeration</remarks>
     public const string ListSketches = "sketch.list";
     public const string ListBodies = "body.list";
+
+    /// <summary>Creates one «Копия геометрии» operation from another part's saved file.</summary>
+    /// <remarks>DOC: <c>imodelcontainer_copiesgeometry.html</c> → <c>icopiesgeometry_add.html</c> →
+    /// <c>icopygeometry_addinitialobjectsfromexternaldocument.html</c> →
+    /// <c>imodelobject_update.html</c>. MEASURED: without the <c>Update()</c> the operation stays a draft
+    /// while the add call already answers TRUE.
+    /// History: docs/decisions/master-geometry.md#copy-geometry-route</remarks>
+    public const string CopyGeometry = "master.copy_geometry";
+
+    /// <summary>Lists the document's copy operations: source path, watching flag, mode flags.</summary>
+    public const string ListCopiesGeometry = "master.list_copies_geometry";
+
+    /// <summary>Synchronises one copy with its source.</summary>
+    public const string SynchroniseCopy = "master.synchronise_copy";
+
     public const string Measure = "geom.measure";
     public const string ResolveSelection = "geom.resolve";
     public const string ReadTopology = "topo.read";
@@ -824,6 +839,81 @@ public sealed record ListBodiesCommand
 {
     public required string DocumentId { get; init; }
 }
+
+/// <summary>Copy geometry from another part's saved file into this document.</summary>
+public sealed record CopyGeometryCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Absolute path to the source part inside an allowed root (checked by the Host).</summary>
+    public required string SourcePath { get; init; }
+
+    /// <summary>What to copy: <c>body</c> (the first body of the source collection) or
+    /// <c>plane_xoy</c>. Only these two were measured as addressable.</summary>
+    public string ObjectKind { get; init; } = "body";
+
+    /// <summary>Write <c>WatchForSourceChange</c> after the copy is created.</summary>
+    public bool WatchForSourceChange { get; init; } = true;
+}
+
+public sealed record CopyGeometryResult(
+    int CopyIndex,
+    string SourcePath,
+    string ObjectKind,
+    int BodiesBefore,
+    int BodiesAfter,
+    double? VolumeBeforeMm3,
+    double? VolumeAfterMm3,
+    VerificationDto Verification);
+
+public sealed record ListCopiesGeometryCommand
+{
+    public required string DocumentId { get; init; }
+}
+
+/// <summary>One copy operation. <c>Index</c> is the position the mutation commands accept.</summary>
+public sealed record CopiesGeometryRowDto
+{
+    public required int Index { get; init; }
+
+    /// <summary>The source file the operation records; read-only in the product.</summary>
+    public string? SourcePath { get; init; }
+
+    public bool? WatchForSourceChange { get; init; }
+
+    public bool? ContextObjects { get; init; }
+
+    public bool? MirrorCopy { get; init; }
+
+    public bool? ByCollectionGeometry { get; init; }
+}
+
+public sealed record ListCopiesGeometryResult(
+    IReadOnlyList<CopiesGeometryRowDto> Rows,
+    string Route,
+    IReadOnlyList<string> Notes);
+
+public sealed record SynchroniseCopyCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Number from <c>kompas_list_copies_geometry</c>.</summary>
+    public int CopyIndex { get; init; }
+}
+
+public sealed record SynchroniseCopyResult(
+    int CopyIndex,
+    string? SourcePath,
+    bool SynhroniseReturned,
+    int BodiesBefore,
+    int BodiesAfter,
+    double? VolumeBeforeMm3,
+    double? VolumeAfterMm3,
+    VerificationDto Verification);
 
 public sealed record MeasureCommand
 {

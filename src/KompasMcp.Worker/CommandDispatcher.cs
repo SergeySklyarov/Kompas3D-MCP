@@ -360,6 +360,12 @@ public sealed class CommandDispatcher
             WorkerCommands.ListFeatures => _sta.Run(() => Features(request), "feat.list", cancellationToken),
             WorkerCommands.ListSketches => _sta.Run(() => Sketches(request), "sketch.list", cancellationToken),
             WorkerCommands.ListBodies => _sta.Run(() => Bodies(request), "body.list", cancellationToken),
+            WorkerCommands.ListCopiesGeometry => _sta.Run(
+                () => CopiesGeometry(request), "master.list_copies_geometry", cancellationToken),
+            WorkerCommands.CopyGeometry => _sta.Run(
+                () => CopyGeometry(request), "master.copy_geometry", cancellationToken),
+            WorkerCommands.SynchroniseCopy => _sta.Run(
+                () => SynchroniseCopy(request), "master.synchronise_copy", cancellationToken),
             WorkerCommands.Measure => _sta.Run(() => Measure(request), "geom.measure", cancellationToken),
             WorkerCommands.ResolveSelection => _sta.Run(() => Resolve(request), "geom.resolve", cancellationToken),
             WorkerCommands.ReadTopology => _sta.Run(() => Topology(request), "topo.read", cancellationToken),
@@ -1481,6 +1487,15 @@ public sealed class CommandDispatcher
     }
 
     private object? Bodies(IpcFrame request) => _session.ListBodies(Argument<ListBodiesCommand>(request));
+
+    private object? CopiesGeometry(IpcFrame request) =>
+        _session.ListCopiesGeometry(Argument<ListCopiesGeometryCommand>(request));
+
+    private object? CopyGeometry(IpcFrame request) =>
+        _session.CopyGeometry(Argument<CopyGeometryCommand>(request));
+
+    private object? SynchroniseCopy(IpcFrame request) =>
+        _session.SynchroniseCopy(Argument<SynchroniseCopyCommand>(request));
 
     private object? ListComponents(IpcFrame request) =>
         _session.ListComponents(Argument<ListComponentsCommand>(request));

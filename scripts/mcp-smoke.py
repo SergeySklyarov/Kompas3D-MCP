@@ -120,9 +120,9 @@ class Client:
         # обращении. Вписанный руками список расходится с поставкой ровно тогда, когда поставку
         # меняют, — и прибор начинает посылать поле, которого схема не объявляет.
         self._op_id_tools = None
-        # Режим каталога, опубликованный набор и реестр — из ответа kompas_capabilities, а не из флага
-        # прибора: один и тот же прогон поднимает Хосты разных режимов (группа CT), и клиент обязан
-        # знать режим СВОЕГО Хоста, иначе обёртка kompas_run ушла бы не туда.
+        # Опубликованный набор и реестр — из ответа kompas_capabilities, а не из списка прибора:
+        # каталог публикует Хост, и клиент обязан знать набор СВОЕГО Хоста, иначе обёртка kompas_run
+        # ушла бы не туда.
         self._catalog = None
         self._tools = None
         self._describe = {}
@@ -284,12 +284,11 @@ class Client:
         return "operation_id" in (schema.get("properties") or {})
 
     def catalog(self):
-        """Режим, опубликованный набор и реестр — из ответа Хоста `kompas_capabilities`.
+        """Опубликованный набор и реестр — из ответа Хоста `kompas_capabilities`.
 
-        ЗАЧЕМ СПРАШИВАТЬ, А НЕ ПЕРЕДАВАТЬ. Режим задаётся на старте процесса, а прогон поднимает
-        несколько Хостов (группа CT — по одному на режим). Клиент, помнящий режим флагом прибора,
-        ошибся бы ровно там, где режимов два. В `full` реестр равен опубликованному набору: отдельного
-        поля `operations` Хост в этом режиме не публикует, и это различие сохраняется.
+        ЗАЧЕМ СПРАШИВАТЬ, А НЕ ПЕРЕДАВАТЬ. Прибор не помнит каталог у себя: ответ Хоста — то, что
+        действительно опубликовано ЭТОМУ клиенту. `operations` Хост публикует всегда, поэтому полнота
+        реестра доказывается им, а не длиной списка.
         """
         if self._catalog is None:
             result = self.call("tools/call", {"name": "kompas_capabilities", "arguments": {}},
@@ -298,14 +297,10 @@ class Client:
             published = [str(n) for n in (body.get("tools") or [])]
             registry = [str(n) for n in (body.get("operations") or published)]
             self._catalog = {
-                "mode": body.get("catalog_mode") or "full",
                 "published": published,
                 "registry": registry,
             }
         return self._catalog
-
-    def mode(self):
-        return self.catalog()["mode"]
 
     def published(self):
         return set(self.catalog()["published"])
@@ -314,7 +309,7 @@ class Client:
         return list(self.catalog()["registry"])
 
     def serves(self, name):
-        """Достижим ли инструмент в этом режиме: опубликован сам или вызывается через kompas_run."""
+        """Достижим ли инструмент: опубликован сам или вызывается через kompas_run."""
         return name in self.published() or name in self.catalog()["registry"]
 
     def tools(self):
@@ -323,18 +318,18 @@ class Client:
         return self._tools
 
     def schema_of(self, name):
-        """Схема инструмента НА ПРОВОДЕ в этом режиме: опубликованный отдаёт свою, операция реестра
-        в `compact` — через `kompas_describe_operation` (та же схема, что в schemas/)."""
+        """Схема инструмента НА ПРОВОДЕ: опубликованный отдаёт свою, операция реестра — через
+        `kompas_describe_operation` (та же схема, что в schemas/)."""
         if name in self.published():
             return next((t.get("inputSchema") for t in self.tools() if t.get("name") == name), None)
         return (self.describe(name) or {}).get("schema")
 
     def description_of(self, name):
-        """Описание инструмента НА ПРОВОДЕ в этом режиме.
+        """Описание инструмента НА ПРОВОДЕ.
 
         ЗАЧЕМ ОТДЕЛЬНЫЙ ВОПРОС. Строки, которые держат обещанное клиенту (ограничение в описании,
-        названные поля), не должны зависеть от режима каталога: в `compact` операция реестра не
-        публикуется, и `tools/list` о ней молчит, поэтому описание спрашивается у
+        названные поля), должны читать то же, что видит клиент: операция реестра в `tools/list` не
+        публикуется, и список о ней молчит, поэтому описание спрашивается у
         `kompas_describe_operation` — тот же текст, что у прямого инструмента.
         """
         if name in self.published():
@@ -342,7 +337,7 @@ class Client:
         return (self.describe(name) or {}).get("description") or ""
 
     def describe(self, name):
-        """Ответ `kompas_describe_operation` для операции реестра (в `full` — None)."""
+        """Ответ `kompas_describe_operation` для операции реестра."""
         if name not in self._describe:
             if name not in self.catalog()["registry"]:
                 self._describe[name] = None
@@ -666,26 +661,6 @@ def file_sha256(path):
 # → 97 (SM-08: kompas_create_thread).
 EXPECTED_TOOL_COUNT = 100
 
-# Режим каталога прибора (наряд CATALOG_COMPACT). По умолчанию — тот же, что у Хоста по умолчанию:
-# `compact`. Режим попадает в КОПИЮ конфигурации прогона, поэтому Хост поднимается именно в нём.
-DEFAULT_CATALOG_MODE = "compact"
-CATALOG_MODES = ("compact", "full")
-
-
-def apply_catalog_mode(path, mode):
-    """Записать режим каталога в конфигурацию ЭТОГО прогона.
-
-    ЗАЧЕМ В ФАЙЛ, А НЕ В ПЕРЕМЕННУЮ ОКРУЖЕНИЯ. `KOMPAS_MCP_CATALOG_MODE` перебивает конфигурацию, и
-    тогда группа CT не смогла бы поднять Хост во втором режиме. Копия конфигурации у каждого прогона
-    своя, поэтому режим живёт в ней.
-    """
-    with open(path, encoding="utf-8-sig") as fh:
-        data = json.load(fh)
-    data["catalog_mode"] = mode
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-
-
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
     describe. Одна форма нужна потому, что строки приёмки сверяют `inputSchema` с schemas/, а в
@@ -695,11 +670,11 @@ def entry_of(client, name):
 
 
 def listing_matches(client, names):
-    """Опубликованный набор равен ожидаемому для режима, а реестр полон.
+    """Опубликованный набор равен ожидаемому, а реестр полон.
 
-    В `full` ожидание прежнее — список равен реестру. В `compact` публикуется постоянный набор, и
-    полнота доказывается РЕЕСТРОМ из `kompas_capabilities.operations`, а не длиной списка: иначе
-    строка требовала бы от режима ровно того, чего он не обещает.
+    Публикуется постоянный набор, и полнота доказывается РЕЕСТРОМ из
+    `kompas_capabilities.operations`, а не длиной списка: иначе строка требовала бы от каталога
+    ровно того, чего он не обещает.
     """
     catalog = client.catalog()
     return (sorted(names) == sorted(catalog["published"])
@@ -820,8 +795,8 @@ RUN_GROUPS = (
      "Приёмка SD: завершение сеанса не оставляет висящий КОМПАС, а несохранённая работа сохраняется "
      "спасательной копией (наряд SHUTDOWN_NO_ORPHANS)"),
     ("catalog", "catalog", "catalog-acceptance.json",
-     "Приёмка CT: механизм каталога — режим compact постоянен по размеру, find/describe/run, отказы "
-     "по имени поля, full не изменился (наряд CATALOG_MECHANISM_RESEARCH)"),
+     "Приёмка CT: механизм каталога — список постоянен по размеру, find/describe/run, отказы по "
+     "имени поля (наряды CATALOG_MECHANISM_RESEARCH и CATALOG_FULL_REMOVAL)"),
     ("copy_geometry", "copy-geometry", "copy-geometry-acceptance.json",
      "Приёмка CG: копия геометрии из файла другой детали — создание, чтение, ассоциативность, "
      "save -> reopen и названные отказы (наряд G8, профиль master-geometry-minimal-v1)"),
@@ -867,8 +842,8 @@ ALL_GROUPS_EXTRA = (
     # Группа SD ведёт свои процессы Хоста и не пользуется свежим общим сеансом: см. ветку `shutdown`
     # в run_extra_group_fresh. Последняя, чтобы её собственные процессы были единственными.
     ("shutdown", ["--shutdown-only"]),
-    # Группа CT тоже ведёт свои Хосты: режим каталога задаётся конфигурацией на старте, а общий Хост
-    # прогона поднят в `full`. Свежий общий сеанс ей не нужен.
+    # Группа CT тоже ведёт свой Хост: список публикуется на старте процесса, и свой Хост отделяет
+    # ответы приёмки от следов общего сеанса. Свежий общий сеанс ей не нужен.
     ("catalog", ["--catalog-only"]),
     ("copy_geometry", ["--copy-geometry-only"]),
 )
@@ -964,7 +939,7 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
 
     if key in ("shutdown", "catalog"):
         # Группы SD и CT — исключения из правила «свой свежий сеанс»: SD ведёт СВОИ процессы Хоста
-        # (закрывает им stdin, убивает их), CT поднимает два Хоста в разных режимах каталога. Общий
+        # (закрывает им stdin, убивает их), CT поднимает свой Хост для проверки каталога. Общий
         # сеанс здесь был бы ЧУЖИМ живым экземпляром КОМПАС на момент их проверки.
         dispatch_extra_group(client, rep, None, workdir, key, vm_reference_doc, None)
         return
@@ -1230,23 +1205,18 @@ def run_environment(rep):
     }
 
 
-def run_directory_name(started_utc, group, commit, dirty, mode=""):
-    """Имя каталога прогона: `<UTC-время>-<группа>-<короткий коммит>[-dirty][-<режим>]`.
+def run_directory_name(started_utc, group, commit, dirty):
+    """Имя каталога прогона: `<UTC-время>-<группа>-<короткий коммит>[-dirty]`.
 
     `-dirty` не украшение. Коммит в имени описывает ДЕРЕВО ИСХОДНИКОВ, а собранный бинарь при
     незакоммиченных правках этому коммиту не соответствует: имя, которое об этом молчит, читается
     как «прогон шёл на коммите X», и доказательство пришлось бы разбирать заново.
-
-    Режим каталога в имени появляется только тогда, когда он НЕ по умолчанию: два зачётных прогона
-    одного коммита различаются каталогами, а имя прогона по умолчанию остаётся таким, каким его
-    находят приборы цикла (`full_run.py` ищет `*-all-<коммит>`). Режим всегда записан в `run.json`.
     """
     stamp = started_utc.replace("-", "").replace(":", "").replace("T", "-")[:15]
-    suffix = "" if mode in ("", DEFAULT_CATALOG_MODE) else "-" + mode
-    return f"{stamp}-{group}-{commit}" + ("-dirty" if dirty else "") + suffix
+    return f"{stamp}-{group}-{commit}" + ("-dirty" if dirty else "")
 
 
-def create_run_directory(workdir, started_utc, group, commit, dirty, mode=""):
+def create_run_directory(workdir, started_utc, group, commit, dirty):
     """Создать каталог ЭТОГО прогона и вернуть путь.
 
     Различитель `-2`, `-3`, … нужен потому, что два прогона одной группы подряд — обычное дело
@@ -1255,7 +1225,7 @@ def create_run_directory(workdir, started_utc, group, commit, dirty, mode=""):
     """
     runs = os.path.join(workdir, "runs")
     os.makedirs(runs, exist_ok=True)
-    base = run_directory_name(started_utc, group, commit, dirty, mode)
+    base = run_directory_name(started_utc, group, commit, dirty)
     name, index = base, 1
     while os.path.exists(os.path.join(runs, name)):
         index += 1
@@ -15795,13 +15765,6 @@ def main():
         if os.path.exists(worker):
             os.environ["KOMPAS_MCP_WORKER_PATH"] = worker
     config = os.path.abspath(argument("--config") or local_config(ROOT))
-    # Режим каталога: тот же, что у Хоста по умолчанию (`compact`). Явное значение нужно для второго
-    # зачётного прогона одного коммита: `--all --catalog-mode full`.
-    catalog_mode = (argument("--catalog-mode") or DEFAULT_CATALOG_MODE).strip().lower()
-    if catalog_mode not in CATALOG_MODES:
-        print("--catalog-mode: допустимы только " + " и ".join(CATALOG_MODES)
-              + ", получено " + catalog_mode)
-        return 2
     workdir = os.path.join(ROOT, "scratch", "mcp-smoke")
     os.makedirs(workdir, exist_ok=True)
     keep = "--keep" in sys.argv
@@ -16154,7 +16117,7 @@ def main():
     # внутри него, иначе упавший прогон снова оставит доказательства врозь от отчёта.
     started_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     commit, tree_dirty = git_state(ROOT)
-    run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty, catalog_mode)
+    run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty)
     rep = Report(report_title, os.path.join(run_dir, report_filename))
     # Разбивка по группам — только у полного прогона: его один отчёт несёт строки всех групп.
     rep.grouped = all_groups
@@ -16187,14 +16150,10 @@ def main():
     # в общий журнал 27 705 строк, то есть доказательство клиентского сеанса перестало быть
     # отличимым от шума прибора. В отчёт идёт ИСХОДНЫЙ путь: по нему отчёт привязывается к поставке.
     measured_config = isolate_config(config, run_dir, "smoke")
-    apply_catalog_mode(measured_config, catalog_mode)
     rep.context = {
         "started_utc": started_utc,
         "run_directory": run_dir,
         "run_group": group,
-        # Режим каталога, в котором шёл прогон: без него два прогона одного коммита неразличимы в
-        # отчёте, а именно их сравнение и есть предмет приёмки.
-        "catalog_mode": catalog_mode,
         "source_commit": commit,
         "source_tree_dirty": tree_dirty,
         # Штамп собранного бинаря (`<Version>+<коммит>`) читается из serverInfo при initialize и
@@ -16269,7 +16228,7 @@ def main():
 
         tools = client.tools()
         names = sorted(t["name"] for t in tools)
-        rep.add("S02", f"tools/list: {len(names)} инструментов в режиме {client.mode()}",
+        rep.add("S02", f"tools/list: {len(names)} опубликованных инструментов",
                 "PASS" if listing_matches(client, names) else "FAIL",
                 f"опубликовано {len(names)}, реестр {len(client.registry())}; " + ", ".join(names))
 
@@ -48768,18 +48727,16 @@ def threads_checks(client, rep, app_id, workdir):
 
 
 def catalog_checks(host, config, workdir, rep):
-    """CT.* — механизм каталога: `compact` обслуживает ВЕСЬ реестр (наряд CATALOG_COMPACT).
+    """CT.* — механизм каталога: один постоянный список над ВЕСЬ реестр операций.
 
-    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. `tools/list` в `compact` ПОСТОЯНЕН: он не содержит ни одной операции
-    реестра, поэтому не растёт с их числом. Каждая операция реестра находится по русскому слову из
-    своего заголовка и описывается схемой, равной `schemas/<id>.json`; каждая достижима ровно одним
-    путём — опубликованным инструментом или `kompas_run`. `kompas_run` отдаёт тот же ответ, что
-    прямой вызов, и отвергает неверные аргументы по имени поля ДО исполнения. Режим `full` не
-    изменился: его список по-прежнему равен реестру.
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. `tools/list` ПОСТОЯНЕН: он не содержит ни одной операции реестра,
+    поэтому не растёт с их числом. Каждая операция реестра находится по русскому слову из своего
+    заголовка и описывается схемой, равной `schemas/<id>.json`; каждая достижима ровно одним путём —
+    опубликованным инструментом или `kompas_run`. `kompas_run` отдаёт тот же ответ, что прямой вызов,
+    и отвергает неверные аргументы по имени поля ДО исполнения.
 
-    ПОЧЕМУ ГРУППА ВЕДЁТ СВОИ ХОСТЫ. Режим задаётся конфигурацией на старте процесса, а режим общего
-    Хоста прогона выбирает флаг прибора. Свои два Хоста (по одному на режим) — единственный способ
-    сравнить ответы двух режимов на одной машине; КОМПАС при этом живёт в одном экземпляре за раз.
+    ПОЧЕМУ ГРУППА ВЕДЁТ СВОЙ ХОСТ. Список публикуется на старте процесса, а общий Хост прогона живёт
+    с сеансом и документами других групп: свой Хост отделяет ответы приёмки от их следов.
     """
     import json as _json
     import os as _os
@@ -48789,7 +48746,7 @@ def catalog_checks(host, config, workdir, rep):
     from localconfig import isolate_config
 
     catalog_tools = {"kompas_find_operations", "kompas_describe_operation", "kompas_run"}
-    # Прямой набор `compact`. Имена и число — УТВЕРЖДЕНИЕ строки CT.02 («список постоянен»), а не
+    # Прямой набор каталога. Имена и число — УТВЕРЖДЕНИЕ строки CT.01 («список постоянен»), а не
     # копия реестра: строка падает, если состав прямого набора изменился молча.
     direct = {
         "kompas_health", "kompas_connect", "kompas_session_status", "kompas_acquire_session",
@@ -48797,20 +48754,12 @@ def catalog_checks(host, config, workdir, rep):
         "kompas_open_document", "kompas_close_document", "kompas_get_context",
         "kompas_capabilities",
     }
-    def mode_config(tag, mode):
-        path = isolate_config(config, workdir, "ct-" + tag)
-        with open(path, encoding="utf-8-sig") as fh:
-            data = _json.load(fh)
-        data["catalog_mode"] = mode
-        with open(path, "w", encoding="utf-8") as fh:
-            _json.dump(data, fh, ensure_ascii=False, indent=2)
-        return path
 
-    def open_host(tag, mode):
-        probe = Client(host, mode_config(tag, mode))
+    def open_host():
+        probe = Client(host, isolate_config(config, workdir, "ct-catalog"))
         probe.call("initialize", {
             "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "mcp-smoke-ct-" + tag, "version": "0"}}, timeout=60)
+            "clientInfo": {"name": "mcp-smoke-ct", "version": "0"}}, timeout=60)
         probe.notify("notifications/initialized")
         return probe
 
@@ -48830,6 +48779,11 @@ def catalog_checks(host, config, workdir, rep):
         tools = result.get("tools") or []
         return tools, {t.get("name") for t in tools}, len(_json.dumps(result, ensure_ascii=False))
 
+    def capabilities(probe):
+        result = probe.call("tools/call", {"name": "kompas_capabilities", "arguments": {}},
+                            timeout=120)
+        return (result.get("structuredContent") or {}).get("result") or {}
+
     def call(probe, tool, args, timeout=300):
         payload = dict(args)
         if probe.declares_operation_id(tool):
@@ -48841,43 +48795,51 @@ def catalog_checks(host, config, workdir, rep):
         """Операция через kompas_run: аргументы уходят как есть, id — полем."""
         return call(probe, "kompas_run", {"id": op_id, "args": args}, timeout=timeout)
 
-    full = open_host("full", "full")
-    compact = open_host("compact", "compact")
+    probe = open_host()
     try:
-        full_tools, full_names, full_size = listing(full)
-        rep.add("CT.01", "full: список инструментов равен реестру, инструментов каталога в нём нет",
-                "PASS" if len(full_names) == EXPECTED_TOOL_COUNT and not (full_names & catalog_tools)
-                else "FAIL",
-                f"инструментов {len(full_names)} (реестр {EXPECTED_TOOL_COUNT}), размер {full_size} символов, "
-                f"лишних {sorted(full_names & catalog_tools)}")
-
-        compact_tools, compact_names, compact_size = listing(compact)
+        _tools, names, size = listing(probe)
         expected = direct | catalog_tools
-        rep.add("CT.02", "compact: список постоянен — прямой набор плюс три инструмента каталога",
-                "PASS" if compact_names == expected else "FAIL",
-                f"инструментов {len(compact_names)} (ожидалось {len(expected)}), размер {compact_size} "
-                f"символов; лишние {sorted(compact_names - expected)}, недостающие {sorted(expected - compact_names)}")
+        body = capabilities(probe)
+        has_mode_field = "catalog_mode" in body
+        rep.add("CT.01",
+                "список постоянен: прямой набор плюс три инструмента каталога, поля catalog_mode нет",
+                "PASS" if names == expected and not has_mode_field else "FAIL",
+                f"инструментов {len(names)} (ожидалось {len(expected)}), размер {size} символов; "
+                f"лишние {sorted(names - expected)}, недостающие {sorted(expected - names)}; "
+                f"поле catalog_mode в ответе: {has_mode_field}")
 
         # ПОСТОЯНСТВО, а не одноразовый размер: второй запрос того же клиента обязан вернуть то же
         # самое. Иначе «постоянен» означало бы «однажды измерили».
-        _again_tools, again_names, again_size = listing(compact)
-        rep.add("CT.03", "compact: второй tools/list того же Хоста совпадает по составу и размеру",
-                "PASS" if again_names == compact_names and again_size == compact_size else "FAIL",
-                f"размер {compact_size} → {again_size}, состав совпал={again_names == compact_names}")
+        _again, again_names, again_size = listing(probe)
+        rep.add("CT.02", "второй tools/list того же Хоста совпадает по составу и размеру",
+                "PASS" if again_names == names and again_size == size else "FAIL",
+                f"размер {size} → {again_size}, состав совпал={again_names == names}")
 
         # РЕЕСТР ЦЕЛИКОМ — из ответа Хоста, а не из списка прибора: строка, помнящая состав реестра,
         # перестала бы замечать его изменение. `find` с пустым запросом отдаёт все операции.
-        env_all, code_all = call(compact, "kompas_find_operations",
+        env_all, code_all = call(probe, "kompas_find_operations",
                                  {"query": "", "limit": EXPECTED_TOOL_COUNT})
         all_rows = ((env_all or {}).get("result") or {}).get("operations") or []
         registry = [row.get("id") for row in all_rows]
-        rep.add("CT.04", "compact: размер не зависит от числа операций — операций в списке нет",
-                "PASS" if (not (compact_names & (set(registry) - direct))
-                           and len(registry) == EXPECTED_TOOL_COUNT and compact_size * 5 < full_size)
-                else "FAIL",
-                f"compact {compact_size} символов против full {full_size} на {len(full_names)} инструментах; "
-                f"операций в реестре {len(registry)} (код {code_all}); "
-                f"операции вне прямого набора в списке: {sorted(compact_names & (set(registry) - direct))}")
+        leaked = sorted(names & (set(registry) - direct))
+        rep.add("CT.03", "реестр целиком: find отдаёт все операции, ни одна не опубликована списком",
+                "PASS" if len(registry) == EXPECTED_TOOL_COUNT and not leaked else "FAIL",
+                f"операций в реестре {len(registry)} (код {code_all}); операции вне прямого набора "
+                f"в списке: {leaked}")
+
+        # ТРИ УТВЕРЖДЕНИЯ ПОРОЗНЬ: что опубликовано, что есть в реестре и что из этого вызывается
+        # через kompas_run. Один список на все три сказал бы клиенту, что у него сотня недоступных
+        # инструментов.
+        published = [str(n) for n in (body.get("tools") or [])]
+        operations = [str(n) for n in (body.get("operations") or [])]
+        via_run = [str(n) for n in (body.get("operations_via_run") or [])]
+        rep.add("CT.04", "capabilities: tool_count равен длине списка, operations — реестр, "
+                "operations_via_run — реестр без прямого набора",
+                "PASS" if (body.get("tool_count") == len(published)
+                           and sorted(operations) == sorted(registry)
+                           and sorted(via_run) == sorted(set(operations) - direct)) else "FAIL",
+                f"опубликовано {len(published)} (tool_count {body.get('tool_count')}), "
+                f"operations {len(operations)}, через run {len(via_run)}")
 
         # CT.05: русское слово из СОБСТВЕННОГО заголовка операции находит её среди первых `limit`.
         # Слова не вписаны руками: заголовки приходят из того же ответа, что и id, поэтому строка
@@ -48889,7 +48851,7 @@ def catalog_checks(host, config, workdir, rep):
             title = (row.get("title") or "").lower()
             candidates = sorted({w for w in _re.findall(r"[а-яё]{4,}", title)}, key=len, reverse=True)
             for word in candidates[:4]:
-                env_w, _c = call(compact, "kompas_find_operations", {"query": word})
+                env_w, _c = call(probe, "kompas_find_operations", {"query": word})
                 shown = (((env_w or {}).get("result") or {}).get("operations") or [])[:20]
                 if op_id in [r.get("id") for r in shown]:
                     find_words[op_id] = word
@@ -48897,19 +48859,17 @@ def catalog_checks(host, config, workdir, rep):
             if op_id not in find_words:
                 find_fail[op_id] = candidates
         rep.add("CT.05",
-                "compact: каждая операция реестра находится по русскому слову своего заголовка "
-                "(первые limit)",
+                "каждая операция реестра находится по русскому слову своего заголовка (первые limit)",
                 "PASS" if all_rows and not find_fail else "FAIL",
                 f"операций {len(all_rows)}, нашли все={not find_fail}, "
                 f"слово понадобилось у {len(find_words)}; не нашли: {sorted(find_fail)[:5]}",
                 details={"not_found": find_fail, "word_used": find_words})
 
-        # CT.06: схема describe равна опубликованному реестру схем, ДЛЯ КАЖДОЙ операции, и совпадает
-        # со схемой прямого инструмента в `full`. Обе половины нужны: первая держит поставку,
-        # вторая — то, что два режима описывают один и тот же вход.
+        # CT.06: схема describe равна опубликованному реестру схем, ДЛЯ КАЖДОЙ операции. Строка
+        # держит поставку: клиент, получивший схему от describe, валидирует по ней же аргументы.
         schema_bad = {}
         for op_id in registry:
-            env_d, d_code = call(compact, "kompas_describe_operation", {"id": op_id})
+            env_d, d_code = call(probe, "kompas_describe_operation", {"id": op_id})
             got = ((env_d or {}).get("result") or {}).get("schema")
             path = _os.path.join(ROOT, "schemas", str(op_id) + ".json")
             want = None
@@ -48919,14 +48879,10 @@ def catalog_checks(host, config, workdir, rep):
                 want.pop("$schema", None)
             except (OSError, ValueError):
                 want = None
-            full_schema = next((t.get("inputSchema") for t in full_tools
-                                if t.get("name") == op_id), None)
-            if not (got is not None and want is not None and got == want and got == full_schema):
+            if not (got is not None and want is not None and got == want):
                 schema_bad[op_id] = {"code": d_code, "file": want is not None,
-                                     "equal_file": got == want, "equal_full": got == full_schema}
-        rep.add("CT.06",
-                "compact: describe отдаёт схему, равную schemas/<id>.json и схеме прямого инструмента "
-                "в full, для каждой операции реестра",
+                                     "equal_file": got == want}
+        rep.add("CT.06", "describe отдаёт схему, равную schemas/<id>.json, для каждой операции реестра",
                 "PASS" if registry and not schema_bad else "FAIL",
                 f"сверено {len(registry)}; расхождения: {sorted(schema_bad)[:5]}",
                 details={"bad": schema_bad})
@@ -48940,81 +48896,60 @@ def catalog_checks(host, config, workdir, rep):
         }
         bad_rows = {}
         for label, args in bad.items():
-            env, code = run(compact, "kompas_create_sketch", args)
+            env, code = run(probe, "kompas_create_sketch", args)
             details = ((env or {}).get("error") or {}).get("details") or {}
             bad_rows[label] = (code, [v.get("path") for v in details.get("violations") or []],
                                details.get("schema_ref"))
-        rep.add("CT.07", "compact: kompas_run отвергает неверные аргументы по имени поля до исполнения",
+        rep.add("CT.07", "kompas_run отвергает неверные аргументы по имени поля до исполнения",
                 "PASS" if all(code == "INVALID_ARGUMENT" and paths and ref == "schemas/kompas_create_sketch.json"
                               for code, paths, ref in bad_rows.values()) else "FAIL",
                 "; ".join(f"{label}: {code} {paths}" for label, (code, paths, _ref) in bad_rows.items()),
                 details={"rows": {k: list(v) for k, v in bad_rows.items()}})
 
-        env, code = run(compact, "kompas_extrde", {"document_id": "d"})
+        env, code = run(probe, "kompas_extrde", {"document_id": "d"})
         details = ((env or {}).get("error") or {}).get("details") or {}
         nearest = details.get("nearest_ids") or []
-        rep.add("CT.08", "compact: неизвестный id — отказ с ближайшими id",
+        rep.add("CT.08", "неизвестный id — отказ с ближайшими id",
                 "PASS" if code == "INVALID_ARGUMENT" and "kompas_extrude" in nearest else "FAIL",
                 f"код={code}, ближайшие={nearest}")
 
         # CT.09: достижимость РОВНО ОДНИМ путём. Два пути у одной операции означали бы, что клиент не
-        # знает, какой вызов настоящий; третий (недостижима) — что режим обещает больше, чем даёт.
+        # знает, какой вызов настоящий; третий (недостижима) — что каталог обещает больше, чем даёт.
         reach = {row.get("id"): row.get("reachable_via") for row in all_rows}
         bad_reach = {k: v for k, v in reach.items() if v not in ("direct", "run")}
         direct_rows = sorted(k for k, v in reach.items() if v == "direct")
-        rep.add("CT.09", "compact: каждая операция реестра достижима ровно одним путём (direct или run)",
+        rep.add("CT.09", "каждая операция реестра достижима ровно одним путём (direct или run)",
                 "PASS" if (not bad_reach and direct_rows == sorted(direct)) else "FAIL",
                 f"direct: {len(direct_rows)} (ожидание {len(direct)}), иные ответы: {bad_reach}",
                 details={"direct": direct_rows, "bad": bad_reach})
 
-        # ОДИН ОБРАБОТЧИК, ОДИН ОТВЕТ. Одна и та же операция — запись файла `kompas_export_image` —
-        # ИСПОЛНЯЕТСЯ в каждом режиме: в compact через kompas_run, в full прямым вызовом. Сравниваются
-        # статус, код, уровень проверки, состав полей результата и существование файла; изменчивые
-        # значения (пути, идентификаторы, размеры) не сравниваются. Строка требует УСПЕХА, а не
-        # совпадения двух отказов: совпасть на отказе значит не дойти до обработчика операции.
-        def doc_of(env):
+        # ОДИН ОБРАБОТЧИК, ОДИН ОТВЕТ. Одна и та же операция вызывается ДВУМЯ путями: опубликованным
+        # инструментом и через kompas_run. Сравниваются статус, код, уровень проверки и состав полей
+        # результата вместе с устойчивыми значениями; изменчивые (число процессов, записи ROT) не
+        # сравниваются. Строка требует УСПЕХА, а не совпадения двух отказов: совпасть на отказе значит
+        # не дойти до обработчика операции.
+        def shape(env):
             res = (env or {}).get("result") or {}
-            return res.get("document_id") or res.get("id") or (env or {}).get("document_id")
-
-        compare = {}
-        for probe, tag, via_run in ((compact, "compact", True), (full, "full", False)):
-            env_c, _code = call(probe, "kompas_connect",
-                                {"mode": "launch", "make_visible": False}, timeout=300)
-            app = (env_c or {}).get("application_id")
-            env_d, code_d = call(probe, "kompas_create_document",
-                                 {"application_id": app, "kind": "part", "name": "catalog-check-" + tag},
-                                 timeout=300)
-            doc = doc_of(env_d)
-            image = os.path.join(workdir, "catalog-check-" + tag + ".png")
-            if os.path.exists(image):
-                os.remove(image)
-            args = {"document_id": doc, "expected_revision": (env_d or {}).get("revision_after") or 1,
-                    "format": "png", "save_path": image, "operation_id": str(_uuid.uuid4())}
-            env_op, code_op = (run(probe, "kompas_export_image", args) if via_run
-                               else call(probe, "kompas_export_image", args))
-            res = (env_op or {}).get("result")
-            compare[tag] = {
-                "document": bool(doc),
-                "create_code": code_d,
-                "status": (env_op or {}).get("status"),
-                "code": code_op,
-                "level": ((env_op or {}).get("verification") or {}).get("level"),
+            return {
+                "status": (env or {}).get("status"),
+                "code": error_code(env),
+                "level": ((env or {}).get("verification") or {}).get("level"),
                 "keys": sorted(res) if isinstance(res, dict) else None,
-                "file": os.path.exists(image),
+                "tools": res.get("tools") if isinstance(res, dict) else None,
+                "tool_count": res.get("tool_count") if isinstance(res, dict) else None,
+                "server_version": res.get("server_version") if isinstance(res, dict) else None,
             }
-            if doc:
-                call(probe, "kompas_close_document", {"document_id": doc, "dirty_policy": "discard"},
-                     timeout=120)
-            call(probe, "kompas_disconnect",
-                 {"application_id": app, "close_owned_application": True}, timeout=120)
-        succeeded = compare["compact"]["code"] is None and compare["compact"]["file"]
-        rep.add("CT.10", "compact: kompas_run отдаёт тот же ответ, что прямой вызов в full",
-                "PASS" if succeeded and compare["compact"] == compare["full"] else "FAIL",
-                f"compact={compare['compact']} full={compare['full']}",
-                details=compare)
+
+        env_direct, _c1 = call(probe, "kompas_capabilities", {})
+        env_run, _c2 = run(probe, "kompas_capabilities", {})
+        both = {"direct": shape(env_direct), "run": shape(env_run)}
+        succeeded = both["direct"]["code"] is None
+        rep.add("CT.10", "kompas_run отдаёт тот же ответ, что прямой вызов того же инструмента",
+                "PASS" if succeeded and both["direct"] == both["run"] else "FAIL",
+                f"direct={both['direct']} run={both['run']}",
+                details=both)
     finally:
-        stop(compact)
-        stop(full)
+        stop(probe)
 
 
 def copy_geometry_checks(client, rep, app_id, workdir):

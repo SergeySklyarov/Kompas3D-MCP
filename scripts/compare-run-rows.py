@@ -1,9 +1,9 @@
 """Compare the rows of two `--all` runs of the same commit and name every divergence.
 
-WHY. The catalog mode is measured twice on one tree (`compact` and `full`): the two runs must have
-the same rows, and a differing row has to be named, not counted. Row ids repeat inside one report
-(a per-document row runs once per document), so a row is identified by its id plus its ordinal
-among the rows of that id.
+WHY. Two runs of one commit must have the same rows - a repeat after an external failure, or a run
+of the same tree on another day. A differing row has to be named, not counted. Row ids repeat inside
+one report (a per-document row runs once per document), so a row is identified by its id plus its
+ordinal among the rows of that id.
 
 INVARIANT: a row present in one run and absent in the other is reported as a divergence, never as
 an equal row: an equal count over a different row set would read as a clean comparison.
@@ -28,7 +28,6 @@ def load(run_dir):
     ctx = data.get("context") or {}
     return {
         "run_dir": os.path.relpath(os.path.abspath(run_dir), ROOT).replace("\\", "/"),
-        "catalog_mode": ctx.get("catalog_mode"),
         "source_commit": ctx.get("source_commit"),
         "source_tree_dirty": ctx.get("source_tree_dirty"),
         "rows": data.get("rows") or [],
@@ -63,8 +62,8 @@ def compare(a, b):
     group_diff = [{"group": g, "a": a["groups"].get(g), "b": b["groups"].get(g)}
                   for g in groups if a["groups"].get(g) != b["groups"].get(g)]
     return {
-        "a": {k: a[k] for k in ("run_dir", "catalog_mode", "source_commit", "source_tree_dirty")},
-        "b": {k: b[k] for k in ("run_dir", "catalog_mode", "source_commit", "source_tree_dirty")},
+        "a": {k: a[k] for k in ("run_dir", "source_commit", "source_tree_dirty")},
+        "b": {k: b[k] for k in ("run_dir", "source_commit", "source_tree_dirty")},
         "rows_a": len(a["rows"]),
         "rows_b": len(b["rows"]),
         "counts_a": counts(a["rows"]),

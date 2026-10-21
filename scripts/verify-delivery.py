@@ -7,11 +7,19 @@
 
 1. состав и разрядность исполняемых файлов (машинный признак PE, а не имя папки);
 2. `initialize` + `tools/list` по настоящему stdio-транспорту — опубликованным Host;
-3. схемы из `tools/list` против каталога `schemas/` поставки и против `schemas/` репозитория;
+3. схемы из `tools/list` против `schemas/` поставки и репозитория, а состав `schemas/` - против
+   реестра операций из `kompas_capabilities`;
 4. какие бинари фактически измерялись — пути и SHA-256.
 
 Схемы из `tools/list` берутся с провода, а не из `--print-schemas`: клиент видит именно ответ
 сервера, и «поле есть в C# или в файле схемы» не означает «поле опубликовано».
+
+INVARIANT: `schemas/` holds one file per REGISTRY OPERATION, not one per published tool, so the two
+sets are not equal by design. The permanent catalog publishes 14 tools; the folder describes 105
+operations, and the ones not published directly are reached through `kompas_run`. The folder is
+therefore compared with `kompas_capabilities.operations`, and the tools carrying no schema of their
+own are named separately.
+History: docs/decisions/tests.md#schema-coverage
 
 Usage:
   python scripts/verify-delivery.py --delivery artifacts/publish-b2-20260918 \
@@ -191,6 +199,33 @@ def read_schema_dir(path):
     return schemas
 
 
+META_TOOLS = ("kompas_find_operations", "kompas_describe_operation", "kompas_run")
+
+
+def coverage_problems(wire, operations, via_run, shipped, meta=META_TOOLS):
+    """Where the published tools, the operation registry and the schema folder disagree.
+
+    `wire` - names from `tools/list`; `operations` - the whole registry from `kompas_capabilities`;
+    `via_run` - operations reached through `kompas_run`; `shipped` - file names in `schemas/`.
+    A direct tool is an operation that is not reached through `kompas_run`, so a direct operation
+    missing from the wire is unreachable by either route, and a tool absent from both the registry
+    and the meta list has no documented contract behind it. Pure: no Host, no KOMPAS, no files.
+    TEST: self_test cases named "схем больше, чем инструментов" and "пропавшая схема названа".
+    """
+    wire, operations, via_run, shipped, meta = (
+        set(x) for x in (wire, operations, via_run, shipped, meta))
+    problems = [f"операция {n} есть в реестре, а схемы schemas/{n}.json в поставке нет"
+                for n in sorted(operations - shipped)]
+    problems += [f"в поставке лежит схема {n}.json, а операции {n} в реестре нет"
+                 for n in sorted(shipped - operations)]
+    problems += [f"операция {n} не публикуется ни инструментом, ни через kompas_run"
+                 for n in sorted((operations - via_run) - wire)]
+    problems += [f"инструмент {n} опубликован, но его нет ни в реестре операций, ни среди "
+                 f"мета-инструментов"
+                 for n in sorted((wire - operations) - meta)]
+    return problems
+
+
 def isolate_config(config, out):
     """Копия конфигурации сервера с журналами в каталоге проверки.
 
@@ -279,6 +314,27 @@ def self_test():
     c = {"type": "object", "properties": {"b": 3, "a": 1}}
     check("порядок ключей и $schema не влияют", canonical(a) == canonical(b))
     check("разные значения дают разные канонизации", canonical(a) != canonical(c))
+
+    # The folder is per operation, the tool list is per published tool: more schemas than tools is
+    # the normal shape after the permanent catalog, and every other mismatch must still be named.
+    operations = ["kompas_health", "op_a", "op_b", "op_via_run"]
+    wire = ["kompas_health", "kompas_find_operations", "kompas_describe_operation", "kompas_run"]
+    via_run = ["op_a", "op_b", "op_via_run"]
+    check("схем больше, чем инструментов, — не расхождение",
+          coverage_problems(wire, operations, via_run, operations) == [],
+          str(coverage_problems(wire, operations, via_run, operations)))
+    check("пропавшая схема названа",
+          any("op_b" in p for p in coverage_problems(
+              wire, operations, via_run, ["kompas_health", "op_a", "op_via_run"])))
+    check("лишняя схема названа",
+          any("op_ghost" in p for p in coverage_problems(
+              wire, operations, via_run, operations + ["op_ghost"])))
+    check("инструмент без операции и без мета-роли назван",
+          any("kompas_extra" in p for p in coverage_problems(
+              wire + ["kompas_extra"], operations, via_run, operations)))
+    check("прямая операция вне tools/list названа",
+          any("op_direct" in p for p in coverage_problems(
+              wire, operations + ["op_direct"], via_run, operations + ["op_direct"])))
 
     derived = default_out(os.path.join(ROOT, "artifacts", "publish-b4-20260920"))
     check("имя отчёта выводится из имени поставки",
@@ -377,6 +433,24 @@ def main():
         facts["protocol_version"] = init.get("protocolVersion")
         client.notify("notifications/initialized")
         tools = client.call("tools/list", {}).get("tools", [])
+        # The registry comes from the delivered Host, not from the repository: it is what tells a
+        # schema folder of operations from a folder of tools. A refusal is NAMED, never a skip.
+        registry, via_run, capabilities_problems = None, [], []
+        try:
+            is_error, envelope, _raw = client.tool("kompas_capabilities", {})
+            payload = (envelope or {}).get("result") or {}
+            registry, via_run = payload.get("operations"), payload.get("operations_via_run") or []
+            if is_error or registry is None:
+                registry, capabilities_problems = None, [
+                    "kompas_capabilities не назвал реестр операций: сверять schemas/ не с чем — "
+                    + str(payload.get("error") or "isError")]
+            elif payload.get("tool_count") != len(tools):
+                capabilities_problems = [
+                    f"kompas_capabilities: tool_count={payload.get('tool_count')}, "
+                    f"а tools/list отдаёт {len(tools)}"]
+        except Exception as exc:
+            registry, capabilities_problems = None, [
+                "kompas_capabilities не ответил: сверять schemas/ не с чем — " + str(exc)]
     finally:
         client.close()
 
@@ -389,10 +463,21 @@ def main():
     facts["schemas_shipped_count"] = len(shipped)
     facts["schemas_repo_count"] = len(repo)
 
-    for name in sorted(set(wire) - set(shipped)):
-        problems.append(f"инструмент {name} отвечает по проводу, но схемы в поставке нет")
-    for name in sorted(set(shipped) - set(wire)):
-        problems.append(f"в поставке лежит схема {name}.json, но такого инструмента сервер не публикует")
+    problems += capabilities_problems
+    if registry is not None:
+        facts["operations_count"] = len(registry)
+        facts["operations_via_run_count"] = len(via_run)
+        facts["tools_without_schema"] = sorted(set(wire) - set(registry))
+        problems += coverage_problems(wire, registry, via_run, shipped)
+    # The delivery carries the repository's schemas verbatim: a difference means one of the two was
+    # rebuilt or edited after the other, and a reader of the folder would get another contract.
+    for name in sorted(set(shipped) | set(repo)):
+        if name not in repo:
+            problems.append(f"схема {name}.json есть в поставке, но не в репозитории")
+        elif name not in shipped:
+            problems.append(f"схема {name}.json есть в репозитории, но не в поставке")
+        elif canonical(shipped[name]) != canonical(repo[name]):
+            problems.append(f"схема {name}.json в поставке разошлась с schemas/ репозитория")
     mismatched = []
     for name in sorted(set(wire) & set(shipped)):
         if canonical(wire[name]) != canonical(shipped[name]):

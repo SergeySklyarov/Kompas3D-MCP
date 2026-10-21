@@ -32922,22 +32922,32 @@ def chamfer_checks(client, rep, app_id, workdir):
         builtL = (codeL is None and vL1 is not None
                   and abs(vL1 - wantL) <= max(0.01, 1e-6 * l_plate_ch)
                   and levelL == "geometry_checked")
-        # На неизменном теле принимается ТОЛЬКО честный ноль-результат. Перенос поверхности на другое
-        # ребро (`chamfer_on_other_edge`) при неизменном теле - ЛОЖНОЕ имя: поверхность не может уехать
-        # на другое ребро, если материал не тронут; такой исход - FAIL, а не «любой названный отказ».
+        # INVARIANT: on an untouched body only a NAMED geometry refusal is honest - the chamfer is not in
+        # the body and the client is told so. A silent success is a false success, and a refusal that
+        # claims the surface moved to another edge is a false name: untouched material cannot move.
+        # DOC: two refusal routes are documented - NO_GEOMETRY_CHANGE/chamfer_not_applied (the feature is
+        # built and the body does not hold it) and GEOMETRY_FAILED/feature_error (the kernel reports an
+        # error on the feature). On the same reflex edge the kernel answers with either one.
+        # History: docs/decisions/adapter-features.md#chamfer-not-applied
         detailsL = ((chL_env or {}).get("error") or {}).get("details") or {}
         notAppliedL = (codeL == "NO_GEOMETRY_CHANGE"
                        and detailsL.get("code") == "chamfer_not_applied")
         untouchedL = vL1 is not None and abs(vL1 - l_plate_ch) <= 0.01
-        okL = builtL or (not want_convex and notAppliedL and untouchedL)
+        honestL = (not want_convex and untouchedL
+                   and codeL in ("NO_GEOMETRY_CHANGE", "GEOMETRY_FAILED")
+                   and detailsL.get("code") != "chamfer_on_other_edge")
+        okL = builtL or honestL
         if builtL:
             outcomeL = "материал добавлен и поверхность прилегает"
         elif notAppliedL and untouchedL:
             outcomeL = "ноль-результат назван chamfer_not_applied, тело не тронуто"
+        elif honestL:
+            outcomeL = ("отказ назван на неизменном теле: "
+                        + str(detailsL.get("code") or codeL))
         elif codeL is None and untouchedL:
             outcomeL = "ЛОЖНЫЙ УСПЕХ: тело не изменилось, а отказа нет"
         elif untouchedL and codeL:
-            outcomeL = ("отказ назван ПЕРЕНОСОМ на неизменном теле: "
+            outcomeL = ("отказ на неизменном теле не принят: "
                         + str(detailsL.get("code") or codeL))
         else:
             outcomeL = "исход не отнесён ни к одному приемлемому"

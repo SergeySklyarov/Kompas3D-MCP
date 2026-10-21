@@ -244,6 +244,11 @@ public static class Program
                 var dismantle = new DismantleProbe(report, options);
                 pump.Run(() => dismantle.Run());
             }
+            else if (options.Sections)
+            {
+                var sectionsProbe = new SectionsProbe(report, options);
+                pump.Run(() => sectionsProbe.Run());
+            }
             else if (options.MechanicalMates)
             {
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
@@ -794,6 +799,12 @@ public sealed class Options
     /// History: docs/decisions/dismantle.md#probe</summary>
     public bool Dismantle { get; private set; }
 
+    /// <summary><c>--sections</c>: dynamic cross-sections — is a section step writable through the
+    /// documented route, does the section mode change the raster snapshot in an invisible instance, and
+    /// do the sections survive save/reopen (order <c>OMEGA_G11_SECTIONS</c>).
+    /// History: docs/decisions/sections.md#probe</summary>
+    public bool Sections { get; private set; }
+
     /// <summary><c>--mech-mates</c>: are «Механическая передача» and «Кулачок - толкатель» created by the
     /// documented API7 route, and is the LINK observable through a measured change of the driven
     /// component's placement (order <c>G4_MECHANICAL_MATES</c>, stage 0).
@@ -945,6 +956,7 @@ public sealed class Options
         var copyGeometry = false;
         var copyGeometryDiskSource = false;
         var dismantle = false;
+        var sections = false;
         var mechanicalMates = false;
         var drafts = false;
         var draftsBaseEdit = false;
@@ -1060,6 +1072,9 @@ public sealed class Options
                 case "--dismantle":
                     dismantle = true;
                     break;
+                case "--sections":
+                    sections = true;
+                    break;
                 case "--mech-mates":
                     mechanicalMates = true;
                     break;
@@ -1159,6 +1174,7 @@ public sealed class Options
             : b5 ? "b5-sweep-loft-shell"
             : sketchCopy ? "sketch-copy-project"
             : dismantle ? "dismantle"
+            : sections ? "sections"
             : copyGeometry ? "copy-geometry"
             : repositionParams ? "reposition-params"
             : repositionRead ? "reposition-read"
@@ -1193,6 +1209,7 @@ public sealed class Options
             CopyGeometry = copyGeometry,
             CopyGeometryDiskSource = copyGeometryDiskSource,
             Dismantle = dismantle,
+            Sections = sections,
             MechanicalMates = mechanicalMates,
             Drafts = drafts,
             DraftsBaseEdit = draftsBaseEdit,

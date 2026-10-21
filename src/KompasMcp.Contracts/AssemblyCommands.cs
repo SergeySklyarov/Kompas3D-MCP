@@ -243,8 +243,9 @@ public sealed record SetDismantleCommand
 
     /// <summary>Indices of steps to remove one by one through <c>DeleteDismantleStep</c> before anything
     /// else happens. DOC: <c>idismantleparameters_deletedismantlestep.html</c> — a removed step shifts the
-    /// indices after it, so they are removed from the highest down.</summary>
-    public IReadOnlyList<int>? DeleteStepIndices { get; init; }
+    /// indices after it, so they are removed from the highest down. The name is the schema's field
+    /// (<c>delete_steps</c>) so the argument reaches this property instead of being dropped.</summary>
+    public IReadOnlyList<int>? DeleteSteps { get; init; }
 }
 
 /// <summary>Read the exploded view: the mode and the steps.</summary>

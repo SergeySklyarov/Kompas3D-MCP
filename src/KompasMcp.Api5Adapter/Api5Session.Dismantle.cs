@@ -54,7 +54,7 @@ public partial class Api5Session
         var before = Int(() => parameters.DismantleStepsCount);
         checks.Add(new NamedCheck("steps_count_read_before", before is not null, before?.ToString()));
 
-        if (command.DeleteStepIndices is { Count: > 0 } doomed)
+        if (command.DeleteSteps is { Count: > 0 } doomed)
         {
             // DOC: idismantleparameters_deletedismantlestep.html — the step at the index goes away and the
             // indices after it shift, so the highest index is removed first.

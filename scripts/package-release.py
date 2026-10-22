@@ -268,6 +268,23 @@ def passport_problems(passport, host_dll_sha256):
     return problems
 
 
+def manifest_counts(passport, schemas):
+    """The manifest's two counts, each taken from its own source.
+
+    INVARIANT: `tools_count` is what `tools/list` publishes, `operations_count` is the number of
+    registry operations (one schema file each). MEASURED: the two differ since the catalog became
+    fixed, and a single number read as "tools" was wrong for every client of the manifest. The
+    published count is the delivery's own `tools/list` measurement, carried by the passport as
+    `package.tools_count`; the schema count is read from the delivery. A passport without the
+    published number gives `None` and the release is refused, never a literal.
+    History: docs/decisions/releases.md#manifest-counts
+    """
+    published = (passport.get("package") or {}).get("tools_count")
+    if not isinstance(published, int) or isinstance(published, bool) or published <= 0:
+        published = None
+    return {"tools_count": published, "operations_count": len(schemas)}
+
+
 # Paths whose content decides the binaries. Docs, coverage and scripts do not reach a delivery.
 PRODUCT_SOURCES = ["src", "Directory.Build.props", "Directory.Build.targets",
                    "Directory.Packages.props", "global.json", "NuGet.config"]
@@ -394,6 +411,12 @@ def self_test():
         (notes_problems("n.md", "# KompasMCP 0.4.1 - другое\n", "KompasMCP 0.4.1 - уклоны") != [],
          "заметки под другим заголовком отвергнуты"),
         (notes_problems("n.md", None, "KompasMCP 0.4.1 - уклоны") != [], "нет заметок - отказ"),
+        # The 0.10.0 delivery publishes 14 tools for 105 operations: the two numbers must be told apart.
+        (manifest_counts({"package": {"tools_count": 14}}, ["op%d" % i for i in range(105)])
+         == {"tools_count": 14, "operations_count": 105}, "числа манифеста из своих источников"),
+        (manifest_counts({"package": {}}, ["op"])["tools_count"] is None, "нет числа инструментов - отказ"),
+        (manifest_counts({"package": {"tools_count": "14"}}, ["op"])["tools_count"] is None,
+         "число инструментов строкой отвергнуто"),
         self_test_profile_catalog(),
         *self_test_not_included(),
     ]
@@ -505,6 +528,10 @@ def main():
 
     schemas = sorted(r[len("schemas/"):-len(".json")] for r, _ in files
                      if r.startswith("schemas/kompas_") and r.endswith(".json"))
+    counts = manifest_counts(passport, schemas)
+    if counts["tools_count"] is None:
+        sys.exit("ОТКАЗ: выпуск не собран.\n  - в паспорте нет package.tools_count: число "
+                 "опубликованных инструментов (tools/list) взять неоткуда")
     if not os.path.isfile(os.path.join(delivery, "config", "kompas-mcp.example.json")):
         sys.exit("в поставке нет шаблона config/kompas-mcp.example.json")
 
@@ -536,7 +563,8 @@ def main():
         "scope": scope_text,
         "profiles": manifest_profiles,
         "not_included": not_included_lines(entries, len(profiles)),
-        "tools_count": len(schemas),
+        "tools_count": counts["tools_count"],
+        "operations_count": counts["operations_count"],
         "tools": schemas,
         "server_info": {"name": "kompas-mcp", "version": version, "protocol": "2025-06-18"},
         "requirements": [
@@ -572,7 +600,8 @@ def main():
     assets = " ".join(f'"{os.path.join(out, n)}"' for n in
                       (zip_name, "release-manifest.json", "SHA256SUMS.txt", "Install-KompasMcp.ps1"))
     print(json.dumps({"out": out, "zip": zip_name, "zip_sha256": sha256(zip_path), "files": len(files),
-                      "tools": len(schemas), "title": a.title, "notes": notes_rel,
+                      "tools": counts["tools_count"], "operations": counts["operations_count"],
+                      "title": a.title, "notes": notes_rel,
                       "publish_command": f'gh release create {a.tag} --title "{a.title}" '
                                          f'--notes-file {notes_rel} {assets}',
                       "after_publish_check": f"python scripts/lint-dashes.py --release {a.tag}"},

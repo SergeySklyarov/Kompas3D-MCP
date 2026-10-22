@@ -170,6 +170,20 @@ function Assert-Checksum([hashtable]$sums, [string]$file) {
 
 # --- 3. Unpack and verify the package --------------------------------------------------------
 
+function Get-ManifestCounts($manifest) {
+    # INVARIANT: `tools_count` is the published `tools/list` catalog, `operations_count` the registry
+    # (one schema per operation). A manifest without `operations_count` predates the split and its
+    # `tools_count` WAS the number of operations, so such a release stays installable as it was.
+    # History: docs/decisions/releases.md#manifest-counts
+    $operations = [int]$manifest.tools_count
+    $published = $null
+    if ($manifest.PSObject.Properties.Name -contains "operations_count") {
+        $operations = [int]$manifest.operations_count
+        $published = [int]$manifest.tools_count
+    }
+    return @{ Operations = $operations; Published = $published }
+}
+
 function Test-PackageDir([string]$dir, $manifest) {
     # INVARIANT: own assemblies are compared with the manifest, so a stale or foreign Host/Worker
     # in versions\<tag> is detected instead of silently reused.
@@ -179,7 +193,8 @@ function Test-PackageDir([string]$dir, $manifest) {
         if ((Get-Sha256 $f) -ne $p.Value) { return "хеш $($p.Name) не совпал с манифестом" }
     }
     $schemas = @(Get-ChildItem -LiteralPath (Join-Path $dir "schemas") -Filter "kompas_*.json" -File).Count
-    if ($schemas -ne [int]$manifest.tools_count) { return "схем $schemas, а в манифесте $($manifest.tools_count)" }
+    $counts = Get-ManifestCounts $manifest
+    if ($schemas -ne $counts.Operations) { return "схем $schemas, а в манифесте операций $($counts.Operations)" }
     if (-not (Test-Path -LiteralPath (Join-Path $dir "config\kompas-mcp.example.json"))) { return "нет шаблона конфигурации" }
     return $null
 }
@@ -270,18 +285,21 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
         $list = Send "tools/list" @{}
         $names = @($list.result.tools | ForEach-Object { $_.name })
         $report.tools = $names.Count
-        # INVARIANT: tools/list publishes the FIXED catalog, not one tool per registry operation, so it
-        # is compared with the count the Host itself reports; the manifest counts SCHEMAS, i.e. the
-        # registry, and that number is compared with `operations`. One number for both failed a correct
-        # install. History: docs/decisions/releases.md#install-layout
+        # INVARIANT: tools/list publishes the FIXED catalog, not one tool per registry operation, so
+        # the two numbers are compared with the fields that carry them: `tools_count` is the published
+        # catalog, `operations_count` the registry. One number for both failed a correct install.
+        # History: docs/decisions/releases.md#install-layout
         $caps = Send "tools/call" @{ name = "kompas_capabilities"; arguments = @{} }
         $body = $caps.result.structuredContent.result
         $published = [int]$body.tool_count
         $operations = @($body.operations).Count
-        if (($names.Count -eq $published) -and ($operations -eq [int]$manifest.tools_count)) {
-            Ok "tools/list: $($names.Count) опубликованных, реестр $operations (манифест: $($manifest.tools_count))"
+        $counts = Get-ManifestCounts $manifest
+        $publishedOk = ($null -eq $counts.Published) -or ($names.Count -eq $counts.Published)
+        $declared = if ($null -eq $counts.Published) { "операций $($counts.Operations)" } else { "инструментов $($counts.Published), операций $($counts.Operations)" }
+        if (($names.Count -eq $published) -and $publishedOk -and ($operations -eq $counts.Operations)) {
+            Ok "tools/list: $($names.Count) опубликованных, реестр $operations (манифест: $declared)"
         } else {
-            Bad "tools/list: $($names.Count) опубликованных при tool_count $published; реестр $operations, в манифесте $($manifest.tools_count)"
+            Bad "tools/list: $($names.Count) опубликованных при tool_count $published; реестр $operations, в манифесте: $declared"
             $report.failed = $true
         }
         foreach ($tool in @("kompas_health", "kompas_session_status", "kompas_capabilities")) {
@@ -459,7 +477,12 @@ if ($UseInstalled) {
     if ((Split-Path -Leaf $zip) -ne $manifest.zip) { Stop-Install "архив $(Split-Path -Leaf $zip) не тот, что назван в манифесте: $($manifest.zip)" }
     Assert-Checksum $sums $zip
     $Tag = $manifest.tag
-    Say "  Выпуск: $Tag; объём: $($manifest.scope); инструментов: $($manifest.tools_count)"
+    $counts = Get-ManifestCounts $manifest
+    if ($null -ne $counts.Published) {
+        Say "  Выпуск: $Tag; объём: $($manifest.scope); инструментов MCP: $($counts.Published), операций: $($counts.Operations)"
+    } else {
+        Say "  Выпуск: $Tag; объём: $($manifest.scope); операций: $($counts.Operations)"
+    }
 
     $versionDir = Join-Path $versionsDir $Tag
     if (Test-Path -LiteralPath $versionDir) {

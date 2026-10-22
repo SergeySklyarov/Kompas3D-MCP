@@ -12673,7 +12673,10 @@
       ],
       "tests": [
         "SKC.10.geometry_validation",
-        "SKC.16.no_silent_rewrite"
+        "SKC.16.no_silent_rewrite",
+        "CB22.1.refused_constraint_leaves_no_record",
+        "CB22.2.open_document_not_rewritten",
+        "CB22.3.polyline_vertex_refused_before_kernel"
       ],
       "evidence": [
         "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",

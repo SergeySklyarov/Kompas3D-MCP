@@ -539,16 +539,28 @@ if (-not $SkipSelfTest) {
     # starts Host and Worker by <InstallRoot>\current\... and asks kompas_health, so a link the Host
     # cannot resolve is caught here instead of in the client. A failure returns the link to its
     # previous target: a switched link over an unverified version would be worse than no update.
+    # MEASURED (client, 22.10.2026): a launch through the junction answered "The system cannot find the
+    # path specified" on a machine where the same exe started by its absolute path. LIMIT: the cause is
+    # not established, so the refusal names that absolute path as the working alternative instead of
+    # promising the link works. History: docs/decisions/releases.md#current-junction-launch
     $viaCurrent = $null
+    $currentFailure = $null
     try {
         $viaCurrent = Invoke-SelfTest $hostExe $configPath $manifest
     } catch {
-        if ($previousTarget) { Set-CurrentLink $previousTarget | Out-Null }
-        Stop-Install "запуск через current прерван ошибкой: $($_.Exception.Message); точка возвращена на $previousTarget"
+        $currentFailure = $_.Exception.Message
     }
-    if ([bool]$viaCurrent.failed) {
-        if ($previousTarget) { Set-CurrentLink $previousTarget | Out-Null }
-        Stop-Install "запуск через current не прошёл; точка возвращена на $previousTarget. Запись в Codex не делалась."
+    if ($null -ne $currentFailure -or [bool]$viaCurrent.failed) {
+        $absoluteHost = Join-Path $versionDir "KompasMcp.Host.exe"
+        $why = if ($null -ne $currentFailure) { "прерван ошибкой: $currentFailure" } else { "не прошёл самопроверку" }
+        if ($previousTarget) {
+            Set-CurrentLink $previousTarget | Out-Null
+            Stop-Install "запуск через current $why; точка возвращена на $previousTarget. Если клиент не запускает сервер через current, укажите ему абсолютный путь $absoluteHost"
+        }
+        # FIRST INSTALL: there is no verified version to return to, so an unverified link is removed
+        # rather than left as the client's entry point. The reparse point goes; the version stays.
+        [IO.Directory]::Delete($currentLink, $false)
+        Stop-Install "запуск через current $why; проверенной версии ещё нет, поэтому точка current удалена. Укажите клиенту абсолютный путь $absoluteHost"
     }
     Ok "Host и Worker работают через current"
 }

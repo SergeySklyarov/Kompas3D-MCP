@@ -5991,6 +5991,103 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
         rep.add("SKC.47.bisector", "биссектриса: постановка измерена и проверена по геометрии",
                 "FAIL", "сценарий упал: %s" % exc)
 
+    # ── CB22.1-CB22.3: дефекты заказчика 22.10.2026 (наряд CLIENT_BUGS_20261022) ───────────────────
+    # ЧТО ЗДЕСЬ. Отказ ограничения оставлял в списке запись valid=false, а ответ объявлял
+    # partial_effects=false; из этого ложного флага политика контрольных копий пыталась перезаписать
+    # ОТКРЫТЫЙ файл документа. Строки проверяют ответ И перечитанный список, а не одно из двух.
+    try:
+        doc_cb, _ccb = new_part("cb22-refused-constraint")
+        sk_cb, rev_cb = fresh(doc_cb)
+        call("kompas_create_sketch", {"document_id": doc_cb, "expected_revision": rev_cb,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "cb22-circle"})
+        sk_cb, rev_cb = fresh(doc_cb)
+        call("kompas_edit_sketch", {"sketch_ref": sk_cb, "expected_revision": rev_cb,
+                                    "mode": "replace",
+                                    "entities": [{"kind": "circle", "center_mm": [0.0, 0.0],
+                                                  "radius_mm": 20.0}]})
+        sk_cb, rev_cb = fresh(doc_cb)
+        cb_addrs, _cba = addresses(sk_cb)
+        cb_circle = cb_addrs[0] if cb_addrs else None
+        cb_before = len(rows_for(result(constraints_of(sk_cb, cb_circle)[0]), cb_circle))
+
+        # CB22.1: ядро отвечает отказом - ответ и перечитанный список обязаны совпасть.
+        env_cb, code_cb = create_constraint(sk_cb, rev_cb, cb_circle, "ksCFixedLenght")
+        cb_err = (env_cb or {}).get("error") or {}
+        cb_details = cb_err.get("details") or {}
+        cb_partial = cb_err.get("partial_effects", cb_details.get("partial_effects"))
+        sk_cb, _rcb = fresh(doc_cb)
+        cb_after = len(rows_for(result(constraints_of(sk_cb, cb_circle)[0]), cb_circle))
+        cb_cleanup = cb_details.get("cleanup")
+        cb_ok = (code_cb == "GEOMETRY_FAILED" and cb_partial is False
+                 and cb_cleanup in ("removed", "not_needed") and cb_after == cb_before)
+        rep.add("CB22.1.refused_constraint_leaves_no_record",
+                "отказ ограничения: «ничего не изменено» подтверждено ПЕРЕЧИТАННЫМ списком - "
+                "записи до и после совпадают, cleanup назван, partial_effects=false",
+                "PASS" if cb_ok else "FAIL",
+                f"код {code_cb}; partial_effects={cb_partial}; cleanup={cb_cleanup}; записей до "
+                f"{cb_before}, после {cb_after}; cleanup_failure={cb_details.get('cleanup_failure')}",
+                {"code": code_cb, "partial_effects": cb_partial, "cleanup": cb_cleanup,
+                 "count_before": cb_before, "count_after": cb_after,
+                 "cleanup_failure": cb_details.get("cleanup_failure")})
+
+        # CB22.2: тот же отказ на СОХРАНЁННОМ и ОТКРЫТОМ документе - файл не перезаписывается.
+        cb_path = _os.path.join(workdir, "cb22-open-doc.m3d")
+        clear_path(cb_path)
+        sk_cb, rev_cb = fresh(doc_cb)
+        call("kompas_save_document", {"document_id": doc_cb, "target_path": cb_path,
+                                      "expected_revision": rev_cb})
+        sk_cb, rev_cb = fresh(doc_cb)
+        env_cb2, code_cb2 = create_constraint(sk_cb, rev_cb, cb_circle, "ksCFixedLenght")
+        cb2_err = (env_cb2 or {}).get("error") or {}
+        cb2_details = cb2_err.get("details") or {}
+        cb2_decision = cb2_details.get("restore_decision")
+        cb2_scope = cb2_details.get("rollback_scope_code")
+        cb2_ok = (code_cb2 == "GEOMETRY_FAILED" and cb2_decision != "restore_from_copy"
+                  and cb2_scope != "file_restore_failed")
+        rep.add("CB22.2.open_document_not_rewritten",
+                "отказ на сохранённом и ОТКРЫТОМ документе: файл не перезаписывается - решение "
+                "не restore_from_copy, исхода file_restore_failed нет",
+                "PASS" if cb2_ok else "FAIL",
+                f"код {code_cb2}; restore_decision={cb2_decision}; rollback_scope_code={cb2_scope}; "
+                f"restore_attempted={cb2_details.get('restore_attempted')}; "
+                f"control_copy_made={cb2_details.get('control_copy_made')}",
+                {"code": code_cb2, "restore_decision": cb2_decision, "rollback_scope_code": cb2_scope,
+                 "restore_attempted": cb2_details.get("restore_attempted"),
+                 "control_copy_made": cb2_details.get("control_copy_made")})
+        close(doc_cb)
+
+        # CB22.3: point_index на полилинии - отказ ДО ядра, записи в эскизе не появляется.
+        doc_pl, _cpl = new_part("cb22-polyline-vertex")
+        sk_pl, rev_pl = fresh(doc_pl)
+        call("kompas_create_sketch", {"document_id": doc_pl, "expected_revision": rev_pl,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "cb22-polyline"})
+        sk_pl, rev_pl = fresh(doc_pl)
+        call("kompas_edit_sketch", {"sketch_ref": sk_pl, "expected_revision": rev_pl,
+                                    "mode": "replace",
+                                    "entities": [{"kind": "polyline", "closed": True,
+                                                  "points_mm": [[-20.0, -10.0], [20.0, -10.0],
+                                                                [20.0, 10.0], [-20.0, 10.0]]}]})
+        sk_pl, rev_pl = fresh(doc_pl)
+        pl_addrs, _cpa = addresses(sk_pl)
+        pl_ref = pl_addrs[0] if pl_addrs else None
+        pl_before = len(rows_for(result(constraints_of(sk_pl, pl_ref)[0]), pl_ref))
+        env_pl, code_pl = create_constraint(sk_pl, rev_pl, pl_ref, "ksCFixedPoint", point_index=0)
+        sk_pl, _rpl = fresh(doc_pl)
+        pl_after = len(rows_for(result(constraints_of(sk_pl, pl_ref)[0]), pl_ref))
+        pl_ok = code_pl == "INVALID_ARGUMENT" and pl_after == pl_before
+        rep.add("CB22.3.polyline_vertex_refused_before_kernel",
+                "вершина полилинии: point_index отвергается INVALID_ARGUMENT до вызова ядра, "
+                "записей в эскизе не появляется",
+                "PASS" if pl_ok else "FAIL",
+                f"код {code_pl}; записей до {pl_before}, после {pl_after}; "
+                f"сообщение: {(emsg(env_pl) or '')[:160]}",
+                {"code": code_pl, "count_before": pl_before, "count_after": pl_after})
+        close(doc_pl)
+    except Exception as exc:  # noqa: BLE001
+        rep.add("CB22.1.refused_constraint_leaves_no_record",
+                "отказ ограничения: «ничего не изменено» по перечитанному списку", "FAIL",
+                "сценарий упал: %s" % exc)
+
     close(doc2)
 
 

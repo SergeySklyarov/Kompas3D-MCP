@@ -46,6 +46,34 @@ IModelObject::Update». То же в `isheetmetalbends_add.html` и осталь
 документированного маршрута не имеет; двухшаговый маршрут «`Straighten` → чертёж → конвертер» -
 предложение, а не документированный путь, и решается заказчиком (отчёт §5, §7).
 
+## Проба: прибор и что он измерил
+
+<a id="probe"></a>
+Прибор - `scripts/probes/sheet-metal/` (C#, свой `.csproj`, x64, interop из `KompasInteropDir`,
+в `KompasMcp.sln` не входит, ссылок на `src/` нет). Вход в КОМПАС - маршрут продукта, а не
+`CoCreateInstance("KOMPAS.Application.7")`: `KOMPAS.Application.5` → `ksGetApplication7()` →
+`TransferInterface(документ, ksAPI7Dual)` → `IKompasDocument3D.TopPart`. Прибор пишет JSON
+«ожидалось / прочитано» по каждой проверке.
+
+- **Контейнер.** `TopPart as ISheetMetalContainer` отвечает на живом документе: QI работает.
+- **Тело.** `SheetMetalBodies.Add()` → `ISheetMetalBody`; `Sketch` (эскиз, перенесённый в API7 из
+  API5), `Thickness = 1.5`, `Radius = 2`, `Direction = dtNormal`, затем `Update()` = TRUE. Чтение
+  назад совпало с заданным, счётчик коллекции 0 → 1. `Profile` после задания `Sketch` читается
+  непустым, то есть свойства не взаимоисключающие (справка связи не описывает).
+- **Сгиб.** `SheetMetalBends.Add()` → `ISheetMetalBend`; `BendObject` = ребро тела, перенесённое в
+  API7 (`IModelObject`), `Angle = 90`, `Update()` = TRUE, угол читается назад 90°, счётчик 0 → 1.
+- **Развёртка.** Флаг `ISheetMetalBody.Straighten = true` читается назад TRUE, но габарит не
+  меняется - флаг состояния геометрию не перестраивает. `UpdateParam()` при пустых входах = FALSE.
+  Работает третий маршрут: `UnfoldPlane` + `FixedFaces` + `Unfold = true` → `IsCreated` = TRUE,
+  тело плоское (габарит по нормали 0..1.5 вместо -15..1.5). `UpdateParam()` при этом отвечает FALSE,
+  то есть его FALSE не означает «не создано» - судить только по `IsCreated` и геометрии.
+  `SheetMetalBendedStraightens.Add(o3d_sheetMetalBendUnfold)` возвращает null: операция не создаётся.
+- **Сохранение и открытие.** `SaveAs` → `Documents.Open` даёт `ISheetMetalContainer` с теми же
+  счётчиками, толщиной, радиусом и `Straighten`.
+
+Доказательства прогона - `docs/acceptance/evidence/20261022-sheetmetal-238fedb/` (JSON «ожидалось /
+прочитано», команда, версия КОМПАС, итог PASS 35 / FAIL 3 / INFO 7).
+
 ## Что не входит и почему
 
 Отбортовка (свойство отдаёт `ISheetMetalBends`, страницы коллекции нет), обечайка и линейчатая

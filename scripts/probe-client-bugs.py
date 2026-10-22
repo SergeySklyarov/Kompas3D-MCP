@@ -156,6 +156,126 @@ def revision_of(session, document_id):
                                                     "detail": "minimal"})).get("revision")
 
 
+def status_of(session, sketch_ref):
+    """Aggregate sketch status as the product reports it, without interpretation."""
+    answer = body(session.tool("kompas_get_sketch_status", {"sketch_ref": sketch_ref}))
+    return {key: answer.get(key) for key in
+            ("definition_status", "is_fully_defined", "raw_state", "native_state_name",
+             "degrees_of_freedom")}
+
+
+def dimension_rows(session, sketch_ref):
+    """Constraint rows of the sketch, split into all rows and the dimension-typed ones.
+
+    MEASURED: a driving dimension is an `IParametriticConstraint` too, so it appears in the constraint
+    listing; `kompas_list_dimensions` needs `document_id` plus `view_ref` and cannot count per sketch.
+    """
+    listing = session.tool("kompas_list_sketch_constraints", {"sketch_ref": sketch_ref})
+    total, dims = 0, []
+    for obj in body(listing).get("objects") or []:
+        for row in obj.get("constraints") or []:
+            total += 1
+            if "Dim" in (row.get("type") or ""):
+                dims.append({"type": row.get("type"), "valid": row.get("valid"),
+                             "value": row.get("value")})
+    return total, dims
+
+
+def clean_sketch_probe(session, app_id, out):
+    """Decision 6: a clean sketch - circle, fixed centre, diametral dimension - and its status.
+
+    DOC: `kompas_get_sketch_status` reads `ISketch.ConstraintsState`; the order asks whether a
+    DRIVING dimension makes the answer `fully_defined` on a sketch built from scratch, and whether a
+    REFUSED dimension leaves a record behind (decision 1, second sentence).
+    """
+    created = session.mutate("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                        "name": "cb22-clean-sketch"})
+    document_id = (created or {}).get("document_id")
+    out["clean_document_code"] = code_of(created)
+    if not document_id:
+        out["clean_error"] = "документ для чистого эскиза не создан"
+        return
+    try:
+        session.mutate("kompas_create_sketch", {
+            "document_id": document_id, "expected_revision": revision_of(session, document_id),
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": "clean"})
+        listing = body(session.tool("kompas_list_sketches", {"document_id": document_id}))
+        sketch_ref = next((row.get("sketch_ref") for row in listing.get("rows") or []
+                           if row.get("name") == "clean"), None)
+        if not sketch_ref:
+            out["clean_error"] = "эскиз clean не найден в перечислении"
+            return
+        session.mutate("kompas_edit_sketch", {
+            "sketch_ref": sketch_ref, "expected_revision": revision_of(session, document_id),
+            "mode": "replace",
+            "entities": [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 25.0}]})
+        entities = body(session.tool("kompas_list_sketch_entities", {"sketch_ref": sketch_ref}))
+        rows = entities.get("rows") or []
+        out["clean_entities"] = rows
+        circle = next((row for row in rows
+                       if "circle" in str(row.get("entity_kind") or row.get("kind") or "").lower()),
+                      None)
+        if not circle or not circle.get("address"):
+            out["clean_error"] = "окружность без адреса в перечислении объектов"
+            return
+        address = circle["address"]
+        steps = [{"step": "circle only", "status": status_of(session, sketch_ref)}]
+        fixed = session.mutate("kompas_create_sketch_constraint", {
+            "sketch_ref": sketch_ref, "expected_revision": revision_of(session, document_id),
+            "constraint_type": "ksCFixedPoint", "object_ref": address, "point_index": 0})
+        steps.append({"step": "ksCFixedPoint centre", "code": code_of(fixed),
+                      "message": message_of(fixed), "status": status_of(session, sketch_ref)})
+        diameter = session.mutate("kompas_create_sketch_dimension", {
+            "sketch_ref": sketch_ref, "expected_revision": revision_of(session, document_id),
+            "object_ref": address, "kind": "diametral", "value_mm": 60.0})
+        steps.append({"step": "diametral dimension", "code": code_of(diameter),
+                      "message": message_of(diameter), "status": status_of(session, sketch_ref)})
+        out["clean_steps"] = steps
+        # The dimension is DRIVING only if the geometry followed it: radius 25 -> 30 for diameter 60.
+        after_dim = body(session.tool("kompas_list_sketch_entities", {"sketch_ref": sketch_ref}))
+        out["clean_radius_after_dimension"] = next(
+            (row.get("radius_mm") for row in after_dim.get("rows") or []), None)
+
+        rows_before, dims_before = dimension_rows(session, sketch_ref)
+        refused = session.mutate("kompas_create_sketch_dimension", {
+            "sketch_ref": sketch_ref, "expected_revision": revision_of(session, document_id),
+            "object_ref": address, "kind": "linear", "value_mm": 10.0})
+        rows_after, dims_after = dimension_rows(session, sketch_ref)
+        out["dimension_refusal"] = {
+            "code": code_of(refused), "message": message_of(refused),
+            "details": details_of(refused), "rows_before": rows_before, "rows_after": rows_after,
+            "dimensions_before": dims_before, "dimensions_after": dims_after}
+
+        # The status is a snapshot of a solver that may not have settled: read it again after the file
+        # has been written and reopened, which is the state the customer compares against.
+        reopen_path = os.path.join(ROOT, "scratch", "cb22", "clean-reopen.m3d")
+        saved = session.mutate("kompas_save_document", {
+            "document_id": document_id, "target_path": reopen_path,
+            "expected_revision": revision_of(session, document_id)})
+        out["clean_save_code"] = code_of(saved)
+        out["clean_save_message"] = message_of(saved)
+        session.mutate("kompas_close_document", {"document_id": document_id,
+                                                 "dirty_policy": "discard"})
+        reopened = session.mutate("kompas_open_document", {"application_id": app_id,
+                                                          "path": reopen_path, "access": "edit"})
+        out["clean_reopen_code"] = code_of(reopened)
+        reopened_id = (reopened or {}).get("document_id")
+        if reopened_id:
+            listing = body(session.tool("kompas_list_sketches", {"document_id": reopened_id}))
+            reopened_ref = next((row.get("sketch_ref") for row in listing.get("rows") or []
+                                 if row.get("name") == "clean"), None)
+            if reopened_ref:
+                out["clean_status_after_reopen"] = status_of(session, reopened_ref)
+                rows_after_reopen, dims_after_reopen = dimension_rows(session, reopened_ref)
+                out["clean_rows_after_reopen"] = rows_after_reopen
+                out["clean_dimensions_after_reopen"] = dims_after_reopen
+            session.mutate("kompas_close_document", {"document_id": reopened_id,
+                                                     "dirty_policy": "discard"})
+    finally:
+        session.mutate("kompas_close_document", {"document_id": document_id,
+                                                 "dirty_policy": "discard"})
+
+
 def sketches_state(session, document_id, tag, out):
     """Что читается у каждого эскиза: ограничения с `valid`, размеры, агрегатный статус."""
     listing = session.tool("kompas_list_sketches", {"document_id": document_id})
@@ -275,6 +395,9 @@ def main():
                                           "details": details_of(single_loft)}
             session.mutate("kompas_close_document", {"document_id": single_id,
                                                      "dirty_policy": "discard"})
+
+        # (2c) чистый эскиз: круг, закреплённый центр, диаметральный размер (решение 6)
+        clean_sketch_probe(session, app_id, out)
 
         # (3) сохранение и переоткрытие: что меняет сам файл
         reopen_path = os.path.join(work, "reopen.m3d")

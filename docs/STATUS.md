@@ -56,7 +56,7 @@
   `docs/04_KOMPAS_API_NOTES.md` §4.101, решение - `docs/decisions/sections.md#assembly-section`.
   **Ложные проверки** (ожидание передано, `passed` его не сравнивал) исправлены четыре:
   `sections_count_after`, `plane_offset_written`, `steps_count_after`, `step_update_returned`; та же
-  форма найдена в `angle_read_back` и не тронута - вне наряда. Приёмка: строка
+  форма найдена в `base_line_read_back` и не тронута - вне наряда. Приёмка: строка
   `SEC-14.assembly_dismantled` в `--sections-only` (ожидание - названный отказ и счётчик 0).
   **Приборы:** `verify-client-entry.py` и `verify-delivery.py` пишут и читают `package-check.json` по
   одному правилу `delivery-<стадия>` под постоянным корнем доказательств; входов в `scratch/` больше нет.

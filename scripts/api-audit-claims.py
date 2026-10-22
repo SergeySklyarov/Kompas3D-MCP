@@ -38,6 +38,10 @@ ACTIONS = ("discover", "create", "read", "edit", "rebuild", "save_reopen", "supp
 # What a call of each action LOOKS like in the journal. `None` means "the definition names no call":
 # a refusal by it would be a refusal by guesswork, and `rebuild` is exactly that case (it is defined
 # as checking that dependents rebuild, which no single tool call expresses).
+# INVARIANT: a list names the tool that PERFORMS the action, so a domain with its own tool is named
+# by that tool. A prefix wider than the domain is not used: `kompas_get_` would credit any read to
+# every row, which is the false confirmation the sweep of false checks removed.
+# History: docs/decisions/api-audit.md#section-view-calls
 ACTION_CALLS = {
     "discover": {"any": [("prefix", "kompas_list_"), ("exact", "kompas_get_context")]},
     "create": {"any": [("prefix", "kompas_create_"), ("prefix", "kompas_pattern_"),
@@ -52,10 +56,11 @@ ACTION_CALLS = {
                        ("exact", "kompas_set_sketch_plane"), ("exact", "kompas_set_variable")]},
     "read": {"any": [("exact", "kompas_get_feature"), ("exact", "kompas_get_pattern"),
                      ("exact", "kompas_get_material"), ("exact", "kompas_list_bodies"),
-                     ("exact", "kompas_read_topology"), ("exact", "kompas_get_sketch_status")]},
+                     ("exact", "kompas_read_topology"), ("exact", "kompas_get_sketch_status"),
+                     ("exact", "kompas_get_section_view")]},
     "edit": {"any": [("exact", "kompas_update_feature"), ("exact", "kompas_update_plane"),
                      ("exact", "kompas_edit_sketch"), ("exact", "kompas_edit_sketch_entity"),
-                     ("exact", "kompas_edit_view")]},
+                     ("exact", "kompas_edit_view"), ("exact", "kompas_update_section_view")]},
     "rebuild": None,
     "save_reopen": {"all": [("exact", "kompas_save_document")],
                     "any": [("exact", "kompas_open_document"), ("exact", "kompas_close_document")]},
@@ -63,7 +68,8 @@ ACTION_CALLS = {
     "delete_dependencies": {"any": [("exact", "kompas_delete_feature"),
                                     ("exact", "kompas_delete_component"),
                                     ("exact", "kompas_delete_mate"),
-                                    ("exact", "kompas_delete_sketch_constraint")]},
+                                    ("exact", "kompas_delete_sketch_constraint"),
+                                    ("exact", "kompas_delete_section_view")]},
     "geometry_validation": {"any": [("exact", "kompas_measure"), ("exact", "kompas_measure_gap"),
                                     ("exact", "kompas_check_interference")]},
     "negative_tests": {"outcome": "error"},
@@ -420,6 +426,19 @@ def self_test():
           and not signature_ok("negative_tests", [{"tool": "kompas_extrude", "error": None}])[0])
     check("ошибочный вызов не засчитывается как действие",
           not signature_ok("create", [{"tool": "kompas_extrude", "error": "GEOMETRY_FAILED"}])[0])
+    check("чтение разреза засчитывается как read",
+          signature_ok("read", [{"tool": "kompas_get_section_view", "error": None}])[0])
+    check("ошибочное чтение разреза как read НЕ засчитывается",
+          not signature_ok("read", [{"tool": "kompas_get_section_view",
+                                     "error": "NOT_FOUND"}])[0])
+    check("правка разреза засчитывается как edit",
+          signature_ok("edit", [{"tool": "kompas_update_section_view", "error": None}])[0])
+    check("удаление разреза засчитывается как delete_dependencies",
+          signature_ok("delete_dependencies",
+                       [{"tool": "kompas_delete_section_view", "error": None}])[0])
+    check("выгрузка чертежа НЕ засчитывается как geometry_validation",
+          not signature_ok("geometry_validation",
+                           [{"tool": "kompas_export_drawing", "error": None}])[0])
 
     route = {"routes": [{"tool": "kompas_get_context", "require_args": ["application_id"]}]}
     ok, reason = route_satisfied(route, [{"tool": "kompas_get_context", "error": None,

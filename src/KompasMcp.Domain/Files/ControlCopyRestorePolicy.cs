@@ -29,7 +29,10 @@ public static class ControlCopyRestorePolicy
     public const string FailureBeforeCom = "failure_before_com";
 
     /// <summary>The model may have changed and the document was NOT open in KOMPAS: the file is returned.</summary>
-    public const string FileRestored = "file_restored";
+    /// <remarks>INVARIANT: this code names the INTENT and never the outcome — the outcome is
+    /// <c>restored</c> plus <c>rollback_scope_code</c>, so a failed overwrite cannot be read as a restore.
+    /// History: docs/decisions/files.md#control-copy-open-doc</remarks>
+    public const string RestoreFromCopy = "restore_from_copy";
 
     /// <summary>Failures that GUARANTEED no model change: they come BEFORE COM or from the contract layer,
     /// so restoring the file on them would be a pointless write to a user file.</summary>
@@ -84,11 +87,19 @@ public static class ControlCopyRestorePolicy
                 "КОМПАСа при этом не откатывается");
         }
 
-        // THE DOCUMENT IS OPEN IN KOMPAS — THE COPY IS KEPT AND THE FILE IS NOT TOUCHED. Named, not left
-        // to the OS: the same call that overwrites the file here failed for the client, so the outcome is
-        // machine-dependent and cannot be promised. And a successful overwrite returns only the FILE,
-        // never the in-memory model, which the next save would silently overwrite anyway.
-        if (openInKompas && partialEffects)
+        // THE DOCUMENT IS OPEN IN KOMPAS — THE COPY IS KEPT AND THE FILE IS NOT TOUCHED, whatever the
+        // partial-effect flag says. Named, not left to the OS: the same call that overwrites the file here
+        // failed for the client, so the outcome is machine-dependent and cannot be promised. And a
+        // successful overwrite returns only the FILE, never the in-memory model, which the next save would
+        // silently overwrite anyway.
+        if (errorCode is not null && NeverTouchedTheModel.Contains(errorCode))
+        {
+            return new RestoreDecision(false, FailureBeforeCom,
+                $"отказ «{errorCode}» приходит до обращения к COM и модель не менял: восстановление " +
+                "файла было бы лишней записью в файл пользователя");
+        }
+
+        if (openInKompas)
         {
             return new RestoreDecision(false, CopyKeptDocumentOpen,
                 "файл открыт в КОМПАС: копия сохранена (путь в control_copy_path), файл документа НЕ " +
@@ -99,19 +110,12 @@ public static class ControlCopyRestorePolicy
 
         if (partialEffects)
         {
-            return new RestoreDecision(true, FileRestored,
+            return new RestoreDecision(true, RestoreFromCopy,
                 "отказ нёс частичный эффект, документ НЕ открыт в КОМПАС: файл документа возвращается к " +
                 "состоянию до мутации (модель в памяти КОМПАСа — нет)");
         }
 
-        if (errorCode is not null && NeverTouchedTheModel.Contains(errorCode))
-        {
-            return new RestoreDecision(false, FailureBeforeCom,
-                $"отказ «{errorCode}» приходит до обращения к COM и модель не менял: восстановление " +
-                "файла было бы лишней записью в файл пользователя");
-        }
-
-        return new RestoreDecision(true, FileRestored, errorCode is null
+        return new RestoreDecision(true, RestoreFromCopy, errorCode is null
             ? "неожиданное исключение: исход мутации неизвестен, файл возвращается к состоянию до неё"
             : $"отказ «{errorCode}» мог изменить модель: файл возвращается к состоянию до мутации");
     }

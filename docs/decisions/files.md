@@ -187,6 +187,28 @@ xUnit с `DisableParallelization`, пул освобождается в `finally
 `ControlCopyTests` держат все ветви таблицы. Ручной откат описан в
 `docs/operator-guide/control-copies.md`.
 
+## <a id="control-copy-open-doc"></a>Открытый документ не перезаписывается при любом отказе (наряд CLIENT_BUGS_20261022, 23.10.2026)
+
+**Что измерено клиентом (22.10.2026).** Отказ ограничения эскиза на СОХРАНЁННОМ и ОТКРЫТОМ документе
+вернул одновременно `restore_decision=file_restored` и `rollback_scope_code=file_restore_failed`:
+политика получила `partialEffects=false` (ложное, причина - оставленная ядром запись), ветка
+«документ открыт» не сработала, сервер попытался записать открытый файл и получил `IOException`.
+
+**Что решено (решение техлида, п. 2 наряда).** Ветка `openInKompas` в `ControlCopyRestorePolicy.Decide`
+больше не зависит от `partialEffects`: файл открытого в КОМПАС документа не перезаписывается НИКОГДА,
+копия хранится. Проверка «отказ до COM» (`NeverTouchedTheModel`) стоит ПЕРЕД ней, поэтому такой отказ
+по-прежнему называется `failure_before_com` - запись не делается ни в одном из двух случаев, а причина
+остаётся точной. Закрывать документ ради восстановления запрещено.
+
+**Разделение решения и исхода.** Код решения `file_restored` переименован в `restore_from_copy`
+(`ControlCopyRestorePolicy.RestoreFromCopy`): это НАМЕРЕНИЕ, и оно не должно совпадать по имени с
+исходом. Исход выражают `restored` и `rollback_scope_code` (`file_restored` / `file_restore_failed` -
+значения этих полей не менялись). Смена значения поля ответа - MINOR до `1.0.0`.
+
+**Чем подтверждено.** Модульные тесты `ControlCopyTests`: `NoPartialEffect_OnDocumentOpenInKompas_
+StillDoesNotOverwriteTheFile`, `PartialEffect_OnDocumentOpenInKompas_KeepsTheCopyAndDoesNotOverwriteTheFile`,
+`CleanRefusalBeforeCom_IsNotRestored`, `RestoreIntent_IsNamedRestoreFromCopy_NotFileRestored`.
+
 ## <a id="rescue-copies"></a>Спасательные копии: копия несохранённой работы при завершении сеанса (наряд SHUTDOWN_NO_ORPHANS, 13.10.2026)
 
 **Зачем.** Завершение сеанса закрывает документы без сохранения. Если в документе остались

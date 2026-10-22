@@ -541,7 +541,7 @@ set_transform не считается успешным по одному воз�
 | `control_copy_made` | снята ли контрольная копия перед мутацией |
 | `control_copy_path` | путь копии; присутствует в КАЖДОМ отказе с частичным эффектом |
 | `restore_attempted` | была ли попытка вернуть файл документа из копии |
-| `restore_decision` | код решения: `copy_not_made`, `document_read_only`, `copy_kept_document_open`, `failure_before_com`, `file_restored` |
+| `restore_decision` | код решения (намерение): `copy_not_made`, `document_read_only`, `copy_kept_document_open`, `failure_before_com`, `restore_from_copy` |
 | `restore_decision_reason` | текст причины (прежнее содержимое `restore_decision`) |
 | `restored` | вернулся ли файл документа |
 | `restore_failure` | причина неудачи восстановления, если она была |
@@ -556,6 +556,12 @@ set_transform не считается успешным по одному воз�
 контрольной копии: `restore_attempted: false`, `restore_decision: copy_kept_document_open`. Копия
 сохраняется, откат делается вручную (`docs/operator-guide/control-copies.md`). Решение и измерение -
 `docs/decisions/files.md#control-copies`, `docs/04_KOMPAS_API_NOTES.md` §4.65.
+
+**Смена значения поля (0.11.0, MINOR).** Код решения `file_restored` переименован в
+`restore_from_copy`: `restore_decision` называет НАМЕРЕНИЕ, исход выражают `restored` и
+`rollback_scope_code`. Ветка «документ открыт в КОМПАС» перестала зависеть от `partial_effects`:
+открытый файл не перезаписывается ни при каком отказе. Решение -
+`docs/decisions/files.md#control-copy-open-doc`.
 
 **Смена кода отказа (0.7.0).** `kompas_connect` с `mode=attach` при НУЛЕ записей КОМПАС отвечает
 `APPLICATION_DISCONNECTED` (с полем `reason`) вместо `AMBIGUOUS_APPLICATION`; последний остаётся

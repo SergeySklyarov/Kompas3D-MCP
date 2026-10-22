@@ -95,7 +95,32 @@ public class ControlCopyTests : IDisposable
             openInKompas: false);
 
         Assert.True(decision.Restore);
-        Assert.Equal(ControlCopyRestorePolicy.FileRestored, decision.Code);
+        Assert.Equal(ControlCopyRestorePolicy.RestoreFromCopy, decision.Code);
+    }
+
+    /// <summary>A refusal that claims NO partial effect on a document OPEN IN KOMPAS still does not
+    /// overwrite the open file — the flag is a claim about the model, not a licence to write.</summary>
+    /// <remarks>MEASURED: the client saw <c>restore_decision=file_restored</c> together with
+    /// <c>rollback_scope_code=file_restore_failed</c> on a saved and open document, because the constraint
+    /// refusal reported <c>partialEffects=false</c> while leaving a record behind.
+    /// History: docs/decisions/files.md#control-copy-open-doc</remarks>
+    [Fact]
+    public void NoPartialEffect_OnDocumentOpenInKompas_StillDoesNotOverwriteTheFile()
+    {
+        var decision = ControlCopyRestorePolicy.Decide(
+            copyMade: true, DocumentAccess.Edit, ErrorCodes.GeometryFailed, partialEffects: false,
+            openInKompas: true);
+
+        Assert.False(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.CopyKeptDocumentOpen, decision.Code);
+    }
+
+    /// <summary>The decision code names the INTENT, never the outcome: a failed overwrite must not be
+    /// readable as a restore from the decision alone.</summary>
+    [Fact]
+    public void RestoreIntent_IsNamedRestoreFromCopy_NotFileRestored()
+    {
+        Assert.Equal("restore_from_copy", ControlCopyRestorePolicy.RestoreFromCopy);
     }
 
     [Fact]

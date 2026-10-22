@@ -124,6 +124,7 @@ public sealed partial class Api5Session
         {
             var targetObject = ResolveSketchObject(objects, command.ObjectRef!, "object_ref");
             var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
+            RefusePolylineVertex(targetObject.Kind, command.PointIndex, "point_index", command.ObjectRef!);
             var before = Api7SketchConstraints.ReadRows(host, notes);
 
             object? partner = null;
@@ -137,6 +138,8 @@ public sealed partial class Api5Session
             else if (command.PartnerRef is { Length: > 0 } partnerRef)
             {
                 partnerObject = ResolveSketchObject(objects, partnerRef, "partner_ref");
+                RefusePolylineVertex(partnerObject.Kind, command.PartnerPointIndex,
+                    "partner_point_index", partnerRef);
                 partner = partnerObject.Host;
             }
 
@@ -186,6 +189,13 @@ public sealed partial class Api5Session
 
             var state = Api7SketchConstraints.ObjectState(host, notes);
 
+            // A REFUSAL THAT LEFT A RECORD IS NOT "NOTHING CHANGED". The list after the call is compared
+            // with the list before it, and an appeared record is removed through the same route
+            // kompas_delete_sketch_constraint uses; the refusal reports the RE-READ list, not the hope.
+            var cleanup = applied
+                ? null
+                : Api7SketchConstraints.RemoveAdded(host, before, after, notes);
+
             // GEOMETRY CONFIRMATION — the relation the constraint must establish, read from the geometry
             // AFTER the write. "Success is only what a re-read confirms": a record in the list proves the
             // constraint EXISTS, not that it BINDS the geometry.
@@ -210,13 +220,15 @@ public sealed partial class Api5Session
             return new WriteOutcome(
                 applied,
                 before,
-                after,
+                cleanup?.Rows ?? after,
                 created.Created,
                 created.Failure,
                 state.Raw,
                 state.Name,
                 relation,
-                geometryDetail);
+                geometryDetail,
+                cleanup?.Code,
+                cleanup?.Failure);
         });
 
         if (outcome is null)
@@ -230,44 +242,21 @@ public sealed partial class Api5Session
 
         if (outcome.Failure is not null)
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
+            throw ConstraintRefused(target.Document, command, outcome, notes,
                 "Ограничение не создано: " + outcome.Failure + ". Это ответ ядра на эту постановку, а не " +
                 "«сервер не умеет»: Create() вернул " +
-                (outcome.Created is null ? "не прочитано" : outcome.Created.Value.ToString()) + ".",
-                RetryPolicy.SameOperationId,
-                partialEffects: false,
-                details: new Dictionary<string, object?>
-                {
-                    ["constraint_type"] = command.ConstraintType,
-                    ["object_ref"] = command.ObjectRef,
-                    ["created"] = outcome.Created,
-                    ["notes"] = notes.ToArray(),
-                });
+                (outcome.Created is null ? "не прочитано" : outcome.Created.Value.ToString()) + ".");
         }
 
         if (!outcome.Applied)
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
+            throw ConstraintRefused(target.Document, command, outcome, notes,
                 $"Ограничение '{command.ConstraintType}' НЕ создано: ядро ответило Create() = " +
                 (outcome.Created is null ? "не прочитано" : outcome.Created.Value.ToString()) +
                 $", действующей записи этого типа в перечитанном списке нет (записей до " +
                 $"{outcome.Before.Count}, после {outcome.After.Count}). Вызов, который не отказал, " +
                 "применением не объявляется, и запись, которую ядро называет недействительной, " +
-                "созданным ограничением не считается.",
-                RetryPolicy.SameOperationId,
-                partialEffects: false,
-                details: new Dictionary<string, object?>
-                {
-                    ["constraint_type"] = command.ConstraintType,
-                    ["object_ref"] = command.ObjectRef,
-                    ["created"] = outcome.Created,
-                    ["count_before"] = outcome.Before.Count,
-                    ["count_after"] = outcome.After.Count,
-                    ["rows_after"] = outcome.After.Select(ToDto).ToList(),
-                    ["notes"] = notes.ToArray(),
-                });
+                "созданным ограничением не считается.");
         }
 
         // GEOMETRY CONFIRMATION, the second half of "success is only what a re-read confirms". A record
@@ -551,7 +540,8 @@ public sealed partial class Api5Session
     // ─────────────────────────────────────────────────────────────────── machinery ──
 
     /// <summary>Outcome of one write session: the counts BEFORE and AFTER, both taken inside the SAME
-    /// session, so their difference describes the operation and not two different sessions.</summary>
+    /// session, so their difference describes the operation and not two different sessions. After a
+    /// refusal <see cref="After"/> is the list RE-READ once the leftover record was removed.</summary>
     private sealed record WriteOutcome(
         bool Applied,
         IReadOnlyList<SketchConstraintRow> Before,
@@ -561,7 +551,9 @@ public sealed partial class Api5Session
         int? ObjectStateRaw,
         string? ObjectStateName,
         ConstraintRelationVerdict? Relation = null,
-        string? GeometryDetail = null);
+        string? GeometryDetail = null,
+        string? Cleanup = null,
+        string? CleanupFailure = null);
 
     /// <summary>A shape as the refusal's numbers name it — every member that was read, or "не прочитано".
     /// </summary>
@@ -587,10 +579,81 @@ public sealed partial class Api5Session
         };
     }
 
+    /// <summary>Refuses a point index on a POLYLINE before the kernel is asked.</summary>
+    /// <remarks>LIMIT: a polyline vertex is not a documented point index for a constraint. DOC:
+    /// <c>iparametriticconstraint_index.html</c> — «Индекс точки на объекте (начинается с 0, у дуги и
+    /// окружности 0-центр)», and <c>ipolyline2d_props.html</c> describes the polyline's points only as
+    /// <c>Points</c>/<c>PointsCount</c>, never as constraint indices. Picking indices by experiment is
+    /// outside the documentation boundary, and a guess would leave an invalid record behind.
+    /// History: docs/decisions/adapter-api7.md#polyline-vertex</remarks>
+    private static void RefusePolylineVertex(string? kind, int? index, string field, string objectRef)
+    {
+        if (index is null || !string.Equals(kind, "ksDrPolyline", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.InvalidArgument,
+            $"{field} на полилинии не поддерживается: справка описывает индекс точки ограничения как " +
+            "«индекс точки на объекте» и отдельно называет центр дуги и окружности, а у полилинии " +
+            "описывает только массив Points и PointsCount — какая вершина соответствует какому индексу, " +
+            "не сказано ни на одной странице. Подбор индекса экспериментом запрещён границей " +
+            "документации, поэтому запрос отвергнут ДО вызова ядра и запись в эскизе не появилась. " +
+            "Поставьте ограничение на отрезок, дугу, окружность или точку.",
+            details: new Dictionary<string, object?>
+            {
+                [field] = index,
+                ["object_ref"] = objectRef,
+                ["kind"] = kind,
+            });
+    }
+
     private static SketchConstraintRowDto ToDto(SketchConstraintRow row) =>
         new(row.Index, row.Type, row.TypeCode, row.PointIndex, row.PartnerIndex, row.SegmentIndex,
             row.PartnerSegmentIndex, row.Valid, row.Value, row.Expression, row.Variable, row.PartnerPresent,
             row.Notes);
+
+    /// <summary>The refusal of a create, with the cleanup carried as FACTS: the list RE-READ after the
+    /// cleanup, its code and the reason. <c>partialEffects</c> is true only when a record the kernel left
+    /// behind is STILL there.</summary>
+    /// <remarks>INVARIANT: "nothing was changed" is said only when the re-read list equals the one from
+    /// before the call. MEASURED: the kernel appends an invalid record on a refused create, so a blanket
+    /// <c>partialEffects=false</c> was a false statement that also cost the caller the control copy.
+    /// History: docs/decisions/adapter-api7.md#constraint-refusal-cleanup</remarks>
+    private KompasContractException ConstraintRefused(DocumentEntry document,
+        CreateSketchConstraintCommand command, WriteOutcome outcome, List<string> notes, string message)
+    {
+        var partial = string.Equals(outcome.Cleanup, "failed", StringComparison.Ordinal);
+        if (partial)
+        {
+            // The model keeps a record nobody asked for: the revision moves with it, or the next mutation
+            // would pass a stale-revision check over a changed model.
+            BumpRevision(document, "sketch.constraint.create.refused");
+        }
+
+        return new KompasContractException(
+            ErrorCodes.GeometryFailed,
+            message + (partial
+                ? " Запись, оставленная отказом, снять не удалось: " + (outcome.CleanupFailure ?? "причина не названа") +
+                  $". В списке осталось {outcome.After.Count} записей (до вызова {outcome.Before.Count}) — " +
+                  "модель изменена, снимите их kompas_delete_sketch_constraint."
+                : string.Empty),
+            partial ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
+            partialEffects: partial,
+            details: new Dictionary<string, object?>
+            {
+                ["constraint_type"] = command.ConstraintType,
+                ["object_ref"] = command.ObjectRef,
+                ["created"] = outcome.Created,
+                ["count_before"] = outcome.Before.Count,
+                ["count_after"] = outcome.After.Count,
+                ["cleanup"] = outcome.Cleanup,
+                ["cleanup_failure"] = outcome.CleanupFailure,
+                ["rows_after"] = outcome.After.Select(ToDto).ToList(),
+                ["notes"] = notes.ToArray(),
+            });
+    }
 
     /// <summary>Finds the object by its ADDRESS inside the enumerated objects. The address is the one the
     /// enumeration itself issued, so a foreign address cannot be silently substituted.</summary>

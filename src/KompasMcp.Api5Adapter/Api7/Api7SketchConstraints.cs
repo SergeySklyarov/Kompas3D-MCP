@@ -314,6 +314,46 @@ internal static class Api7SketchConstraints
         }
     }
 
+    /// <summary>What a refused create left in the constraint list, and what was done about it.</summary>
+    /// <remarks><see cref="Code"/> is one of <c>not_needed</c> (the list never grew), <c>removed</c> (the
+    /// list is back to <c>before</c>) or <c>failed</c> (records remain, or the delete refused) — so the
+    /// refusal can say what happened instead of claiming "nothing was changed".</remarks>
+    internal sealed record CleanupOutcome(IReadOnlyList<SketchConstraintRow> Rows, string Code, string? Failure);
+
+    /// <summary>Removes the record a REFUSED create left behind, through the same documented route
+    /// <c>kompas_delete_sketch_constraint</c> uses (<c>IParametriticConstraint::Delete()</c>), and re-reads
+    /// the list.</summary>
+    /// <remarks>MEASURED: the kernel answers <c>Create() = FALSE</c> and still appends a record of that
+    /// type with <c>Valid = false</c>. INVARIANT: only the RE-READ list may say "nothing was changed".
+    /// DOC: <c>iparametriticconstraint_create.html</c> («TRUE — параметрическое ограничение создано,
+    /// FALSE — в случае неудачи»). History: docs/decisions/adapter-api7.md#constraint-refusal-cleanup</remarks>
+    public static CleanupOutcome RemoveAdded(IDrawingObject1 host,
+        IReadOnlyList<SketchConstraintRow> before, IReadOnlyList<SketchConstraintRow> after, List<string> notes)
+    {
+        if (after.Count <= before.Count)
+        {
+            return new CleanupOutcome(after, "not_needed", null);
+        }
+
+        // The kernel APPENDS the record of a refused constraint, so the added ones are the tail positions;
+        // deleting from the tail keeps the remaining positions valid.
+        for (var index = after.Count - 1; index >= before.Count; index--)
+        {
+            var (result, failure) = DeleteOne(host, index, after, notes);
+            if (failure is not null || result == false)
+            {
+                return new CleanupOutcome(ReadRows(host, notes), "failed",
+                    failure ?? $"Delete() по позиции {index} вернул false");
+            }
+        }
+
+        var reread = ReadRows(host, notes);
+        return reread.Count == before.Count
+            ? new CleanupOutcome(reread, "removed", null)
+            : new CleanupOutcome(reread, "failed",
+                $"после удаления в списке {reread.Count} записей, до вызова было {before.Count}");
+    }
+
     /// <summary>Reads the parametric state of ONE object
     /// (<c>ksObjectConstraintsStateEnum</c>, <c>constraintsstate.html</c>).</summary>
     public static (int? Raw, string? Name) ObjectState(IDrawingObject1 host, List<string> notes)

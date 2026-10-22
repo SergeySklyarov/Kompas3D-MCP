@@ -531,6 +531,26 @@ PASS 15 / FAIL 0 (`scratch/mcp-smoke/runs/20261019-122717-all-7a0dc15`). Что 
 `cam_gear` вне контракта: набор объектов, при котором `Valid=TRUE`, не установлен.
 `docs/decisions/mates.md#mechanical-transmission`, `docs/decisions/probes.md#mechanical-mates`.
 
+**22.10.2026 - выпуск 0.10.0 прошёл функциональную и клиентскую приёмку.** Поставка
+`artifacts/publish-v0.10.0-bfbcd7b`: 155 файлов, 8,7 МБ, штамп всех собственных сборок
+`0.10.0+bfbcd7b`, `verify-delivery.py` PASS (схемы поставки совпали со `schemas/`), `tools/list`
+22 815 символов при потолке стража 23 821. **Этап 1 на файлах поставки:** `--all` -
+**PASS 1819 / NAMED 6 / UNKNOWN 3 / FAIL 0**, 1828 строк, 22 группы, 32 минуты, дерево чистое,
+коммит `bfbcd7b`; сверка состава с зачётным `20261021-152127-all-d1a0afb` - отсутствующих 0,
+прибавилась одна строка `SEC-14.assembly_dismantled` (PASS), группа `sections` 14 -> 15;
+`--suppress-repeat 20` - **PASS 41 / NAMED 1 / FAIL 0**, попыток 40, молча неверной геометрии 0.
+Приборы: `acceptance-levels.py` - `COMPLETE`, `problems []`, 17 профилей, режимы 118/118,
+зависимости 76/76; `emit-coverage-matrix.py` - целостность OK; `record-b2-rows.py --check` -
+согласовано; `check-evidence-links.py`, `lint-dashes.py`, `verify-publish-set.py` - 0.
+**Этап 2 (клиентская приёмка,** `docs/acceptance/evidence/delivery-v0.10.0-bfbcd7b/client-acceptance.json`**):**
+21 строка, **PASS 17 / FAIL 0**, не выполнено 2, не проверяемы клиентом 2, вердикт `PASS`.
+Конец сеанса закрыт отдельным прибором (`client/session-end-check.json`, 05:25:24Z): Host 13160 и
+`KOMPAS.exe` 4580 после закрытия диалога завершились - **PASS**. «Установка» проверяется после
+публикации: установщик берёт выпуск из GitHub Releases, а каталог поставки не пакет. Названное
+расхождение: `verify-mcp-approval.py` даёт итог FAIL из-за `A05` (7 ключей прежних записей под другими
+хешами) при `A04` PASS - тот же класс, что в приёмке `f679843`, отказом выпуска не считается;
+хранилище клиента не правилось. Публикация, тег `v0.10.0` и `git push` - по слову заказчика.
+
 ## Архив журнала
 
 - `docs/status/journal-2026-10.md` - записи 10.2026: раздел «Текущее состояние на публикацию 0.9.0

@@ -1,3 +1,4 @@
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Mates;
 using Xunit;
 
@@ -45,4 +46,60 @@ public class MateTransmissionPolicyTests
     [Fact]
     public void Ratio_NotRead_IsNotConfirmed() =>
         Assert.Null(MateTransmissionPolicy.RatioMatches(null, 2d, 1d, 2d));
+
+    [Theory]
+    // A parametric mate takes its parameter and nothing of the transmission.
+    [InlineData(false, 10d, null, null, null, null, MateTransmissionPolicy.EditRefusal.None)]
+    [InlineData(false, null, null, null, null, null, MateTransmissionPolicy.EditRefusal.NoEditFields)]
+    [InlineData(false, 10d, 1d, 2d, null, null, MateTransmissionPolicy.EditRefusal.TransmissionFieldOnParamEdit)]
+    [InlineData(false, null, null, null, true, null, MateTransmissionPolicy.EditRefusal.TransmissionFieldOnParamEdit)]
+    // A transmission takes its ratio and directions, never a parameter, and the ratio is a pair.
+    [InlineData(true, 10d, 1d, 2d, null, null, MateTransmissionPolicy.EditRefusal.ParamValueOnTransmission)]
+    [InlineData(true, null, 1d, null, null, null, MateTransmissionPolicy.EditRefusal.IncompleteRatio)]
+    [InlineData(true, null, null, 2d, null, null, MateTransmissionPolicy.EditRefusal.IncompleteRatio)]
+    [InlineData(true, null, 0d, 2d, null, null, MateTransmissionPolicy.EditRefusal.RatioOutOfRule)]
+    [InlineData(true, null, 1d, -2d, null, null, MateTransmissionPolicy.EditRefusal.RatioOutOfRule)]
+    [InlineData(true, null, double.NaN, 2d, null, null, MateTransmissionPolicy.EditRefusal.RatioOutOfRule)]
+    [InlineData(true, null, 1d, 4d, null, null, MateTransmissionPolicy.EditRefusal.None)]
+    [InlineData(true, null, null, null, false, null, MateTransmissionPolicy.EditRefusal.None)]
+    [InlineData(true, null, 1d, 4d, true, false, MateTransmissionPolicy.EditRefusal.None)]
+    [InlineData(true, null, null, null, null, null, MateTransmissionPolicy.EditRefusal.NoEditFields)]
+    public void EditFields_FollowTheMateType(
+        bool isTransmission, double? paramValue, double? scale1, double? scale2,
+        bool? direction1, bool? direction2, MateTransmissionPolicy.EditRefusal expected) =>
+        Assert.Equal(expected, MateTransmissionPolicy.CheckEdit(
+            isTransmission, paramValue, scale1, scale2, direction1, direction2));
+
+    [Fact]
+    public void Edit_ReadBackAsRequested_IsConfirmed()
+    {
+        var read = new MateTransmissionStateDto
+        {
+            Scale1 = 1d, Scale2 = 4d, Direction1 = true, Direction2 = false, Valid = true,
+        };
+
+        Assert.Empty(MateTransmissionPolicy.EditMismatches(read, 1d, 4d, true, false));
+    }
+
+    [Fact]
+    public void Edit_ReadBackDiffers_IsNotConfirmed()
+    {
+        var read = new MateTransmissionStateDto
+        {
+            Scale1 = 1d, Scale2 = 2d, Direction1 = true, Direction2 = true, Valid = true,
+        };
+
+        Assert.Equal(new[] { "scale" }, MateTransmissionPolicy.EditMismatches(read, 1d, 4d, null, null));
+        Assert.Equal(new[] { "direction2" }, MateTransmissionPolicy.EditMismatches(read, null, null, null, false));
+    }
+
+    [Fact]
+    public void Edit_NotRead_IsNotConfirmed()
+    {
+        var requested = MateTransmissionPolicy.EditMismatches(
+            new MateTransmissionStateDto(), 1d, 4d, true, false);
+
+        Assert.Equal(new[] { "scale", "direction1", "direction2" }, requested);
+        Assert.Equal(3, MateTransmissionPolicy.EditMismatches(null, 1d, 4d, true, false).Count);
+    }
 }

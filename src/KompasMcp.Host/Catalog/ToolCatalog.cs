@@ -744,12 +744,21 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_set_mate_parameter", "Задать параметр сопряжения",
-                "Задаёт параметр сопряжения (расстояние или угол) и перечитывает его.",
+                "Задаёт параметр сопряжения (расстояние или угол) либо, у механической передачи, "
+                + "коэффициент и направления, и сверяет перечитанное из модели с запрошенным. Поля "
+                + "выбираются видом сопряжения, прочитанным из модели: param_value — только у "
+                + "расстояния и угла, scale1/scale2 (парой целиком) и direction1/direction2 — только "
+                + "у передачи. Update() для передачи в справке не документирован: маршрут подтверждён "
+                + "измерением.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("mate_ref", Sch.Str("Ссылка на сопряжение из kompas_list_mates.")),
-                    ("param_value", Sch.Num("Новое значение параметра."))),
+                    ("param_value", Sch.Nullable(Sch.Num("Расстояние или угол; только у сопряжений с параметром."))),
+                    ("scale1", Sch.Nullable(Sch.Num("Передача: Scale1 > 0, вместе с scale2."))),
+                    ("scale2", Sch.Nullable(Sch.Num("Передача: Scale2 > 0, вместе с scale1."))),
+                    ("direction1", Sch.Nullable(Sch.Bool("Передача: Direction1."))),
+                    ("direction2", Sch.Nullable(Sch.Bool("Передача: Direction2.")))),
                 WorkerCommands.SetMateParameter,
                 requiresDocument: true,
                 requiresRevision: true),

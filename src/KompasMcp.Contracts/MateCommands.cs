@@ -62,7 +62,12 @@ public sealed record ListMatesCommand
     public required string DocumentId { get; init; }
 }
 
-/// <summary>Change the parameter of an existing mate (distance or angle).</summary>
+/// <summary>Change an existing mate: its parameter (distance or angle) or, for a transmission, its ratio
+/// and directions.</summary>
+/// <remarks>INVARIANT: the two field groups never mix — a parameter where the mate has none and a
+/// transmission field on another type are both refusals naming the field, because a number accepted and
+/// never applied reads as success. The mate type lives in the MODEL, so this rule is enforced by the
+/// adapter, not by the request schema. History: docs/decisions/mates.md#transmission-edit</remarks>
 public sealed record SetMateParameterCommand
 {
     public required string DocumentId { get; init; }
@@ -71,7 +76,21 @@ public sealed record SetMateParameterCommand
 
     public required string MateRef { get; init; }
 
-    public required double ParamValue { get; init; }
+    /// <summary>Distance or angle mates only — <c>IMateConstraint3D.ParamValue</c>.</summary>
+    public double? ParamValue { get; init; }
+
+    /// <summary>Transmission only: <c>Scale1</c>, written through <c>SetScale</c> together with
+    /// <see cref="Scale2"/>; one side alone is a refusal.</summary>
+    public double? Scale1 { get; init; }
+
+    /// <summary>Transmission only: <c>Scale2</c>, same route and rule as <see cref="Scale1"/>.</summary>
+    public double? Scale2 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction1</c> (<c>put_Direction1</c>).</summary>
+    public bool? Direction1 { get; init; }
+
+    /// <summary>Transmission only: <c>Direction2</c> (<c>put_Direction2</c>).</summary>
+    public bool? Direction2 { get; init; }
 }
 
 /// <summary>Set the component-fixation flag through a mate.</summary>
@@ -173,7 +192,25 @@ public sealed record SetMateParameterResult(
     ReferenceDto MateRef,
     double? ParamValueBefore,
     double? ParamValueAfter,
-    VerificationDto Verification);
+    VerificationDto Verification,
+    MateTransmissionStateDto? TransmissionBefore = null,
+    MateTransmissionStateDto? TransmissionAfter = null);
+
+/// <summary>A transmission's own numbers as the MODEL holds them; every field is a read value, and
+/// <c>null</c> means "not read", never zero or <c>false</c>.</summary>
+public sealed record MateTransmissionStateDto
+{
+    public double? Scale1 { get; init; }
+
+    public double? Scale2 { get; init; }
+
+    public bool? Direction1 { get; init; }
+
+    public bool? Direction2 { get; init; }
+
+    /// <summary><c>IMateConstraint3D.Valid</c> — the mate's own verdict after the rebuild.</summary>
+    public bool? Valid { get; init; }
+}
 
 public sealed record SetMateFixedResult(
     ReferenceDto MateRef,

@@ -407,7 +407,8 @@ public sealed partial class Api5Session
     }
 
     // ── MATE-03 ──
-    /// <summary>Change a mate parameter (distance or angle).</summary>
+    /// <summary>Change a mate parameter (distance or angle) or, for a transmission, its ratio and
+    /// directions.</summary>
     public SetMateParameterResult SetMateParameter(SetMateParameterCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -433,10 +434,26 @@ public sealed partial class Api5Session
             throw MateIdentityRefusal(document, command.MateRef, payload, identity, identityNote);
         }
 
+        // THE MATE TYPE IS READ FROM THE MODEL, so the field group is decided here and not by the
+        // request schema: a parameter written into a transmission would be accepted and ignored.
+        // History: docs/decisions/mates.md#transmission-edit
+        var isTransmission = payload.ConstraintType == (short)MateConstraintType.mc_Transmission;
+        var refusal = MateTransmissionPolicy.CheckEdit(isTransmission, command.ParamValue,
+            command.Scale1, command.Scale2, command.Direction1, command.Direction2);
+        if (refusal != MateTransmissionPolicy.EditRefusal.None)
+        {
+            throw EditFieldRefusal(refusal, command);
+        }
+
+        if (isTransmission)
+        {
+            return SetTransmissionParameters(document, command, mate);
+        }
+
         var before = SafeDouble(() => mate.ParamValue);
         try
         {
-            mate.ParamValue = command.ParamValue;
+            mate.ParamValue = command.ParamValue!.Value;
             mate.Update();
         }
         catch (COMException ex)
@@ -453,12 +470,12 @@ public sealed partial class Api5Session
         BumpRevision(document, "mate.set_parameter");
 
         var matched = before is not null && after is not null
-            && Math.Abs(after.Value - command.ParamValue) <= 1e-6;
+            && Math.Abs(after.Value - command.ParamValue!.Value) <= 1e-6;
         var checks = new List<NamedCheck>
         {
             new("param_value_read_back", matched,
                 Observed: after?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: command.ParamValue.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
+                Expected: command.ParamValue!.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
         };
 
         // A FAILED MANDATORY CHECK IS NOT SUCCESS: the re-read parameter did not match the requested
@@ -471,7 +488,7 @@ public sealed partial class Api5Session
                 + (after is null
                     ? "НЕ ЧИТАЕТСЯ"
                     : after.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))
-                + ", запрошено " + command.ParamValue.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
+                + ", запрошено " + command.ParamValue!.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
                 + ". Успехом это не считается: модель изменена, параметр не подтверждён.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true,
@@ -495,6 +512,176 @@ public sealed partial class Api5Session
                     "param_value_not_read_back — перечитанное значение не совпало с заданным",
                 }));
     }
+
+    /// <summary>Why the requested field group does not fit the mate, with the field named.</summary>
+    private static KompasContractException EditFieldRefusal(
+        MateTransmissionPolicy.EditRefusal refusal, SetMateParameterCommand command)
+    {
+        var message = refusal switch
+        {
+            MateTransmissionPolicy.EditRefusal.ParamValueOnTransmission =>
+                "Сопряжение — механическая передача: поля param_value у неё нет (расстояния и угла у "
+                + "передачи не бывает). Коэффициент задаётся парой scale1/scale2, направления — "
+                + "direction1/direction2.",
+            MateTransmissionPolicy.EditRefusal.TransmissionFieldOnParamEdit =>
+                "Поле «" + FirstTransmissionField(command) + "» относится только к механической "
+                + "передаче, а это сопряжение другого вида: значение было бы записано и "
+                + "проигнорировано.",
+            MateTransmissionPolicy.EditRefusal.IncompleteRatio =>
+                "Коэффициент передачи задаётся парой целиком: передано только «"
+                + (command.Scale1 is null ? "scale2" : "scale1") + "», не хватает «"
+                + (command.Scale1 is null ? "scale1" : "scale2") + "».",
+            MateTransmissionPolicy.EditRefusal.RatioOutOfRule =>
+                "Коэффициент передачи — конечные числа больше нуля: принято "
+                + $"scale1={command.Scale1?.ToString("0.####") ?? "нет"}, "
+                + $"scale2={command.Scale2?.ToString("0.####") ?? "нет"}.",
+            _ => "Ни одного поля правки не передано: нужен param_value либо scale1/scale2 и/или "
+                + "direction1/direction2 у передачи.",
+        };
+
+        return new KompasContractException(ErrorCodes.InvalidArgument, message, RetryPolicy.Never);
+    }
+
+    private static string FirstTransmissionField(SetMateParameterCommand command) =>
+        command.Scale1 is not null ? "scale1"
+        : command.Scale2 is not null ? "scale2"
+        : command.Direction1 is not null ? "direction1"
+        : "direction2";
+
+    /// <summary>Write a transmission's ratio and directions into an EXISTING mate and judge it by the
+    /// read-back.</summary>
+    /// <remarks>DOC: <c>imate3dtransmission_methods.html</c> — <c>SetScale</c> is the only method and
+    /// <c>Scale1/2</c> are read-only; <c>imate3dtransmission_direction1/2.html</c> name
+    /// <c>put_Direction1/2</c>, so the directions are writable. <c>Update()</c> is not documented for
+    /// mechanical mates; the route is the one measured on creation.
+    /// History: docs/decisions/mates.md#transmission-edit</remarks>
+    private SetMateParameterResult SetTransmissionParameters(
+        DocumentEntry document, SetMateParameterCommand command, IMateConstraint3D mate)
+    {
+        var transmission = mate as IMate3DTransmission
+            ?? throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Сопряжение прочитано как mc_Transmission, но не приводится к IMate3DTransmission: "
+                + "коэффициент и направления этим маршрутом не задаются.",
+                RetryPolicy.ReacquireContext);
+
+        var notes = new List<string>();
+        var before = TransmissionState(mate, transmission);
+
+        try
+        {
+            // A FALSE IS NOT SWALLOWED: it means the number was not accepted, and the read-back below
+            // decides; the note stops `true` from being read as "the ratio is in the model".
+            if (command.Scale1 is { } scale1
+                && transmission.SetScale(scale1, command.Scale2!.Value) != true)
+            {
+                notes.Add("set_scale_not_confirmed — SetScale не подтвердил запись коэффициента; "
+                    + "коэффициент проверяется перечитыванием из модели");
+            }
+
+            if (command.Direction1 is { } direction1)
+            {
+                transmission.Direction1 = direction1;
+            }
+
+            if (command.Direction2 is { } direction2)
+            {
+                transmission.Direction2 = direction2;
+            }
+
+            mate.Update();
+        }
+        catch (COMException ex)
+        {
+            // The write may have landed: the revision must show it (same rule as mate.create.partial).
+            BumpRevision(document, "mate.set_parameter.partial");
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Запись параметров передачи прервалась: {ex.Message}. Правка не подтверждена.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true);
+        }
+
+        document.Document3D.RebuildDocument();
+        var after = TransmissionState(mate, transmission);
+        BumpRevision(document, "mate.set_parameter");
+
+        var mismatched = MateTransmissionPolicy.EditMismatches(
+            after, command.Scale1, command.Scale2, command.Direction1, command.Direction2);
+
+        var checks = new List<NamedCheck>();
+        if (command.Scale1 is { } requested1)
+        {
+            checks.Add(new("transmission_ratio_read_back", !mismatched.Contains("scale"),
+                Observed: $"{Number(after.Scale1)}:{Number(after.Scale2)}",
+                Expected: $"{Number(requested1)}:{Number(command.Scale2)}"));
+        }
+
+        if (command.Direction1 is not null || command.Direction2 is not null)
+        {
+            checks.Add(new("transmission_directions_read_back",
+                !mismatched.Contains("direction1") && !mismatched.Contains("direction2"),
+                Observed: $"{Flag(after.Direction1)}/{Flag(after.Direction2)}",
+                Expected: $"{Flag(command.Direction1)}/{Flag(command.Direction2)}"));
+        }
+
+        // A READ-BACK THAT DIFFERS IS A REFUSAL, not a success with a warning: the mate is in the model
+        // and the revision is bumped, so the partial effect is named with both numbers.
+        if (mismatched.Count > 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Параметры передачи ЗАПИСАНЫ, но не подтверждены перечитыванием: не совпало "
+                + string.Join(", ", mismatched) + ". Прочитано "
+                + $"{Number(after.Scale1)}:{Number(after.Scale2)}, направления "
+                + $"{Flag(after.Direction1)}/{Flag(after.Direction2)}; запрошено "
+                + $"{Number(command.Scale1)}:{Number(command.Scale2)}, направления "
+                + $"{Flag(command.Direction1)}/{Flag(command.Direction2)}. Успехом это не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["mate_ref"] = command.MateRef,
+                    ["mismatched"] = mismatched,
+                    ["scale1_requested"] = command.Scale1,
+                    ["scale2_requested"] = command.Scale2,
+                    ["scale1_read"] = after.Scale1,
+                    ["scale2_read"] = after.Scale2,
+                    ["direction1_requested"] = command.Direction1,
+                    ["direction2_requested"] = command.Direction2,
+                    ["direction1_read"] = after.Direction1,
+                    ["direction2_read"] = after.Direction2,
+                    ["valid"] = after.Valid,
+                });
+        }
+
+        return new SetMateParameterResult(
+            ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate"),
+            null,
+            null,
+            new VerificationDto(VerificationLevel.StructureChecked, checks, notes),
+            before,
+            after);
+    }
+
+    /// <summary>The transmission's own numbers as the model holds them; <c>null</c> — not read.</summary>
+    private static MateTransmissionStateDto TransmissionState(
+        IMateConstraint3D mate, IMate3DTransmission transmission) =>
+        new()
+        {
+            Scale1 = SafeDouble(() => transmission.Scale1),
+            Scale2 = SafeDouble(() => transmission.Scale2),
+            Direction1 = Bool(() => transmission.Direction1),
+            Direction2 = Bool(() => transmission.Direction2),
+            Valid = Bool(() => mate.Valid),
+        };
+
+    private static string Number(double? value) =>
+        value?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается";
+
+    private static string Flag(bool? value) =>
+        value is null ? "не читается" : value.Value ? "true" : "false";
+
 
     // ── MATE-04 ──
     /// <summary>Set the component-fixing flag of a mate.</summary>

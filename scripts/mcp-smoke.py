@@ -8001,6 +8001,176 @@ def mech_mates_checks(client, rep, app_id, workdir):
                 f"журнал_назван={replay_warned} count={count_repeat} "
                 f"устаревшая_ревизия={stale_code} count_после={count_after_stale}")
 
+    # ========= MM-11: правка СУЩЕСТВУЮЩЕЙ передачи =========
+    # Успех правки - СРАВНЕНИЕ перечитанного с запрошенным, а не `true` от вызова: `SetScale`
+    # подтверждает приём числа, а не то, что коэффициент в модели. Вид сопряжения берётся из модели,
+    # поэтому поля чужой группы отвергаются адаптером (INVALID_ARGUMENT с именем поля).
+    pair_e, problem_e = new_pair("MM-asm-4")
+    if not pair_e:
+        rep.add("MM.11.edit_ratio", "постановка для правки передачи не построена", "FAIL",
+                problem_e or "")
+    else:
+        env, code = call("kompas_create_mate", transmission_args(pair_e, 1.0, 2.0,
+                                                                 direction1=True, direction2=True))
+        seeded = transmission_row(pair_e, 1.0, 2.0)
+        if code or seeded is None:
+            rep.add("MM.11.edit_ratio", "передача для правки не создана", "FAIL",
+                    f"код={code} msg={emsg(env)}")
+        else:
+            def edit_mate(document, mate_ref, **fields):
+                args = {"document_id": document, "expected_revision": current_rev(document),
+                        "mate_ref": mate_ref}
+                args.update(fields)
+                env_e, code_e = call("kompas_set_mate_parameter", args)
+                return env_e, code_e, result(env_e)
+
+            env1, code1, res1 = edit_mate(pair_e, seeded.get("mate_ref"), scale1=1.0, scale2=4.0)
+            check1 = {row.get("name"): row.get("passed")
+                      for row in ((res1.get("verification") or {}).get("checks") or [])}
+            said1 = res1.get("transmission_after") or {}
+            row1e = transmission_row(pair_e, 1.0, 4.0)
+            env_rb, code_rb = call("kompas_rebuild", {"document_id": pair_e})
+            row1b = transmission_row(pair_e, 1.0, 4.0)
+            rep.add("MM.11.edit_ratio",
+                    "отношение существующей передачи 1:2 -> 1:4 задано SetScale и перечитано из "
+                    "модели; после перестроения читаются те же числа",
+                    "PASS" if (not code1 and check1.get("transmission_ratio_read_back") is True
+                               and near(said1.get("scale1"), 1.0) and near(said1.get("scale2"), 4.0)
+                               and row1e is not None and near(row1e.get("scale2"), 4.0)
+                               and not code_rb and row1b is not None
+                               and near(row1b.get("scale1"), 1.0) and near(row1b.get("scale2"), 4.0)
+                               and row1b.get("valid") is True) else "FAIL",
+                    f"код={code1} проверка={check1.get('transmission_ratio_read_back')} "
+                    f"ответ={said1.get('scale1')}:{said1.get('scale2')} "
+                    f"чтение={row1e and row1e.get('scale1')}:{row1e and row1e.get('scale2')} "
+                    f"перестроение={code_rb} после={row1b and row1b.get('scale1')}:"
+                    f"{row1b and row1b.get('scale2')} valid={row1b and row1b.get('valid')} "
+                    f"msg={emsg(env1)}")
+
+            # НАПРАВЛЕНИЯ: оба члена названы справкой доступными для записи (put_Direction1/2).
+            env2, code2, res2 = edit_mate(pair_e, (row1b or row1e or {}).get("mate_ref"),
+                                          direction1=False, direction2=True)
+            said2 = res2.get("transmission_after") or {}
+            row2e = transmission_row(pair_e, 1.0, 4.0)
+            rep.add("MM.11.edit_direction",
+                    "направления существующей передачи сменены (direction1=false, direction2=true) "
+                    "и перечитаны из модели",
+                    "PASS" if (not code2 and said2.get("direction1") is False
+                               and said2.get("direction2") is True
+                               and row2e is not None and row2e.get("direction1") is False
+                               and row2e.get("direction2") is True
+                               and row2e.get("valid") is True) else "FAIL",
+                    f"код={code2} ответ={said2.get('direction1')}/{said2.get('direction2')} "
+                    f"чтение={row2e and row2e.get('direction1')}/{row2e and row2e.get('direction2')} "
+                    f"valid={row2e and row2e.get('valid')} msg={emsg(env2)}")
+
+            edit_path = os.path.join(src_dir, "mm-asm-4.a3d")
+            env_s, code_s = call("kompas_save_document", {
+                "document_id": pair_e, "expected_revision": current_rev(pair_e),
+                "target_path": edit_path})
+            saved_e = (not code_s) and os.path.isfile(edit_path)
+            call("kompas_close_document", {"document_id": pair_e, "dirty_policy": "save"})
+            env_o, code_o = call("kompas_open_document", {
+                "application_id": app_id, "path": edit_path, "access": "edit"})
+            reopened_e = doc_id(env_o)
+            row3e = transmission_row(reopened_e, 1.0, 4.0) if reopened_e else None
+            rep.add("MM.11.edit_reopen",
+                    "правленые отношение и направления переживают сохранение, закрытие и "
+                    "переоткрытие: из модели читаются те же числа",
+                    "PASS" if (saved_e and row3e is not None
+                               and near(row3e.get("scale1"), 1.0) and near(row3e.get("scale2"), 4.0)
+                               and row3e.get("direction1") is False
+                               and row3e.get("direction2") is True
+                               and row3e.get("valid") is True) else "FAIL",
+                    f"сохранено={saved_e} path={edit_path} чтение="
+                    f"{row3e and row3e.get('scale1')}:{row3e and row3e.get('scale2')} "
+                    f"направления={row3e and row3e.get('direction1')}/"
+                    f"{row3e and row3e.get('direction2')} valid={row3e and row3e.get('valid')} "
+                    f"error={code_s}/{code_o}")
+
+            if not row3e:
+                for lost in ("MM.11.idempotent", "MM.11.edit_foreign_fields",
+                             "MM.11.edit_plain_mate"):
+                    rep.add(lost, "переоткрытая передача не найдена", "FAIL",
+                            f"error={code_s}/{code_o}")
+            else:
+                # ПОВТОР ТЕХ ЖЕ ЗНАЧЕНИЙ: модель уже в этом состоянии, и это ВИДНО в ответе — «до»
+                # и «после» совпадают с запрошенным, второго сопряжения не появляется.
+                env_i, code_i, res_i = edit_mate(reopened_e, row3e.get("mate_ref"),
+                                                 scale1=1.0, scale2=4.0,
+                                                 direction1=False, direction2=True)
+                said_before = res_i.get("transmission_before") or {}
+                said_after = res_i.get("transmission_after") or {}
+                _rows_i, count_i = mates_of(reopened_e)
+                rep.add("MM.11.idempotent",
+                        "повтор тех же значений идемпотентен: «до» и «после» совпадают с "
+                        "запрошенным, сопряжение одно",
+                        "PASS" if (not code_i
+                                   and near(said_before.get("scale1"), 1.0)
+                                   and near(said_before.get("scale2"), 4.0)
+                                   and near(said_after.get("scale1"), 1.0)
+                                   and near(said_after.get("scale2"), 4.0)
+                                   and said_before.get("direction1") is False
+                                   and said_after.get("direction1") is False
+                                   and said_before.get("direction2") is True
+                                   and said_after.get("direction2") is True
+                                   and count_i == 1) else "FAIL",
+                        f"код={code_i} до={said_before.get('scale1')}:"
+                        f"{said_before.get('scale2')} после={said_after.get('scale1')}:"
+                        f"{said_after.get('scale2')} направления до="
+                        f"{said_before.get('direction1')}/{said_before.get('direction2')} после="
+                        f"{said_after.get('direction1')}/{said_after.get('direction2')} "
+                        f"сопряжений={count_i} msg={emsg(env_i)}")
+
+                # ОТКАЗЫ: поля чужой группы и отношение вне правила — до записи, с именем поля.
+                base = {"document_id": reopened_e, "expected_revision": current_rev(reopened_e),
+                        "mate_ref": row3e.get("mate_ref")}
+                env_p, code_p = call("kompas_set_mate_parameter", dict(base, param_value=5.0))
+                env_h, code_h = call("kompas_set_mate_parameter", dict(base, scale1=2.0))
+                env_z, code_z = call("kompas_set_mate_parameter", dict(base, scale1=0.0, scale2=1.0))
+                env_n, code_n = call("kompas_set_mate_parameter", dict(base))
+                named = (("param_value" in (emsg(env_p) or ""))
+                         and ("scale2" in (emsg(env_h) or ""))
+                         and ("scale1" in (emsg(env_z) or "")))
+                row_f = transmission_row(reopened_e, 1.0, 4.0)
+                rep.add("MM.11.edit_foreign_fields",
+                        "param_value у передачи, половина коэффициента, коэффициент вне правила и "
+                        "пустой набор полей отвергнуты INVALID_ARGUMENT с именем поля; модель не "
+                        "изменилась",
+                        "PASS" if (code_p == "INVALID_ARGUMENT" and code_h == "INVALID_ARGUMENT"
+                                   and code_z == "INVALID_ARGUMENT" and code_n == "INVALID_ARGUMENT"
+                                   and named and row_f is not None
+                                   and near(row_f.get("scale1"), 1.0)
+                                   and near(row_f.get("scale2"), 4.0)) else "FAIL",
+                        f"param_value → {code_p}; половина → {code_h}; 0 → {code_z}; "
+                        f"пусто → {code_n}; имена_названы={named} чтение="
+                        f"{row_f and row_f.get('scale1')}:{row_f and row_f.get('scale2')}")
+
+                # ОБРАТНАЯ СТОРОНА ПРАВИЛА: поля передачи у обычного сопряжения. Ставится ПОСЛЕ
+                # строк передачи: второе сопряжение на той же паре может сделать передачу негодной.
+                refs_e = component_refs(reopened_e)
+                env_c, code_c = call("kompas_create_mate", {
+                    "document_id": reopened_e, "expected_revision": current_rev(reopened_e),
+                    "constraint_type": "coincidence",
+                    "first_component_ref": refs_e[0], "first_face_index": 0,
+                    "second_component_ref": refs_e[1], "second_face_index": 0})
+                plain = result(env_c).get("mate_ref")
+                plain_ref = plain.get("id") if isinstance(plain, dict) else None
+                if code_c or not plain_ref:
+                    rep.add("MM.11.edit_plain_mate",
+                            "обычное сопряжение для проверки не создано", "FAIL",
+                            f"код={code_c} msg={emsg(env_c)}")
+                else:
+                    env_q, code_q = call("kompas_set_mate_parameter", {
+                        "document_id": reopened_e, "expected_revision": current_rev(reopened_e),
+                        "mate_ref": plain_ref, "scale1": 1.0, "scale2": 2.0})
+                    plain_named = "scale1" in (emsg(env_q) or "")
+                    rep.add("MM.11.edit_plain_mate",
+                            "поле передачи у обычного сопряжения отвергнуто INVALID_ARGUMENT с "
+                            "именем поля, а не записано и проигнорировано",
+                            "PASS" if (code_q == "INVALID_ARGUMENT" and plain_named) else "FAIL",
+                            f"код={code_q} имя_названо={plain_named} msg={emsg(env_q)}")
+
     # ========= MM-10: отказы без ложного успеха =========
     def count_after_refusal(args):
         before_rows, _c = mates_of(asm)

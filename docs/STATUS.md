@@ -602,7 +602,7 @@
 (`*-acceptance-instruments-fix.json`), прежние файлы доказательств восстановлены байт в байт.
 
 **Проверки:** `--self-test` изменённых приборов 0 (`verify-client-entry` 13 проверок,
-`verify-mcp-approval` 3, `check-session-end` 6, `make-delivery-passport` 4 батареи),
+`verify-mcp-approval` 3, `check-session-end` 5, `make-delivery-passport` 4 батареи),
 `mcp-smoke.py --self-test` 0 (82 проверки), стражи `long-comment-blocks` / `lint-dashes` /
 `check-evidence-links` - 0 / 0 / 0.
 

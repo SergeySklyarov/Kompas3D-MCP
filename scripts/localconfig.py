@@ -13,11 +13,17 @@
 from __future__ import annotations
 
 import datetime
+import glob
 import json
 import os
 
 LOCAL_CONFIG = os.path.join("config", "kompas-mcp.local.json")
 EXAMPLE_CONFIG = os.path.join("config", "kompas-mcp.example.json")
+
+# The installer keeps a junction `<InstallRoot>\current` and a state file next to it; a client entry
+# pointing through the junction names no delivery on its own.
+CURRENT_LINK = "current"
+INSTALLED_STATE = "installed.json"
 
 _MISSING = """Нет локальной конфигурации: {local}
 
@@ -86,3 +92,77 @@ def isolate_config(config: str, base_dir: str, prefix: str = "probe") -> str:
     with open(isolated, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
     return isolated
+
+
+def _current_version(delivery_dir: str):
+    """Version directory behind `<InstallRoot>\\current`; returns `(dir, tag, source, problem)`.
+
+    INVARIANT: the junction is resolved through `installed.json` first and through the link target
+    second, never by reading the junction name as a delivery name. MEASURED: an entry written
+    through `current` was taken for a delivery of its own, so the instruments looked for evidence of
+    a delivery `current` that does not exist. History: docs/decisions/tests.md#current-layout
+    """
+    install_root = os.path.dirname(delivery_dir)
+    state_path = os.path.join(install_root, INSTALLED_STATE)
+    tag, source = None, None
+    try:
+        with open(state_path, encoding="utf-8-sig") as fh:
+            tag = (json.load(fh).get("tag") or "").strip() or None
+        source = state_path if tag else None
+    except (OSError, ValueError):
+        tag = None
+    if not tag:
+        target = os.path.realpath(delivery_dir)
+        resolved = os.path.basename(os.path.normpath(target)) or None
+        if resolved and resolved.lower() != CURRENT_LINK:
+            tag, source = resolved, "цель точки соединения: " + target
+    if not tag:
+        return None, None, None, (
+            "тег установки не найден: нет %s, и точка соединения %s не разрешается"
+            % (state_path, delivery_dir))
+    version_dir = os.path.join(install_root, "versions", tag)
+    if not os.path.isdir(version_dir):
+        return None, tag, source, ("каталога версии нет: %s (тег %s, источник %s)"
+                                  % (version_dir, tag, source))
+    return version_dir, tag, source, None
+
+
+def client_delivery(command: str, root: str):
+    """Evidence directory and passport of the delivery a client entry points at.
+
+    Returns `(info, problem)`; `info` carries `version_dir`, `tag`, `source`, `evidence_dir`,
+    `passport`. INVARIANT: both acceptance instruments call THIS function - a copy would drift and
+    the passport and the approval report would name different deliveries. LIMIT: only the layout
+    `<InstallRoot>\\current` and a command inside a delivery directory are understood; any other
+    layout is reported as the delivery directory of the command itself.
+    History: docs/decisions/tests.md#current-layout
+    """
+    delivery_dir = os.path.dirname(os.path.abspath(command))
+    name = os.path.basename(os.path.normpath(delivery_dir))
+    info = {"version_dir": delivery_dir, "tag": None, "source": "каталог команды записи",
+            "evidence_dir": None, "passport": None}
+    if name.lower() != CURRENT_LINK:
+        stage = name[len("publish-"):] if name.startswith("publish-") else name
+        info["evidence_dir"] = os.path.join(root, "docs", "acceptance", "evidence",
+                                           "delivery-" + stage)
+        return info, None
+    version_dir, tag, source, problem = _current_version(delivery_dir)
+    if problem:
+        return None, problem
+    info.update(version_dir=version_dir, tag=tag, source=source)
+    pattern = os.path.join(root, "docs", "acceptance", "delivery-" + tag + "*",
+                           "delivery-passport.json")
+    found = sorted(glob.glob(pattern))
+    if not found:
+        return None, "паспорт поставки %s не найден: искал %s" % (tag, pattern)
+    if len(found) > 1:
+        return None, ("паспортов поставки %s несколько, и выбрать из них один - догадка: %s. "
+                      "Укажите --passport"
+                      % (tag, ", ".join(os.path.relpath(path, root) for path in found)))
+    info["passport"] = found[0]
+    info["evidence_dir"] = os.path.join(root, "docs", "acceptance", "evidence",
+                                        os.path.basename(os.path.dirname(found[0])))
+    if not os.path.isdir(info["evidence_dir"]):
+        return None, ("каталог доказательств поставки не найден: %s (паспорт %s)"
+                      % (info["evidence_dir"], found[0]))
+    return info, None

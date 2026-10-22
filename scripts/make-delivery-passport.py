@@ -148,6 +148,58 @@ def report_path(name):
     return None, None
 
 
+def full_run_report(directory):
+    """Path of the full-run report, or a NAMED refusal saying where it was looked for.
+
+    INVARIANT: the full run has exactly ONE file name, `FULL_RUN_REPORT`, and a report set without
+    it is not a delivery. MEASURED: an absent report used to reach the verdict as `rows 0`, so a
+    wrong file name read as an empty run instead of a missing one. `all.json` is named in the reason
+    when it lies beside: it was the second name, and one delivery carried it as a hard link.
+    History: docs/decisions/releases.md#full-run-report-name
+    """
+    path = os.path.join(directory, FULL_RUN_REPORT)
+    if os.path.exists(path):
+        return path, None
+    problem = "нет отчёта полного прогона " + rel(path)
+    legacy = os.path.join(directory, "all.json")
+    if os.path.exists(legacy):
+        problem += ("; рядом лежит all.json (" + rel(legacy) + ") - второе имя того же отчёта, "
+                    "полный прогон пишется только как " + FULL_RUN_REPORT)
+    return None, problem
+
+
+def self_test_full_run_report():
+    """Both halves of one rule: the report is found under its single name, and its absence is a
+    refusal naming the path, with `all.json` named as the second name.
+
+    THE DIRECTORIES ARE BUILT HERE: a control reading a delivery on disk would measure that delivery
+    and stop running when it is archived. History: docs/decisions/releases.md#full-run-report-name
+    """
+    import tempfile
+
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="passport-full-run-") as tmp:
+        path, problem = full_run_report(tmp)
+        if path is not None or "нет отчёта полного прогона" not in (problem or ""):
+            failures.append("пустой каталог: ожидался отказ с названной причиной, получено %r"
+                            % (path or problem))
+        with open(os.path.join(tmp, "all.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        path, problem = full_run_report(tmp)
+        if path is not None or "all.json" not in (problem or ""):
+            failures.append("только all.json: отказ обязан назвать второе имя, получено %r"
+                            % (problem,))
+        os.replace(os.path.join(tmp, "all.json"), os.path.join(tmp, FULL_RUN_REPORT))
+        path, problem = full_run_report(tmp)
+        if problem is not None or os.path.basename(path or "") != FULL_RUN_REPORT:
+            failures.append("отчёт под верным именем не найден: %r" % (path or problem))
+    if failures:
+        print("самопроверка отчёта полного прогона: " + "; ".join(failures))
+        return 1
+    print("самопроверка отчёта полного прогона: отказ с причиной и единственное имя - верно")
+    return 0
+
+
 def counts(report):
     result = {}
     for row in report.get("rows", []):
@@ -366,9 +418,9 @@ def self_test_client_gate():
                 failures.append(f"плечо (в): итог {got['verdict']!r} / fully_ready "
                                 f"{got['fully_ready']!r} без отчёта полного прогона, ожидание "
                                 f"FAIL / False — паспорт объявляет готовность по неполному набору")
-            elif not reason:
+            elif not reason or FULL_RUN_REPORT not in reason:
                 failures.append("плечо (в): итог FAIL, но отсутствие отчёта полного прогона не "
-                                "названо — читатель не увидит, чего не хватает")
+                                f"названо путём — причина {reason!r}")
 
     if failures:
         print("КОНТРОЛЬ ВЕРДИКТА НЕ ПРОЙДЕН:")
@@ -405,14 +457,15 @@ def kompas_facts():
 
 
 def client_entry(reports_dir):
-    """Проверка записи клиента: запускается ли то, что записано в конфиге.
+    """The client-entry check: does the entry the config carries actually launch?
 
-    Отчёт ищется в двух местах: рядом с сырыми отчётами прогонов и в каталоге приёмки самой
-    поставки. `verify-client-entry.py` без `--out` кладёт его рядом с паспортом, которым сверялся, —
-    то есть в каталог приёмки, и паспорт, смотревший только в каталог прогонов, отвечал `not_run`
-    на УЖЕ ВЫПОЛНЕННУЮ проверку.
+    INVARIANT: the report is searched beside the raw run reports, in `installed/` of the delivery's
+    evidence directory (where the instrument writes by default) and in the acceptance directory of
+    the delivery itself. MEASURED: a passport looking only at the run reports answered `not_run` for
+    a check that HAD been run. History: docs/decisions/tests.md#approval-report-path
     """
     candidates = (os.path.join(reports_dir, "client-entry-check.json"),
+                  os.path.join(reports_dir, "installed", "client-entry-check.json"),
                   os.path.join(OUT_DIR, "client-entry-check.json"))
     path = next((p for p in candidates if os.path.exists(p)), None)
     if path is None:
@@ -716,6 +769,10 @@ def main():
         RUN_ID = "delivery-" + os.path.basename(delivery)
 
     groups = []
+    # INVARIANT: a passport is built from a FULL run, and the report set must contain it under its
+    # single name. MEASURED: a wrong file name read as `rows 0` - an empty run instead of a missing
+    # report - so the reason below names the path it looked for.
+    full_path, full_problem = full_run_report(REPORTS)
     # Имена строк каждой группы — по ним считается, что «групповые прогоны» и «полный прогон» —
     # это одни и те же проверки по частям, а не два независимых набора.
     ids_by_group = {}
@@ -1016,6 +1073,10 @@ def main():
     full_run = None if complete is None else {"report": complete["report"], "rows": complete["rows"]}
     acceptance_levels = levels.summarize_levels(dict(total_counts), scope, transport,
                                                 client_acceptance_block, full_run)
+    if complete is None:
+        # The rule already refuses without a full run; the passport is the only place that knows
+        # WHERE it looked, so the named path (and `all.json` beside it) replaces the generic reason.
+        acceptance_levels["full_run"]["reason"] = full_problem
     acceptance_levels["mandatory_scope"]["profile_revision"] = scope.get("profile_revision")
     if scope["problems"]:
         acceptance_levels["mandatory_scope"]["problems"] = scope["problems"]
@@ -1228,7 +1289,7 @@ if __name__ == "__main__":
     # отчётах. Все три обязаны уметь отказать; ни один не имеет права «пройти» молча.
     if "--self-test" in sys.argv[1:]:
         raise SystemExit(levels.self_test() or self_test_measured_binaries()
-                         or self_test_client_gate())
+                         or self_test_client_gate() or self_test_full_run_report())
     # `main()` возвращает код: без `SystemExit` отказ (например, защита от перезаписи чужого
     # паспорта) печатался, но наружу отдавал 0 — вызывающая цепочка видела успех там, где записи
     # НЕ было. Возврат значения обязан быть видимым.

@@ -14,15 +14,16 @@
 будет что вызывать. Разница названа в отчёте отдельной строкой.
 
 Usage:
-  python scripts/verify-client-entry.py [--config <mcp.json>] [--name kompas]
+  PY -I scripts/verify-client-entry.py [--config <mcp.json>] [--name kompas]
       [--passport docs/acceptance/<поставка>/delivery-passport.json]
-      [--out docs/acceptance/<поставка>/client-entry-check.json]
-  python scripts/verify-client-entry.py --self-test
+      [--out docs/acceptance/evidence/<поставка>/installed/client-entry-check.json]
+  PY -I scripts/verify-client-entry.py --self-test
 
-Без `--passport` паспорт берётся по поставке, НА КОТОРУЮ УКАЗЫВАЕТ ЗАПИСЬ, а без `--out` отчёт
-ложится рядом с ним. Прежняя редакция держала оба пути константами поставки B2: к 19.09.2026 запись
-B3 сверялась с паспортом B2, и проверка отказывала записи за то, что она ведёт на ДРУГУЮ поставку —
-два FAIL (`E03b`, `E07`) описывали операнд прибора, а не предмет.
+Without `--passport` the passport belongs to the delivery the entry points at, and without `--out`
+the report goes into that delivery's evidence directory. An entry written through
+`<InstallRoot>/current` resolves to `versions/<tag>` (the installation's `installed.json` first, the
+link target second), and the passport is found BY TAG: `current` is a junction name, not a delivery
+name. History: docs/decisions/tests.md#current-layout
 
 ПОПРАВКА 21.09.2026, 20:4x (наряд `JOURNAL_SHARING_FIX_DEVELOPER_PROMPT.md`). Здесь стоял выбор
 паспорта ПО СВЕЖЕСТИ (`newest_passport()`): брался самый новый паспорт в `docs/acceptance/*/`, а не
@@ -47,15 +48,17 @@ import sys
 import time
 import uuid
 
-from localconfig import isolate_config as shared_isolate_config
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# INVARIANT: the instrument runs as `PY -I scripts/<name>.py`; `-I` keeps the script directory off
+# `sys.path`, so the shared modules are reachable only by adding that directory here.
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from localconfig import client_delivery, isolate_config as shared_isolate_config  # noqa: E402
 
 for stream in (sys.stdout, sys.stderr):
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _spec = importlib.util.spec_from_file_location("verify_delivery", os.path.join(ROOT, "scripts", "verify-delivery.py"))
 vd = importlib.util.module_from_spec(_spec)
@@ -166,45 +169,57 @@ IDENTITY_FIELDS = ("host_sha256", "host_dll_sha256", "tools_count")
 
 
 def delivery_identity(command, passport_arg):
-    """Опознание поставки для строк `E03`/`E03b`/`E07`: поля + ИЗ КАКОГО ИСТОЧНИКА они взяты.
+    """Delivery identity for `E03`/`E03b`/`E07`: the fields and the source they came from.
 
-    Явный `--passport` — это операнд: он берётся как указано, и его отсутствие — отказ.
-    Без `--passport`: измерение поставки обязательно (иначе опознать нечем — отказ с причиной),
-    а паспорт подключается, если он ИЗДАН и описывает ТУ ЖЕ поставку. Если издан и расходится —
-    отказ: молчаливый выбор одного из двух дал бы проверку с числами одной поставки и другой.
+    An explicit `--passport` is an operand: taken as given, and a missing file is a refusal. An entry
+    through `<InstallRoot>/current` is resolved by the shared rule (`localconfig.client_delivery`):
+    installation tag first, then the passport by tag - a junction name is not a delivery name.
+    Otherwise the delivery measurement is mandatory (nothing else identifies it) and an issued
+    passport joins only if it describes the SAME delivery; a disagreement is a named refusal, since
+    picking one of the two would compare an entry with the numbers of another delivery.
+    Returns `(identity, source, passport, measurement, installed | None, refusal | None)`.
     """
     delivery_dir = delivery_dir_of(command)
+    if passport_arg:
+        passport_path = os.path.abspath(passport_arg)
+        if not os.path.isfile(passport_path):
+            return None, None, None, None, None, f"указан --passport, но файла нет: {passport_path}"
+        with open(passport_path, encoding="utf-8") as fh:
+            package = (json.load(fh).get("package") or {})
+        return ({f: package.get(f) for f in IDENTITY_FIELDS}, passport_path, passport_path,
+                None, None, None)
+    installed, problem = client_delivery(command, ROOT)
+    if installed is None:
+        return None, None, None, None, None, problem
+    if installed["passport"]:
+        with open(installed["passport"], encoding="utf-8") as fh:
+            package = (json.load(fh).get("package") or {})
+        return ({f: package.get(f) for f in IDENTITY_FIELDS}, installed["passport"],
+                installed["passport"], None, installed, None)
     measure_path = measurement_path_for(delivery_dir)
     measurement = None
     if os.path.isfile(measure_path):
         with open(measure_path, encoding="utf-8-sig") as fh:
             measurement = json.load(fh)
-    if passport_arg:
-        passport_path = os.path.abspath(passport_arg)
-        if not os.path.isfile(passport_path):
-            return None, None, None, passport_path, f"указан --passport, но файла нет: {passport_path}"
-        with open(passport_path, encoding="utf-8") as fh:
-            package = (json.load(fh).get("package") or {})
-        return ({f: package.get(f) for f in IDENTITY_FIELDS}, passport_path, passport_path,
-                passport_path, None)
     if measurement is None:
-        return None, None, None, None, (
-            f"поставку нечем опознать: нет ни измерения {measure_path}, ни --passport.\n"
+        return None, None, None, None, None, (
+            f"поставку нечем опознать: нет ни паспорта поставки {installed['evidence_dir']}, "
+            f"ни измерения {measure_path}, ни --passport.\n"
             f"         Переснимите: python scripts\\verify-delivery.py --delivery {delivery_dir}")
     passport_path = passport_for_delivery(measurement)
     if passport_path is None:
         # Паспорт не издан — законное состояние (наряд §0.4), а не пробел: опознание из измерения.
         return ({f: measurement.get(f) for f in IDENTITY_FIELDS}, measure_path, None,
-                measure_path, None)
+                measure_path, installed, None)
     with open(passport_path, encoding="utf-8") as fh:
         package = (json.load(fh).get("package") or {})
     mismatch = [f for f in IDENTITY_FIELDS if package.get(f) != measurement.get(f)]
     if mismatch:
-        return None, None, passport_path, measure_path, (
+        return None, None, passport_path, measure_path, None, (
             "паспорт и измерение поставки РАСХОДЯТСЯ — опознание неоднозначно: " + ", ".join(
                 f"{f} (паспорт {package.get(f)!r} / измерение {measurement.get(f)!r})" for f in mismatch))
     return ({f: package.get(f) for f in IDENTITY_FIELDS}, passport_path, passport_path,
-            measure_path, None)
+            measure_path, installed, None)
 
 
 # DOC: the Host answers `running` with the warning "повторите тот же вызов с тем же operation_id"
@@ -295,6 +310,50 @@ def self_test():
     check("измерение поставки не ищется в scratch/",
           "scratch" not in measured.replace("\\", "/").split("/"), measured)
 
+    # The `current` layout: the junction name is not a delivery name, so the tag decides which
+    # passport describes the installed delivery. THE TREE IS BUILT HERE - a control reading a real
+    # installation would measure that machine, not the rule.
+    import shutil
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="_client-entry-selftest-") as scratch:
+        install = os.path.join(scratch, "install")
+        repo = os.path.join(scratch, "repo")
+        os.makedirs(os.path.join(install, "current"))
+        os.makedirs(os.path.join(install, "versions", "v9.9.9"))
+        passport_dir = os.path.join(repo, "docs", "acceptance", "delivery-v9.9.9-selftest")
+        evidence_dir = os.path.join(repo, "docs", "acceptance", "evidence",
+                                    "delivery-v9.9.9-selftest")
+        os.makedirs(passport_dir)
+        os.makedirs(evidence_dir)
+        with open(os.path.join(install, "installed.json"), "w", encoding="utf-8") as fh:
+            json.dump({"tag": "v9.9.9"}, fh)
+        with open(os.path.join(passport_dir, "delivery-passport.json"), "w", encoding="utf-8") as fh:
+            json.dump({"package": {"host_sha256": "a", "host_dll_sha256": "b", "tools_count": 1}}, fh)
+        command = os.path.join(install, "current", "KompasMcp.Host.exe")
+
+        info, problem = client_delivery(command, repo)
+        check("запись через current разрешена в versions/<тег>",
+              info is not None and os.path.normcase(info["version_dir"]) == os.path.normcase(
+                  os.path.join(install, "versions", "v9.9.9")), str(problem or (info or {}).get("tag")))
+        check("по тегу найден паспорт поставки и её каталог доказательств",
+              info is not None and os.path.normcase(info["passport"]) == os.path.normcase(
+                  os.path.join(passport_dir, "delivery-passport.json"))
+              and os.path.normcase(info["evidence_dir"]) == os.path.normcase(evidence_dir),
+              str(problem or (info or {}).get("passport")))
+
+        shutil.move(os.path.join(passport_dir, "delivery-passport.json"),
+                    os.path.join(scratch, "passport-moved.json"))
+        info, problem = client_delivery(command, repo)
+        check("нет паспорта поставки - отказ с причиной, а не поиск delivery-current",
+              info is None and "паспорт поставки v9.9.9 не найден" in problem
+              and "delivery-current" not in problem, str(problem))
+
+        os.remove(os.path.join(install, "installed.json"))
+        info, problem = client_delivery(command, repo)
+        check("тег не найден - отказ с причиной, а не догадка по имени каталога",
+              info is None and "тег установки не найден" in problem, str(problem))
+
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))
     return 1 if failures else 0
@@ -356,11 +415,15 @@ def main():
     if not exists:
         return finish(report, out)
 
-    identity, identity_path, identity_passport, identity_measure, identity_problem = delivery_identity(command, passport_arg)
+    identity, identity_path, identity_passport, identity_measure, installed, identity_problem = \
+        delivery_identity(command, passport_arg)
     report["identity"] = {
         "source": identity_path,
         "passport": identity_passport,
         "measurement": identity_measure,
+        "layout": ({"tag": installed["tag"], "version_dir": installed["version_dir"],
+                    "evidence_dir": installed["evidence_dir"],
+                    "resolved_from": installed["source"]} if installed else None),
         "note": ("паспорт ЭТОЙ поставки не издан — опознание взято измерением поставки. Это законное "
                  "состояние: наряд §0.4 запрещает издавать паспорт до повторной клиентской приёмки"
                  if identity is not None and identity_passport is None else None),
@@ -371,10 +434,15 @@ def main():
         report["identity_problem"] = identity_problem
         return finish(report, out)
     if out_arg is None:
-        out = os.path.join(os.path.dirname(identity_path), "client-entry-check.json")
+        out = (os.path.join(installed["evidence_dir"], "installed", "client-entry-check.json")
+               if installed else os.path.join(os.path.dirname(identity_path),
+                                              "client-entry-check.json"))
     print(f"  опознание поставки: {identity_path}"
           + (f" (паспорт ЭТОЙ поставки: {identity_passport})" if identity_passport
              else " (паспорт ЭТОЙ поставки не издан — опознание измерением)"))
+    if installed:
+        print(f"  установка: {installed['version_dir']} (тег {installed['tag']}, "
+              f"источник {installed['source']})")
 
     recorded = identity.get("host_sha256")
     actual = vd.sha256_of(command)

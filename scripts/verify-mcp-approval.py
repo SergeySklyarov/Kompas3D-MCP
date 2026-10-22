@@ -22,19 +22,18 @@ A04 отвечает на вопрос «запустит ли клиент эт
 Подтверждение выдаёт только интерфейс клиента (`approveMcpServer` / `toggleMcpServer`). Записывать
 его скриптом запрещено: это и есть обход подтверждения доверия. Скрипт только читает.
 
-КУДА ПИШЕТСЯ ОТЧЁТ (дефект прибора №25, исправлен 21.09.2026). Прежде умолчание `--out` было
-ЖЁСТКО прописано в каталог поставки 18.09.2026 (`scratch/mcp-smoke/delivery-20260918/`), то есть
-доказательство клиентской записи ложилось не туда, где его ищут паспорт и приёмка, — и прогон без
-`--out` на текущей поставке создавал отчёт в каталоге ЧУЖОГО, давно пройденного прогона. Умолчание
-теперь ВЫЧИСЛЯЕТСЯ из источника аудита (`docs/API_COMPLIANCE.json` →
-`claimed_actions_check.source`, то есть каталог отчётов ТЕКУЩЕГО прогона), а `--out` по-прежнему
-переопределяет его. Если источник аудита не разрешается, прибор ОТКАЗЫВАЕТ и называет причину, а не
-падает обратно в прежний каталог: молчаливый откат к 18.09 был бы тем же дефектом, только тише.
+КУДА ПИШЕТСЯ ОТЧЁТ (долг 61, исправлен 22.10.2026). Умолчание `--out` - каталог доказательств
+поставки, на которую указывает запись клиента: `<каталог доказательств поставки>/installed/`.
+Каталог поставки разрешается общим правилом (`localconfig.client_delivery`), тем же, что у
+`verify-client-entry.py`, - включая запись через `<InstallRoot>/current`. Поставку определить
+нельзя - прибор ОТКАЗЫВАЕТ и просит задать `--out`; в каталог «источника аудита» (последнего
+отчёта `--all`) он больше не пишет: 22.10.2026 отчёт лёг в каталог чужого наряда, и его переносили
+руками.
 
 Usage:
-  python scripts/verify-mcp-approval.py [--config <mcp.json>] [--name kompas]
+  PY -I scripts/verify-mcp-approval.py [--config <mcp.json>] [--name kompas]
       [--approvals <mcp-approvals.json>]
-      [--out <путь>]            # умолчание — каталог источника аудита
+      [--out <путь>]            # умолчание - <каталог доказательств поставки>/installed/
       [--self-test]
 """
 
@@ -44,13 +43,17 @@ import os
 import sys
 from datetime import datetime, timezone
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# INVARIANT: the instrument runs as `PY -I scripts/<name>.py`; `-I` keeps the script directory off
+# `sys.path`, so the shared module is reachable only by adding that directory here.
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from localconfig import client_delivery  # noqa: E402
+
 for stream in (sys.stdout, sys.stderr):
     try:
         stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 REQUIRED_ACTION = (
     "Подтверждение выдаётся только интерфейсом клиента, и только в самом приложении WorkBuddy AI "
@@ -94,117 +97,81 @@ def config_hash(entry):
     return hashlib.sha256(material.encode("utf-8")).hexdigest(), material
 
 
-# ─────────────────────── УМОЛЧАНИЕ `--out`: КАТАЛОГ ТЕКУЩЕГО ПРОГОНА ───────────────────────
+# ─────────────────────── DEFAULT `--out`: THE DELIVERY'S EVIDENCE DIRECTORY ───────────────────────
 #
-# Дефект прибора №25 (назван в `SMALL_RECORD_FIXES_REPORT_20260921.md` §5, исправлен 21.09.2026).
-# Прежняя строка умолчания знала ровно один каталог — `delivery-20260918`, — и после каждой новой
-# поставки он оставался прежним. Доказательство «клиент подтвердил запись» при этом создавалось, и
-# прибор возвращал rc=0; ошибочным было только МЕСТО. Поэтому лечится не заменой строки на другую
-# строку (следующая поставка повторила бы дефект в третий раз), а ВЫЧИСЛЕНИЕМ: умолчание берётся из
-# того же источника, из которого его берёт аудит, — `claimed_actions_check.source`.
-AUDIT_JSON = os.environ.get("KOMPAS_AUDIT_JSON", os.path.join(ROOT, "docs", "API_COMPLIANCE.json"))
+# MEASURED: the default used to follow the audit source, i.e. the last `--all` run, so the report
+# landed in a foreign run directory and was moved by hand. The directory now comes from the delivery
+# the entry points at, through the SAME function `verify-client-entry.py` calls - one implementation
+# for both instruments, otherwise the passport and the approval report name different deliveries.
+# History: docs/decisions/tests.md#approval-report-path
 
 
-def audit_reports_dir(audit_path=None):
-    """Каталог отчётов ТЕКУЩЕГО прогона по источнику аудита. → (каталог|None, источник, ошибка|None).
+def default_out(command, root=ROOT):
+    """Путь отчёта по умолчанию: `<каталог доказательств поставки>/installed/`. → (путь, источник, отказ).
 
-    Источник в `docs/API_COMPLIANCE.json` записан маской файлов текущего прогона
-    (`scratch/mcp-smoke/<прогон>/*.json`). Каталог — часть источника ДО маски, и маска обязана стоять
-    в ИМЕНИ ФАЙЛА, а не в каталоге: маска в каталоге (`scratch/mcp-smoke/*/full.json`) называет
-    МНОГО прогонов, и выбрать из них один — догадка. Такой источник прибор ОТКЛОНЯЕТ и называет
-    причину; пустой «каталога нет» здесь означал бы «пиши куда хочешь», а это и есть дефект №25.
+    INVARIANT: the directory is the delivery the client entry points at, never the run that happens
+    to be the audit source. LIMIT: an unresolvable delivery is a refusal asking for `--out`, not a
+    silent fallback - a fallback would be the same defect, only quieter.
+    History: docs/decisions/tests.md#approval-report-path
     """
-    path = os.path.abspath(audit_path or AUDIT_JSON)
-    try:
-        with open(path, encoding="utf-8-sig") as fh:
-            doc = json.load(fh)
-    except Exception as exc:  # noqa: BLE001 — отказ обязан быть назван, а не уронить прибор
-        return None, None, "источник аудита не прочитан (%s: %s)" % (type(exc).__name__, exc)
-    if not isinstance(doc, dict):
-        return None, None, "источник аудита не словарь: %s" % path
-    src = ((doc.get("claimed_actions_check") or {}).get("source") or "").strip()
-    if not src:
-        return None, None, "в %s нет поля claimed_actions_check.source" % path
-    rel = src.replace("\\", "/")
-    head, sep, tail = rel.rpartition("/")
-    if not sep:
-        return None, src, "источник не называет каталога: %s" % src
-    if "*" in head or "?" in head:
-        return None, src, "маска стоит в КАТАЛОГЕ источника — прогон неоднозначен: %s" % src
-    resolved = os.path.normpath(os.path.join(ROOT, head))
-    if not os.path.isdir(resolved):
-        return None, src, "каталог источника аудита не существует: %s" % resolved
-    return resolved, src, None
-
-
-def default_out():
-    """Путь отчёта по умолчанию. → (путь|None, источник|None, ошибка|None)."""
-    directory, src, err = audit_reports_dir()
-    if directory is None:
-        return None, src, err
-    return os.path.join(directory, "mcp-approval-check.json"), src, None
+    info, problem = client_delivery(command, root)
+    if info is None:
+        return None, None, problem
+    return (os.path.join(info["evidence_dir"], "installed", "mcp-approval-check.json"),
+            "поставка записи клиента: " + info["evidence_dir"], None)
 
 
 def self_test():
-    """Instrument battery: both halves of each of the two default-`--out` properties.
+    """Instrument battery: both halves of the default-`--out` rule, on trees built HERE.
 
-    THE DATA IS BUILT HERE, in a temporary directory inside the repository root. It used to read
-    another run's artefacts and reported a RED battery once those were gone - i.e. it measured the
-    survival of a directory, not the default. The directory must sit under the root because the audit
-    source is a root-relative path. Property one: the default FOLLOWS the source (resolves into an
-    existing directory, refuses a missing one). Property two: the legacy `delivery-20260918` NEVER
-    comes back - the negative control of defect #25, which must fire on every input.
-    History: docs/decisions/tests.md#evidence-rebuild
+    Arm one: an entry through `<InstallRoot>/current` resolves to the delivery's evidence directory,
+    and the report lands in its `installed/` subdirectory. Arm two: a delivery that cannot be
+    resolved is a NAMED refusal, not a path - the negative control of debt 61, which must fire on
+    every input. The tree sits in a temporary directory because a control reading the real
+    installation would measure that machine, not the rule.
+    History: docs/decisions/tests.md#approval-report-path
     """
-    import shutil
+    import json as _json
     import tempfile
 
     checks, results = [], []
-    with tempfile.TemporaryDirectory(prefix="_mcp-approval-selftest-", dir=ROOT) as scratch:
-        # Живой прогон строится здесь же: один файл — ровно то, что нужно источнику с маской в
-        # ИМЕНИ файла. Пустое содержимое допустимо: проверяется разрешение каталога, а не отчёт.
-        live_dir = os.path.join(scratch, "live-run")
-        os.makedirs(live_dir)
-        with open(os.path.join(live_dir, "full.json"), "w", encoding="utf-8") as fh:
-            fh.write("{}")
-        live_rel = os.path.relpath(live_dir, ROOT).replace("\\", "/")
+    with tempfile.TemporaryDirectory(prefix="_mcp-approval-selftest-") as scratch:
+        install = os.path.join(scratch, "install")
+        repo = os.path.join(scratch, "repo")
+        os.makedirs(os.path.join(install, "current"))
+        os.makedirs(os.path.join(install, "versions", "v9.9.9"))
+        passport_dir = os.path.join(repo, "docs", "acceptance", "delivery-v9.9.9-selftest")
+        evidence_dir = os.path.join(repo, "docs", "acceptance", "evidence",
+                                    "delivery-v9.9.9-selftest")
+        os.makedirs(passport_dir)
+        os.makedirs(evidence_dir)
+        with open(os.path.join(install, "installed.json"), "w", encoding="utf-8") as fh:
+            _json.dump({"tag": "v9.9.9"}, fh)
+        with open(os.path.join(passport_dir, "delivery-passport.json"), "w", encoding="utf-8") as fh:
+            _json.dump({"package": {"host_dll_sha256": "b"}}, fh)
+        command = os.path.join(install, "current", "KompasMcp.Host.exe")
 
-        def probe(label, source, expect_dir, expect_error):
-            path = os.path.join(scratch, "audit-%s.json" % label)
-            doc = {"claimed_actions_check": {"source": source}} if source is not None else {"meta": {}}
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(doc, fh, ensure_ascii=False)
-            directory, _src, err = audit_reports_dir(path)
-            got_dir = os.path.normpath(directory) if directory else None
-            ok = ((got_dir == os.path.normpath(expect_dir)) if expect_dir
-                  else (got_dir is None and bool(err) == expect_error))
-            checks.append(ok)
-            results.append((label, source, got_dir, err))
-            return ok
+        out, source, problem = default_out(command, repo)
+        expected = os.path.join(evidence_dir, "installed", "mcp-approval-check.json")
+        checks.append(out is not None and os.path.normcase(out) == os.path.normcase(expected))
+        results.append(("follows_delivery", command, out or problem))
 
-        # (1) следует за источником: каталог существует
-        probe("follows", live_rel + "/*.json", live_dir, None)
-        # (2) обязан отказать: каталога нет — подстановка запрещена
-        probe("refuses_absent", live_rel + "-absent/*.json", None, True)
-        # (3) обязан отказать: поля нет вовсе (прежняя редакция здесь молча шла в 18.09)
-        probe("refuses_missing_field", None, None, True)
-        # (4) обязан отказать: маска стоит в КАТАЛОГЕ — прогон неоднозначен, выбирать нельзя
-        probe("refuses_glob_dir", live_rel + "/*/full.json", None, True)
-        # (5) источник без маски, но с названным каталогом — каталог однозначен и принимается
-        probe("plain_file", live_rel + "/full.json", live_dir, None)
+        # (2) отказ: тег установки не найден - пути нет, причина названа
+        os.remove(os.path.join(install, "installed.json"))
+        out, source, problem = default_out(command, repo)
+        checks.append(out is None and bool(problem) and "тег установки не найден" in problem)
+        results.append(("refuses_unknown", command, out or problem))
 
-        # (6) ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ ДЕФЕКТА №25: прежний каталог не возвращается ни на одном входе.
-        legacy = "delivery-20260918"
-        leaked = [r for r in results if r[2] and legacy in r[2]]
+        # (3) ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ ДОЛГА 61: каталог прогона аудита не возвращается ни на одном входе.
+        legacy = os.path.join("scratch", "mcp-smoke")
+        leaked = [r for r in results if r[2] and legacy in str(r[2])]
         checks.append(not leaked)
 
         print("=== батарея прибора (самопроверка) ===")
-        for label, source, got_dir, err in results:
-            print("  %-18s источник %-46s → %s"
-                  % (label, str(source)[:46],
-                     os.path.relpath(got_dir, ROOT) if got_dir else "ОТКАЗ: " + str(err)))
-        print("  %-18s прежний каталог `%s` не возвращается: %s"
-              % ("№25-контроль", legacy, "ДА" if not leaked else "НЕТ — ДЕФЕКТ НЕ ВЫЛЕЧЕН"))
+        for label, subject, got in results:
+            print("  %-18s %-46s → %s" % (label, os.path.basename(subject), got))
+        print("  %-18s каталог прогона аудита `%s` не возвращается: %s"
+              % ("долг-61-контроль", legacy, "ДА" if not leaked else "НЕТ — ДЕФЕКТ НЕ ВЫЛЕЧЕН"))
         ok = all(checks)
         print("  проверок пройдено: %d из %d" % (sum(1 for c in checks if c), len(checks)))
         print("  батарея: %s" % ("ЗЕЛЁНАЯ" if ok else "КРАСНАЯ"))
@@ -218,16 +185,30 @@ def main():
     name = argument("--name") or "kompas"
     approvals_path = os.path.abspath(argument("--approvals") or os.path.join(os.path.dirname(config_path), "mcp-approvals.json"))
     out_arg = argument("--out")
+
+    # INVARIANT: the entry is read BEFORE the report path is chosen - the default path is the
+    # delivery the entry points at, so without the entry there is no path. LIMIT: no report is
+    # written then; a directory taken by guesswork is exactly what the defect below was.
+    entry = None
+    config_error = None
+    try:
+        with open(config_path, encoding="utf-8-sig") as fh:
+            config = json.load(fh)
+        entry = (config.get("mcpServers") or {}).get(name)
+    except Exception as exc:  # noqa: BLE001 — причина отказа обязана быть названа
+        config_error = "%s: %s" % (type(exc).__name__, exc)
+
     if out_arg:
         out = os.path.abspath(out_arg)
         out_from = "переопределение --out"
     else:
-        out, src, err = default_out()
+        command = (entry or {}).get("command") or ""
+        out, out_from, problem = default_out(command) if command else (
+            None, None, "в записи клиента нет команды - поставку определить нельзя")
         if out is None:
-            print("ОТКАЗ: умолчание --out не разрешено — %s" % err)
-            print("Задайте --out явно или переиздайте аудит (`docs/API_COMPLIANCE.json`).")
+            print("ОТКАЗ: путь отчёта по умолчанию не разрешён — %s" % problem)
+            print("Задайте --out явно: прибор не пишет отчёт в каталог постороннего прогона.")
             return 2
-        out_from = "источник аудита: %s" % src
 
     report = {
         "run_id": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
@@ -250,17 +231,9 @@ def main():
         if detail:
             print("         %s" % detail)
 
-    entry = None
     digest = None
-    try:
-        with open(config_path, encoding="utf-8-sig") as fh:
-            config = json.load(fh)
-        entry = (config.get("mcpServers") or {}).get(name)
-        row("A01", "запись '%s' найдена в конфигурации клиента" % name,
-            entry is not None, config_path)
-    except Exception as exc:  # noqa: BLE001 — отчёт обязан появиться даже при сбое чтения
-        row("A01", "запись '%s' найдена в конфигурации клиента" % name, False,
-            "%s: %s" % (type(exc).__name__, exc))
+    row("A01", "запись '%s' найдена в конфигурации клиента" % name, entry is not None,
+        config_error or config_path)
 
     if entry is not None:
         digest, material = config_hash(entry)

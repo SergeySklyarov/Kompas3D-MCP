@@ -1356,7 +1356,7 @@ public sealed partial class Api5Session
             // Emitted ONLY when the analytic figure exists: a check with passed=false here said "the basis
             // is wrong" where the truth was "there is no basis to state". The basis names where the figure
             // comes from; in the equality case that figure IS the exact expectation.
-            checks.Add(new NamedCheck("expected_basis", true, Observed: boundBasis));
+            checks.Add(new NamedCheck("expected_basis", boundBasis is not null, Observed: boundBasis));
         }
 
         // Reported always, gated only for a boss. A cut may divide one body into two (a through slot
@@ -1388,13 +1388,16 @@ public sealed partial class Api5Session
         {
             case VolumeBoundVerdict.Confirmed:
                 geometryConfirmed = true;
-                checks.Add(new NamedCheck("volume_delta", true,
+                // `passed` is the rule's verdict — the comparison of the measured delta with the bound.
+                checks.Add(new NamedCheck("volume_delta",
+                    bound.Verdict == VolumeBoundVerdict.Confirmed,
                     Observed: Mm3(bound.MeasuredMm3), Expected: Mm3(bound.BoundMm3)));
                 break;
 
             case VolumeBoundVerdict.WithinBound:
                 // The bound check is the only claim the measurement supports; the exact figure is unknown.
-                checks.Add(new NamedCheck("volume_upper_bound", true,
+                checks.Add(new NamedCheck("volume_upper_bound",
+                    bound.Verdict == VolumeBoundVerdict.WithinBound,
                     Observed: Mm3(bound.MeasuredMm3), Expected: "≤ " + Mm3(bound.BoundMm3)));
                 expectedNotComputed = bound.Reason;
                 break;

@@ -276,19 +276,54 @@ public sealed partial class Api5Session
                 });
         }
 
+        // THE BASE OBJECTS ARE COMPARED WITH THE REQUESTED ONES by the route the product already uses for
+        // object identity: `GetBaseObj(1|2)` → `IModelObject.Part`, matched by RCW identity.
+        // LIMIT: the FACE inside a component is not readable back through this route, so the comparison
+        // proves the two requested COMPONENTS, one per base object — not the face index within it.
+        // History: docs/decisions/mates.md#read-back-objects
+        var mate5 = MateAt(document, created.Ordinal ?? 0);
+        var firstSide = 0;
+        var secondSide = 0;
+        var objectsMatch = mate5 is not null
+            && MateTouchesComponent(document, mate5, first.Component7, out firstSide)
+            && MateTouchesComponent(document, mate5, second.Component7, out secondSide)
+            && firstSide != secondSide;
+
         var stored = References.Register(
             MateRefKind, document.Id, document.Revision,
-            new MatePayload(MateAt(document, created.Ordinal ?? 0)!, created.Ordinal ?? 0, (short)type));
+            new MatePayload(mate5!, created.Ordinal ?? 0, (short)type));
 
         var checks = new List<NamedCheck>
         {
             new("mate_created", after > before, Observed: $"{before} → {after}",
                 Expected: $"{before + 1}"),
-            new("mate_valid", true, Observed: "Valid=true"),
-            new("mate_read_back", true,
-                Observed: $"тип «{created.ConstraintType}», объектов два: " +
-                          $"{created.BaseObject1 is not null} / {created.BaseObject2 is not null}"),
+            new("mate_valid", valid == true, Observed: $"Valid={valid}"),
+            new("mate_read_back", objectsMatch,
+                Observed: $"тип «{created.ConstraintType}», компоненты запрошенных граней найдены в базовых "
+                          + $"объектах {firstSide} и {secondSide}",
+                Expected: "по одному запрошенному компоненту на каждый базовый объект (1 и 2)"),
         };
+
+        if (!objectsMatch)
+        {
+            // The mate exists in the model, so the refusal carries the partial effect and the revision
+            // already bumped above — the same outcome the ratio check below has for a failed read-back.
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Сопряжение создано, но прочитанные обратно базовые объекты — НЕ запрошенные: компоненты "
+                + $"найдены в базовых объектах {firstSide} и {secondSide}, а запрошены два разных "
+                + $"(«{command.FirstComponentRef}» и «{command.SecondComponentRef}»). Сверены "
+                + "компоненты-владельцы; грань внутри компонента этим маршрутом не читается. Успехом это "
+                + "не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["first_base_object"] = firstSide,
+                    ["second_base_object"] = secondSide,
+                    ["mate_read_back_scope"] = "component_owner_only",
+                });
+        }
 
         // AN EXPLICIT VALUE IS CONFIRMED BY THE MEASURED ORIENTATION, where the type allows it. The
         // read-back number is NOT a check: it is a fact returned in the answer, and a check expecting

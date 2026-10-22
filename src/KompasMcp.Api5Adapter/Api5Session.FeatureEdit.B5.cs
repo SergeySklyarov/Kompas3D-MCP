@@ -811,7 +811,9 @@ public partial class Api5Session
 
         if (sectionsBefore is not null && sectionsBefore != sectionsAfter)
         {
-            checks.Add(new NamedCheck("section_count_changed", true,
+            // `passed` is the comparison of the two counts READ BACK, not a literal.
+            checks.Add(new NamedCheck("section_count_changed",
+                sectionsBefore is not null && sectionsBefore != sectionsAfter,
                 Observed: sectionsBefore + " → " + (sectionsAfter?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано"),
                 Expected: "набор сечений заменён целиком"));
         }

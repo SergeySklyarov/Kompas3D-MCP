@@ -2612,11 +2612,15 @@ public sealed partial class Api5Session
                     });
             }
 
+            // INVARIANT: a cut that removes no material is NOT a success, so a zero delta never passes.
+            // `passed` is the product's own noise floor applied to the delta READ BACK, not a literal.
+            var remainderDelta = changes.DeltaOf(changed[0]);
+            var remainderBefore = bodiesBefore.FirstOrDefault(b => b.Index == changed[0])?.Volume;
             checks.Add(new NamedCheck(
                 "target_body_affected",
-                true,
-                Observed: "тел" + changed[0] + ": ΔV=" + Num(changes.DeltaOf(changed[0])),
-                Expected: "изменение объёма тела-остатка"));
+                VolumeMoved(remainderDelta, remainderBefore),
+                Observed: "тел" + changed[0] + ": ΔV=" + Num(remainderDelta),
+                Expected: "изменение объёма тела-остатка больше шума измерения"));
             checks.Add(new NamedCheck(
                 "nontarget_bodies_unchanged", vanished.Count == 0 && createdBodies.Count == 0,
                 Observed: "исчезло " + Num(vanished.Count) + ", появилось " + Num(createdBodies.Count),
@@ -2907,11 +2911,14 @@ public sealed partial class Api5Session
 
             if (resultBody is not null)
             {
+                // INVARIANT: the result body carries material — a volume at or below the reading's noise
+                // floor is not a result, so `passed` is that comparison and not a literal.
                 checks.Add(new NamedCheck(
                     "result_body_volume",
-                    true,
+                    resultBody.VolumeMm3 is double resultVolume
+                        && resultVolume > BodyChangePolicy.VolumeNoiseMm3,
                     Observed: Num(resultBody.VolumeMm3) + " (объём тела-результата)",
-                    Expected: "наблюдение, а не ожидание: объём результата отделён от объёма документа"));
+                    Expected: "объём результата выше шума измерения: тело-результат несёт материал"));
             }
         }
 

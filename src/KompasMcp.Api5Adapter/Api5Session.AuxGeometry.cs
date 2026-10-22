@@ -414,8 +414,17 @@ public sealed partial class Api5Session
 
         if (placement is { Verdict: FacePlacementMatch.Verdict.Confirmed })
         {
-            checks.Add(new NamedCheck("base_line_read_back", true,
-                Observed: readLine ?? "не задавалась", Expected: requestedLine ?? "не задавалась"));
+            // INVARIANT: `passed` is the comparison of the line READ BACK with the requested one, not a
+            // literal. Emitted only when a line was requested: with none, there is nothing to compare and
+            // the fact lives in the pure rule's detail. A plane tilted about another line never reaches
+            // this branch (the rule refuses it above), so the comparison can only fail on a fresh reading.
+            if (!string.IsNullOrEmpty(requestedLine))
+            {
+                checks.Add(new NamedCheck("base_line_read_back",
+                    string.Equals(readLine, requestedLine, StringComparison.Ordinal),
+                    Observed: readLine ?? "не прочитана", Expected: requestedLine));
+            }
+
             checks.Add(new NamedCheck("angle_read_back",
                 readAngle is not null && requestedAngle is not null
                     && Math.Abs(readAngle.Value - requestedAngle.Value)

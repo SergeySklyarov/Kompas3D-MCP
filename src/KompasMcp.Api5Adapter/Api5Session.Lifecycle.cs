@@ -208,7 +208,7 @@ public partial class Api5Session
                     modelBeforeRecheck);
                 checks.Add(new NamedCheck(
                     "pre_suppression_state_recorded",
-                    true,
+                    modelBefore.IsReadable && modelAfter.IsReadable,
                     Observed: $"объём {Num(modelBefore.VolumeMm3)}, тел {modelBefore.BodyCount}, "
                               + $"граней {modelBefore.FaceCount}; после подавления объём "
                               + $"{Num(modelAfter.VolumeMm3)}, тел {modelAfter.BodyCount}, "
@@ -235,7 +235,7 @@ public partial class Api5Session
         {
             checks.Add(new NamedCheck(
                 "restored_to_pre_suppression_state",
-                true,
+                comparison?.Verdict == RestoreVerdict.Matched,
                 Observed: $"объём {Num(modelAfter.VolumeMm3)}, тел {modelAfter.BodyCount}, "
                           + $"граней {modelAfter.FaceCount}",
                 Expected: $"объём {Num(document.Suppression!.Before.VolumeMm3)}, "

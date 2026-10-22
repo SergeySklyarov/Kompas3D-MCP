@@ -435,7 +435,10 @@ public partial class Api5Session
                     });
             }
 
-            checks.Add(new NamedCheck("requested_face_removed", true,
+            // `passed` repeats the pure rule's own verdict — the comparison of the faces read after the
+            // shell with the requested face's area — instead of a literal.
+            checks.Add(new NamedCheck("requested_face_removed",
+                result.Verdict == FacePlacementMatch.Verdict.Confirmed,
                 Observed: result.Detail, Expected: "в плоскости запрошенной грани граней нет"));
         }
     }
@@ -480,7 +483,9 @@ public partial class Api5Session
         var confirmed = results.Where(r => r.Result.Verdict == FacePlacementMatch.Verdict.Confirmed).ToList();
         if (confirmed.Count > 0)
         {
-            checks.Add(new NamedCheck("axis_on_requested_face", true,
+            // `passed` is the rule's verdict on the cylinder being reported, not a literal.
+            checks.Add(new NamedCheck("axis_on_requested_face",
+                confirmed[0].Result.Verdict == FacePlacementMatch.Verdict.Confirmed,
                 Observed: confirmed[0].Result.Detail,
                 Expected: "ось отверстия перпендикулярна запрошенной грани и пересекает её"));
             return;

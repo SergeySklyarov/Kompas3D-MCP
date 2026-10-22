@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Research probe for the sheet-metal block, run by hand and never by the solution build.
+    INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ — a probe that
+    rode the shipping graph could not be used to argue about what the product does.
+    DOC: SHEET_METAL_RESEARCH_DEVELOPER_PROMPT.md §1.4; reference/kompas-sdk-v24/docs-wire-20261022-sheetmetal/
+    History: docs/decisions/sheet-metal.md#probe
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SheetMetalProbe</RootNamespace>
+    <AssemblyName>SheetMetalProbe</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Vendor interop is referenced, never copied (build/KompasInterop.props convention). -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KompasAPI7">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- The interop is Private=false, so the runtime loads it from the installation: the path is
+       baked in here instead of being re-derived from a working directory at run time. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasInteropDir" Value="$(KompasInteropDir)" />
+  </ItemGroup>
+
+  <Target Name="ThrowWhenInteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.KompasAPI7.dll')"
+           Text="Не найден Interop.KompasAPI7.dll в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=... — прибор, который молча не находит interop, измеряет не то." />
+  </Target>
+
+</Project>

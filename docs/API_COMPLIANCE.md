@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-21T20:46:40+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-22T21:08:23+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 150, маршрутов 683.
-- Измеряемая сборка: `release_build`, коммит `25e65b4`, дерево чистое; `KompasMcp.Host.dll` sha256 `e9f1028649085b7ed8a29e97709f8eaacd1444aca65a6d977f20329118ecce66`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 151, маршрутов 684.
+- Измеряемая сборка: `release_build`, коммит `8b478ed`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `c0eaff863a4791e7ce6aa3b5d76236144b035b256823550bb88b608fcd6cb7ca`.
 
 ## 2. Сверка полноты
 
@@ -21,9 +21,9 @@
 | schemas_matching_wire_by_shape | 11 |
 | matrix_rows | 199 |
 | catalog_modes_and_variants | 220 |
-| com_routes | 693 |
-| com_routes_confirmed_by_documentation | 678 |
-| com_routes_confirmed_over_wire | 678 |
+| com_routes | 694 |
+| com_routes_confirmed_by_documentation | 679 |
+| com_routes_confirmed_over_wire | 679 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 5 |
 | com_routes_confirmed_by_name | 6 |
@@ -46,7 +46,7 @@
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 10, 'route_field': 4}.
-COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-twins': 10}.
+COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -1452,6 +1452,7 @@ COM-маршрутов по сборкам: {'api7': 425, 'api5': 258, 'adapter-
 | `IDynamicCrossSectionsManager.AddDynamicCrossSection` | api7 | method | `DynamicCrossSection AddDynamicCrossSection()` | 1 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSection.FillCutPlanes` | api7 | property | `prop Boolean FillCutPlanes` | 2 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSection.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `IAssemblyDocument.DismantleMode` | api7 | property | `prop Boolean DismantleMode` | 1 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSection.AddStep` | api7 | method | `DynamicCrossSectionStep AddStep(ksDynamicCrossSectionStepBuildingTypeE` | 1 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSectionStepParametersByOffsetPlane.OffsetPlane` | api7 | property | `prop Plane3DByOffset OffsetPlane` | 2 | Подтверждено | перечень интерфейса |
 | `IPlane3DByOffset.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 3 | Подтверждено | перечень интерфейса |

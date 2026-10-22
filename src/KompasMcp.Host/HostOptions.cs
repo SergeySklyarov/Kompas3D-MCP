@@ -5,6 +5,21 @@ using KompasMcp.Domain.Journaling;
 
 namespace KompasMcp.Host;
 
+/// <summary>Category of a configuration problem found by <see cref="HostOptions.Validate"/>.</summary>
+public enum HostConfigProblemKind
+{
+    /// <summary>A writable root cannot be canonicalized or lies inside a read-only root: a call could
+    /// write where the operator forbade it, so no call runs at all.</summary>
+    Error,
+
+    /// <summary>No writable root is configured, or the Host log cannot be opened: reads still work.</summary>
+    Warning,
+}
+
+/// <summary>One configuration problem: the category decides whether calls are refused, the message is what
+/// the operator and the client read.</summary>
+public sealed record HostConfigProblem(HostConfigProblemKind Kind, string Message);
+
 /// <summary>Host configuration. Loaded from a JSON file and environment overrides; nothing is downloaded
 /// and no default points at a user's model directory (spec 1.12).</summary>
 public sealed class HostOptions
@@ -156,15 +171,21 @@ public sealed class HostOptions
 
     private static bool? ReadBool(JsonObject node, string key) => node[key] is JsonValue value && value.TryGetValue<bool>(out var parsed) ? parsed : null;
 
-    /// <summary>Refuse to start when the configuration would allow writing into a directory the operator
-    /// declared read-only, or when no writable root exists at all.</summary>
-    public IReadOnlyList<string> Validate()
+    /// <summary>Problems of the loaded configuration, each with the category that decides whether calls
+    /// may still run.</summary>
+    /// <remarks>INVARIANT: an ERROR refuses every tool but <c>kompas_health</c> with
+    /// <c>CONFIG_INVALID</c>; a WARNING never blocks a call. The Host does not exit on either: exiting
+    /// would take away all tools without a reason the client can read.
+    /// History: docs/decisions/host.md#config-problems</remarks>
+    public IReadOnlyList<HostConfigProblem> Validate()
     {
-        var problems = new List<string>();
+        var problems = new List<HostConfigProblem>();
 
         if (WritableRoots.Count == 0 && ExportRoots.Count == 0)
         {
-            problems.Add("Не задан ни один корень для записи: экспорты и сохранение будут невозможны (paths.writable_roots).");
+            problems.Add(new HostConfigProblem(
+                HostConfigProblemKind.Warning,
+                "Не задан ни один корень для записи: экспорты и сохранение будут невозможны (paths.writable_roots)."));
         }
 
         foreach (var writable in WritableRoots.Concat(ExportRoots))
@@ -172,7 +193,7 @@ public sealed class HostOptions
             var full = TryFull(writable);
             if (full is null)
             {
-                problems.Add($"Корень записи не канонизируется: {writable}");
+                problems.Add(new HostConfigProblem(HostConfigProblemKind.Error, $"Корень записи не канонизируется: {writable}"));
                 continue;
             }
 
@@ -181,7 +202,9 @@ public sealed class HostOptions
                 var ro = TryFull(readOnly);
                 if (ro is not null && (KompasMcp.Domain.Paths.PathPolicy.IsWithin(full, ro) || string.Equals(full, ro, StringComparison.OrdinalIgnoreCase)))
                 {
-                    problems.Add($"Корень записи '{full}' лежит внутри только-для-чтения '{ro}': так рабочие модели не защищены.");
+                    problems.Add(new HostConfigProblem(
+                        HostConfigProblemKind.Error,
+                        $"Корень записи '{full}' лежит внутри только-для-чтения '{ro}': так рабочие модели не защищены."));
                 }
             }
         }

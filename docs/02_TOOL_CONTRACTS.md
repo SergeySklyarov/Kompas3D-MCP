@@ -55,7 +55,15 @@
 **`revision_after` у ОТКАЗА мутации (уточнено 09.10.2026, наряды `ENTITY_CREATE_FALSE` и `ENTITY_CREATE_FALSE_FOLLOWUP`).** Успешный вызов несёт ревизию в `result`; у отказа `result` нет вовсе, поэтому ревизия едет в `error.details.revision_after`, и конверт читает её оттуда (`EnvelopeRevisions.After`: сначала `result`, затем `error.details`). Правило: если отказ оставил изменения (`partial_effects = true` — признак остался в дереве), ответ несёт ФАКТИЧЕСКУЮ ревизию после операции; если откат прошёл, ответ несёт ревизию после отката (модель в памяти КОМПАСа не откатывается, поэтому это текущая ревизия документа). `null` остаётся только там, где ревизия не названа вовсе — отказ до COM или обрыв связи. Причина правила измерена: `kompas_extrude`, отказавший `NO_GEOMETRY_CHANGE`, отвечал `revision_after = null`, и следующий вызов клиента с прежней ревизией получал `REVISION_CONFLICT` («ожидалась 6, фактически 7»), хотя ответил не он. Проверяется строками `EC9.16`/`EC9.17`.
 
 Минимальный каталог ошибок: INVALID_ARGUMENT, CAPABILITY_UNAVAILABLE, KOMPAS_NOT_INSTALLED, COM_REGISTRATION_ERROR, BITNESS_MISMATCH, LICENSE_UNAVAILABLE, AMBIGUOUS_APPLICATION, APPLICATION_DISCONNECTED, WRONG_DOCUMENT_KIND, DOCUMENT_NOT_FOUND, DOCUMENT_DIRTY, REVISION_CONFLICT, STALE_REFERENCE, AMBIGUOUS_SELECTION, NO_BODY, GEOMETRY_FAILED, NO_GEOMETRY_CHANGE, INTERSECTION_UNKNOWN, COM_BUSY, WORKER_UNRESPONSIVE, OUTCOME_UNKNOWN, QUEUE_FULL, OPERATION_ID_CONFLICT, PATH_NOT_ALLOWED, FILE_EXISTS, SAVE_FAILED, EXTERNAL_REFERENCES, EXPORT_FAILED, IMPORT_FAILED, UNITS_UNVERIFIED, NOT_CONSTANT_THICKNESS, AMBIGUOUS_FLAT_PATTERN, VERIFICATION_FAILED, CANCEL_NOT_CONFIRMED, SESSION_OWNER_ACTIVE, JOURNAL_UNAVAILABLE,
-SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_STATE_UNKNOWN.
+SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_STATE_UNKNOWN,
+CONFIG_INVALID.
+
+`CONFIG_INVALID` добавлен 22.10.2026 нарядом `HOST_START_REFUSAL` (строка долга 55): конфигурация
+Хоста негодна - корень записи не канонизируется либо лежит внутри только-для-чтения (или совпадает с
+ним). Отказ приходит **до записи в журнал операций и до COM**, несёт перечень проблем в сообщении и в
+`details.problems`, а сам перечень всегда виден в `kompas_health` (поле `config_errors`). Отличается
+от `PATH_NOT_ALLOWED` тем, что говорит о ПРОЦЕССЕ, а не об одном пути одного вызова: лечится файлом
+конфигурации, а не другим путём.
 
 Четыре последних добавлены 04.10.2026 нарядом `MCP_SESSION_RELEASE_DEVELOPER_PROMPT.md` и описывают
 владение CAD-сеансом, а не отказ запуска:
@@ -107,7 +115,7 @@ SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_ST
 
 | Инструмент | Вход сверх общих полей | Результат и условия |
 |---|---|---|
-| `kompas_health` | detail: minimal/diagnostic | Host жив, Worker состояние, очередь; без обращения к COM при busy; поле `update` (см. ниже) |
+| `kompas_health` | detail: minimal/diagnostic | Host жив, Worker состояние, очередь; без обращения к COM при busy; поле `update` (см. ниже), поля `config_errors`/`config_warnings` (см. ниже) |
 | `kompas_capabilities` | optional application_id | Реально поддержанные инструменты, API и ограничения |
 | `kompas_connect` | mode attach/launch, optional application_selector, `make_visible` | application_id, PID, ownership, version; launch только явно |
 | `kompas_disconnect` | application_id, close_owned_application=false | По умолчанию отсоединение, не закрытие документов |
@@ -136,6 +144,16 @@ Host, поэтому есть и без рабочего процесса. `stat
 не чаще раза в сутки, и не задерживает `initialize`, `tools/list` и вызовы; `initialize.instructions`
 несёт одну строку «установлена X, доступна Y» только при `available`, из итога прошлой проверки.
 Выключатель - `update_check` (по умолчанию `true`) и `KOMPAS_MCP_UPDATE_CHECK` (`0`/`1`).
+
+**Поля `config_errors` и `config_warnings` в ответе `kompas_health`** (новые необязательные поля, наряд
+`HOST_START_REFUSAL`, 22.10.2026). Собираются в Host из `HostOptions.Validate()` и `HostLog`, поэтому
+есть и без рабочего процесса; обе присутствуют всегда, пустые списки - это ответ «проблем нет», а не
+отсутствие проверки. `config_errors` - негодная конфигурация: корень записи не канонизируется либо
+лежит внутри только-для-чтения (или совпадает с ним). При непустом `config_errors` **любой** вызов
+инструмента, кроме `kompas_health`, отвечает `CONFIG_INVALID` до записи в журнал операций и до COM.
+`config_warnings` - работа возможна: не задан ни один корень записи/экспорта (работа только на чтение
+законна) либо журнал Хоста не открывается; вызовы не блокируются. Процесс на старте не завершается ни
+при одной категории: выход отнял бы у клиента все инструменты без читаемой причины.
 
 **Видимость (`make_visible`).** Режим по умолчанию - невидимый: сервер не крадёт фокус (P0.4b).
 `make_visible=true` показывает экземпляр, и семантика зависит от его происхождения: `launch` -

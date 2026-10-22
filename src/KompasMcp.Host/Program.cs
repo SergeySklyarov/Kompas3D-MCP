@@ -85,9 +85,11 @@ public static class Program
             return 0;
         }
 
+        // stderr is for the operator; the client reads the same problems in kompas_health and in the
+        // CONFIG_INVALID refusal. Startup continues either way - see the Validate() remarks.
         foreach (var problem in options.Validate())
         {
-            StderrWriter.WriteLine("конфигурация: " + problem);
+            StderrWriter.WriteLine("конфигурация: " + problem.Message);
         }
 
         using var log = HostLog.Open(options.LogPath);

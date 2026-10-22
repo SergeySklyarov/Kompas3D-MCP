@@ -200,9 +200,6 @@ public sealed class PathPolicy
         return new PathDecision(PathAccess.ReadOnly, full, null, winner.Root);
     }
 
-    private bool IsWithinWritable(string full) =>
-        WritableRoots.Any(root => IsWithin(full, root) || PathsEqual(full, root));
-
     private static PathDecision Denied(string reason) =>
         new(PathAccess.Denied, null, reason, null);
 

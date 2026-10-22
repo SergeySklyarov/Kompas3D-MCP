@@ -128,6 +128,13 @@ public static class ErrorCodes
     /// other process, not to check the path. The check runs BEFORE KOMPAS is asked, because KOMPAS answers a
     /// locked file with a MODAL DIALOG ("the file is edited by user ...") and the COM call then never returns.</summary>
     public const string FileLocked = "FILE_LOCKED";
+
+    /// <summary>The Host configuration itself is unusable: a writable root cannot be canonicalized, or it lies
+    /// inside (or equals) a root the operator declared read-only. Every tool call but <c>kompas_health</c> is
+    /// refused with this code BEFORE the journal and BEFORE COM. A separate code, not
+    /// <see cref="PathNotAllowed"/>: that one is about ONE path of ONE call, this one is about the whole
+    /// process and its remedy is the configuration file, not another path.</summary>
+    public const string ConfigInvalid = "CONFIG_INVALID";
 }
 
 /// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
@@ -217,6 +224,10 @@ public static class ErrorMessages
         [ErrorCodes.DocumentStateUnknown] =
             "Состояние документов сеанса неизвестно: Worker терялся или перезапускался, правки могли " +
             "остаться несохранёнными. Освобождение требует acknowledge_unknown_document_state=true.",
+        [ErrorCodes.ConfigInvalid] =
+            "Конфигурация Хоста негодна: корень записи не канонизируется либо лежит внутри " +
+            "только-для-чтения. Вызов отклонён до журнала операций и до COM; перечень проблем - в " +
+            "details.problems и в kompas_health (поле config_errors).",
     };
 
     public static string For(string code) =>

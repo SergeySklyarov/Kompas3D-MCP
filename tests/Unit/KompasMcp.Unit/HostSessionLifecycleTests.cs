@@ -37,6 +37,20 @@ public class HostSessionLifecycleTests : IDisposable
         return new HostSession(_options, HostOwnership.Open(_options.JournalPath), log);
     }
 
+    private HostSession Session(HostOptions options)
+    {
+        var log = HostLog.Open(Path.Combine(_directory, "host-" + Guid.NewGuid().ToString("N")[..8] + ".jsonl"));
+        return new HostSession(options, HostOwnership.Open(options.JournalPath), log);
+    }
+
+    private HostOptions Options(params string[] writableRoots) => new()
+    {
+        JournalPath = Path.Combine(_directory, "operations-" + Guid.NewGuid().ToString("N")[..8] + ".jsonl"),
+        LogPath = Path.Combine(_directory, "host.jsonl"),
+        ReadOnlyRoots = new[] { Path.Combine(_directory, "models") },
+        WritableRoots = writableRoots,
+    };
+
     private int JournalLines()
     {
         if (!File.Exists(_options.JournalPath))
@@ -96,6 +110,82 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Equal("not_started", Body(envelope)["cad_channel"]!.GetValue<string>());
         Assert.False(File.Exists(HostOwnership.RecordPathFor(_options.JournalPath)),
             "диагностический health не занимает CAD-владение");
+    }
+
+    // Configuration problems: an error blocks every call but health, a warning blocks nothing.
+
+    /// <summary>INVARIANT: a configuration ERROR refuses every tool but <c>kompas_health</c> with
+    /// <c>CONFIG_INVALID</c>, names the problems in the message AND in <c>details.problems</c>, and takes
+    /// no ownership on the way — the refusal stands before the journal and before COM.</summary>
+    /// <remarks>History: docs/decisions/host.md#config-problems</remarks>
+    [Fact]
+    public async Task ConfigError_RefusesEveryToolButHealth_AndTakesNoOwnership()
+    {
+        // A writable root INSIDE the read-only one: the configuration declares the models unprotectable.
+        var options = Options(Path.Combine(_directory, "models", "out"));
+        await using var session = Session(options);
+        var arguments = new JsonObject { ["document_id"] = "0000000000000000000000000000000f" };
+
+        var refused = await session.InvokeAsync("kompas_rebuild", arguments, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Failed, refused.Status);
+        Assert.Equal(ErrorCodes.ConfigInvalid, refused.Error!.Code);
+        var problems = ((JsonArray)refused.Error.Details!["problems"]!)
+            .Select(node => node!.GetValue<string>()).ToArray();
+        Assert.Single(problems);
+        Assert.Contains("только-для-чтения", problems[0], StringComparison.Ordinal);
+        Assert.Contains(problems[0], refused.Error.Message, StringComparison.Ordinal);
+        Assert.False(session.OwnsSession, "отказ по конфигурации не имеет права занимать сеанс");
+
+        // Every other tool is refused the same way - the compact ones and the diagnostics included.
+        foreach (var tool in new[] { "kompas_capabilities", "kompas_find_operations", "kompas_session_status" })
+        {
+            var other = await session.InvokeAsync(tool, new JsonObject(), CancellationToken.None);
+            Assert.Equal(ErrorCodes.ConfigInvalid, other.Error?.Code);
+        }
+
+        var health = await session.InvokeAsync(HostSession.HealthTool, new JsonObject(), CancellationToken.None);
+        Assert.Equal(OperationStatus.Succeeded, health.Status);
+        Assert.Equal(problems,
+            ((JsonArray)Body(health)["config_errors"]!).Select(node => node!.GetValue<string>()));
+        Assert.Empty((JsonArray)Body(health)["config_warnings"]!);
+    }
+
+    /// <summary>INVARIANT: a WARNING (no writable root at all) blocks nothing — the call reaches the
+    /// ordinary routing and is refused by IT, and <c>kompas_health</c> names the warning.</summary>
+    [Fact]
+    public async Task ConfigWarning_DoesNotBlockCalls_AndHealthNamesIt()
+    {
+        await using var session = Session(Options());
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+        await session.InvokeAsync(HostSession.ReleaseTool, new JsonObject(), CancellationToken.None);
+
+        var call = await session.InvokeAsync("kompas_rebuild", new JsonObject
+        {
+            ["document_id"] = "0000000000000000000000000000000f",
+        }, CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.SessionNotAcquired, call.Error!.Code);
+
+        var health = await session.InvokeAsync(HostSession.HealthTool, new JsonObject(), CancellationToken.None);
+        Assert.Empty((JsonArray)Body(health)["config_errors"]!);
+        Assert.Single((JsonArray)Body(health)["config_warnings"]!);
+    }
+
+    /// <summary>INVARIANT: a usable configuration answers with two EMPTY lists — the fields are present, so
+    /// "no problems" is an answer and not a missing field.</summary>
+    [Fact]
+    public async Task ValidConfiguration_ReportsEmptyLists()
+    {
+        var options = Options(Path.Combine(_directory, "sandbox"));
+        await using var session = Session(options);
+
+        var health = await session.InvokeAsync(HostSession.HealthTool, new JsonObject(), CancellationToken.None);
+
+        Assert.Empty(options.Validate());
+        Assert.Equal(OperationStatus.Succeeded, health.Status);
+        Assert.Empty((JsonArray)Body(health)["config_errors"]!);
+        Assert.Empty((JsonArray)Body(health)["config_warnings"]!);
     }
 
     /// <summary>The capabilities answer tells the three statements apart: what is published, what

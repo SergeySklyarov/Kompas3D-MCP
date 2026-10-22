@@ -134,7 +134,9 @@ public static class ToolCatalog
         {
             ReadOnly("kompas_health", "Состояние сервера",
                 "Жив ли Host, в каком состоянии Worker и очередь. К COM не обращается и отвечает, даже когда CAD-канал занят. "
-                + "Поле update называет, есть ли выпуск новее установленного, может ли смена версии сломать контракт (may_break) и как обновиться.",
+                + "Поле update называет, есть ли выпуск новее установленного, может ли смена версии сломать контракт (may_break) и как обновиться. "
+                + "Поля config_errors и config_warnings называют проблемы конфигурации: при непустом config_errors любой "
+                + "вызов, кроме этого, отвечает CONFIG_INVALID до журнала и до COM; config_warnings вызовы не блокирует.",
                 Sch.Props(("detail", Sch.Enum("minimal — только состояния; diagnostic — добавает статистику COM-фильтра и окружение.", "minimal", "diagnostic"))),
                 WorkerCommands.Ping),
 

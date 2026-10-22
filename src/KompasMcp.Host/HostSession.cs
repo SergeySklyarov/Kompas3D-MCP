@@ -25,10 +25,11 @@ public sealed class HostSession : IAsyncDisposable
     public const string AcquireTool = "kompas_acquire_session";
     public const string ReleaseTool = "kompas_release_session";
     public const string CapabilitiesTool = "kompas_capabilities";
+    public const string HealthTool = "kompas_health";
 
     /// <summary>Diagnostics that take NO ownership: <c>health</c> and <c>capabilities</c> must answer
     /// even when another chat owns the session.</summary>
-    private static readonly string[] DiagnosticTools = { "kompas_health", CapabilitiesTool };
+    private static readonly string[] DiagnosticTools = { HealthTool, CapabilitiesTool };
 
     private static readonly TimeSpan InventoryTimeout = TimeSpan.FromSeconds(30);
 
@@ -41,6 +42,8 @@ public sealed class HostSession : IAsyncDisposable
     private readonly HostLog _log;
     private readonly HostOwnership _ownership;
     private readonly UpdateCheck? _update;
+    private readonly IReadOnlyList<string> _configErrors;
+    private readonly IReadOnlyList<string> _configWarnings;
     private readonly SemaphoreSlim _transition = new(1, 1);
     private readonly object _callGate = new();
 
@@ -67,6 +70,19 @@ public sealed class HostSession : IAsyncDisposable
         _ownership = ownership;
         _log = log;
         _update = update;
+
+        // Computed ONCE: the configuration cannot change while the process lives, and a health call must
+        // not re-canonicalize paths on every request.
+        var problems = options.Validate();
+        _configErrors = problems
+            .Where(problem => problem.Kind == HostConfigProblemKind.Error)
+            .Select(problem => problem.Message)
+            .ToArray();
+        _configWarnings = problems
+            .Where(problem => problem.Kind == HostConfigProblemKind.Warning)
+            .Select(problem => problem.Message)
+            .Concat(log.UnavailableReason is { } logProblem ? new[] { logProblem } : Array.Empty<string>())
+            .ToArray();
     }
 
     /// <summary>Whether the tool belongs to session control.</summary>
@@ -80,6 +96,29 @@ public sealed class HostSession : IAsyncDisposable
 
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
+        // INVARIANT: an ERROR of the configuration refuses EVERY tool but health, and it refuses before
+        // the compact branch, before ownership, before the journal and before COM: the roots a call would
+        // write into are the very thing the configuration declared unsafe. Health still answers - it is
+        // where the client reads WHY. History: docs/decisions/host.md#config-problems
+        if (_configErrors.Count > 0 && !string.Equals(toolName, HealthTool, StringComparison.Ordinal))
+        {
+            _log.Write("warn", "tool call refused: invalid configuration", new
+            {
+                tool = toolName,
+                code = ErrorCodes.ConfigInvalid,
+                problems = _configErrors,
+            });
+
+            return Refusal(
+                ErrorCodes.ConfigInvalid,
+                "Конфигурация Хоста негодна, поэтому вызов отклонён до журнала операций и до COM: "
+                + string.Join(" ", _configErrors),
+                RetryPolicy.Never,
+                new JsonObject { ["problems"] = Strings(_configErrors) },
+                remedy: "Исправьте writable_roots/export_roots в конфигурации и перезапустите Хост; "
+                    + "перечень проблем читается в kompas_health (поля config_errors и config_warnings).");
+        }
+
         // The catalog's three tools are not catalog entries: one branch answers them, and kompas_run
         // re-enters THIS method, so a call through it takes exactly the same path as a direct call —
         // one handler, one validation, one journal.
@@ -120,7 +159,7 @@ public sealed class HostSession : IAsyncDisposable
             // History: docs/decisions/host.md#capabilities-catalog
             return string.Equals(tool.Name, CapabilitiesTool, StringComparison.Ordinal)
                 ? WithCapabilitiesCatalog(answer, _options)
-                : WithUpdateNotice(answer);
+                : WithConfigProblems(WithUpdateNotice(answer));
         }
 
         if (!_ownership.IsOwner)
@@ -1528,6 +1567,27 @@ public sealed class HostSession : IAsyncDisposable
         node["update"] = _update.ToJson();
         return envelope with { Result = node };
     }
+
+    /// <summary>Adds the configuration problems to a <c>kompas_health</c> answer, whichever process produced
+    /// it — the same reason the update notice is added here.</summary>
+    /// <remarks>INVARIANT: both fields are ALWAYS present, empty arrays included: an absent field would read
+    /// as "not checked", and a client that asked about the configuration must see the answer.
+    /// History: docs/decisions/host.md#config-problems</remarks>
+    private ResultEnvelope<JsonNode?> WithConfigProblems(ResultEnvelope<JsonNode?> envelope)
+    {
+        if (envelope.Result is not JsonObject result)
+        {
+            return envelope;
+        }
+
+        var node = (JsonObject)result.DeepClone();
+        node["config_errors"] = Strings(_configErrors);
+        node["config_warnings"] = Strings(_configWarnings);
+        return envelope with { Result = node };
+    }
+
+    private static JsonArray Strings(IReadOnlyList<string> values) =>
+        new(values.Select(value => (JsonNode)JsonValue.Create(value)!).ToArray());
 
     private static ResultEnvelope<JsonNode?> Succeeded(
         JsonNode? result,

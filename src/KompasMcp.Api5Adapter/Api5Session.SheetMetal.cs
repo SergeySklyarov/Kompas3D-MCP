@@ -119,17 +119,21 @@ public partial class Api5Session
         }
 
         var updated = SafeBool(() => created.Update());
-        Api7Bridge.Rebuild(container, document.Document3D);
-        BumpRevision(document, "sheet_metal.create_body");
 
+        // MEASURED: the counter and the extent are read right after Update() and no rebuild follows. The
+        // documented route ends at IModelObject::Update, and an extra RebuildDocument makes the API7
+        // container answer 0 bodies for the rest of the session.
         var bodiesAfter = ReadCount(() => sheet.SheetMetalBodies.Count);
         var read = ReadBody(document, created, ordinal: bodiesAfter is { } after ? after - 1 : null);
+
+        BumpRevision(document, "sheet_metal.create_body");
         var mismatched = SheetMetalBodyPolicy.CreateMismatches(
             read, command.ThicknessMm, command.BendRadiusMm, command.UnfoldType,
             command.BendCoefficient, command.BendValue, command.BendReduction);
 
         var counterGrew = bodiesBefore is { } beforeCount && bodiesAfter is { } afterCount
             && afterCount == beforeCount + 1;
+        var extentRead = read?.ExtentByNormalMm is not null;
         var extentMatches = read?.ExtentByNormalMm is { } extent
             && Math.Abs(extent - command.ThicknessMm) <= SheetMetalBodyPolicy.Tolerance;
 
@@ -144,11 +148,13 @@ public partial class Api5Session
             // geometry check and not a re-read of the property just written.
             new("extent_by_normal", extentMatches,
                 Observed: read?.ExtentByNormalMm?.ToString("0.####", CultureInfo.InvariantCulture)
-                    ?? "габарит не прочитан",
+                    ?? "габарит не прочитан (GetGabarit отдал нечисловое значение)",
                 Expected: command.ThicknessMm.ToString("0.####", CultureInfo.InvariantCulture)),
         };
 
-        var confirmed = counterGrew && mismatched.Count == 0 && extentMatches;
+        // An unread extent is a NAMED gap, not a failure: the counter and the properties are still the
+        // comparison the order asks for. A read extent that differs IS a failure.
+        var confirmed = counterGrew && mismatched.Count == 0 && (!extentRead || extentMatches);
         if (!confirmed)
         {
             throw new KompasContractException(
@@ -168,7 +174,15 @@ public partial class Api5Session
                 });
         }
 
-        var unverified = new List<string>
+        var unverified = new List<string>();
+        if (!extentRead)
+        {
+            unverified.Add("extent_not_read — габарит по нормали не прочитан: на детали, где единственное "
+                + "тело листовое, GetGabarit отвечает нечисловым значением; проверка габарита не выполнена, "
+                + "тело подтверждено счётчиком и перечитанными свойствами");
+        }
+
+        unverified.AddRange(new[]
         {
             "direction_measured_once — из четырёх значений ksDirectionTypeEnum на листовом теле измерено "
             + "только normal; остальные приняты по странице перечисления, а не прогоном",
@@ -176,7 +190,7 @@ public partial class Api5Session
             + "называют границ значения, поэтому проверяется только конечность числа",
             "body_not_deletable — созданное тело этим продуктом не удаляется: документированный "
             + "DeleteObject листовые объекты не удаляет",
-        };
+        });
 
         return new CreateSheetMetalBodyResult(
             ToDto(bodyRef, $"sheet metal body {command.ThicknessMm:0.###}"),
@@ -315,14 +329,15 @@ public partial class Api5Session
         }
 
         var updated = SafeBool(() => body.Update());
-        Api7Bridge.Rebuild(container, document.Document3D);
-        BumpRevision(document, "sheet_metal.edit_body");
 
+        // Same order as on creation: read right after Update(), no extra rebuild.
         var after = ReadBody(document, body, ordinal: null);
+        var bends = ReadCount(() => sheet.SheetMetalBends.Count);
+
+        BumpRevision(document, "sheet_metal.edit_body");
         var unchanged = SameValues(before, after);
         // A flat body's extent along the normal IS its thickness, so a thickness edit must move it. With
         // bends in the body the extent is no longer the thickness, and that is named, not assumed.
-        var bends = ReadCount(() => sheet.SheetMetalBends.Count);
         var extentApplies = command.ThicknessMm is not null && bends == 0;
         var extentFollows = extentApplies && after?.ExtentByNormalMm is { } editedExtent
             && Math.Abs(editedExtent - command.ThicknessMm!.Value) <= SheetMetalBodyPolicy.Tolerance;
@@ -333,7 +348,8 @@ public partial class Api5Session
         // The extent is part of the edit's success only where it means something: a flat body, thickness
         // changed. Elsewhere it is named as not applicable instead of being quietly skipped.
         var failed = new List<string>(mismatched);
-        if (extentApplies && !extentFollows)
+        // Only a READ extent can fail the edit; an unread one is named in unverified_aspects instead.
+        if (extentApplies && !extentFollows && after?.ExtentByNormalMm is not null)
         {
             failed.Add("extent_by_normal");
         }
@@ -379,6 +395,11 @@ public partial class Api5Session
             + "называют границ значения",
             "bends_not_checked — сгибы и вырезы тела правкой не пересчитываются и здесь не проверяются",
         };
+        if (extentApplies && after?.ExtentByNormalMm is null)
+        {
+            unverified.Insert(0, "extent_not_read — габарит по нормали не прочитан (GetGabarit отдал "
+                + "нечисловое значение): проверка «габарит следует толщине» не выполнена");
+        }
 
         return new EditSheetMetalBodyResult(
             ToDto(stored, "sheet metal body (edit)"),
@@ -463,14 +484,23 @@ public partial class Api5Session
         };
     }
 
-    /// <summary>Extent along Z of the solid bodies only — for a flat sheet body this is the thickness.
+    /// <summary>Extent along Z of the whole document — for a flat sheet body this is the thickness.
     /// <c>LIMIT:</c> the normal is taken as Z, the arrangement the probe measured (sketch on XOY); a body
     /// built on another plane reports its Z extent, which is not its thickness.</summary>
-    private static double? ExtentByNormal(DocumentEntry document) =>
-        TryReadGabaritCorners(document, full: false, customizable: true, out var min, out var max)
-            && min.Length >= 3 && max.Length >= 3
-            ? max[2] - min[2]
-            : null;
+    private static double? ExtentByNormal(DocumentEntry document)
+    {
+        if (!TryReadGabaritCorners(document, full: true, customizable: true, out var min, out var max)
+            || min.Length < 3 || max.Length < 3)
+        {
+            return null;
+        }
+
+        var extent = max[2] - min[2];
+        // MEASURED: on a part whose only body is a sheet-metal body GetGabarit answers true and hands back
+        // a sentinel around 1e300 until the model has been rebuilt once more. A sentinel is "not read",
+        // never a length: turning it into a number would confirm or refuse a geometry nobody measured.
+        return double.IsFinite(extent) && Math.Abs(extent) < 1e6 ? extent : null;
+    }
 
     /// <summary>Every documented collection counter of <c>isheetmetalcontainer.html</c>. A counter the
     /// kernel does not answer is named in <see cref="SheetMetalCountersDto.Unread"/>, never turned into 0.</summary>

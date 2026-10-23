@@ -3,7 +3,7 @@
 **MCP-сервер для КОМПАС-3D v24: ИИ-агент строит и проверяет настоящие детали и сборки, а сервер
 отвечает тем, что измерил на модели, а не тем, что вызов «прошёл».**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
 ![KOMPAS-3D](https://img.shields.io/badge/%D0%9A%D0%9E%D0%9C%D0%9F%D0%90%D0%A1--3D-v24-0a5eb0)
 ![.NET](https://img.shields.io/badge/.NET-10-512bd4)
@@ -16,7 +16,8 @@
 > STEP and image export. Every mutating call reports a
 > measured verification level (volume, bodies, faces, re-read parameters, save/reopen), journals
 > operations for idempotent retries, rejects stale revisions, and is confined to configured disk
-> roots. No arbitrary code execution. 90 tools, MIT licensed. Documentation is in Russian.
+> roots. No arbitrary code execution. 90 tools, dual-licensed MIT / Apache-2.0. Documentation is
+> in Russian.
 
 ## Быстрая установка через ChatGPT Codex
 
@@ -306,5 +307,5 @@ JSON-конфигурацией:
 
 ## Лицензия
 
-[MIT](LICENSE). КОМПАС-3D является продуктом АСКОН и в репозиторий не входит; для работы нужна
-собственная лицензия.
+[MIT](LICENSE-MIT) или [Apache-2.0](LICENSE-APACHE) на выбор получателя ([LICENSE](LICENSE)).
+КОМПАС-3D является продуктом АСКОН и в репозиторий не входит; для работы нужна собственная лицензия.

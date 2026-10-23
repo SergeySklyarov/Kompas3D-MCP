@@ -431,6 +431,8 @@ FORBIDDEN = re.compile(r"(^|/)(Interop\.Kompas|Kompas6|KAPITypes|.*\.local\.json
 
 EXTRA_FILES = {
     "LICENSE.txt": "LICENSE",
+    "LICENSE-MIT.txt": "LICENSE-MIT",
+    "LICENSE-APACHE.txt": "LICENSE-APACHE",
     "THIRD-PARTY-NOTICES.txt": "docs/distribution/THIRD-PARTY-NOTICES.txt",
     "INSTALL.md": "docs/distribution/INSTALL.md",
     "Install-KompasMcp.ps1": "scripts/Install-KompasMcp.ps1",

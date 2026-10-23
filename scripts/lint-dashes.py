@@ -43,6 +43,8 @@ PUBLIC_TEXT = [
     "README.md",
     "KOMPAS3D_MCP.md",
     "LICENSE",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
     "AGENTS.md",
     "config/kompas-mcp.example.json",
     "scripts/Install-KompasMcp.ps1",

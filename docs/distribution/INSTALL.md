@@ -94,7 +94,8 @@ Restart extension; CLI подхватит сам в новой сессии). Р
 
 Host и Worker (framework-dependent, win-x64), собственные сборки и зависимости NuGet, `schemas\`
 (JSON-схемы всех инструментов), `config\kompas-mcp.example.json`, этот файл, `Install-KompasMcp.ps1`,
-`LICENSE.txt` (MIT) и `THIRD-PARTY-NOTICES.txt`.
+`LICENSE.txt` (MIT или Apache-2.0 на выбор), `LICENSE-MIT.txt`, `LICENSE-APACHE.txt` и
+`THIRD-PARTY-NOTICES.txt`.
 
 `SHA256SUMS.txt` проверяет целостность скачанного архива, а не личность издателя: цифровой подписи
 у выпуска нет.

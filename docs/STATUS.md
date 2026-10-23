@@ -36,8 +36,9 @@
   нарядом не заказан, вопрос техлиду. Решение - `docs/decisions/sheet-metal.md#body-tools`, отчёт
   `SHEET_METAL_BODY_REPORT_20261023.md`. **Проверки:** сборка Release - 0 предупреждений, тесты Release
   1483/1483, стражи `long-comment-blocks` / `lint-dashes` / `check-evidence-links` - 0 / 0 / 0,
-  `--self-test` 82/0; зачётный `--all` запущен через `full_run.py` на сдаваемом коммите, итог
-  записывается следующим запуском.
+  `--self-test` 82/0; зачётный `--all` на коммите `0438600` (Release, дерево чистое) -
+  **PASS 1842 / NAMED 6 / UNKNOWN 3, FAIL 0**, группа `sheet_metal` в нём PASS 14 / FAIL 0, каталог
+  `scratch/mcp-smoke/runs/20261023-021405-all-0438600`.
 
 - **Проба маршрутов листового профиля (наряд `SHEET_METAL_PROBE`, попытка 1, 23.10.2026, сдан):**
   прибор `scripts/probes/sheet-metal/` расширен до семи групп маршрутов, на которые опираются

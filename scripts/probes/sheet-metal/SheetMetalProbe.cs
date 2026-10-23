@@ -810,6 +810,231 @@ internal sealed class SheetMetalProbe : IDisposable
             Verdict.Info);
     }
 
+    /// <summary>Opens one saved file and reports what the model holds — the check that splits a lost
+    /// write from a failed read.</summary>
+    public int RunInspect(string file)
+    {
+        try
+        {
+            Launch();
+            Inspect(file);
+        }
+        catch (ProbeStop)
+        {
+        }
+        catch (Exception ex)
+        {
+            Record("probe", "проба доходит до конца", Describe(ex), Verdict.Fail);
+        }
+
+        Write();
+        return Failed ? 1 : 0;
+    }
+
+    private void Inspect(string file)
+    {
+        Record("inspect_file", "файл существует", file + (File.Exists(file) ? "" : " — НЕТ"),
+            File.Exists(file) ? Verdict.Pass : Verdict.Fail);
+        if (!File.Exists(file))
+        {
+            return;
+        }
+
+        IKompasDocument opened;
+        try
+        {
+            opened = _app7!.Documents.Open(file, false, true);
+        }
+        catch (COMException ex)
+        {
+            Record("inspect_open", "файл открывается", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (opened as IKompasDocument3D is not { TopPart: { } part } || part as ISheetMetalContainer is not { } container)
+        {
+            Record("inspect_open", "файл открывается как листовая деталь", RuntimeName(opened), Verdict.Fail);
+            return;
+        }
+
+        Record("inspect_open", "файл открывается как листовая деталь", "ISheetMetalContainer", Verdict.Pass);
+        Record("inspect_counters", "счётчики тел/сгибов/вырезов/отверстий",
+            Count(container.SheetMetalBodies.Count) + "/" + Count(container.SheetMetalBends.Count) + "/"
+            + Count(container.SheetMetalCuts.Count) + "/" + Count(container.SheetMetalHoles.Count),
+            Verdict.Info);
+
+        var body = BodyAt(container);
+        Record("inspect_body", "тело читается", body is null ? "нет" : "ISheetMetalBody",
+            body is null ? Verdict.Fail : Verdict.Pass);
+        if (body is null)
+        {
+            return;
+        }
+
+        Record("inspect_values", "толщина/радиус/способ/поле",
+            Num(SafeDouble(() => body.Thickness) ?? double.NaN) + " / "
+            + Num(SafeDouble(() => body.Radius) ?? double.NaN) + " / "
+            + SafeInt(() => body.UnfoldType) + " / "
+            + Num(SafeDouble(() => body.BendReduction) ?? double.NaN), Verdict.Info);
+    }
+
+    /// <summary>Runs only the persistence experiment: does a body reach the file without the later steps?</summary>
+    public int RunPersist()
+    {
+        try
+        {
+            Launch();
+            Persist();
+        }
+        catch (ProbeStop)
+        {
+        }
+        catch (Exception ex)
+        {
+            Record("probe", "проба доходит до конца", Describe(ex), Verdict.Fail);
+        }
+
+        Write();
+        return Failed ? 1 : 0;
+    }
+
+    /// <summary>Which part of the product's save/reopen route loses the body.</summary>
+    /// <remarks>INVARIANT: each case is a fresh document and a fresh file, so a case cannot inherit the
+    /// previous one's state. DOC: isheetmetalbodies_add.html, ikompasdocument_saveas.html,
+    /// ksdocument3d.html (SaveAs). History: docs/decisions/sheet-metal.md#body-tools</remarks>
+    private void Persist()
+    {
+        PersistCase("p1_api5_save", rebuild: false, saveThroughApi7: false);
+        PersistCase("p2_api7_save", rebuild: false, saveThroughApi7: true);
+        PersistCase("p3_api5_save_after_rebuild", rebuild: true, saveThroughApi7: false);
+    }
+
+    private void PersistCase(string id, bool rebuild, bool saveThroughApi7)
+    {
+        IKompasDocument added;
+        try
+        {
+            added = _app7!.Documents.Add(DocumentTypeEnum.ksDocumentPart, false);
+        }
+        catch (COMException ex)
+        {
+            Record(id + "_document", "новая деталь создана", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (added as IKompasDocument3D is not { } doc7)
+        {
+            Record(id + "_document", "новая деталь создана", RuntimeName(added), Verdict.Fail);
+            return;
+        }
+
+        _doc7 = doc7;
+        _doc5 = _app5!.TransferInterface(doc7, Api5Auto, 0) as ksDocument3D;
+        if (_doc5 is null)
+        {
+            Record(id + "_document_api5", "API5-вид детали получен", "null", Verdict.Fail);
+            return;
+        }
+
+        if (doc7.TopPart as ISheetMetalContainer is not { } container)
+        {
+            Record(id + "_container", "IPart7 приводится к ISheetMetalContainer", RuntimeName(doc7.TopPart),
+                Verdict.Fail);
+            return;
+        }
+
+        var sketch5 = MakeRectangleSketch(-20d, -20d, 20d, 20d, id + "_sketch", "эскиз 40x40 на XOY создан");
+        var sketch7 = Transfer7<ISketch>(sketch5, id + "_sketch_to7", "эскиз перенесён в API7");
+
+        if (container.SheetMetalBodies.Add() is not ISheetMetalBody body)
+        {
+            Record(id + "_body_add", "ISheetMetalBodies.Add() отдаёт ISheetMetalBody", "не приводится",
+                Verdict.Fail);
+            return;
+        }
+
+        body.Sketch = (Sketch)sketch7;
+        body.Thickness = 2d;
+        body.Radius = 3d;
+        body.Direction = ksDirectionTypeEnum.dtNormal;
+        body.UnfoldType = ksUnfoldTypeEnum.ksDecreaseBend;
+        body.BendReduction = 0.3d;
+        CheckBool(id + "_update", true, SafeBool(() => body.Update()));
+        CheckInt(id + "_bodies_in_session", 1, container.SheetMetalBodies.Count);
+        CheckDouble(id + "_extent_in_session", 2d, ExtentZOn(_doc5));
+
+        if (rebuild)
+        {
+            try
+            {
+                _doc5.RebuildDocument();
+                Record(id + "_rebuild", "деталь перестроена", "RebuildDocument() вызван", Verdict.Info);
+            }
+            catch (COMException ex)
+            {
+                Record(id + "_rebuild", "деталь перестроена", Describe(ex), Verdict.Fail);
+            }
+
+            // MEASURED: the container read before the rebuild answers 0 afterwards, so it is taken again
+            // from the document — otherwise the case would measure a stale COM object, not the model.
+            container = doc7.TopPart as ISheetMetalContainer;
+            Record(id + "_bodies_after_rebuild", "счётчик тел после перестроения",
+                container is null ? "контейнер не прочитан" : Count(container.SheetMetalBodies.Count),
+                Verdict.Info);
+            CheckDouble(id + "_extent_after_rebuild", 2d, ExtentZOn(_doc5));
+        }
+
+        var file = Path.Combine(Path.GetTempPath(),
+            "smb-persist-" + id + "-" + DateTime.Now.ToString("HHmmss", CultureInfo.InvariantCulture) + ".m3d");
+        try
+        {
+            if (saveThroughApi7)
+            {
+                doc7.SaveAs(file);
+            }
+            else
+            {
+                _doc5.SaveAs(file);
+            }
+        }
+        catch (COMException ex)
+        {
+            Record(id + "_save", "деталь сохранена", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        var exists = File.Exists(file);
+        Record(id + "_save", "деталь сохранена", (exists ? "файл есть: " : "файла нет: ") + file,
+            exists ? Verdict.Pass : Verdict.Fail);
+        if (!exists)
+        {
+            return;
+        }
+
+        IKompasDocument reopened;
+        try
+        {
+            reopened = _app7!.Documents.Open(file, false, true);
+        }
+        catch (COMException ex)
+        {
+            Record(id + "_reopen", "сохранённый файл открывается", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (reopened as IKompasDocument3D is not { TopPart: { } part }
+            || part as ISheetMetalContainer is not { } reContainer)
+        {
+            Record(id + "_reopen", "файл открывается как листовая деталь", RuntimeName(reopened), Verdict.Fail);
+            return;
+        }
+
+        CheckInt(id + "_reopen_bodies", 1, reContainer.SheetMetalBodies.Count);
+        var reBody = BodyAt(reContainer);
+        CheckDouble(id + "_reopen_thickness", 2d, reBody is null ? null : SafeDouble(() => reBody.Thickness));
+        CheckDouble(id + "_reopen_radius", 3d, reBody is null ? null : SafeDouble(() => reBody.Radius));
+    }
+
     /// <summary>Order item 7: what the kernel answers on input the tools must refuse themselves.</summary>
     /// <remarks>INVARIANT: these answers are recorded as INFO with the kernel's own result — the question is
     /// what it does, not what the product should do. DOC: isheetmetalbodies_add.html,

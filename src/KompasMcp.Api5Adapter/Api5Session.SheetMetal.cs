@@ -121,8 +121,10 @@ public partial class Api5Session
         var updated = SafeBool(() => created.Update());
 
         // MEASURED: the counter and the extent are read right after Update() and no rebuild follows. The
-        // documented route ends at IModelObject::Update, and an extra RebuildDocument makes the API7
-        // container answer 0 bodies for the rest of the session.
+        // documented route ends at IModelObject::Update. An extra RebuildDocument does not lose the body
+        // (a container taken again from the document still answers 1 and the file keeps it), but the
+        // container obtained BEFORE the rebuild answers 0 afterwards - so a rebuild would only add a
+        // stale handle to the route.
         var bodiesAfter = ReadCount(() => sheet.SheetMetalBodies.Count);
         var read = ReadBody(document, created, ordinal: bodiesAfter is { } after ? after - 1 : null);
 

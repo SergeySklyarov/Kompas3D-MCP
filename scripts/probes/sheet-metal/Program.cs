@@ -15,9 +15,16 @@ internal static class Program
         Console.OutputEncoding = Encoding.UTF8;
         ResolveInteropFromInstallation();
 
-        var outPath = args.Length > 0 ? args[0] : Path.Combine("scratch", "probe-sheet-metal.json");
+        var outPath = args.Length > 0 && !args[0].StartsWith("--", StringComparison.Ordinal)
+            ? args[0]
+            : Path.Combine("scratch", "probe-sheet-metal.json");
         using var probe = new SheetMetalProbe(outPath);
-        return probe.Run();
+        if (args.Contains("--inspect"))
+        {
+            return probe.RunInspect(args[args.Length - 1]);
+        }
+
+        return args.Contains("--persist") ? probe.RunPersist() : probe.Run();
     }
 
     /// <summary>Loads the vendor interop from the installation: the project references it with

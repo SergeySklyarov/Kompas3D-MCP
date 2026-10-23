@@ -50508,24 +50508,36 @@ def sheet_metal_checks(client, rep, app_id, workdir):
     part = doc_id(env)
     prev = rev_of(env)
     sketch = None
+    # INVARIANT: the profile must be DRAWN, not merely declared. A body built from an empty sketch
+    # answers the counter and the properties and then does not reach the file at all, so a group that
+    # ignores the draw's refusal measures a body the model does not have.
+    draw_codes = {}
     if part:
         env, code = call("kompas_create_sketch", {
             "document_id": part, "expected_revision": prev,
             "plane": {"base": "xy", "offset_mm": 0}, "name": "smb-profile"})
         sketch = result(env).get("id")
+        draw_codes["create_sketch"] = code
         prev = rev_of(env, prev)
         if sketch:
+            # A rectangle takes its corner and its sizes: start_mm/end_mm is refused as a foreign field.
             env, code = call("kompas_edit_sketch", {
                 "sketch_ref": sketch, "expected_revision": prev, "mode": "append",
-                "entities": [{"kind": "rectangle", "start_mm": [-20, -20], "end_mm": [20, 20]}]})
+                "entities": [{"kind": "rectangle", "start_mm": [-20, -20],
+                              "width_mm": 40, "height_mm": 40}]})
+            draw_codes["edit_sketch"] = code
             prev = rev_of(env, prev)
             env, code = call("kompas_finish_sketch", {"sketch_ref": sketch,
                                                       "require_closed_profile": True})
+            draw_codes["finish_sketch"] = code
             prev = rev_of(env, prev)
+    drawn = bool(sketch) and not any(draw_codes.values())
     rep.add("SMB.PREP.sketch",
-            "деталь создана, замкнутый эскиз 40x40 на плоскости XOY построен инструментами MCP",
-            "PASS" if sketch else "FAIL", f"document={part} sketch={sketch} error={code}")
-    if not sketch:
+            "деталь создана, замкнутый эскиз 40x40 на плоскости XOY построен инструментами MCP "
+            "(эскиз нарисован, а не только объявлен)",
+            "PASS" if drawn else "FAIL",
+            f"document={part} sketch={sketch} коды={draw_codes}")
+    if not drawn:
         return
 
     # ========= SMB.01: обнаружение =========

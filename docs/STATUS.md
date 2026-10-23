@@ -32,8 +32,11 @@
   `docs/decisions/sheet-metal.md#feature-tools`, отчёт `SHEET_METAL_FEATURES_REPORT_20261023.md`.
   **Проверки:** сборка Release - 0 предупреждений, тесты Release 1525/1525, стражи
   `long-comment-blocks` / `lint-dashes` / `check-evidence-links` / `update-tool-listing --check` -
-  0 / 0 / 0 / 0, группа `--sheet-metal-only` - **PASS 48 / FAIL 0**, зачётный `--all` запущен на `87a5cce`
-  (дерево чистое), итог - следующим запуском.
+  0 / 0 / 0 / 0, группа `--sheet-metal-only` - **PASS 48 / FAIL 0**. Зачётный `--all` на `87a5cce`
+  прошёл с FAIL 0 (PASS 1853 / NAMED 6 / UNKNOWN 3), но описание сгиба правилось после него
+  (`8d7f399`: «габарит вырос ИЛИ стало больше граней» - прежде оно обещало только габарит и называло
+  проверку строже фактической), поэтому зачётный прогон перезапущен на `8d7f399` (дерево чистое);
+  итог - следующим запуском.
 
 - **Листовое тело: создание, чтение, правка (наряд `SHEET_METAL_BODY`, попытка 1, 23.10.2026, сдан):**
   профиль `sheet-metal-minimal-v1` (ревизия 1.0) и три инструмента - `kompas_create_sheet_metal_body`

@@ -1,0 +1,80 @@
+{
+ "meta": {
+  "profile_id": "sheet-metal-minimal-v1",
+  "title": "Листовое тело v24: создание из эскиза, чтение состояния, правка",
+  "revision": "1.0",
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "23.10.2026",
+    "change": "профиль заведён нарядом SHEET_METAL_BODY: три инструмента тела, объём ограничен телом - сгиб, вырез, отверстие и развёртка вынесены в SHEET_METAL_FEATURES и SHEET_METAL_UNFOLD; unfold_type=bend_table удалён измерением (ядро не принимает тип без таблицы, формат файла таблицы справка не описывает)"
+   }
+  ],
+  "target_build": "24.0.0.2799",
+  "queue": {
+   "SM": "Листовое моделирование - второй наряд блока (план реализации, поправки двадцать шестая и двадцать седьмая)"
+  }
+ },
+ "modes": [
+  {
+   "ref": "SMB-01.body.create",
+   "title": "Создать листовое тело из эскиза детали",
+   "family": "SMB",
+   "queue": "SM",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "save_reopen",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Успех - счётчик SheetMetalBodies +1 И перечитанные Thickness/Radius/UnfoldType/поле способа (допуск 1e-6) И габарит по нормали равен толщине. IsCreated у ISheetMetalBody в версии 24 нет. Толщина 0 и отрицательная и радиус 0 отвергаются продуктом ДО Add(): ядро их принимает и оставляет тело. Удаления созданного тела у продукта нет (DeleteObject листовые объекты не удаляет), поэтому отказ после Add() несёт partialEffects и body_ref."
+  },
+  {
+   "ref": "SMB-02.body.read",
+   "title": "Прочитать листовое тело и счётчики коллекций контейнера",
+   "family": "SMB",
+   "queue": "SM",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "required_actions": [
+    "discover",
+    "read",
+    "save_reopen",
+    "negative_tests"
+   ],
+   "gap": "Читаются толщина, радиус, способ развёртки и его поле, флаг Straighten, габарит по нормали и счётчики коллекций, которые называет isheetmetalcontainer.html. Счётчик, который ядро не отдало, назван в unread: пустое значение - «не прочитано», а не ноль."
+  },
+  {
+   "ref": "SMB-03.body.edit",
+   "title": "Изменить толщину, радиус сгиба и способ определения длины развёртки",
+   "family": "SMB",
+   "queue": "SM",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "required_actions": [
+    "discover",
+    "edit",
+    "read",
+    "rebuild",
+    "save_reopen",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Способ развёртки читается из МОДЕЛИ до записи: поле чужого способа отвергается INVALID_ARGUMENT с именем поля. Успех - сравнение перечитанных значений; повтор с теми же значениями идемпотентен и виден в ответе. Правка тела со сгибами работает, но сгибы этой правкой не пересчитываются и не проверяются."
+  }
+ ],
+ "explicitly_out_of_scope": {
+  "next_block_after_profile": [
+   "сгиб, вырез и отверстие листового тела (SHEET_METAL_FEATURES)",
+   "Unfold/Straighten и параметры развёртки (SHEET_METAL_UNFOLD)",
+   "удаление листовых объектов: документированного работающего маршрута нет (измерено)"
+  ],
+  "removed_by_measurement": [
+   "unfold_type=bend_table и bend_table_path: ksTableBends (3) без таблицы сгибов не устанавливается, формат файла таблицы справка не описывает"
+  ]
+ }
+}

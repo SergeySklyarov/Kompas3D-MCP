@@ -156,6 +156,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль sheet-metal-minimal-v1 — Листовое тело v24: создание из эскиза, чтение состояния, правка
+
+- **обязательных_режимов:** 3
+- **режимов_закрыто:** 3
+- **общих_зависимостей:** 0
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** SM 3/3
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль sketch-bulk-minimal-v1 — Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24
 
 - **обязательных_режимов:** 3
@@ -218,19 +230,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 366
-- **строк_полностью_закрыто:** 178
-- **строк_с_каким_либо_прогрессом:** 195
-- **семейств_в_каталоге:** 46
+- **строк_каталога:** 369
+- **строк_полностью_закрыто:** 181
+- **строк_с_каким_либо_прогрессом:** 198
+- **семейств_в_каталоге:** 47
 - **семейств_без_строк:** 12
-- **операций:** 139
-- **режимов_и_вариантов:** 220
-- **применимых_действий:** 3001
-- **действий_verified:** 1187
-- **покрытие_действий:** 39.6%
-- **распределение_статусов:** {'not_started': 1814, 'verified': 1187, 'not_applicable': 659}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 63, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 70, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 142
+- **режимов_и_вариантов:** 223
+- **применимых_действий:** 3018
+- **действий_verified:** 1204
+- **покрытие_действий:** 39.9%
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1204, 'not_applicable': 672}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 66, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 73, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -504,6 +516,19 @@
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
 | `dep.api7.sections_interface` | да | discover, read, save_reopen | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
+
+## Метрика 1 — обязательные режимы профиля `sheet-metal-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SMB-01.body.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.PREP.sketch, SMB.01.discover, SMB.02.create, SMB.03.read, SMB.04.thickness_refused, SMB.05.radius_refused, SMB.06.unfold_fields_refused, SMB.06.bend_table_refused, SMB.12.reopen |
+| `SMB-02.body.read` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SMB.01.discover, SMB.03.read, SMB.12.reopen |
+| `SMB-03.body.edit` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | SMB.01.discover, SMB.08.edit_thickness_radius, SMB.09.edit_unfold_types, SMB.10.foreign_field_refused, SMB.11.idempotent, SMB.12.reopen |
+
+### Общие зависимости профиля `sheet-metal-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
 
 ## Метрика 1 — обязательные режимы профиля `sketch-bulk-minimal-v1`
 
@@ -903,6 +928,9 @@
 | `G9.dismantle.mode_exploded` | G9 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | OK | н/п | OK | DSM-03.axis, DSM-05.exploded, DSM-06.mode_off, DSM-07.step_many, DSM-09.delete_step, DSM-10.clear |
 | `G11.sections.create_read` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SEC-01.discovery, SEC-01.schema, SEC-02.create, SEC-03.read, SEC-07.reopen, SEC-08.reverse, SEC-09.assembly, SEC-10.second, SEC-11.not_3d, SEC-12.bad_plane, SEC-13.stale_revision |
 | `G11.sections.mode_snapshot` | G11 | practical_required | E4 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | OK | н/п | н/п | OK | SEC-04.mode_on, SEC-05.snapshot_on, SEC-06.snapshot_off |
+| `SMB-01.body.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.PREP.sketch, SMB.01.discover, SMB.02.create, SMB.03.read, SMB.04.thickness_refused, SMB.05.radius_refused, SMB.06.unfold_fields_refused, SMB.06.bend_table_refused, SMB.12.reopen |
+| `SMB-02.body.read` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SMB.01.discover, SMB.03.read, SMB.12.reopen |
+| `SMB-03.body.edit` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | SMB.01.discover, SMB.08.edit_thickness_radius, SMB.09.edit_unfold_types, SMB.10.foreign_field_refused, SMB.11.idempotent, SMB.12.reopen |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1592,6 +1620,17 @@
 - `G11.sections.mode_snapshot` — закрыт целиком
   - Сечение - отображение: геометрия не меняется вовсе, поэтому единственное доказательство - растр. Порог «видно» - 1 % различающихся байтов несжатого BMP; измерено 11,5 % в режиме и 0 после выключения.
   - Снимок делает существующий kompas_export_image: отдельного инструмента снимка нет.
+- `SMB-01.body.create` — закрыт целиком
+  - IsCreated у ISheetMetalBody в версии 24 нет: тело подтверждается счётчиком, свойствами и габаритом, а не признаком создания
+  - из четырёх значений ksDirectionTypeEnum на листовом теле измерено только normal; reverse, both и middle_plane приняты по странице перечисления, а не прогоном
+  - границ значения коэффициента, величины и уменьшения сгиба справка не называет: проверяется только конечность числа
+  - созданное тело этим продуктом не удаляется (DeleteObject листовые объекты не удаляет), поэтому отказ после Add() несёт partialEffects и body_ref
+- `SMB-02.body.read` — закрыт целиком
+  - счётчик коллекции, который ядро не отдало, назван в unread: пустое значение - «не прочитано», а не ноль
+  - габарит по нормали берётся как протяжённость по Z: это раскладка пробы (эскиз на XOY), у тела на другой плоскости это не толщина
+- `SMB-03.body.edit` — закрыт целиком
+  - сгибы этой правкой не пересчитываются и не проверяются: сгиб - объём SHEET_METAL_FEATURES
+  - габарит как проверка толщины применим только к телу без сгибов; при сгибах проверка названа неприменимой, а не пропущена молча
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

@@ -15279,6 +15279,147 @@
         "G9.dismantle.mode_steps",
         "G9.dismantle.mode_exploded"
       ]
+    },
+    {
+      "operation_id": "SMB-01.body.create",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_create_sheet_metal_body.json",
+      "adapter_route": "kompas_create_sheet_metal_body: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBodies.Add() -> Sketch (эскиз, перенесённый в API7) / Thickness / Radius / Direction / UnfoldType / поле способа -> Update() -> RebuildModel; подтверждение - счётчик +1, перечитанные значения и габарит по нормали",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка существующего тела - режим SMB-03; у создания менять нечего",
+        "rebuild": "перестроение отдельным действием не заявляется: тело перестраивается тем же Update() и RebuildModel внутри создания",
+        "suppress_restore": "у листового тела нет режима подавления как у признака: подавление относится к признакам дерева, а не к телу",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом: документированный DeleteObject их не удаляет (измерено)"
+      },
+      "tests": [
+        "SMB.PREP.sketch",
+        "SMB.01.discover",
+        "SMB.02.create",
+        "SMB.03.read",
+        "SMB.04.thickness_refused",
+        "SMB.05.radius_refused",
+        "SMB.06.unfold_fields_refused",
+        "SMB.06.bend_table_refused",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#body-tools"
+      ],
+      "limitations": [
+        "IsCreated у ISheetMetalBody в версии 24 нет: тело подтверждается счётчиком, свойствами и габаритом, а не признаком создания",
+        "из четырёх значений ksDirectionTypeEnum на листовом теле измерено только normal; reverse, both и middle_plane приняты по странице перечисления, а не прогоном",
+        "границ значения коэффициента, величины и уменьшения сгиба справка не называет: проверяется только конечность числа",
+        "созданное тело этим продуктом не удаляется (DeleteObject листовые объекты не удаляет), поэтому отказ после Add() несёт partialEffects и body_ref"
+      ]
+    },
+    {
+      "operation_id": "SMB-02.body.read",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_get_sheet_metal.json",
+      "adapter_route": "kompas_get_sheet_metal: Count коллекций ISheetMetalContainer и свойства ISheetMetalBody (Thickness, Radius, UnfoldType, поле способа, Straighten) плюс габарит по нормали; ничего не пишет",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "чтение ничего не создаёт - создание это SMB-01",
+        "edit": "чтение ничего не меняет - правка это SMB-03",
+        "rebuild": "чтение не перестраивает модель",
+        "suppress_restore": "у листового тела нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)",
+        "geometry_validation": "чтение не заявляет геометрию: габарит по нормали - прочитанное значение, а не проверка построения"
+      },
+      "tests": [
+        "SMB.01.discover",
+        "SMB.03.read",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#body-tools"
+      ],
+      "limitations": [
+        "счётчик коллекции, который ядро не отдало, назван в unread: пустое значение - «не прочитано», а не ноль",
+        "габарит по нормали берётся как протяжённость по Z: это раскладка пробы (эскиз на XOY), у тела на другой плоскости это не толщина"
+      ]
+    },
+    {
+      "operation_id": "SMB-03.body.edit",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_edit_sheet_metal_body.json",
+      "adapter_route": "kompas_edit_sheet_metal_body: запись свойств существующего ISheetMetalBody -> Update() -> RebuildModel; подтверждение - сравнение перечитанных значений и габарита по нормали с заданными",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "create": "правка работает по существующей ссылке - создание это SMB-01",
+        "suppress_restore": "у листового тела нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.01.discover",
+        "SMB.08.edit_thickness_radius",
+        "SMB.09.edit_unfold_types",
+        "SMB.10.foreign_field_refused",
+        "SMB.11.idempotent",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#body-tools"
+      ],
+      "limitations": [
+        "сгибы этой правкой не пересчитываются и не проверяются: сгиб - объём SHEET_METAL_FEATURES",
+        "габарит как проверка толщины применим только к телу без сгибов; при сгибах проверка названа неприменимой, а не пропущена молча"
+      ]
     }
   ],
   "pending_families": [

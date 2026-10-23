@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 46,
-   "operations": 139,
+   "families": 47,
+   "operations": 142,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 220,
+   "modes_and_variants": 223,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8159,6 +8159,63 @@
       {
        "id": "G11.sections.mode_snapshot",
        "name": "Режим сечения виден на снимке и выключается обратно",
+       "level": "mcp_verified"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SMB",
+   "title": "Листовое тело: создание из эскиза, чтение состояния и правка через ISheetMetalContainer",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "metadata": "kAPI7.tlb: ISheetMetalContainer (QI от IPart7), ISheetMetalBodies, ISheetMetalBody; ksUnfoldTypeEnum, ksDirectionTypeEnum",
+    "runtime": "измерено 23.10.2026 на build 24.0.0.2799: тело входит в модель на ISheetMetalBody.Update(); толщина, радиус и тип развёртки читаются назад; габарит по нормали плоского тела равен толщине; ядро принимает толщину 0 и -1.5 и радиус 0, отвечает Update()=TRUE и оставляет тело; ksTableBends (3) без таблицы не устанавливается; DeleteObject листовые объекты не удаляет"
+   },
+   "route": "API7 QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBodies.Add() -> Sketch (эскиз, перенесённый из API5) / Thickness / Radius / Direction / UnfoldType / BendCoefficient|BendValue|BendReduction -> Update() -> RebuildModel; чтение - Count коллекций и свойства тела",
+   "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body",
+   "next_step": "Группа --sheet-metal-only и профиль sheet-metal-minimal-v1. Следующее - SHEET_METAL_FEATURES (сгиб, вырез, отверстие) и SHEET_METAL_UNFOLD (Unfold/Straighten).",
+   "operations": [
+    {
+     "id": "SMB-01",
+     "name": "Листовое тело из эскиза детали",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalbodies_add.html, isheetmetalbody_sketch.html, isheetmetalbody_thickness.html, isheetmetalbody_radius.html, isheetmetalbody_direction.html, isheetmetalbody_unfoldtype.html, isheetmetalbody_bendcoefficient.html, isheetmetalbody_bendvalue.html, isheetmetalbody_bendreduction.html, ksunfoldtypeenum.html, ksdirectiontypeenum.html",
+     "route": "SheetMetalBodies.Add() -> Sketch / Thickness / Radius / Direction / UnfoldType / поле способа -> Update(); успех - счётчик +1 и перечитанные значения плюс габарит по нормали",
+     "modes": [
+      {
+       "id": "SMB-01.body.create",
+       "name": "Создать листовое тело",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-02",
+     "name": "Чтение листового состояния",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalcontainer.html, isheetmetalcontainer_props.html, isheetmetalbody_props.html, isheetmetalbody_straighten.html",
+     "route": "Count коллекций контейнера плюс Thickness / Radius / UnfoldType / поле способа / Straighten; ничего не пишет",
+     "modes": [
+      {
+       "id": "SMB-02.body.read",
+       "name": "Прочитать тело и счётчики коллекций",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-03",
+     "name": "Правка листового тела",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalbody_thickness.html, isheetmetalbody_radius.html, isheetmetalbody_unfoldtype.html, isheetmetalbody_bendcoefficient.html, isheetmetalbody_bendvalue.html, isheetmetalbody_bendreduction.html",
+     "route": "запись свойств существующего ISheetMetalBody -> Update() -> RebuildModel; успех - сравнение перечитанных значений",
+     "modes": [
+      {
+       "id": "SMB-03.body.edit",
+       "name": "Изменить толщину, радиус и способ развёртки",
        "level": "mcp_verified"
       }
      ]

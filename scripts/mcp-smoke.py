@@ -663,7 +663,7 @@ def file_sha256(path):
 # → 94 (SECTION_VIEWS: вид-разрез, четыре инструмента).
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread).
-EXPECTED_TOOL_COUNT = 105
+EXPECTED_TOOL_COUNT = 108
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -727,6 +727,9 @@ RUN_GROUPS = (
     ("mech_mates", "mech-mates", "mech-mates-acceptance.json",
      "Приёмка MM: механическая передача через MCP — создание и чтение параметров, названные отказы "
      "(наряд G4, профиль mechanical-mates-minimal-v1)"),
+    ("sheet_metal", "sheet-metal", "sheet-metal-acceptance.json",
+     "Приёмка SMB: листовое тело — создание из эскиза, чтение состояния, правка, названные отказы "
+     "(наряд SHEET_METAL_BODY, профиль sheet-metal-minimal-v1)"),
     ("drafts", "drafts", "drafts-acceptance.json",
      "Приёмка DR: уклоны граней - от основания и от базовой линии, чтение, правка, переоткрытие, "
      "названные отказы (наряд SM-12, профиль drafts-minimal-v1)"),
@@ -839,6 +842,7 @@ ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
     ("mate", ["--mate-only"]),
     ("mech_mates", ["--mech-mates-only"]),
+    ("sheet_metal", ["--sheet-metal-only"]),
     ("drafts", ["--drafts-only"]),
     ("threads", ["--threads-only"]),
     ("interference", ["--interference-only"]),
@@ -16191,6 +16195,9 @@ def main():
     # MM на своём сеансе, потому что клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MM.<NN>.<действие>`), а не по номеру в общем потоке.
     mech_mates_only = "--mech-mates-only" in sys.argv
+    # То же для листового тела (наряд SHEET_METAL_BODY, профиль `sheet-metal-minimal-v1`): одна группа
+    # SMB на своём сеансе, клетка матрицы находится по имени строки (`SMB.<NN>.<действие>`).
+    sheet_metal_only = "--sheet-metal-only" in sys.argv
 
     # Домен УКЛОНОВ (наряд SM-12, профиль `drafts-minimal-v1`): одна группа DR на своём сеансе.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DR.<NN>.<действие>`), а не по номеру в
@@ -16355,6 +16362,7 @@ def main():
         "assembly": assembly_only,
         "mate": mate_only,
         "mech_mates": mech_mates_only,
+        "sheet_metal": sheet_metal_only,
         "drafts": drafts_only,
         "interference": interference_only,
         "threads": threads_only,
@@ -16924,6 +16932,14 @@ def main():
 
         if mech_mates_only:
             mech_mates_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if sheet_metal_only:
+            sheet_metal_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -50435,10 +50451,317 @@ def dismantle_checks(client, rep, app_id, workdir):
              timeout=120)
 
 
+def sheet_metal_checks(client, rep, app_id, workdir):
+    """SMB.* - листовое тело через MCP (наряд SHEET_METAL_BODY, профиль `sheet-metal-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Тело создаётся из эскиза и подтверждается ЧТЕНИЕМ: счётчик коллекции вырос
+    на единицу, толщина, радиус, способ развёртки и его поле совпали с заданными, габарит по нормали
+    равен толщине. Правка подтверждается сравнением перечитанного, повтор - идемпотентностью.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Сгиба, выреза и отверстия (объём SHEET_METAL_FEATURES) и развёртки
+    (SHEET_METAL_UNFOLD). Удаления нет: у продукта нет работающего маршрута (измерено), поэтому
+    SMB.13 проверяет, что такой инструмент и не публикуется.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def efield(env):
+        err = (env or {}).get("error") or {}
+        details = err.get("details") if isinstance(err, dict) else None
+        return (details or {}).get("field")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def near(value, expected, tolerance=1e-6):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tolerance
+
+    def bodies_count(doc):
+        _e, env, _r = client.tool("kompas_get_sheet_metal", {"document_id": doc})
+        counters = (result(env) or {}).get("counters") or {}
+        return counters.get("bodies")
+
+    # ========= PREP: деталь и эскиз 40x40 на плоскости XOY =========
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "SMB-body"})
+    part = doc_id(env)
+    prev = rev_of(env)
+    sketch = None
+    if part:
+        env, code = call("kompas_create_sketch", {
+            "document_id": part, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "smb-profile"})
+        sketch = result(env).get("id")
+        prev = rev_of(env, prev)
+        if sketch:
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": sketch, "expected_revision": prev, "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [-20, -20], "end_mm": [20, 20]}]})
+            prev = rev_of(env, prev)
+            env, code = call("kompas_finish_sketch", {"sketch_ref": sketch,
+                                                      "require_closed_profile": True})
+            prev = rev_of(env, prev)
+    rep.add("SMB.PREP.sketch",
+            "деталь создана, замкнутый эскиз 40x40 на плоскости XOY построен инструментами MCP",
+            "PASS" if sketch else "FAIL", f"document={part} sketch={sketch} error={code}")
+    if not sketch:
+        return
+
+    # ========= SMB.01: обнаружение =========
+    names = ("kompas_create_sheet_metal_body", "kompas_get_sheet_metal", "kompas_edit_sheet_metal_body")
+    entries = {name: entry_of(client, name) for name in names}
+    listed = all(entries.values())
+    props = ((entries.get("kompas_create_sheet_metal_body") or {}).get("inputSchema")
+             or {}).get("properties") or {}
+    unfold = ((props.get("unfold_type") or {}).get("enum")) or []
+    direction = ((props.get("direction") or {}).get("enum")) or []
+    published = True
+    for name in names:
+        try:
+            with open(os.path.join(ROOT, "schemas", name + ".json"), encoding="utf-8-sig") as handle:
+                schema = json.load(handle)
+            schema.pop("$schema", None)
+        except (OSError, ValueError):
+            published = False
+            continue
+        published = published and schema == (entries.get(name) or {}).get("inputSchema")
+    _e, caps, _r = client.tool("kompas_capabilities", {})
+    caps_result = (caps or {}).get("result") or {}
+    caps_tools = caps_result.get("tools") or []
+    rep.add("SMB.01.discover",
+            "три инструмента тела опубликованы, их схемы совпадают с реестром, bend_table в перечне "
+            "способов развёртки ОТСУТСТВУЕТ, направление называет значения ksDirectionTypeEnum",
+            "PASS" if (listed and published and "bend_table" not in unfold
+                       and set(unfold) == {"coefficient", "bend_value", "bend_reduction"}
+                       and set(direction) == {"normal", "reverse", "both", "middle_plane"}
+                       and all(name in caps_tools for name in names)
+                       and len(client.registry()) == EXPECTED_TOOL_COUNT) else "FAIL",
+            f"опубликованы={listed} схемы_совпадают={published} способы={unfold} "
+            f"направления={direction} count={len(client.registry())}")
+
+    # ========= SMB.02: создание тела и чтение назад =========
+    env, code = call("kompas_create_sheet_metal_body", {
+        "sketch_ref": sketch, "expected_revision": current_rev(part),
+        "thickness_mm": 1.5, "bend_radius_mm": 2.0, "direction": "normal",
+        "unfold_type": "coefficient", "bend_coefficient": 0.4})
+    created = result(env)
+    body_ref = (created.get("body_ref") or {}).get("id")
+    body = created.get("body") or {}
+    checks = {row.get("name"): row.get("passed")
+              for row in ((created.get("verification") or {}).get("checks") or [])}
+    ok_create = (not code and body_ref and near(body.get("thickness_mm"), 1.5)
+                 and near(body.get("bend_radius_mm"), 2.0)
+                 and body.get("unfold_type") == "coefficient"
+                 and near(body.get("unfold_value"), 0.4)
+                 and near(body.get("extent_by_normal_mm"), 1.5)
+                 and created.get("bodies_after") == (created.get("bodies_before") or 0) + 1
+                 and checks.get("body_counter_grew") is True
+                 and checks.get("values_read_back") is True
+                 and checks.get("extent_by_normal") is True)
+    rep.add("SMB.02.create",
+            "листовое тело создано из эскиза: счётчик +1, толщина 1.5, радиус 2, способ coefficient "
+            "со значением 0.4 прочитаны из модели, габарит по нормали равен толщине",
+            "PASS" if ok_create else "FAIL",
+            f"body={body_ref} thickness={body.get('thickness_mm')} radius={body.get('bend_radius_mm')} "
+            f"unfold={body.get('unfold_type')} value={body.get('unfold_value')} "
+            f"extent={body.get('extent_by_normal_mm')} "
+            f"bodies={created.get('bodies_before')}->{created.get('bodies_after')} "
+            f"проверки={checks} error={code} {emsg(env) or ''}")
+    if not ok_create:
+        return
+
+    # ========= SMB.03: чтение по ссылке и счётчики =========
+    env, code = call("kompas_get_sheet_metal", {"document_id": part, "body_ref": body_ref})
+    read = result(env)
+    rows = read.get("bodies") or []
+    counters = read.get("counters") or {}
+    first = rows[0] if rows else {}
+    ok_read = (not code and len(rows) == 1 and near(first.get("thickness_mm"), 1.5)
+               and near(first.get("bend_radius_mm"), 2.0)
+               and first.get("unfold_type") == "coefficient"
+               and counters.get("bodies") == 1 and counters.get("bends") == 0
+               and counters.get("cuts") == 0 and counters.get("holes") == 0
+               and not (counters.get("unread") or []))
+    rep.add("SMB.03.read",
+            "kompas_get_sheet_metal по body_ref отдаёт одно тело с прочитанными значениями, а счётчики "
+            "коллекций контейнера - тела 1, сгибов/вырезов/отверстий 0, ни один счётчик не назван "
+            "непрочитанным",
+            "PASS" if ok_read else "FAIL",
+            f"тел={len(rows)} thickness={first.get('thickness_mm')} "
+            f"straighten={first.get('straighten')} counters={counters} error={code}")
+
+    # ========= SMB.04-SMB.06: отказы ДО создания =========
+    def refusal(name, args, expected_field, label):
+        before = bodies_count(part)
+        env2, code2 = call("kompas_create_sheet_metal_body",
+                           dict(args, sketch_ref=sketch, expected_revision=current_rev(part)))
+        after_count = bodies_count(part)
+        err = (env2 or {}).get("error") or {}
+        ok = (code2 == "INVALID_ARGUMENT" and err.get("partial_effects") is False
+              and (expected_field is None or efield(env2) == expected_field)
+              and before == after_count)
+        rep.add(name, label + " - отказ INVALID_ARGUMENT до создания, счётчик тел не вырос",
+                "PASS" if ok else "FAIL",
+                f"code={code2} field={efield(env2)} partial_effects={err.get('partial_effects')} "
+                f"тел {before}->{after_count} {emsg(env2) or ''}")
+
+    base = {"thickness_mm": 1.5, "bend_radius_mm": 2.0, "direction": "normal",
+            "unfold_type": "coefficient", "bend_coefficient": 0.4}
+    refusal("SMB.04.thickness_refused", dict(base, thickness_mm=0.0), "thickness_mm",
+            "толщина 0 (ядро её принимает и оставляет тело с толщиной 0)")
+    refusal("SMB.05.radius_refused", dict(base, bend_radius_mm=0.0), "bend_radius_mm",
+            "радиус сгиба 0 (ядро его принимает)")
+    refusal("SMB.06.unfold_fields_refused",
+            dict(base, unfold_type="coefficient", bend_coefficient=None, bend_value=1.2),
+            "bend_coefficient|bend_value|bend_reduction",
+            "поле чужого способа развёртки")
+    refusal("SMB.06.bend_table_refused",
+            dict(base, unfold_type="bend_table", bend_coefficient=None, bend_reduction=0.3),
+            "unfold_type", "bend_table (ядро не принимает тип без таблицы сгибов)")
+
+    # ========= SMB.08: правка толщины и радиуса =========
+    env, code = call("kompas_edit_sheet_metal_body", {
+        "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+        "thickness_mm": 2.0, "bend_radius_mm": 3.0})
+    edited = result(env)
+    after = edited.get("body_after") or {}
+    checks = {row.get("name"): row.get("passed")
+              for row in ((edited.get("verification") or {}).get("checks") or [])}
+    ok_edit = (not code and near(after.get("thickness_mm"), 2.0)
+               and near(after.get("bend_radius_mm"), 3.0)
+               and near(after.get("extent_by_normal_mm"), 2.0)
+               and checks.get("values_read_back") is True
+               and checks.get("extent_follows_thickness") is True
+               and checks.get("idempotent_repeat") is True)
+    rep.add("SMB.08.edit_thickness_radius",
+            "толщина 2 и радиус 3 записаны и перечитаны, габарит по нормали стал равен новой толщине, "
+            "правка не выдана за повтор",
+            "PASS" if ok_edit else "FAIL",
+            f"thickness={after.get('thickness_mm')} radius={after.get('bend_radius_mm')} "
+            f"extent={after.get('extent_by_normal_mm')} проверки={checks} error={code} {emsg(env) or ''}")
+
+    # ========= SMB.09: смена способа развёртки по трём значениям =========
+    cases = (("coefficient", "bend_coefficient", 0.45),
+             ("bend_value", "bend_value", 1.2),
+             ("bend_reduction", "bend_reduction", 0.3))
+    problems = []
+    for name, field, value in cases:
+        env, code = call("kompas_edit_sheet_metal_body", {
+            "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+            "unfold_type": name, field: value})
+        row = result(env).get("body_after") or {}
+        if code or row.get("unfold_type") != name or not near(row.get("unfold_value"), value):
+            problems.append(f"{name}: code={code} read={row.get('unfold_type')}/{row.get('unfold_value')}")
+    rep.add("SMB.09.edit_unfold_types",
+            "способ развёртки переключается по трём значениям, и каждый раз перечитывается вместе со "
+            "своим полем",
+            "PASS" if not problems else "FAIL",
+            "все три прочитаны назад" if not problems else "; ".join(problems))
+
+    # ========= SMB.10: поле чужого способа при правке =========
+    env, code = call("kompas_edit_sheet_metal_body", {
+        "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+        "bend_coefficient": 0.5})
+    rep.add("SMB.10.foreign_field_refused",
+            "поле coefficient при способе bend_reduction отвергнуто INVALID_ARGUMENT с именем поля, "
+            "а не записано и проигнорировано",
+            "PASS" if code == "INVALID_ARGUMENT"
+            and efield(env) == "bend_coefficient|bend_value|bend_reduction" else "FAIL",
+            f"code={code} field={efield(env)} {emsg(env) or ''}")
+
+    # ========= SMB.11: идемпотентный повтор =========
+    env, code = call("kompas_edit_sheet_metal_body", {
+        "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+        "thickness_mm": 2.0, "bend_radius_mm": 3.0})
+    repeat = result(env)
+    checks = {row.get("name"): row.get("passed")
+              for row in ((repeat.get("verification") or {}).get("checks") or [])}
+    before_body = repeat.get("body_before") or {}
+    after_body = repeat.get("body_after") or {}
+    ok_repeat = (not code and checks.get("idempotent_repeat") is True
+                 and near(before_body.get("thickness_mm"), after_body.get("thickness_mm"))
+                 and near(before_body.get("bend_radius_mm"), after_body.get("bend_radius_mm")))
+    rep.add("SMB.11.idempotent",
+            "повтор правки с теми же значениями ничего не меняет, и это видно в ответе: тело до и "
+            "после совпадает, проверка idempotent_repeat пройдена сравнением",
+            "PASS" if ok_repeat else "FAIL",
+            f"до={before_body.get('thickness_mm')}/{before_body.get('bend_radius_mm')} "
+            f"после={after_body.get('thickness_mm')}/{after_body.get('bend_radius_mm')} "
+            f"проверки={checks} error={code}")
+
+    # ========= SMB.12: сохранение и переоткрытие =========
+    target = os.path.join(workdir, "sheet-metal-body")
+    os.makedirs(target, exist_ok=True)
+    path = os.path.join(target, "smb-body.m3d")
+    env, code = call("kompas_save_document", {"document_id": part,
+                                              "expected_revision": current_rev(part),
+                                              "target_path": path})
+    saved = (not code) and os.path.isfile(path)
+    reopened = None
+    if saved:
+        call("kompas_close_document", {"document_id": part, "dirty_policy": "discard"})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        reopened = doc_id(env)
+    ok_reopen = False
+    detail = f"path={path} saved={saved} reopened={reopened} error={code}"
+    if reopened:
+        env, code = call("kompas_get_sheet_metal", {"document_id": reopened})
+        read = result(env)
+        rows = read.get("bodies") or []
+        counters = read.get("counters") or {}
+        row = rows[0] if rows else {}
+        ok_reopen = (not code and len(rows) == 1 and near(row.get("thickness_mm"), 2.0)
+                     and near(row.get("bend_radius_mm"), 3.0)
+                     and row.get("unfold_type") == "bend_reduction"
+                     and near(row.get("unfold_value"), 0.3)
+                     and counters.get("bodies") == 1)
+        detail += (f" thickness={row.get('thickness_mm')} radius={row.get('bend_radius_mm')} "
+                   f"unfold={row.get('unfold_type')}/{row.get('unfold_value')} "
+                   f"bodies={counters.get('bodies')}")
+        call("kompas_close_document", {"document_id": reopened, "dirty_policy": "discard"})
+    rep.add("SMB.12.reopen",
+            "после сохранения и переоткрытия тело читается тем же инструментом: толщина, радиус, "
+            "способ развёртки и его поле сохранились",
+            "PASS" if ok_reopen else "FAIL", detail)
+
+    # ========= SMB.13: удаления нет - названный отказ =========
+    # Документированного работающего маршрута удаления листовых объектов нет (измерено пробой), поэтому
+    # продукт не объявляет инструмент удаления: проверяется, что такого инструмента НЕТ в публикации.
+    published_names = {tool.get("name") for tool in client.tools()}
+    rep.add("SMB.13.delete_not_offered",
+            "инструмент удаления листового объекта не публикуется: документированный маршрут удаления "
+            "листовых объектов не работает (измерено), и обещать его нельзя",
+            "PASS" if "kompas_delete_sheet_metal_object" not in published_names else "FAIL",
+            f"опубликовано={len(published_names)} инструментов")
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
+    "sheet_metal": lambda c, r, a, w, v, p: sheet_metal_checks(c, r, a, w),
     "drafts": lambda c, r, a, w, v, p: drafts_checks(c, r, a, w),
     "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
     "threads": lambda c, r, a, w, v, p: threads_checks(c, r, a, w),

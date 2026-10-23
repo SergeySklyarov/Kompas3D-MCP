@@ -426,6 +426,363 @@ public partial class Api5Session
             new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
     }
 
+    // ─── bend ───────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>A bend on ONE edge of an existing body.</summary>
+    /// <remarks>INVARIANT: the edge must belong to this body, checked before <c>Add()</c> — MEASURED: the
+    /// kernel accepts an edge of another body, grows the bend counter and moves the extent, and a bend
+    /// cannot be deleted by this product. INVARIANT: success is the counter +1, every requested field read
+    /// back, <c>BendObjects</c> holding the requested edge and a changed extent — never
+    /// <c>Update() = true</c>. LIMIT: an edge produced by a later feature carries that feature as its
+    /// <c>Owner</c>, so such an edge is refused here; the address is a body edge.
+    /// History: docs/decisions/sheet-metal.md#feature-tools</remarks>
+    public CreateSheetMetalBendResult CreateSheetMetalBend(CreateSheetMetalBendCommand command)
+    {
+        var document = RequireDocument(command.DocumentId);
+        var stored = References.Require(command.BodyRef, document.Id, document.Revision);
+        if (stored.Payload is not ISheetMetalBody body)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка '{command.BodyRef}' указывает не на листовое тело (kind={stored.Kind}).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
+        }
+
+        var refusal = SheetMetalFeaturePolicy.CheckBend(
+            command.AngleDeg, command.RadiusMm, command.LengthType, command.LengthMm);
+        if (refusal != SheetMetalFeaturePolicy.Refusal.None)
+        {
+            throw FeatureRefusal(refusal, "Сгиб не создавался");
+        }
+
+        var bridge = BridgeFor(document);
+        var edge = RequireModelObject(document, bridge, command.EdgeRef, "edge", "edge_ref");
+        var ownership = OwnerIsBody(body, edge);
+        if (ownership == false)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Ребро принадлежит другому элементу модели, а не телу '" + command.BodyRef + "': ядро "
+                + "принимает чужое ребро, счётчик сгибов растёт и габарит меняется, а удалить такой сгиб "
+                + "этот продукт не может (измерено). Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "edge_ref" });
+        }
+
+        var (container, sheet) = RequireSheetMetal(document, "Сгиб не создавался");
+        var bendsBefore = ReadCount(() => sheet.SheetMetalBends.Count);
+        var extentBefore = ExtentByNormal(document);
+
+        ClearKompasResult(document);
+        ISheetMetalBend? created;
+        try
+        {
+            created = sheet.SheetMetalBends.Add() as ISheetMetalBend;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalBends.Add() отказал: " + Describe(ex) + ". Сгиб не создан.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        if (created is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalBends.Add() не вернул ISheetMetalBend. Сгиб не создан.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        // A bend exists in the collection from here on and this product cannot remove it.
+        var bendRef = References.Register("sheet_metal_bend", document.Id, document.Revision, created);
+        try
+        {
+            created.BendObject = edge;
+            created.Angle = command.AngleDeg;
+            if (command.Direction is { } direction)
+            {
+                created.Direction = direction;
+            }
+
+            if (command.InternalRadius is { } internalRadius)
+            {
+                created.InternalRadius = internalRadius;
+            }
+
+            if (command.RadiusMm is { } radius)
+            {
+                created.Radius = radius;
+            }
+
+            if (command.LengthType is { } lengthType)
+            {
+                created.LengthType =
+                    (ksBendLengthTypeEnum)SheetMetalFeaturePolicy.LengthTypeValue(lengthType)!.Value;
+            }
+
+            if (command.LengthMm is { } length)
+            {
+                created.Length = length;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Запись свойств сгиба отказала: " + Describe(ex) + ". Сгиб остался в коллекции.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["bend_ref"] = bendRef.Id });
+        }
+
+        var updated = SafeBool(() => created.Update());
+        var bendsAfter = ReadCount(() => sheet.SheetMetalBends.Count);
+        var read = ReadBend(created, edge, ordinal: bendsAfter is { } after ? after - 1 : null);
+        var extentAfter = ExtentByNormal(document);
+
+        BumpRevision(document, "sheet_metal.create_bend");
+        var mismatched = SheetMetalFeaturePolicy.BendMismatches(
+            read, command.AngleDeg, command.Direction, command.InternalRadius, command.RadiusMm,
+            command.LengthType, command.LengthMm);
+
+        var counterGrew = bendsBefore is { } beforeCount && bendsAfter is { } afterCount
+            && afterCount == beforeCount + 1;
+        var extentRead = extentBefore is not null && extentAfter is not null;
+        var extentMoved = extentRead && Math.Abs(extentAfter!.Value - extentBefore!.Value) > SheetMetalFeaturePolicy.Tolerance;
+
+        var checks = new List<NamedCheck>
+        {
+            new("bend_counter_grew", counterGrew,
+                Observed: $"{bendsBefore} → {bendsAfter}", Expected: "было + 1"),
+            new("values_read_back", mismatched.Count == 0,
+                Observed: DescribeBend(read), Expected: DescribeBendRequest(command)),
+            new("update_returned_true", updated == true, Observed: updated?.ToString() ?? "не прочитано"),
+            new("bend_objects_is_requested_edge", read?.EdgeIsRequested != false,
+                Observed: read?.EdgeIsRequested?.ToString() ?? "BendObjects не прочитан",
+                Expected: "запрошенное ребро"),
+            new("body_extent_changed", !extentRead || extentMoved,
+                Observed: $"{Num(extentBefore)} → {Num(extentAfter)}",
+                Expected: extentRead ? "габарит тела изменился" : "габарит не прочитан"),
+        };
+
+        var failed = counterGrew && mismatched.Count == 0 && read?.EdgeIsRequested != false
+            && (!extentRead || extentMoved);
+        if (!failed)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Сгиб создан, но чтение назад не подтвердило запрошенное: "
+                + string.Join(", ", mismatched.DefaultIfEmpty("счётчик, ребро или габарит"))
+                + ". Сгиб остался в модели — удалить его этим продуктом нельзя.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["bend_ref"] = bendRef.Id,
+                    ["requested"] = DescribeBendRequest(command),
+                    ["read"] = DescribeBend(read),
+                    ["bends_before"] = bendsBefore,
+                    ["bends_after"] = bendsAfter,
+                });
+        }
+
+        var unverified = new List<string>();
+        if (ownership is null)
+        {
+            unverified.Add("edge_owner_not_compared — владелец ребра или тела не прочитался как объект: "
+                + "принадлежность ребра телу проверена только чтением BendObjects после построения");
+        }
+
+        if (!extentRead)
+        {
+            unverified.Add("extent_not_read — габарит тела не прочитан (GetGabarit отдал нечисловое "
+                + "значение): проверка «габарит изменился» не выполнена");
+        }
+
+        unverified.Add("bend_bounds_not_documented — страницы угла, радиуса и длины называют только тип: "
+            + "проверяются положительность и конечность числа, а не границы, которых справка не называет");
+
+        return new CreateSheetMetalBendResult(
+            ToDto(bendRef, $"sheet metal bend {command.AngleDeg:0.###}"),
+            read!,
+            bendsBefore!.Value,
+            bendsAfter!.Value,
+            ReadBody(document, body, ordinal: null),
+            new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
+    }
+
+    // ─── hole ───────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>A round hole on a face of an existing body.</summary>
+    /// <remarks>INVARIANT: the kernel builds the hole's own sketch, so the caller names a face and a point.
+    /// INVARIANT: success is the counter +1, every requested field read back and a face count that GREW
+    /// compared with the reading before — never <c>Update() = true</c>.
+    /// History: docs/decisions/sheet-metal.md#feature-tools</remarks>
+    public CreateSheetMetalHoleResult CreateSheetMetalHole(CreateSheetMetalHoleCommand command)
+    {
+        var document = RequireDocument(command.DocumentId);
+        var stored = References.Require(command.BodyRef, document.Id, document.Revision);
+        if (stored.Payload is not ISheetMetalBody body)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка '{command.BodyRef}' указывает не на листовое тело (kind={stored.Kind}).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
+        }
+
+        var refusal = SheetMetalFeaturePolicy.CheckHole(command.DiameterMm, command.CutType, command.DepthMm);
+        if (refusal != SheetMetalFeaturePolicy.Refusal.None)
+        {
+            throw FeatureRefusal(refusal, "Отверстие не создавалось");
+        }
+
+        var bridge = BridgeFor(document);
+        var face = RequireModelObject(document, bridge, command.BaseFaceRef, "face", "base_face_ref");
+        var ownership = OwnerIsBody(body, face);
+        if (ownership == false)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Опорная грань принадлежит другому элементу модели, а не телу '" + command.BodyRef
+                + "': ядро принимает такую грань, а удалить созданное отверстие этот продукт не может. "
+                + "Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "base_face_ref" });
+        }
+
+        var (container, sheet) = RequireSheetMetal(document, "Отверстие не создавалось");
+        var holesBefore = ReadCount(() => sheet.SheetMetalHoles.Count);
+        var facesBefore = CountFaces(document);
+
+        ClearKompasResult(document);
+        ISheetMetalHole? created;
+        try
+        {
+            created = sheet.SheetMetalHoles.Add() as ISheetMetalHole;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalHoles.Add() отказал: " + Describe(ex) + ". Отверстие не создано.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        if (created is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalHoles.Add() не вернул ISheetMetalHole. Отверстие не создано.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var holeRef = References.Register("sheet_metal_hole", document.Id, document.Revision, created);
+        try
+        {
+            created.Body = body;
+            created.BasePlane = face;
+            created.X = command.XMm;
+            created.Y = command.YMm;
+            created.Diameter = command.DiameterMm;
+            if (command.CutType is { } cutType)
+            {
+                created.CutType =
+                    (ksHoleCutTypeEnum)SheetMetalFeaturePolicy.CutTypeValue(cutType)!.Value;
+            }
+
+            if (command.DepthMm is { } depth)
+            {
+                created.Depth = depth;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Запись свойств отверстия отказала: " + Describe(ex) + ". Отверстие осталось в коллекции.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["hole_ref"] = holeRef.Id });
+        }
+
+        var updated = SafeBool(() => created.Update());
+        var holesAfter = ReadCount(() => sheet.SheetMetalHoles.Count);
+        var read = ReadHole(created, ordinal: holesAfter is { } after ? after - 1 : null);
+        var facesAfter = CountFaces(document);
+
+        BumpRevision(document, "sheet_metal.create_hole");
+        var mismatched = SheetMetalFeaturePolicy.HoleMismatches(
+            read, command.XMm, command.YMm, command.DiameterMm, command.CutType, command.DepthMm);
+
+        var counterGrew = holesBefore is { } beforeCount && holesAfter is { } afterCount
+            && afterCount == beforeCount + 1;
+        var facesRead = facesBefore is not null && facesAfter is not null;
+
+        var checks = new List<NamedCheck>
+        {
+            new("hole_counter_grew", counterGrew,
+                Observed: $"{holesBefore} → {holesAfter}", Expected: "было + 1"),
+            new("values_read_back", mismatched.Count == 0,
+                Observed: DescribeHole(read), Expected: DescribeHoleRequest(command)),
+            new("update_returned_true", updated == true, Observed: updated?.ToString() ?? "не прочитано"),
+            new("face_count_grew", !facesRead || FaceCountGrowth.Grew(facesBefore, facesAfter),
+                Observed: FaceCountGrowth.Observed(facesBefore, facesAfter),
+                Expected: facesRead ? FaceCountGrowth.Expected(facesBefore) : "число граней не прочитано"),
+        };
+
+        var confirmed = counterGrew && mismatched.Count == 0
+            && (!facesRead || FaceCountGrowth.Grew(facesBefore, facesAfter));
+        if (!confirmed)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Отверстие создано, но чтение назад не подтвердило запрошенное: "
+                + string.Join(", ", mismatched.DefaultIfEmpty("счётчик или число граней"))
+                + ". Отверстие осталось в модели — удалить его этим продуктом нельзя.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["hole_ref"] = holeRef.Id,
+                    ["requested"] = DescribeHoleRequest(command),
+                    ["read"] = DescribeHole(read),
+                    ["holes_before"] = holesBefore,
+                    ["holes_after"] = holesAfter,
+                    ["faces_before"] = facesBefore,
+                    ["faces_after"] = facesAfter,
+                });
+        }
+
+        var unverified = new List<string>();
+        if (ownership is null)
+        {
+            unverified.Add("face_owner_not_compared — владелец грани или тела не прочитался как объект: "
+                + "принадлежность грани телу проверена только ответом ядра");
+        }
+
+        if (!facesRead)
+        {
+            unverified.Add("face_count_not_read — число граней тела не прочитано: проверка «граней стало "
+                + "больше» не выполнена");
+        }
+
+        unverified.Add("hole_point_not_checked — страница называет X и Y координатами центра на опорной "
+            + "плоскости, но не говорит, что точка вне грани отвергается: попадание точки в грань не "
+            + "проверяется");
+
+        return new CreateSheetMetalHoleResult(
+            ToDto(holeRef, $"sheet metal hole D{command.DiameterMm:0.###}"),
+            read!,
+            holesBefore!.Value,
+            holesAfter!.Value,
+            ReadBody(document, body, ordinal: null),
+            new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
+    }
+
     // ─── shared ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>The container and its sheet-metal view; a document that is not a sheet-metal part is a
@@ -568,6 +925,139 @@ public partial class Api5Session
     /// a sketch written by another client or a reopened document, where "empty" cannot be claimed.</summary>
     private int? RecordedPrimitives(string sketchRef) =>
         _sketchProfiles.TryGetValue(sketchRef, out var profile) ? profile.Entities.Count : null;
+
+    /// <summary>One bend as the model holds it; every field is a read value, <c>null</c> — not read.</summary>
+    private static SheetMetalBendDto ReadBend(ISheetMetalBend bend, IModelObject requestedEdge, int? ordinal) =>
+        new()
+        {
+            Ordinal = ordinal,
+            AngleDeg = SafeDouble(() => bend.Angle),
+            Direction = SafeBool(() => bend.Direction),
+            InternalRadius = SafeBool(() => bend.InternalRadius),
+            RadiusMm = SafeDouble(() => bend.Radius),
+            LengthType = SheetMetalFeaturePolicy.LengthTypeName(SafeInt(() => (int)bend.LengthType)),
+            LengthMm = SafeDouble(() => bend.Length),
+            EdgeIsRequested = HoldsEdge(bend, requestedEdge),
+        };
+
+    /// <summary>Whether <c>BendObjects</c> holds the requested edge. MEASURED: the kernel hands the edge
+    /// back as another wrapper, so the comparison is by COM identity; an identity that cannot be stated is
+    /// "not read", never "another edge".</summary>
+    private static bool? HoldsEdge(ISheetMetalBend bend, IModelObject requestedEdge)
+    {
+        var wanted = ComIdentity.Of(requestedEdge);
+        if (wanted is null)
+        {
+            return null;
+        }
+
+        object? held;
+        try
+        {
+            held = bend.BendObjects;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+
+        if (held is not Array array)
+        {
+            return null;
+        }
+
+        foreach (var item in array)
+        {
+            if (string.Equals(ComIdentity.Of(item), wanted, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>One hole as the model holds it.</summary>
+    private static SheetMetalHoleDto ReadHole(ISheetMetalHole hole, int? ordinal) => new()
+    {
+        Ordinal = ordinal,
+        XMm = SafeDouble(() => hole.X),
+        YMm = SafeDouble(() => hole.Y),
+        DiameterMm = SafeDouble(() => hole.Diameter),
+        CutType = SheetMetalFeaturePolicy.CutTypeName(SafeInt(() => (int)hole.CutType)),
+        DepthMm = SafeDouble(() => hole.Depth),
+    };
+
+    /// <summary>Whether a model object's owning feature is the body's own — the documented
+    /// <c>Owner</c> («объект дерева, породивший этот объект») compared by COM identity. <c>null</c> when
+    /// either identity cannot be stated: not known is never "foreign".</summary>
+    private static bool? OwnerIsBody(ISheetMetalBody body, IModelObject model)
+    {
+        var bodyOwner = ComIdentity.Of(SafeObject(() => body.Owner));
+        var objectOwner = ComIdentity.Of(SafeObject(() => model.Owner));
+        return bodyOwner is null || objectOwner is null
+            ? null
+            : string.Equals(bodyOwner, objectOwner, StringComparison.Ordinal);
+    }
+
+    /// <summary>A refused bend or hole field as a contract error naming it — before any COM call.</summary>
+    private static KompasContractException FeatureRefusal(SheetMetalFeaturePolicy.Refusal refusal, string consequence)
+    {
+        var reason = refusal switch
+        {
+            SheetMetalFeaturePolicy.Refusal.AngleNotPositive =>
+                "угол сгиба обязан быть положительным: страница называет только тип double, а сгиб на "
+                + "нулевой угол не строит ничего",
+            SheetMetalFeaturePolicy.Refusal.RadiusNotPositive =>
+                "радиус сгиба обязан быть положительным",
+            SheetMetalFeaturePolicy.Refusal.UnknownLengthType =>
+                "способ задания длины сгиба называется одним из значений ksBendLengthTypeEnum: "
+                + string.Join(", ", SheetMetalFeaturePolicy.LengthTypes.Select(entry => entry.Name)),
+            SheetMetalFeaturePolicy.Refusal.LengthNotPositive =>
+                "длина прямой части сгиба обязана быть положительной",
+            SheetMetalFeaturePolicy.Refusal.DiameterNotPositive =>
+                "диаметр отверстия обязан быть положительным",
+            SheetMetalFeaturePolicy.Refusal.UnknownCutType =>
+                "тип построения отверстия называется by_width или by_depth (ksHoleCutTypeEnum); "
+                + "up_to_surface не входит: глубина того типа задаётся объектом DepthObject",
+            SheetMetalFeaturePolicy.Refusal.MissingDepth =>
+                "тип by_depth требует depth_mm: страница делает Depth доступным только при нём",
+            SheetMetalFeaturePolicy.Refusal.DepthWithoutItsCutType =>
+                "depth_mm передаётся только с cut_type = by_depth: при другом типе ядро сохранит число и "
+                + "не применит его",
+            _ => "значение поля не является конечным числом",
+        };
+
+        return new KompasContractException(
+            ErrorCodes.InvalidArgument,
+            reason + ". Обращение к КОМПАС не выполнялось. " + consequence + ".",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?>
+            {
+                ["field"] = SheetMetalFeaturePolicy.RefusalField(refusal),
+            });
+    }
+
+    private static string DescribeBend(SheetMetalBendDto? bend) => bend is null
+        ? "не прочитано"
+        : $"angle={Num(bend.AngleDeg)} direction={bend.Direction?.ToString() ?? "не прочитано"} "
+          + $"internal_radius={bend.InternalRadius?.ToString() ?? "не прочитано"} radius={Num(bend.RadiusMm)} "
+          + $"length_type={bend.LengthType ?? "не прочитано"} length={Num(bend.LengthMm)} "
+          + $"edge_is_requested={bend.EdgeIsRequested?.ToString() ?? "не прочитано"}";
+
+    private static string DescribeBendRequest(CreateSheetMetalBendCommand command) =>
+        $"angle={Num(command.AngleDeg)} direction={command.Direction?.ToString() ?? "не задано"} "
+        + $"internal_radius={command.InternalRadius?.ToString() ?? "не задано"} radius={Num(command.RadiusMm)} "
+        + $"length_type={command.LengthType ?? "не задано"} length={Num(command.LengthMm)}";
+
+    private static string DescribeHole(SheetMetalHoleDto? hole) => hole is null
+        ? "не прочитано"
+        : $"x={Num(hole.XMm)} y={Num(hole.YMm)} diameter={Num(hole.DiameterMm)} "
+          + $"cut_type={hole.CutType ?? "не прочитано"} depth={Num(hole.DepthMm)}";
+
+    private static string DescribeHoleRequest(CreateSheetMetalHoleCommand command) =>
+        $"x={Num(command.XMm)} y={Num(command.YMm)} diameter={Num(command.DiameterMm)} "
+        + $"cut_type={command.CutType ?? "не задано"} depth={Num(command.DepthMm)}";
 
     /// <summary>A refused request as a contract error naming the field — raised before any COM call.</summary>
     private static KompasContractException SheetMetalRefusal(SheetMetalBodyPolicy.Refusal refusal, string? unfoldType)

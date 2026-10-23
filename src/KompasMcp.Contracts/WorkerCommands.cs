@@ -282,6 +282,9 @@ public static class WorkerCommands
     public const string CreateSheetMetalBody = "sheet_metal.create_body";
     public const string GetSheetMetal = "sheet_metal.get";
     public const string EditSheetMetalBody = "sheet_metal.edit_body";
+    // sheet_metal.create_bend → SMB-04, sheet_metal.create_hole → SMB-05: the two features of a body.
+    public const string CreateSheetMetalBend = "sheet_metal.create_bend";
+    public const string CreateSheetMetalHole = "sheet_metal.create_hole";
     // ── block DRW "drawings" (profile drawings-minimal-v1) ──
     // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →

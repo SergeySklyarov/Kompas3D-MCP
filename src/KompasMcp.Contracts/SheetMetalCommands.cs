@@ -163,3 +163,131 @@ public sealed record EditSheetMetalBodyResult(
     SheetMetalBodyDto BodyBefore,
     SheetMetalBodyDto BodyAfter,
     VerificationDto Verification);
+
+/// <summary>A bend on one edge of an existing sheet-metal body.</summary>
+/// <remarks>INVARIANT: exactly one edge — <c>ISheetMetalBends.Add()</c> was measured with one object only.
+/// INVARIANT: the edge must belong to the body being bent: the kernel accepts an edge of ANOTHER body and
+/// grows the bend counter, and this product cannot delete the bend afterwards.
+/// History: docs/decisions/sheet-metal.md#feature-tools</remarks>
+public sealed record CreateSheetMetalBendCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string BodyRef { get; init; }
+
+    /// <summary>One edge of that body, as the edge listing of the product addresses it.</summary>
+    public required string EdgeRef { get; init; }
+
+    /// <summary><c>ISheetMetalBend.Angle</c> in degrees.</summary>
+    public required double AngleDeg { get; init; }
+
+    /// <summary><c>ISheetMetalBend.Direction</c> — the page calls it BOOL and does not name its values;
+    /// <c>true</c> is the value the probe wrote.</summary>
+    public bool? Direction { get; init; }
+
+    /// <summary><c>ISheetMetalBend.InternalRadius</c>: TRUE — внутренний радиус, FALSE — наружный.</summary>
+    public bool? InternalRadius { get; init; }
+
+    /// <summary><c>ISheetMetalBend.Radius</c> in mm; only meaningful together with
+    /// <see cref="InternalRadius"/>.</summary>
+    public double? RadiusMm { get; init; }
+
+    /// <summary>By name: <c>continue</c>, <c>contour</c>, <c>touch</c>, <c>contour_internal</c>,
+    /// <c>tangent_internal</c> — <c>ksBendLengthTypeEnum</c>.</summary>
+    public string? LengthType { get; init; }
+
+    /// <summary><c>ISheetMetalBend.Length</c> — length of the straight part, mm.</summary>
+    public double? LengthMm { get; init; }
+}
+
+/// <summary>A round hole in an existing sheet-metal body, placed on a face of that body.</summary>
+/// <remarks>INVARIANT: the kernel builds the hole's own sketch (<c>isheetmetalhole_sketch.html</c>: «Эскиз
+/// создается при создании»), so the caller gives a face and a point on it, never a sketch.
+/// History: docs/decisions/sheet-metal.md#feature-tools</remarks>
+public sealed record CreateSheetMetalHoleCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string BodyRef { get; init; }
+
+    /// <summary>The face the hole sits on (<c>ISheetMetalHole.BasePlane</c>), a face of that body.</summary>
+    public required string BaseFaceRef { get; init; }
+
+    public required double XMm { get; init; }
+
+    public required double YMm { get; init; }
+
+    public required double DiameterMm { get; init; }
+
+    /// <summary>By name: <c>by_width</c> (0), <c>by_depth</c> (1) — <c>ksHoleCutTypeEnum</c>.
+    /// <c>up_to_surface</c> (2) is NOT a value: it needs <c>DepthObject</c>, a face that sets the
+    /// depth.</summary>
+    public string? CutType { get; init; }
+
+    /// <summary><c>ISheetMetalHole.Depth</c>, mm — only with <c>cut_type = by_depth</c>.</summary>
+    public double? DepthMm { get; init; }
+}
+
+/// <summary>One bend as the MODEL holds it. <c>null</c> means "not read", never zero.</summary>
+public sealed record SheetMetalBendDto
+{
+    public string? BendRef { get; init; }
+
+    /// <summary>Ordinal in <c>ISheetMetalContainer.SheetMetalBends</c>.</summary>
+    public int? Ordinal { get; init; }
+
+    public double? AngleDeg { get; init; }
+
+    public bool? Direction { get; init; }
+
+    public bool? InternalRadius { get; init; }
+
+    public double? RadiusMm { get; init; }
+
+    public string? LengthType { get; init; }
+
+    public double? LengthMm { get; init; }
+
+    /// <summary><c>BendObjects</c> holds the requested edge, compared by COM identity. <c>null</c> — not
+    /// read. The kernel hands the edge back as another wrapper, so a name is not available at all.</summary>
+    public bool? EdgeIsRequested { get; init; }
+}
+
+/// <summary>One hole as the MODEL holds it.</summary>
+public sealed record SheetMetalHoleDto
+{
+    public string? HoleRef { get; init; }
+
+    public int? Ordinal { get; init; }
+
+    public double? XMm { get; init; }
+
+    public double? YMm { get; init; }
+
+    public double? DiameterMm { get; init; }
+
+    /// <summary>By name, as in <see cref="CreateSheetMetalHoleCommand.CutType"/>.</summary>
+    public string? CutType { get; init; }
+
+    public double? DepthMm { get; init; }
+}
+
+public sealed record CreateSheetMetalBendResult(
+    ReferenceDto BendRef,
+    SheetMetalBendDto Bend,
+    int BendsBefore,
+    int BendsAfter,
+    SheetMetalBodyDto? Body,
+    VerificationDto Verification);
+
+public sealed record CreateSheetMetalHoleResult(
+    ReferenceDto HoleRef,
+    SheetMetalHoleDto Hole,
+    int HolesBefore,
+    int HolesAfter,
+    SheetMetalBodyDto? Body,
+    VerificationDto Verification);

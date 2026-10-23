@@ -882,6 +882,78 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // Route = the documented API7 path: ISheetMetalBends.Add() -> BendObject / Angle / Direction /
+            // InternalRadius / Radius / LengthType / Length -> IModelObject.Update(). One edge only: the
+            // collection was measured with a single object.
+            // History: docs/decisions/sheet-metal.md#feature-tools
+            Mutation("kompas_create_sheet_metal_bend", "Создать сгиб листового тела",
+                "Создаёт сгиб по ОДНОМУ ребру листового тела. Успех — НЕ ответ Update(): счётчик "
+                + "SheetMetalBends вырос на 1, каждое запрошенное поле прочитано назад равным (допуск "
+                + "1e-6), BendObjects содержит запрошенное ребро (сравнение по IUnknown — ядро возвращает "
+                + "ребро другим объектом) и габарит тела изменился. Расхождение — VERIFICATION_FAILED с "
+                + "запрошенным и прочитанным. РЕБРО ДРУГОГО ТЕЛА ядро принимает (счётчик растёт, габарит "
+                + "меняется), поэтому принадлежность проверяется до Add(): владелец ребра (Owner — «объект "
+                + "дерева, породивший этот объект») сравнивается с владельцем тела по IUnknown; не "
+                + "совпал — INVALID_ARGUMENT с именем поля edge_ref. Если владелец не прочитался, "
+                + "проверка названа в unverified_aspects, а не выдана за выполненную. Границы угла, "
+                + "радиуса и длины справка не называет — проверяются положительность и конечность числа. "
+                + "Созданный листовой элемент MCP не удаляет; удалить его можно в интерфейсе КОМПАС, "
+                + "поэтому отказ после Add() несёт partialEffects=true и bend_ref оставшейся записи.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("edge_ref", Sch.Ref("#/$defs/reference")),
+                    ("angle_deg", Sch.Num("Угол сгиба в градусах (ISheetMetalBend.Angle).")),
+                    ("direction", Sch.Nullable(Sch.Bool(
+                        "Направление построения сгиба (ISheetMetalBend.Direction, BOOL). Страница значения "
+                        + "не называет; true — то, что записала проба."))),
+                    ("internal_radius", Sch.Nullable(Sch.Bool(
+                        "TRUE — внутренний радиус, FALSE — наружный (страница называет оба значения)."))),
+                    ("radius_mm", Sch.Nullable(Sch.Num("Радиус сгиба, мм (ISheetMetalBend.Radius)."))),
+                    ("length_type", Sch.Nullable(Sch.Enum(
+                        "Способ задания длины прямой части сгиба по ksBendLengthTypeEnum.",
+                        "continue", "contour", "touch", "contour_internal", "tangent_internal"))),
+                    ("length_mm", Sch.Nullable(Sch.Num("Длина прямой части сгиба, мм."))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.CreateSheetMetalBend,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            // Route = ISheetMetalHoles.Add() -> Body / BasePlane / X / Y / Diameter / CutType / Depth ->
+            // IModelObject.Update(). The kernel builds the hole's own sketch, so no sketch is an input.
+            // History: docs/decisions/sheet-metal.md#feature-tools
+            Mutation("kompas_create_sheet_metal_hole", "Создать отверстие листового тела",
+                "Создаёт круглое отверстие в листовом теле по опорной грани и координатам центра. Эскиз "
+                + "строит ядро («Эскиз создается при создании»), поэтому эскиз не передаётся. Успех — НЕ "
+                + "ответ Update(): счётчик SheetMetalHoles вырос на 1, каждое запрошенное поле прочитано "
+                + "назад равным (допуск 1e-6) и число граней тела выросло по сравнению с чтением ДО вызова. "
+                + "Расхождение — VERIFICATION_FAILED с запрошенным и прочитанным. ГРАНЬ ДРУГОГО ЭЛЕМЕНТА "
+                + "ядро принимает, а удалить отверстие этот продукт не может, поэтому принадлежность грани "
+                + "телу проверяется до Add() сравнением владельца (Owner) по IUnknown; не прочитался — "
+                + "названо в unverified_aspects. Тип построения: by_width (0) и by_depth (1); up_to_surface "
+                + "не входит — его глубину задаёт объект DepthObject, а не число. depth_mm передаётся "
+                + "только с by_depth. Попадание точки в грань не проверяется: страница этого не требует. "
+                + "Созданный листовой элемент MCP не удаляет; удалить его можно в интерфейсе КОМПАС, "
+                + "поэтому отказ после Add() несёт partialEffects=true и hole_ref оставшейся записи.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("base_face_ref", Sch.Ref("#/$defs/reference")),
+                    ("x_mm", Sch.Num("Координата центра отверстия по X на опорной плоскости, мм.")),
+                    ("y_mm", Sch.Num("Координата центра отверстия по Y на опорной плоскости, мм.")),
+                    ("diameter_mm", Sch.Num("Диаметр отверстия, мм.")),
+                    ("cut_type", Sch.Nullable(Sch.Enum(
+                        "Тип построения отверстия по ksHoleCutTypeEnum. up_to_surface не принимается: "
+                        + "глубину того типа задаёт объект DepthObject.",
+                        "by_width", "by_depth"))),
+                    ("depth_mm", Sch.Nullable(Sch.Num("Глубина отверстия, мм — только при cut_type=by_depth."))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.CreateSheetMetalHole,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: "
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "

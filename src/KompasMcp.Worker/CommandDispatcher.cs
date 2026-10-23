@@ -433,6 +433,8 @@ public sealed class CommandDispatcher
             WorkerCommands.CreateSheetMetalBody => _sta.Run(() => CreateSheetMetalBody(request), "sheet_metal.create_body", cancellationToken),
             WorkerCommands.GetSheetMetal => _sta.Run(() => GetSheetMetal(request), "sheet_metal.get", cancellationToken),
             WorkerCommands.EditSheetMetalBody => _sta.Run(() => EditSheetMetalBody(request), "sheet_metal.edit_body", cancellationToken),
+            WorkerCommands.CreateSheetMetalBend => _sta.Run(() => CreateSheetMetalBend(request), "sheet_metal.create_bend", cancellationToken),
+            WorkerCommands.CreateSheetMetalHole => _sta.Run(() => CreateSheetMetalHole(request), "sheet_metal.create_hole", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
             WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
@@ -1564,8 +1566,21 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.EditSheetMetalBody(command), document);
     }
 
-    private object? InsertComponent(IpcFrame request)
+    private object? CreateSheetMetalBend(IpcFrame request)
     {
+        var command = Argument<CreateSheetMetalBendCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateSheetMetalBend(command), document);
+    }
+
+    private object? CreateSheetMetalHole(IpcFrame request)
+    {
+        var command = Argument<CreateSheetMetalHoleCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateSheetMetalHole(command), document);
+    }
+
+    private object? InsertComponent(IpcFrame request)    {
         var command = Argument<InsertComponentCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return TaggedAfter(document.Id, () => _session.InsertComponent(command), document);

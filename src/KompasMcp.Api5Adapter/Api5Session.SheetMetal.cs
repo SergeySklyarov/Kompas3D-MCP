@@ -596,22 +596,24 @@ public partial class Api5Session
             new("values_read_back", mismatched.Count == 0,
                 Observed: DescribeBend(read), Expected: DescribeBendRequest(command)),
             new("update_returned_true", updated == true, Observed: updated?.ToString() ?? "не прочитано"),
-            new("bend_objects_is_requested_edge", read?.EdgeIsRequested != false,
+            new("bend_objects_is_requested_edge", read?.EdgeIsRequested == true,
                 Observed: read?.EdgeIsRequested?.ToString() ?? "BendObjects не прочитан",
-                Expected: "запрошенное ребро"),
+                Expected: "запрошенное ребро прочитано"),
             new("body_changed", bodyChanged,
                 Observed: $"габарит {Num(extentBefore)} → {Num(extentAfter)}, граней {facesBefore} → {facesAfter}",
                 Expected: "габарит тела изменился или число граней выросло"),
         };
 
-        var failed = counterGrew && mismatched.Count == 0 && read?.EdgeIsRequested != false
+        // INVARIANT: an unread BendObjects is a refusal, never a pass - the check may not report as
+        // matched what was not read, and the tool description promises exactly this comparison.
+        var verified = counterGrew && mismatched.Count == 0 && read?.EdgeIsRequested == true
             && bodyChanged;
-        if (!failed)
+        if (!verified)
         {
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 "Сгиб создан, но чтение назад не подтвердило запрошенное: "
-                + string.Join(", ", mismatched.DefaultIfEmpty("счётчик, ребро или изменение тела"))
+                + string.Join(", ", checks.Where(check => !check.Passed).Select(check => check.Name))
                 + ". Сгиб остался в модели — удалить его этим продуктом нельзя.",
                 RetryPolicy.Never,
                 partialEffects: true,

@@ -430,6 +430,9 @@ public sealed class CommandDispatcher
             WorkerCommands.SetMateParameter => _sta.Run(() => SetMateParameter(request), "mate.set_parameter", cancellationToken),
             WorkerCommands.SetMateFixed => _sta.Run(() => SetMateFixed(request), "mate.set_fixed", cancellationToken),
             WorkerCommands.DeleteMate => _sta.Run(() => DeleteMate(request), "mate.delete", cancellationToken),
+            WorkerCommands.CreateSheetMetalBody => _sta.Run(() => CreateSheetMetalBody(request), "sheet_metal.create_body", cancellationToken),
+            WorkerCommands.GetSheetMetal => _sta.Run(() => GetSheetMetal(request), "sheet_metal.get", cancellationToken),
+            WorkerCommands.EditSheetMetalBody => _sta.Run(() => EditSheetMetalBody(request), "sheet_metal.edit_body", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
             WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
@@ -1537,6 +1540,28 @@ public sealed class CommandDispatcher
         var command = Argument<DeleteMateCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return TaggedAfter(document.Id, () => _session.DeleteMate(command), document);
+    }
+
+    // SMB: the sketch carries the document, so the create call resolves it the way extrusion does.
+    private object? CreateSheetMetalBody(IpcFrame request)
+    {
+        var command = Argument<CreateSheetMetalBodyCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.CreateSheetMetalBody(command), document);
+    }
+
+    private object? GetSheetMetal(IpcFrame request)
+    {
+        var command = Argument<GetSheetMetalCommand>(request);
+        return _session.GetSheetMetal(command);
+    }
+
+    private object? EditSheetMetalBody(IpcFrame request)
+    {
+        var command = Argument<EditSheetMetalBodyCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.EditSheetMetalBody(command), document);
     }
 
     private object? InsertComponent(IpcFrame request)

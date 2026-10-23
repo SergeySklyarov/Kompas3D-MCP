@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!--
     Single place where the target framework and bitness are pinned.
@@ -12,7 +12,7 @@
     History: docs/decisions/releases.md#versioning
   -->
   <PropertyGroup>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
   </PropertyGroup>
 
   <PropertyGroup>

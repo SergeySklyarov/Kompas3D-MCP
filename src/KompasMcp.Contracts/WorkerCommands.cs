@@ -276,6 +276,12 @@ public static class WorkerCommands
     public const string SetMateParameter = "mate.set_parameter";
     public const string SetMateFixed = "mate.set_fixed";
     public const string DeleteMate = "mate.delete";
+    // ── block SMB "sheet-metal body" (profile sheet-metal-minimal-v1) ──
+    // sheet_metal.create_body → SMB-01, sheet_metal.get → SMB-02, sheet_metal.edit_body → SMB-03.
+    // The route is the documented API7 one: ISheetMetalContainer from IPart7, then Add() and Update().
+    public const string CreateSheetMetalBody = "sheet_metal.create_body";
+    public const string GetSheetMetal = "sheet_metal.get";
+    public const string EditSheetMetalBody = "sheet_metal.edit_body";
     // ── block DRW "drawings" (profile drawings-minimal-v1) ──
     // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →

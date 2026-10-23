@@ -790,6 +790,95 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // ===== sheet-metal body (block SMB, profile sheet-metal-minimal-v1) =====
+            // Route = the documented API7 path: IPart7 as ISheetMetalContainer -> SheetMetalBodies.Add() ->
+            // Sketch/Thickness/Radius/Direction/UnfoldType -> IModelObject.Update(). There is no API5 route
+            // to a sheet-metal body. Success is the READ-BACK values plus a counter that grew by one.
+            // History: docs/decisions/sheet-metal.md#body-tools
+            Mutation("kompas_create_sheet_metal_body", "Создать листовое тело",
+                "Создаёт листовое тело из существующего эскиза детали. Успех — НЕ ответ Update(): "
+                + "перечитываются счётчик SheetMetalBodies (обязан вырасти на 1), Thickness, Radius, "
+                + "UnfoldType, поле способа развёртки и габарит по нормали эскиза (у плоского тела он равен "
+                + "толщине). Расхождение — отказ VERIFICATION_FAILED с запрошенным и прочитанным. ЯДРО САМО "
+                + "НЕ ОТКАЗЫВАЕТ на нулевой и отрицательной толщине и на нулевом радиусе: принимает значение, "
+                + "отвечает Update()=true и оставляет тело с толщиной 0, поэтому проверку делает сервер — до "
+                + "обращения к КОМПАС. Способ развёртки называется coefficient/bend_value/bend_reduction и "
+                + "требует РОВНО ОДНО своё поле; bend_table в объём не входит: ядро не принимает тип без "
+                + "таблицы сгибов, а формат файла таблицы справка не описывает. УДАЛИТЬ созданное тело этот "
+                + "сервер НЕ МОЖЕТ (документированный DeleteObject листовые объекты не удаляет), поэтому отказ "
+                + "после Add() честно несёт partialEffects=true и body_ref оставшейся записи, а не «откат "
+                + "выполнен». Границ значения коэффициента, величины и уменьшения сгиба справка не называет — "
+                + "проверяется только конечность числа.",
+                Sch.Props(
+                    ("sketch_ref", Sch.Ref("#/$defs/reference")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("thickness_mm", Sch.PositiveMm("Толщина листового тела")),
+                    ("bend_radius_mm", Sch.PositiveMm("Радиус сгиба")),
+                    ("direction", Sch.Enum(
+                        "Направление выдавливания по ksDirectionTypeEnum, значения которого называет страница "
+                        + "перечисления, а страница тела ссылается на него. Измерено на теле только normal.",
+                        "normal", "reverse", "both", "middle_plane")),
+                    ("unfold_type", Sch.Enum(
+                        "Способ определения длины развёртки по ksUnfoldTypeEnum. bend_table не принимается: "
+                        + "тип без таблицы сгибов ядро не устанавливает (измерено), формат файла таблицы "
+                        + "справка не описывает.",
+                        "coefficient", "bend_value", "bend_reduction")),
+                    ("bend_coefficient", Sch.Nullable(Sch.Num(
+                        "Коэффициент нейтрального слоя — только при unfold_type=coefficient."))),
+                    ("bend_value", Sch.Nullable(Sch.Num(
+                        "Величина сгиба — только при unfold_type=bend_value."))),
+                    ("bend_reduction", Sch.Nullable(Sch.Num(
+                        "Уменьшение сгиба — только при unfold_type=bend_reduction."))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.CreateSheetMetalBody,
+                requiresDocument: false,
+                requiresRevision: true),
+
+            ReadOnly("kompas_get_sheet_metal", "Листовое тело: чтение",
+                "Читает листовое состояние и НИЧЕГО не пишет: по body_ref — одно тело, без него — все тела "
+                + "документа плюс счётчики коллекций контейнера, которые называет страница "
+                + "isheetmetalcontainer.html. У тела читаются толщина, радиус сгиба, способ развёртки и поле "
+                + "этого способа, флаг Straighten (это ФЛАГ состояния, геометрию он не перестраивает) и "
+                + "габарит по нормали. Свойства IsCreated у листового тела в версии 24 НЕТ — о теле судят по "
+                + "счётчику, свойствам и габариту. Счётчик, который ядро не отдало, назван в unread: пустое "
+                + "значение означает «не прочитано», а не ноль.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("body_ref", Sch.Nullable(Sch.Ref("#/$defs/reference")))),
+                WorkerCommands.GetSheetMetal,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            Mutation("kompas_edit_sheet_metal_body", "Изменить листовое тело",
+                "Меняет толщину, радиус сгиба, способ развёртки и его поле у существующего тела. Успех — "
+                + "сравнение ПЕРЕЧИТАННЫХ значений с запрошенными, а не ответ Update(); расхождение — отказ "
+                + "VERIFICATION_FAILED с запрошенным и прочитанным. Способ развёртки читается из МОДЕЛИ, "
+                + "поэтому поле чужого способа отвергается INVALID_ARGUMENT с именем поля до записи: число, "
+                + "которое ядро сохранит и не применит, читалось бы как успех. Повтор с теми же значениями "
+                + "идемпотентен и виден в ответе (idempotent_repeat). Нулевая и отрицательная толщина и "
+                + "нулевой радиус отвергаются сервером до обращения к КОМПАС — ядро их принимает. Правка "
+                + "тела со сгибами работает (измерено), но сгибы этой правкой не пересчитываются и здесь не "
+                + "проверяются.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("thickness_mm", Sch.Nullable(Sch.PositiveMm("Новая толщина"))),
+                    ("bend_radius_mm", Sch.Nullable(Sch.PositiveMm("Новый радиус сгиба"))),
+                    ("unfold_type", Sch.Nullable(Sch.Enum(
+                        "Новый способ определения длины развёртки.",
+                        "coefficient", "bend_value", "bend_reduction"))),
+                    ("bend_coefficient", Sch.Nullable(Sch.Num(
+                        "Коэффициент нейтрального слоя — только при способе coefficient."))),
+                    ("bend_value", Sch.Nullable(Sch.Num(
+                        "Величина сгиба — только при способе bend_value."))),
+                    ("bend_reduction", Sch.Nullable(Sch.Num(
+                        "Уменьшение сгиба — только при способе bend_reduction."))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.EditSheetMetalBody,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: "
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "

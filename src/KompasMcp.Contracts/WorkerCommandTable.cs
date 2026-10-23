@@ -238,6 +238,9 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.SetMateParameter, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.SetMateFixed, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.DeleteMate, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.CreateSheetMetalBody, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.GetSheetMetal, WorkerAction.Read);
+        Cad(WorkerCommands.EditSheetMetalBody, WorkerAction.ModelMutation, 240_000);
 
         // ---- drawings ----
         // Views and export go through the API7 bridge (TransferInterface + AddStandartViews or the

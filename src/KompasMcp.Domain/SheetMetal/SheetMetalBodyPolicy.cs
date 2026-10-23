@@ -38,6 +38,7 @@ public static class SheetMetalBodyPolicy
     public enum Refusal
     {
         None,
+        EmptySketch,
         ThicknessNotPositive,
         RadiusNotPositive,
         UnknownDirection,
@@ -113,6 +114,13 @@ public static class SheetMetalBodyPolicy
         "bend_reduction" => reduction,
         _ => null,
     };
+
+    /// <summary>Whether the sketch has nothing to build a body from.
+    /// <c>MEASURED:</c> a body created from an empty sketch answers with the counter +1 and readable
+    /// properties but never reaches the saved file, and the kernel keeps no record to clean up — so the
+    /// refusal has to happen before <c>Add()</c>. <c>null</c> — the server did not record this sketch's
+    /// primitives (drawn by another client or reopened), which is "not checked", never "empty".</summary>
+    public static bool SketchIsEmpty(int? recordedPrimitives) => recordedPrimitives == 0;
 
     /// <summary>The rule of a create request, decided before anything is written.</summary>
     public static Refusal CheckCreate(
@@ -210,6 +218,7 @@ public static class SheetMetalBodyPolicy
     /// <summary>The field name a refusal points at, so the caller knows what to fix.</summary>
     public static string RefusalField(Refusal refusal) => refusal switch
     {
+        Refusal.EmptySketch => "sketch_ref",
         Refusal.ThicknessNotPositive => "thickness_mm",
         Refusal.RadiusNotPositive => "bend_radius_mm",
         Refusal.UnknownDirection => "direction",

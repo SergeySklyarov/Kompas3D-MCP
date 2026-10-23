@@ -146,4 +146,17 @@ public class SheetMetalBodyPolicyTests
         Assert.True(SheetMetalBodyPolicy.IsRepeat(before, 2d, 3d, "bend_value", null, 1.2d, null));
         Assert.False(SheetMetalBodyPolicy.IsRepeat(before, 2.5d, 3d, "bend_value", null, 1.2d, null));
     }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(4, false)]
+    // Not recorded is "not checked", never "empty": the server did not draw this sketch.
+    [InlineData(null, false)]
+    public void SketchIsEmpty_OnlyWhenTheServerDrewNothing(int? primitives, bool empty) =>
+        Assert.Equal(empty, SheetMetalBodyPolicy.SketchIsEmpty(primitives));
+
+    [Fact]
+    public void EmptySketch_RefusalPointsAtTheSketchField() =>
+        Assert.Equal("sketch_ref", SheetMetalBodyPolicy.RefusalField(SheetMetalBodyPolicy.Refusal.EmptySketch));
 }

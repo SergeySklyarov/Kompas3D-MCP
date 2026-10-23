@@ -50,6 +50,15 @@ public partial class Api5Session
             throw SheetMetalRefusal(refusal, command.UnfoldType);
         }
 
+        // MEASURED: a body from an EMPTY sketch answers with the counter +1 and readable properties but
+        // never reaches the saved file, and nothing is left to clean up — so an empty profile is refused
+        // here, by the same reading of the drawn profile the extrusion input check uses.
+        var recordedPrimitives = RecordedPrimitives(command.SketchRef);
+        if (SheetMetalBodyPolicy.SketchIsEmpty(recordedPrimitives))
+        {
+            throw SheetMetalRefusal(SheetMetalBodyPolicy.Refusal.EmptySketch, command.UnfoldType);
+        }
+
         var target = RequireSketch(command.SketchRef);
         var document = target.Document;
         var (container, sheet) = RequireSheetMetal(document, "Тело не создавалось");
@@ -177,6 +186,13 @@ public partial class Api5Session
         }
 
         var unverified = new List<string>();
+        if (recordedPrimitives is null)
+        {
+            unverified.Add("empty_sketch_not_checked — профиль эскиза этим сеансом не записан (эскиз нарисован "
+                + "другим клиентом или документ переоткрыт): пустоту эскиза проверить нечем, тело создано "
+                + "без этой проверки");
+        }
+
         if (!extentRead)
         {
             unverified.Add("extent_not_read — габарит по нормали не прочитан: на детали, где единственное "
@@ -548,12 +564,21 @@ public partial class Api5Session
         };
     }
 
+    /// <summary>Primitives this server drew into the sketch, or <c>null</c> when it drew none of them —
+    /// a sketch written by another client or a reopened document, where "empty" cannot be claimed.</summary>
+    private int? RecordedPrimitives(string sketchRef) =>
+        _sketchProfiles.TryGetValue(sketchRef, out var profile) ? profile.Entities.Count : null;
+
     /// <summary>A refused request as a contract error naming the field — raised before any COM call.</summary>
     private static KompasContractException SheetMetalRefusal(SheetMetalBodyPolicy.Refusal refusal, string? unfoldType)
     {
         var field = SheetMetalBodyPolicy.RefusalField(refusal);
         var reason = refusal switch
         {
+            SheetMetalBodyPolicy.Refusal.EmptySketch =>
+                "эскиз пуст — в нём нет ни одного примитива, и листовое тело из него в файл не попадёт: "
+                + "ядро на пустом эскизе отвечает счётчиком +1 и перечитанными свойствами, но после "
+                + "сохранения и открытия тел в документе 0 (измерено)",
             SheetMetalBodyPolicy.Refusal.ThicknessNotPositive =>
                 "толщина листового тела обязана быть положительной: ядро принимает 0 и отрицательное "
                 + "значение, отвечает Update() = TRUE и оставляет тело с толщиной 0 (измерено)",

@@ -11,11 +11,11 @@ namespace SheetMetalProbe;
 
 /// <summary>Measures the documented sheet-metal routes on this installation, end to end.</summary>
 /// <remarks>
-/// INVARIANT: every check records EXPECTED and READ, so a route that answers without building
-/// anything cannot be reported as working. INVARIANT: the entry into KOMPAS is the product's own
-/// route (ProgID KOMPAS.Application.5, then API7 through ksGetApplication7), never a CoCreateInstance
-/// of the API7 server.
-/// DOC: isheetmetalcontainer.html in the reference/kompas-sdk-v24 mirror. History: docs/decisions/sheet-metal.md#probe
+/// INVARIANT: each check records EXPECTED and READ, so a route that answers without building anything
+/// cannot pass; a kernel refusal is recorded as INFO and never retried with other input.
+/// INVARIANT: the entry is the product's own route (ProgID KOMPAS.Application.5, then ksGetApplication7).
+/// DOC: isheetmetal*.html, ks*enum.html, ksdocument3d_deleteobject.html (reference/kompas-sdk-v24).
+/// History: docs/decisions/sheet-metal.md#probe-routes
 /// </remarks>
 internal sealed class SheetMetalProbe : IDisposable
 {
@@ -24,6 +24,9 @@ internal sealed class SheetMetalProbe : IDisposable
 
     /// <summary>ksAPITypeEnum.ksAPI7Dual — the transfer mode the product's bridge uses.</summary>
     private static readonly int Api7Dual = (int)ksAPITypeEnum.ksAPI7Dual;
+
+    /// <summary>ksAPITypeEnum.ksAPI5Auto — the reverse direction, used for the deletion route.</summary>
+    private static readonly int Api5Auto = (int)ksAPITypeEnum.ksAPI5Auto;
 
     private readonly string _outPath;
     private readonly List<Check> _checks = new();
@@ -34,9 +37,17 @@ internal sealed class SheetMetalProbe : IDisposable
     private IKompasDocument3D? _doc7;
     private ISheetMetalContainer? _container;
     private ISheetMetalBody? _body;
+    private ISheetMetalBody? _body2;
+    private ISheetMetalBend? _bend1;
+    private ISheetMetalBend? _bend2;
+    private ISheetMetalCut? _cut;
+    private ISheetMetalHole? _hole;
     private ISheetMetalBendUnfoldParameters? _unfold;
     private string _version = "unknown";
     private int? _pid;
+    private double _thickness = 1.5d;
+    private double _radius = 2d;
+    private int _facesBeforeCut;
 
     public SheetMetalProbe(string outPath) => _outPath = outPath;
 
@@ -48,10 +59,17 @@ internal sealed class SheetMetalProbe : IDisposable
             Document();
             Container();
             Body();
+            EditBody();
+            UnfoldTypes();
+            CutAndHole();
             Bend();
+            SecondBend();
+            EditAfterBend();
+            Delete();
             UnfoldOperation();
             Unfold();
             Reopen();
+            Refusals();
         }
         catch (ProbeStop)
         {
@@ -179,32 +197,14 @@ internal sealed class SheetMetalProbe : IDisposable
         Record("container_qi", "IPart7 приводится к ISheetMetalContainer", "ISheetMetalContainer", Verdict.Pass);
         CheckInt("bodies_count_initial", 0, _container.SheetMetalBodies.Count);
         CheckInt("bends_count_initial", 0, _container.SheetMetalBends.Count);
+        CheckInt("cuts_count_initial", 0, _container.SheetMetalCuts.Count);
+        CheckInt("holes_count_initial", 0, _container.SheetMetalHoles.Count);
     }
 
     private void Body()
     {
-        var sketch5 = MakeSketch();
-
-        object? transferred;
-        ISketch? sketch7;
-        try
-        {
-            transferred = _app5!.TransferInterface(sketch5, Api7Dual, 0);
-            sketch7 = transferred as ISketch;
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            Record("sketch_to7", "эскиз перенесён в API7 (ISketch)", Describe(ex), Verdict.Fail);
-            throw new ProbeStop();
-        }
-
-        if (sketch7 is null)
-        {
-            Record("sketch_to7", "эскиз перенесён в API7 (ISketch)", RuntimeName(transferred), Verdict.Fail);
-            throw new ProbeStop();
-        }
-
-        Record("sketch_to7", "эскиз перенесён в API7 (ISketch)", "ISketch", Verdict.Pass);
+        var sketch5 = MakeRectangleSketch(-20d, -20d, 20d, 20d, "sketch", "эскиз 40x40 на плоскости XOY создан");
+        var sketch7 = Transfer7<ISketch>(sketch5, "sketch_to7", "эскиз перенесён в API7 (ISketch)");
 
         SheetMetalBody created;
         try
@@ -239,35 +239,211 @@ internal sealed class SheetMetalProbe : IDisposable
             RuntimeName(SafeObject(() => _body.Profile)), Verdict.Info);
     }
 
+    /// <summary>Order item 1: the edit route <c>kompas_edit_sheet_metal_body</c> rests on.</summary>
+    /// <remarks>DOC: isheetmetalbody_thickness.html, ..._radius.html, ..._unfoldtype.html,
+    /// ..._bendcoefficient.html, ..._bendvalue.html, ..._bendreduction.html, ..._bendtablepath.html
+    /// History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void EditBody()
+    {
+        var before = Gabarit();
+        Record("edit_gabarit_before", "габарит до правки толщины и радиуса", before, Verdict.Info);
+
+        TrySet("edit_thickness_set", () => _body!.Thickness = 2d);
+        TrySet("edit_radius_set", () => _body!.Radius = 3d);
+        CheckBool("edit_update", true, SafeBool(() => _body!.Update()));
+        CheckDouble("edit_thickness_read_back", 2d, SafeDouble(() => _body!.Thickness));
+        CheckDouble("edit_radius_read_back", 3d, SafeDouble(() => _body!.Radius));
+        Record("edit_gabarit_after", "габарит после правки", Gabarit(), Verdict.Info);
+
+        // MEASURED: a flat body's Z extent IS its thickness, so this is the geometry check the edit
+        // route needs and not a re-read of the property it just wrote.
+        CheckDouble("edit_thickness_by_gabarit", 2d, ExtentZ());
+
+        _thickness = SafeDouble(() => _body!.Thickness) ?? _thickness;
+        _radius = SafeDouble(() => _body!.Radius) ?? _radius;
+    }
+
+    /// <summary>Order item 1, second half: every unfold-length type the page set names.</summary>
+    /// <remarks>DOC: ksunfoldtypeenum.html — ksCoefficient 0, ksValueBend 1, ksDecreaseBend 2,
+    /// ksTableBends 3. Each page of the value says the property is available only under its own type.
+    /// History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void UnfoldTypes()
+    {
+        UnfoldTypeCase("coefficient", 0, () => _body!.BendCoefficient = 0.4d,
+            () => _body!.BendCoefficient, 0.4d);
+        UnfoldTypeCase("bend_value", 1, () => _body!.BendValue = 1.2d,
+            () => _body!.BendValue, 1.2d);
+        UnfoldTypeCase("bend_reduction", 2, () => _body!.BendReduction = 0.3d,
+            () => _body!.BendReduction, 0.3d);
+
+        TrySet("edit_unfoldtype_table_set", () => _body!.UnfoldType = (ksUnfoldTypeEnum)3);
+        CheckBool("edit_unfoldtype_table_update", true, SafeBool(() => _body!.Update()));
+        CheckInt("edit_unfoldtype_table_read_back", 3, SafeInt(() => _body!.UnfoldType));
+        Record("edit_bendtablepath_read", "путь к таблице сгибов при типе «из таблицы»",
+            Quote(SafeString(() => _body!.BendTablePath)), Verdict.Info);
+
+        var tableTypeTaken = SafeInt(() => _body!.UnfoldType) == 3;
+        Record("edit_table_blocks_coefficient_check",
+            "недоступность сеттеров при типе «из таблицы» проверяется только если тип установился",
+            tableTypeTaken ? "тип установился, проверка ниже" : "тип не установился: проверка не применима",
+            Verdict.Info);
+        if (tableTypeTaken)
+        {
+            // The page says the coefficient, value and reduction setters are UNAVAILABLE under the table
+            // type, because the numbers come from the base. A refusal is the documented answer.
+            CheckBool("edit_table_blocks_coefficient", true, Refused(() => _body!.BendCoefficient = 0.4d));
+        }
+        Record("edit_bendtablepath_not_attempted",
+            "BendTablePath не записывался: страница называет тип BSTR и смысл «путь к таблице сгибов», "
+            + "формат файла таблицы не описан", "не пробовался", Verdict.Info);
+
+        TrySet("edit_unfoldtype_reset_set", () => _body!.UnfoldType = (ksUnfoldTypeEnum)0);
+        TrySet("edit_unfoldtype_reset_coefficient", () => _body!.BendCoefficient = 0.4d);
+        CheckBool("edit_unfoldtype_reset_update", true, SafeBool(() => _body!.Update()));
+    }
+
+    private void UnfoldTypeCase(string id, int type, Action setParam, Func<double> getParam, double expected)
+    {
+        TrySet("edit_unfoldtype_" + id + "_set", () => _body!.UnfoldType = (ksUnfoldTypeEnum)type);
+        CheckBool("edit_unfoldtype_" + id + "_update", true, SafeBool(() => _body!.Update()));
+        CheckInt("edit_unfoldtype_" + id + "_read_back", type, SafeInt(() => _body!.UnfoldType));
+        TrySet("edit_unfoldparam_" + id + "_set", setParam);
+        CheckBool("edit_unfoldparam_" + id + "_update", true, SafeBool(() => _body!.Update()));
+        CheckDouble("edit_unfoldparam_" + id + "_read_back", expected, SafeDouble(getParam));
+    }
+
+    /// <summary>Order item 4: the cut and the hole routes the features order will write.</summary>
+    /// <remarks>DOC: isheetmetalcuts_add.html, isheetmetalcut_body.html, ..._sketch.html, ..._cuttype.html,
+    /// ..._depth.html, isheetmetalholes_add.html, isheetmetalhole_baseplane.html, ..._x.html, ..._y.html,
+    /// ..._diameter.html, ..._cuttype.html, ..._depth.html. Both Add pages say: set the parameters, then
+    /// IModelObject::Update. History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void CutAndHole()
+    {
+        _facesBeforeCut = FaceCount();
+        Record("cut_faces_before", "граней у тела до выреза", _facesBeforeCut.ToString(CultureInfo.InvariantCulture),
+            Verdict.Info);
+
+        // Two documented inputs are measured, because the page names the sketch of a cut without saying
+        // which support it must have: the XOY plane the body was built from, and a face of the body.
+        var facesAfterPlaneCut = TryCut("cut", null, -15d, -15d, -5d, -5d);
+        var planeCut = _cut;
+        CheckBool("cut_faces_increased", true, facesAfterPlaneCut > _facesBeforeCut);
+
+        var facesAfterFaceCut = TryCut("cut_face", FaceEntity(), 0d, 0d, 8d, 8d);
+        CheckBool("cut_face_faces_increased", true, facesAfterFaceCut > facesAfterPlaneCut);
+        if (facesAfterFaceCut <= facesAfterPlaneCut)
+        {
+            // Nothing cut through the face support either: the deletion step still measures the object.
+            _cut = planeCut;
+        }
+
+        var facesAfterCut = FaceCount();
+
+        var holes = _container!.SheetMetalHoles;
+        var holesBefore = holes.Count;
+        SheetMetalHole holeCreated;
+        try
+        {
+            holeCreated = holes.Add();
+        }
+        catch (COMException ex)
+        {
+            Record("hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        _hole = holeCreated as ISheetMetalHole;
+        if (_hole is null)
+        {
+            Record("hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", RuntimeName(holeCreated), Verdict.Fail);
+            return;
+        }
+
+        Record("hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", "ISheetMetalHole", Verdict.Pass);
+        var face = FirstFace();
+        Record("hole_baseplane", "опорная грань найдена", face is null ? "null" : "IModelObject", Verdict.Info);
+        TrySet("hole_body_set", () => _hole.Body = (IKompasAPIObject)_body!);
+        if (face is not null)
+        {
+            TrySet("hole_baseplane_set", () => _hole.BasePlane = face);
+        }
+
+        TrySet("hole_x_set", () => _hole.X = 5d);
+        TrySet("hole_y_set", () => _hole.Y = 5d);
+        TrySet("hole_diameter_set", () => _hole.Diameter = 6d);
+        TrySet("hole_cuttype_set", () => _hole.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth);
+        TrySet("hole_depth_set", () => _hole.Depth = 1d);
+        CheckBool("hole_update", true, SafeBool(() => _hole.Update()));
+        CheckInt("hole_count_after_add", holesBefore + 1, holes.Count);
+        CheckDouble("hole_depth_read_back", 1d, SafeDouble(() => _hole.Depth));
+        CheckDouble("hole_diameter_read_back", 6d, SafeDouble(() => _hole.Diameter));
+        CheckInt("hole_cuttype_read_back", 1, SafeInt(() => _hole.CutType));
+
+        var facesAfterHole = FaceCount();
+        Record("hole_faces_after", "граней у тела после отверстия",
+            facesAfterHole.ToString(CultureInfo.InvariantCulture), Verdict.Info);
+        CheckBool("hole_faces_increased", true, facesAfterHole > facesAfterCut);
+    }
+
+    /// <summary>One cut attempt with a named support; returns the face count after the attempt.</summary>
+    /// <remarks>DOC: isheetmetalcuts_add.html, isheetmetalcut_body.html, ..._sketch.html, ..._cuttype.html,
+    /// ..._depth.html. History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private int TryCut(string prefix, ksEntity? support, double x1, double y1, double x2, double y2)
+    {
+        var sketch5 = MakeRectangleSketch(x1, y1, x2, y2, prefix + "_sketch", "эскиз выреза создан", support);
+        Record(prefix + "_sketch_support", "опора эскиза выреза",
+            support is null ? "плоскость XOY" : "грань тела", Verdict.Info);
+        var sketch7 = Transfer7<ISketch>(sketch5, prefix + "_sketch_to7", "эскиз выреза перенесён в API7");
+
+        var cuts = _container!.SheetMetalCuts;
+        var cutsBefore = cuts.Count;
+        ISheetMetalCut? cut;
+        try
+        {
+            cut = cuts.Add() as ISheetMetalCut;
+        }
+        catch (COMException ex)
+        {
+            Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", Describe(ex), Verdict.Fail);
+            return FaceCount();
+        }
+
+        if (cut is null)
+        {
+            Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", "Add() → null", Verdict.Fail);
+            return FaceCount();
+        }
+
+        Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", "ISheetMetalCut", Verdict.Pass);
+        _cut = cut;
+        TrySet(prefix + "_body_set", () => cut.Body = (IKompasAPIObject)_body!);
+        TrySet(prefix + "_sketch_set", () => cut.Sketch = (Sketch)sketch7);
+        TrySet(prefix + "_cuttype_set", () => cut.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth);
+        TrySet(prefix + "_depth_set", () => cut.Depth = 1d);
+        CheckBool(prefix + "_update", true, SafeBool(() => cut.Update()));
+        CheckInt(prefix + "_count", cutsBefore + 1, cuts.Count);
+        CheckDouble(prefix + "_depth_read_back", 1d, SafeDouble(() => cut.Depth));
+        CheckInt(prefix + "_cuttype_read_back", 1, SafeInt(() => cut.CutType));
+        Record(prefix + "_body_read_back", "Body выреза читается назад",
+            RuntimeName(ReadValue(() => cut.Body, prefix + "_body_read")), Verdict.Info);
+
+        var faces = FaceCount();
+        Record(prefix + "_faces_after", "граней у тела после выреза",
+            faces.ToString(CultureInfo.InvariantCulture), Verdict.Info);
+        return faces;
+    }
+
     private void Bend()
     {
         var edge = FirstEdge();
+        var edge7 = Transfer7<IModelObject>(edge, "edge_to7", "ребро тела перенесено в API7 (IModelObject)");
 
-        object? transferred;
-        IModelObject? edge7;
-        try
-        {
-            transferred = _app5!.TransferInterface(edge, Api7Dual, 0);
-            edge7 = transferred as IModelObject;
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            Record("edge_to7", "ребро тела перенесено в API7 (IModelObject)", Describe(ex), Verdict.Fail);
-            throw new ProbeStop();
-        }
-
-        if (edge7 is null)
-        {
-            Record("edge_to7", "ребро тела перенесено в API7 (IModelObject)", RuntimeName(transferred), Verdict.Fail);
-            throw new ProbeStop();
-        }
-
-        Record("edge_to7", "ребро тела перенесено в API7 (IModelObject)", "IModelObject", Verdict.Pass);
-
+        var bends = _container!.SheetMetalBends;
+        var countBefore = bends.Count;
         SheetMetalBend created;
         try
         {
-            created = _container!.SheetMetalBends.Add();
+            created = bends.Add();
         }
         catch (COMException ex)
         {
@@ -275,8 +451,8 @@ internal sealed class SheetMetalProbe : IDisposable
             throw new ProbeStop();
         }
 
-        var bend = created as ISheetMetalBend;
-        if (bend is null)
+        _bend1 = created as ISheetMetalBend;
+        if (_bend1 is null)
         {
             Record("bend_add", "ISheetMetalBends.Add() отдаёт ISheetMetalBend", RuntimeName(created), Verdict.Fail);
             throw new ProbeStop();
@@ -284,50 +460,157 @@ internal sealed class SheetMetalProbe : IDisposable
 
         Record("bend_add", "ISheetMetalBends.Add() отдаёт ISheetMetalBend", "ISheetMetalBend", Verdict.Pass);
 
-        bend.BendObject = edge7;
-        bend.Angle = 90d;
-        CheckBool("bend_update", true, SafeBool(() => bend.Update()));
-        CheckInt("bends_count_after_add", 1, _container.SheetMetalBends.Count);
-        CheckDouble("bend_angle_read_back", 90d, SafeDouble(() => bend.Angle));
+        _bend1.BendObject = edge7;
+        _bend1.Angle = 90d;
+        CheckBool("bend_update", true, SafeBool(() => _bend1.Update()));
+        CheckInt("bends_count_after_add", countBefore + 1, bends.Count);
+        CheckDouble("bend_angle_read_back", 90d, SafeDouble(() => _bend1.Angle));
+
+        // DOC: isheetmetalbend_bendobjects.html (VARIANT), ..._direction.html (BOOL),
+        // ..._internalradius.html (BOOL), ..._lengthtype.html (ksBendLengthTypeEnum), ..._length.html.
+        // MEASURED: the read-back of BendObjects is compared by COM identity, because the edge comes back
+        // as another wrapper and a name comparison is not available for an edge at all.
+        var bendObjects = ReadValue(() => _bend1.BendObjects, "bend_bendobjects_read");
+        Record("bend_bendobjects_type", "что вернул BendObjects", RuntimeName(bendObjects), Verdict.Info);
+        CheckInt("bend_bendobjects_count", 1, ArrayLength(bendObjects));
+        CheckBool("bend_bendobjects_is_requested_edge", true, ArrayContains(bendObjects, edge7));
+
+        TrySet("bend_direction_set", () => _bend1.Direction = true);
+        TrySet("bend_internalradius_set", () => _bend1.InternalRadius = true);
+        TrySet("bend_lengthtype_set", () => _bend1.LengthType = ksBendLengthTypeEnum.ksBendLengthByContour);
+        TrySet("bend_length_set", () => _bend1.Length = 5d);
+        CheckBool("bend_update_after_fields", true, SafeBool(() => _bend1.Update()));
+        CheckBool("bend_direction_read_back", true, SafeBool(() => _bend1.Direction));
+        CheckBool("bend_internalradius_read_back", true, SafeBool(() => _bend1.InternalRadius));
+        CheckInt("bend_lengthtype_read_back", 1, SafeInt(() => _bend1.LengthType));
+        CheckDouble("bend_length_read_back", 5d, SafeDouble(() => _bend1.Length));
     }
 
-    private void Unfold()
+    /// <summary>Order item 3, second half: a second bend on another edge of the same body.</summary>
+    /// <remarks>DOC: isheetmetalbends_add.html. History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void SecondBend()
     {
-        var unfold = _unfold = _container!.SheetMetalBendUnfoldParameters;
-        Record("unfold_params_created", "IsCreated у параметров развёртки после сгиба",
-            Flag(SafeBool(() => unfold.IsCreated)), Verdict.Info);
-        Record("unfold_flag", "Unfold до разгибания", Flag(SafeBool(() => unfold.Unfold)), Verdict.Info);
+        var edge = SecondEdge();
+        var edge7 = Transfer7<IModelObject>(edge, "bend2_edge_to7", "второе ребро перенесено в API7");
 
-        var bent = Gabarit();
-        _body!.Straighten = true;
-        CheckBool("straighten_read_back", true, SafeBool(() => _body.Straighten));
-        CheckBool("body_update_after_straighten", true, SafeBool(() => _body.Update()));
-        var straightened = Gabarit();
-
-        Record("gabarit_bent", "габарит согнутого тела", bent, Verdict.Info);
-        Record("gabarit_after_straighten", "габарит после Straighten", straightened, Verdict.Info);
-        CheckBool("gabarit_changed_by_straighten", true, bent != straightened);
-
-        // The second documented route to an unfolded state: the unfold parameters themselves, with
-        // the inputs the same pages name (plane, fixed faces) before UpdateParam().
-        // DOC: isheetmetalbendunfoldparameters_unfold.html, ..._unfoldplane.html, ..._updateparam.html
-        if (Plane7() is { } plane)
+        var bends = _container!.SheetMetalBends;
+        var countBefore = bends.Count;
+        SheetMetalBend created;
+        try
         {
-            TrySet("unfold_plane_set", () => unfold.UnfoldPlane = plane);
+            created = bends.Add();
+        }
+        catch (COMException ex)
+        {
+            Record("bend2_add", "второй сгиб создан", Describe(ex), Verdict.Fail);
+            return;
         }
 
-        if (FirstFace() is { } fixedFace)
+        _bend2 = created as ISheetMetalBend;
+        if (_bend2 is null)
         {
-            TrySet("unfold_fixed_faces_set", () => unfold.FixedFaces = new object[] { fixedFace });
+            Record("bend2_add", "второй сгиб создан", RuntimeName(created), Verdict.Fail);
+            return;
         }
 
-        TrySet("unfold_set", () => unfold.Unfold = true);
-        CheckBool("unfold_update_param", true, SafeBool(() => unfold.UpdateParam()));
-        CheckBool("unfold_is_created", true, SafeBool(() => unfold.IsCreated));
-        CheckBool("unfold_flag_read_back", true, SafeBool(() => unfold.Unfold));
-        var unfolded = Gabarit();
-        Record("gabarit_after_unfold", "габарит после Unfold + UpdateParam", unfolded, Verdict.Info);
-        CheckBool("gabarit_changed_by_unfold", true, bent != unfolded);
+        Record("bend2_add", "второй сгиб создан", "ISheetMetalBend", Verdict.Pass);
+        _bend2.BendObject = edge7;
+        _bend2.Angle = 45d;
+        CheckBool("bend2_update", true, SafeBool(() => _bend2.Update()));
+        CheckInt("bend2_count", countBefore + 1, bends.Count);
+        CheckDouble("bend2_angle_read_back", 45d, SafeDouble(() => _bend2.Angle));
+        CheckDouble("bend1_angle_after_second", 90d, SafeDouble(() => _bend1!.Angle));
+    }
+
+    /// <summary>Order item 2: editing the body AFTER it has bends — the research left this open.</summary>
+    /// <remarks>DOC: isheetmetalbody_thickness.html, imodelobject_update.html (IModelObject::Update is the
+    /// call both Add pages require). History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void EditAfterBend()
+    {
+        var bendsBefore = _container!.SheetMetalBends.Count;
+        var gabaritBefore = Gabarit();
+        Record("edit2_gabarit_before", "габарит согнутого тела до правки толщины", gabaritBefore, Verdict.Info);
+
+        TrySet("edit2_thickness_set", () => _body!.Thickness = 2.5d);
+        CheckBool("edit2_update", true, SafeBool(() => _body!.Update()));
+        CheckDouble("edit2_thickness_read_back", 2.5d, SafeDouble(() => _body!.Thickness));
+        Record("edit2_body_state", "тело после правки читается: толщина и счётчик сгибов", "см. проверки выше",
+            Verdict.Info);
+        CheckInt("edit2_bends_count", bendsBefore, _container.SheetMetalBends.Count);
+        CheckDouble("edit2_bend1_angle", 90d, SafeDouble(() => _bend1!.Angle));
+        CheckDouble("edit2_bend2_angle", 45d, SafeDouble(() => _bend2!.Angle));
+        Record("edit2_gabarit_after", "габарит согнутого тела после правки", Gabarit(), Verdict.Info);
+        CheckBool("edit2_gabarit_changed", true, gabaritBefore != Gabarit());
+
+        _thickness = SafeDouble(() => _body!.Thickness) ?? _thickness;
+    }
+
+    /// <summary>Order item 5: deletion through the route the product already uses.</summary>
+    /// <remarks>DOC: ksdocument3d_deleteobject.html — «Удалить объект». The product calls it from
+    /// Api5Session.Lifecycle.cs; the created objects are API7, so each is transferred to API5 first.
+    /// History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void Delete()
+    {
+        var cutsBefore = _container!.SheetMetalCuts.Count;
+        DeleteVia5(_cut, "delete_cut");
+        CheckInt("delete_cut_count", cutsBefore - 1, _container.SheetMetalCuts.Count);
+        CheckInt("delete_cut_bodies_kept", 1, _container.SheetMetalBodies.Count);
+        var facesAfterCutDelete = FaceCount();
+        Record("delete_cut_faces", "граней после удаления выреза",
+            facesAfterCutDelete.ToString(CultureInfo.InvariantCulture), Verdict.Info);
+        CheckInt("delete_cut_faces_restored", _facesBeforeCut, facesAfterCutDelete);
+
+        var bendsBefore = _container.SheetMetalBends.Count;
+        var gabaritBefore = Gabarit();
+        DeleteVia5(_bend1, "delete_bend");
+        CheckInt("delete_bend_count", bendsBefore - 1, _container.SheetMetalBends.Count);
+        CheckInt("delete_bend_body_kept", 1, _container.SheetMetalBodies.Count);
+        Record("delete_bend_gabarit", "габарит после удаления сгиба", Gabarit(), Verdict.Info);
+        CheckBool("delete_bend_gabarit_changed", true, gabaritBefore != Gabarit());
+    }
+
+    private bool? DeleteVia5(object? api7Object, string id)
+    {
+        if (api7Object is null)
+        {
+            Record(id, "удаление документированным DeleteObject", "объекта нет: шаг не создал его", Verdict.Fail);
+            return null;
+        }
+
+        object target = api7Object;
+        try
+        {
+            if (_app5!.TransferInterface(api7Object, Api5Auto, 0) is { } transferred)
+            {
+                // INVARIANT: "the same object came back" is not a conversion; asking for the object's own
+                // API answers the source object by design.
+                var converted = !SameCom(transferred, api7Object);
+                target = converted ? transferred : api7Object;
+                Record(id + "_transfer", "объект передан в API5", converted ? "перенос выполнен" : "тот же объект",
+                    Verdict.Info);
+            }
+            else
+            {
+                Record(id + "_transfer", "объект передан в API5", "null: в DeleteObject подан объект API7",
+                    Verdict.Info);
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(id + "_transfer", "объект передан в API5", Describe(ex), Verdict.Info);
+        }
+
+        try
+        {
+            var deleted = _doc5!.DeleteObject(target);
+            Record(id, "DeleteObject → true", deleted.ToString(), deleted ? Verdict.Pass : Verdict.Fail);
+            return deleted;
+        }
+        catch (COMException ex)
+        {
+            Record(id, "DeleteObject → true", Describe(ex), Verdict.Fail);
+            return null;
+        }
     }
 
     /// <summary>The documented "Согнуть/Разогнуть" operation: its type comes as the first argument.</summary>
@@ -371,6 +654,66 @@ internal sealed class SheetMetalProbe : IDisposable
         Record("gabarit_after_unfold_op", "габарит после операции развёртки", Gabarit(), Verdict.Info);
     }
 
+    /// <summary>Order item 6: the unfold as a round trip — unfold, fold back, unfold, save, reopen.</summary>
+    /// <remarks>DOC: isheetmetalbendunfoldparameters_unfold.html, ..._unfoldplane.html, ..._fixedfaces.html,
+    /// ..._updateparam.html, ..._iscreated.html, ..._deleteparam.html. MEASURED: UpdateParam() answers FALSE
+    /// even when the unfold IS created, so success is judged by IsCreated and the geometry.
+    /// History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private void Unfold()
+    {
+        var unfold = _unfold = _container!.SheetMetalBendUnfoldParameters;
+        Record("unfold_params_created", "IsCreated у параметров развёртки до разгибания",
+            Flag(SafeBool(() => unfold.IsCreated)), Verdict.Info);
+        Record("unfold_flag", "Unfold до разгибания", Flag(SafeBool(() => unfold.Unfold)), Verdict.Info);
+
+        var bent = Gabarit();
+        Record("gabarit_bent", "габарит согнутого тела", bent, Verdict.Info);
+
+        if (Plane7() is { } plane)
+        {
+            TrySet("unfold_plane_set", () => unfold.UnfoldPlane = plane);
+        }
+
+        if (FirstFace() is { } fixedFace)
+        {
+            TrySet("unfold_fixed_faces_set", () => unfold.FixedFaces = new object[] { fixedFace });
+        }
+
+        TrySet("unfold_set", () => unfold.Unfold = true);
+        Record("unfold_update_param", "UpdateParam() при заданных входах",
+            Flag(SafeBool(() => unfold.UpdateParam())), Verdict.Info);
+        CheckBool("unfold_is_created", true, SafeBool(() => unfold.IsCreated));
+        CheckBool("unfold_flag_read_back", true, SafeBool(() => unfold.Unfold));
+        var fixedFaces = ReadValue(() => unfold.FixedFaces, "unfold_fixed_faces_read");
+        Record("unfold_fixed_faces_type", "что вернул FixedFaces", RuntimeName(fixedFaces), Verdict.Info);
+        CheckInt("unfold_fixed_faces_count", 1, ArrayLength(fixedFaces));
+        CheckBool("unfold_plane_nonempty", true, SafeObject(() => unfold.UnfoldPlane) is not null);
+        var flat = Gabarit();
+        Record("gabarit_after_unfold", "габарит после Unfold + UpdateParam", flat, Verdict.Info);
+        CheckBool("gabarit_changed_by_unfold", true, bent != flat);
+        CheckDouble("unfold_extent_by_normal", _thickness, ExtentZ());
+
+        // Folding back is the same documented pair: the flag plus UpdateParam(). The geometry must
+        // return to the bent state, otherwise "unfold = false" would be a claim nobody verified.
+        TrySet("fold_back_set", () => unfold.Unfold = false);
+        Record("fold_back_update_param", "UpdateParam() при Unfold = false",
+            Flag(SafeBool(() => unfold.UpdateParam())), Verdict.Info);
+        CheckBool("fold_back_flag_read_back", false, SafeBool(() => unfold.Unfold));
+        Record("fold_back_is_created", "IsCreated после Unfold = false",
+            Flag(SafeBool(() => unfold.IsCreated)), Verdict.Info);
+        var foldedBack = Gabarit();
+        Record("gabarit_after_fold_back", "габарит после Unfold = false", foldedBack, Verdict.Info);
+        CheckBool("fold_back_gabarit_returns", true, foldedBack == bent);
+
+        TrySet("unfold_again_set", () => unfold.Unfold = true);
+        Record("unfold_again_update_param", "UpdateParam() при повторном Unfold = true",
+            Flag(SafeBool(() => unfold.UpdateParam())), Verdict.Info);
+        CheckBool("unfold_again_is_created", true, SafeBool(() => unfold.IsCreated));
+        var flatAgain = Gabarit();
+        Record("gabarit_after_unfold_again", "габарит после повторной развёртки", flatAgain, Verdict.Info);
+        CheckBool("unfold_again_gabarit", true, flatAgain == flat);
+    }
+
     /// <summary>Applies a write whose refusal is a measurement, not a crash.</summary>
     private void TrySet(string id, Action write)
     {
@@ -387,6 +730,14 @@ internal sealed class SheetMetalProbe : IDisposable
 
     private void Reopen()
     {
+        // The counts are taken from the model as it stands, not from the plan: a step that refused
+        // leaves the collection as it was, and a hard-coded number would report that refusal twice.
+        var bendsAtSave = _container!.SheetMetalBends.Count;
+        var cutsAtSave = _container.SheetMetalCuts.Count;
+        var holesAtSave = _container.SheetMetalHoles.Count;
+        Record("save_counts", "счётчики сгибов/вырезов/отверстий на момент сохранения",
+            Count(bendsAtSave) + "/" + Count(cutsAtSave) + "/" + Count(holesAtSave), Verdict.Info);
+
         var file = Path.Combine(Path.GetTempPath(),
             "sheet-metal-probe-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".m3d");
 
@@ -427,7 +778,9 @@ internal sealed class SheetMetalProbe : IDisposable
 
         Record("reopen", "сохранённый файл открывается как листовая деталь", "ISheetMetalContainer", Verdict.Pass);
         CheckInt("reopen_bodies_count", 1, container.SheetMetalBodies.Count);
-        CheckInt("reopen_bends_count", 1, container.SheetMetalBends.Count);
+        CheckInt("reopen_bends_count", bendsAtSave, container.SheetMetalBends.Count);
+        CheckInt("reopen_cuts_count", cutsAtSave, container.SheetMetalCuts.Count);
+        CheckInt("reopen_holes_count", holesAtSave, container.SheetMetalHoles.Count);
 
         var body = BodyAt(container);
         if (body is null)
@@ -436,73 +789,335 @@ internal sealed class SheetMetalProbe : IDisposable
             return;
         }
 
-        CheckDouble("reopen_thickness", 1.5d, SafeDouble(() => body.Thickness));
-        CheckDouble("reopen_radius", 2d, SafeDouble(() => body.Radius));
-        CheckBool("reopen_straighten", true, SafeBool(() => body.Straighten));
+        CheckDouble("reopen_thickness", _thickness, SafeDouble(() => body.Thickness));
+        CheckDouble("reopen_radius", _radius, SafeDouble(() => body.Radius));
+
+        var unfold = container.SheetMetalBendUnfoldParameters;
+        CheckBool("reopen_unfold_is_created", true, SafeBool(() => unfold.IsCreated));
+        CheckBool("reopen_unfold_flag", true, SafeBool(() => unfold.Unfold));
+        var reopenFaces = ReadValue(() => unfold.FixedFaces, "reopen_unfold_fixed_faces_read");
+        CheckInt("reopen_unfold_fixed_faces", 1, ArrayLength(reopenFaces));
+        CheckBool("reopen_unfold_plane_nonempty", true, SafeObject(() => unfold.UnfoldPlane) is not null);
+        Record("reopen_gabarit", "габарит после открытия", GabaritOn(_app5?.ActiveDocument3D() as ksDocument3D),
+            Verdict.Info);
+        CheckDouble("reopen_extent_by_normal", _thickness,
+            ExtentZOn(_app5?.ActiveDocument3D() as ksDocument3D));
+
+        Record("deleteparam_call", "DeleteParam() после открытия",
+            Flag(SafeBool(() => unfold.DeleteParam())), Verdict.Info);
+        CheckBool("deleteparam_is_created_after", false, SafeBool(() => unfold.IsCreated));
+        Record("deleteparam_unfold_after", "Unfold после DeleteParam", Flag(SafeBool(() => unfold.Unfold)),
+            Verdict.Info);
+    }
+
+    /// <summary>Order item 7: what the kernel answers on input the tools must refuse themselves.</summary>
+    /// <remarks>INVARIANT: these answers are recorded as INFO with the kernel's own result — the question is
+    /// what it does, not what the product should do. DOC: isheetmetalbodies_add.html,
+    /// isheetmetalbends_add.html, isheetmetalcuts_add.html. History: docs/decisions/sheet-metal.md#probe-routes
+    /// </remarks>
+    private void Refusals()
+    {
+        var sketch5 = MakeRectangleSketch(60d, -10d, 80d, 10d, "body2_sketch", "эскиз второго тела 20x20 создан");
+        var sketch7 = Transfer7<ISketch>(sketch5, "body2_sketch_to7", "эскиз второго тела перенесён в API7");
+
+        SheetMetalBody created;
+        try
+        {
+            created = _container!.SheetMetalBodies.Add();
+        }
+        catch (COMException ex)
+        {
+            Record("refusal_body2_add", "второе тело создано", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        _body2 = created as ISheetMetalBody;
+        if (_body2 is null)
+        {
+            Record("refusal_body2_add", "второе тело создано", RuntimeName(created), Verdict.Fail);
+            return;
+        }
+
+        _body2.Sketch = (Sketch)sketch7;
+        _body2.Thickness = 1.5d;
+        _body2.Radius = 2d;
+        _body2.Direction = ksDirectionTypeEnum.dtNormal;
+        Record("refusal_body2_add", "второе тело создано", "Update = " + Flag(SafeBool(() => _body2.Update())),
+            Verdict.Info);
+        Record("refusal_body2_count", "счётчик тел после второго тела", Count(_container.SheetMetalBodies.Count),
+            Verdict.Info);
+
+        RefusalBodyWrite("thickness_zero", () => _body2.Thickness = 0d);
+        RefusalBodyWrite("thickness_negative", () => _body2.Thickness = -1.5d);
+        RefusalBodyWrite("radius_zero", () => _body2.Radius = 0d);
+
+        // Restored so the bend below meets a valid body; the numbers come from the documented body pages.
+        _body2.Thickness = 1.5d;
+        _body2.Radius = 2d;
+        _body2.Update();
+        Record("refusal_body2_restored", "второе тело восстановлено после негодных записей",
+            "толщина " + Num(SafeDouble(() => _body2.Thickness) ?? double.NaN)
+            + ", радиус " + Num(SafeDouble(() => _body2.Radius) ?? double.NaN), Verdict.Info);
+
+        RefusalForeignEdge();
+        RefusalEmptySketchCut();
+    }
+
+    private void RefusalBodyWrite(string id, Action write)
+    {
+        try
+        {
+            write();
+            Record("refusal_" + id + "_set", "запись негодного значения принята свойством", "принята", Verdict.Info);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record("refusal_" + id + "_set", "запись негодного значения принята свойством", Describe(ex), Verdict.Info);
+        }
+
+        Record("refusal_" + id + "_update", "Update() с негодным значением",
+            Flag(SafeBool(() => _body2!.Update())), Verdict.Info);
+        Record("refusal_" + id + "_thickness", "Thickness после Update()",
+            Num(SafeDouble(() => _body2!.Thickness) ?? double.NaN), Verdict.Info);
+        Record("refusal_" + id + "_radius", "Radius после Update()",
+            Num(SafeDouble(() => _body2!.Radius) ?? double.NaN), Verdict.Info);
+        Record("refusal_" + id + "_is_created",
+            "IsCreated у ISheetMetalBody: справка v24 такого свойства не описывает", "не читается", Verdict.Info);
+        Record("refusal_" + id + "_bodies_count", "счётчик тел", Count(_container!.SheetMetalBodies.Count),
+            Verdict.Info);
+        Record("refusal_" + id + "_gabarit", "габарит", Gabarit(), Verdict.Info);
+    }
+
+    /// <summary>A bend whose edge belongs to another body: the API7 route has no body argument.</summary>
+    private void RefusalForeignEdge()
+    {
+        var edge = EdgeOfBody(1);
+        if (edge is null)
+        {
+            Record("refusal_foreign_edge_source", "ребро второго тела найдено",
+                "BodyCollection() без второго элемента", Verdict.Info);
+            return;
+        }
+
+        var edge7 = Transfer7<IModelObject>(edge, "refusal_foreign_edge_to7", "ребро второго тела перенесено в API7");
+        var bends = _container!.SheetMetalBends;
+        var countBefore = bends.Count;
+        ISheetMetalBend? bend;
+        try
+        {
+            bend = bends.Add() as ISheetMetalBend;
+        }
+        catch (COMException ex)
+        {
+            Record("refusal_foreign_edge_add", "сгиб по ребру другого тела", Describe(ex), Verdict.Info);
+            return;
+        }
+
+        if (bend is null)
+        {
+            Record("refusal_foreign_edge_add", "сгиб по ребру другого тела", "Add() → null", Verdict.Info);
+            return;
+        }
+
+        try
+        {
+            bend.BendObject = edge7;
+            bend.Angle = 45d;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record("refusal_foreign_edge_fields", "поля сгиба по чужому ребру", Describe(ex), Verdict.Info);
+        }
+
+        Record("refusal_foreign_edge_update", "Update() сгиба по ребру другого тела",
+            Flag(SafeBool(() => bend.Update())), Verdict.Info);
+        Record("refusal_foreign_edge_bends_count", "счётчик сгибов: отказ или +1",
+            Count(countBefore) + " -> " + Count(bends.Count), Verdict.Info);
+        Record("refusal_foreign_edge_gabarit", "габарит модели", Gabarit(), Verdict.Info);
+    }
+
+    private void RefusalEmptySketchCut()
+    {
+        var sketch5 = MakeEmptySketch();
+        if (sketch5 is null)
+        {
+            return;
+        }
+
+        var sketch7 = Transfer7<ISketch>(sketch5, "refusal_empty_sketch_to7", "пустой эскиз перенесён в API7");
+        var cuts = _container!.SheetMetalCuts;
+        var countBefore = cuts.Count;
+        ISheetMetalCut? cut;
+        try
+        {
+            cut = cuts.Add() as ISheetMetalCut;
+        }
+        catch (COMException ex)
+        {
+            Record("refusal_empty_sketch_add", "вырез по пустому эскизу", Describe(ex), Verdict.Info);
+            return;
+        }
+
+        if (cut is null)
+        {
+            Record("refusal_empty_sketch_add", "вырез по пустому эскизу", "Add() → null", Verdict.Info);
+            return;
+        }
+
+        try
+        {
+            cut.Body = (IKompasAPIObject)_body!;
+            cut.Sketch = (Sketch)sketch7;
+            cut.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth;
+            cut.Depth = 1d;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record("refusal_empty_sketch_fields", "поля выреза по пустому эскизу", Describe(ex), Verdict.Info);
+        }
+
+        Record("refusal_empty_sketch_update", "Update() выреза по пустому эскизу",
+            Flag(SafeBool(() => cut.Update())), Verdict.Info);
+        Record("refusal_empty_sketch_cuts_count", "счётчик вырезов: осталась ли запись",
+            Count(countBefore) + " -> " + Count(cuts.Count), Verdict.Info);
     }
 
     // ---------------------------------------------------------------------------------------------
     // API5 side: the sketch and the body edge the documented route needs as inputs
     // ---------------------------------------------------------------------------------------------
 
-    private ksEntity MakeSketch()
+    private ksEntity MakeRectangleSketch(double x1, double y1, double x2, double y2, string prefix, string label,
+        ksEntity? support = null)
     {
         var part = Part5();
-        if (part.GetDefaultEntity(PlaneXoy) is not ksEntity plane)
+        support ??= part.GetDefaultEntity(PlaneXoy) as ksEntity;
+        if (support is null)
         {
-            Record("sketch", "эскиз 40x40 на плоскости XOY создан", "GetDefaultEntity(o3d_planeXOY) → null", Verdict.Fail);
+            Record(prefix, label, "опора эскиза (плоскость XOY или грань) → null", Verdict.Fail);
             throw new ProbeStop();
         }
 
         if (part.NewEntity(ObjSketch) is not ksEntity sketch || sketch.GetDefinition() is not ksSketchDefinition definition)
         {
-            Record("sketch", "эскиз 40x40 на плоскости XOY создан", "NewEntity(o3d_sketch) или его определение → null", Verdict.Fail);
+            Record(prefix, label, "NewEntity(o3d_sketch) или его определение → null", Verdict.Fail);
             throw new ProbeStop();
+        }
+
+        definition.SetPlane(support);
+        sketch.Create();
+        if (definition.BeginEdit() is not ksDocument2D editor)
+        {
+            Record(prefix, label, "BeginEdit() → не ksDocument2D", Verdict.Fail);
+            throw new ProbeStop();
+        }
+
+        editor.ksLineSeg(x1, y1, x2, y1, 1);
+        editor.ksLineSeg(x2, y1, x2, y2, 1);
+        editor.ksLineSeg(x2, y2, x1, y2, 1);
+        editor.ksLineSeg(x1, y2, x1, y1, 1);
+        definition.EndEdit();
+
+        Record(prefix, label, "4 отрезка", Verdict.Pass);
+        return sketch;
+    }
+
+    /// <summary>A sketch with no geometry at all — the input a cut must refuse.</summary>
+    private ksEntity? MakeEmptySketch()
+    {
+        var part = Part5();
+        if (part.GetDefaultEntity(PlaneXoy) is not ksEntity plane
+            || part.NewEntity(ObjSketch) is not ksEntity sketch
+            || sketch.GetDefinition() is not ksSketchDefinition definition)
+        {
+            Record("refusal_empty_sketch", "пустой эскиз создан", "NewEntity/GetDefaultEntity → null", Verdict.Info);
+            return null;
         }
 
         definition.SetPlane(plane);
         sketch.Create();
         if (definition.BeginEdit() is not ksDocument2D editor)
         {
-            Record("sketch", "эскиз 40x40 на плоскости XOY создан", "BeginEdit() → не ksDocument2D", Verdict.Fail);
-            throw new ProbeStop();
+            Record("refusal_empty_sketch", "пустой эскиз создан", "BeginEdit() → не ksDocument2D", Verdict.Info);
+            return null;
         }
 
-        const double half = 20d;
-        editor.ksLineSeg(-half, -half, half, -half, 1);
-        editor.ksLineSeg(half, -half, half, half, 1);
-        editor.ksLineSeg(half, half, -half, half, 1);
-        editor.ksLineSeg(-half, half, -half, -half, 1);
         definition.EndEdit();
-
-        Record("sketch", "эскиз 40x40 на плоскости XOY создан", "4 отрезка", Verdict.Pass);
+        Record("refusal_empty_sketch", "пустой эскиз создан", "ни одного отрезка", Verdict.Info);
         return sketch;
     }
 
     private object FirstEdge()
     {
+        if (EdgeOfBody(0) is { } edge)
+        {
+            Record("edge_source", "ребро тела найдено", "тело 0, ребро 0", Verdict.Pass);
+            return edge;
+        }
+
+        Record("edge_source", "ребро тела найдено", "ни у одной грани нет рёбер", Verdict.Fail);
+        throw new ProbeStop();
+    }
+
+    /// <summary>An edge of the same body that is NOT the first one — the second bend needs it.</summary>
+    private object SecondEdge()
+    {
         var part = Part5();
         if (part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)
         {
-            Record("edge_source", "ребро тела найдено", "GetMainBody()/FaceCollection() → null", Verdict.Fail);
+            Record("bend2_edge_source", "второе ребро найдено", "GetMainBody()/FaceCollection() → null", Verdict.Fail);
             throw new ProbeStop();
+        }
+
+        var first = FirstEdge();
+        for (var f = 0; f < faces.GetCount(); f++)
+        {
+            var element = faces.GetByIndex(f);
+            var face = element as ksFaceDefinition ?? (element as ksEntity)?.GetDefinition() as ksFaceDefinition;
+            if (face?.EdgeCollection() is not ksEdgeCollection edges)
+            {
+                continue;
+            }
+
+            for (var e = 0; e < edges.GetCount(); e++)
+            {
+                var candidate = edges.GetByIndex(e);
+                if (!SameCom(candidate, first))
+                {
+                    Record("bend2_edge_source", "второе ребро найдено", "грань " + f + ", ребро " + e, Verdict.Pass);
+                    return candidate;
+                }
+            }
+        }
+
+        Record("bend2_edge_source", "второе ребро найдено", "все рёбра совпали с первым", Verdict.Fail);
+        throw new ProbeStop();
+    }
+
+    private object? EdgeOfBody(int bodyIndex)
+    {
+        var part = Part5();
+        if (part.BodyCollection() is not ksBodyCollection bodies)
+        {
+            return null;
+        }
+        bodies.refresh();
+        if (bodies.GetCount() <= bodyIndex || bodies.GetByIndex(bodyIndex) is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            return null;
         }
 
         for (var f = 0; f < faces.GetCount(); f++)
         {
             var element = faces.GetByIndex(f);
             var face = element as ksFaceDefinition ?? (element as ksEntity)?.GetDefinition() as ksFaceDefinition;
-            if (face?.EdgeCollection() is not ksEdgeCollection edges || edges.GetCount() < 1)
+            if (face?.EdgeCollection() is ksEdgeCollection edges && edges.GetCount() > 0)
             {
-                continue;
+                return edges.GetByIndex(0);
             }
-
-            Record("edge_source", "ребро тела найдено", "граней " + faces.GetCount() + ", взято ребро 0", Verdict.Pass);
-            return edges.GetByIndex(0);
         }
 
-        Record("edge_source", "ребро тела найдено", "ни у одной грани нет рёбер", Verdict.Fail);
-        throw new ProbeStop();
+        return null;
     }
 
     /// <summary>The XOY plane of the part, transferred to API7 — the unfold plane input.</summary>
@@ -516,6 +1131,36 @@ internal sealed class SheetMetalProbe : IDisposable
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
+            return null;
+        }
+    }
+
+    /// <summary>The first face of the body as an API5 entity — the support a sketch can lie on.</summary>
+    /// <remarks>MEASURED: the kernel accepts a planar face as sketch support (SetPlane = TRUE).
+    /// History: docs/decisions/sheet-metal.md#probe-routes</remarks>
+    private ksEntity? FaceEntity()
+    {
+        var part = Part5();
+        if (part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces
+            || faces.GetCount() < 1)
+        {
+            return null;
+        }
+
+        var element = faces.GetByIndex(0);
+        return element as ksEntity;
+    }
+
+    /// <summary>Reads a value whose refusal to be read is a fact, not a crash.</summary>
+    private object? ReadValue(Func<object?> call, string id)
+    {
+        try
+        {
+            return call();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(id, "значение читается", Describe(ex), Verdict.Info);
             return null;
         }
     }
@@ -538,6 +1183,31 @@ internal sealed class SheetMetalProbe : IDisposable
         {
             return null;
         }
+    }
+
+    /// <summary>Transfers an API5 object to API7 and records the failure as a check of its own.</summary>
+    private T Transfer7<T>(object api5Object, string id, string label)
+        where T : class
+    {
+        object? transferred;
+        try
+        {
+            transferred = _app5!.TransferInterface(api5Object, Api7Dual, 0);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(id, label, Describe(ex), Verdict.Fail);
+            throw new ProbeStop();
+        }
+
+        if (transferred as T is not { } typed)
+        {
+            Record(id, label, RuntimeName(transferred), Verdict.Fail);
+            throw new ProbeStop();
+        }
+
+        Record(id, label, typeof(T).Name, Verdict.Pass);
+        return typed;
     }
 
     private static ISheetMetalBody? BodyAt(ISheetMetalContainer container)
@@ -565,11 +1235,15 @@ internal sealed class SheetMetalProbe : IDisposable
     /// product itself uses, so the probe measures the same object the product would touch.</summary>
     private ksPart Part5() => (ksPart)_doc5!.GetPart(-1);
 
-    private string Gabarit()
+    private string Gabarit() => GabaritOn(_doc5);
+
+    private double? ExtentZ() => ExtentZOn(_doc5);
+
+    private static string GabaritOn(ksDocument3D? document)
     {
         try
         {
-            if (_doc5 is null || Part5() is not { } part)
+            if (document is null || document.GetPart(-1) is not ksPart part)
             {
                 return "нет API5-детали";
             }
@@ -585,6 +1259,40 @@ internal sealed class SheetMetalProbe : IDisposable
         catch (COMException ex)
         {
             return Describe(ex);
+        }
+    }
+
+    /// <summary>The Z extent — the thickness by the normal for a flat body, whatever its X/Y size.</summary>
+    private static double? ExtentZOn(ksDocument3D? document)
+    {
+        try
+        {
+            if (document is null || document.GetPart(-1) is not ksPart part
+                || !part.GetGabarit(true, true, out _, out _, out var z1, out _, out _, out var z2))
+            {
+                return null;
+            }
+
+            return Math.Abs(z2 - z1);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The main body's face count — the "did the geometry change" criterion for a cut.</summary>
+    private int FaceCount()
+    {
+        try
+        {
+            return Part5().GetMainBody() is ksBody body && body.FaceCollection() is ksFaceCollection faces
+                ? faces.GetCount()
+                : -1;
+        }
+        catch (COMException)
+        {
+            return -1;
         }
     }
 
@@ -635,7 +1343,8 @@ internal sealed class SheetMetalProbe : IDisposable
 
     private void CheckInt(string id, int expected, int? read)
     {
-        Record(id, expected.ToString(CultureInfo.InvariantCulture), read?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано",
+        Record(id, expected.ToString(CultureInfo.InvariantCulture),
+            read?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано",
             read == expected ? Verdict.Pass : Verdict.Fail);
     }
 
@@ -648,7 +1357,7 @@ internal sealed class SheetMetalProbe : IDisposable
     private void Record(string id, string expected, string read, Verdict verdict)
     {
         _checks.Add(new Check(id, expected, read, verdict));
-        Console.WriteLine($"{verdict,-5} {id,-32} ожидалось: {expected} | прочитано: {read}");
+        Console.WriteLine($"{verdict,-5} {id,-40} ожидалось: {expected} | прочитано: {read}");
     }
 
     private void Write()
@@ -689,6 +1398,8 @@ internal sealed class SheetMetalProbe : IDisposable
 
     private int Count(Verdict verdict) => _checks.Count(c => c.Verdict == verdict);
 
+    private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
+
     private static string ReadVersion(KompasObject app)
     {
         try
@@ -709,6 +1420,8 @@ internal sealed class SheetMetalProbe : IDisposable
     private static string Flag(bool? value) => value is null ? "не прочитано" : value.Value ? "true" : "false";
 
     private static string Num(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static string Quote(string? value) => value is null ? "не прочитано" : "\"" + value + "\"";
 
     private static string RuntimeName(object? value) =>
         value is null ? "null" : value.GetType().FullName ?? value.GetType().Name;
@@ -743,6 +1456,30 @@ internal sealed class SheetMetalProbe : IDisposable
         }
     }
 
+    private static int? SafeInt(Func<object?> call)
+    {
+        try
+        {
+            return call() is { } value ? Convert.ToInt32(value, CultureInfo.InvariantCulture) : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static string? SafeString(Func<string> call)
+    {
+        try
+        {
+            return call();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     private static object? SafeObject(Func<object?> call)
     {
         try
@@ -752,6 +1489,74 @@ internal sealed class SheetMetalProbe : IDisposable
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Whether a write was refused by the kernel — the documented answer for a blocked setter.</summary>
+    private static bool? Refused(Action write)
+    {
+        try
+        {
+            write();
+            return false;
+        }
+        catch (COMException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>How many objects the property returned: a VARIANT array, or a single unwrapped object.</summary>
+    private static int? ArrayLength(object? value) => value switch
+    {
+        null => null,
+        Array array => array.Length,
+        _ => 1,
+    };
+
+    /// <summary>Whether the array the property returned holds the requested object, by COM identity.</summary>
+    private static bool? ArrayContains(object? value, object? expected)
+    {
+        if (value is null || expected is null)
+        {
+            return null;
+        }
+
+        if (value is not Array array)
+        {
+            return SameCom(value, expected);
+        }
+
+        foreach (var item in array)
+        {
+            if (SameCom(item, expected))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SameCom(object? left, object? right)
+    {
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        try
+        {
+            return Marshal.GetIUnknownForObject(left) == Marshal.GetIUnknownForObject(right);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return false;
         }
     }
 

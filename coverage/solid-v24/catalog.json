@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 47,
-   "operations": 142,
+   "operations": 144,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 223,
+   "modes_and_variants": 225,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8175,8 +8175,8 @@
     "runtime": "измерено 23.10.2026 на build 24.0.0.2799: тело входит в модель на ISheetMetalBody.Update(); толщина, радиус и тип развёртки читаются назад; габарит по нормали плоского тела равен толщине; ядро принимает толщину 0 и -1.5 и радиус 0, отвечает Update()=TRUE и оставляет тело; ksTableBends (3) без таблицы не устанавливается; DeleteObject листовые объекты не удаляет"
    },
    "route": "API7 QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBodies.Add() -> Sketch (эскиз, перенесённый из API5) / Thickness / Radius / Direction / UnfoldType / BendCoefficient|BendValue|BendReduction -> Update() -> RebuildModel; чтение - Count коллекций и свойства тела",
-   "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body",
-   "next_step": "Группа --sheet-metal-only и профиль sheet-metal-minimal-v1. Следующее - SHEET_METAL_FEATURES (сгиб, вырез, отверстие) и SHEET_METAL_UNFOLD (Unfold/Straighten).",
+   "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body / kompas_create_sheet_metal_bend / kompas_create_sheet_metal_hole",
+   "next_step": "Группа --sheet-metal-only и профиль sheet-metal-minimal-v1. Следующее - SHEET_METAL_CUT_PROBE (вырез) и SHEET_METAL_UNFOLD (Unfold/Straighten).",
    "operations": [
     {
      "id": "SMB-01",
@@ -8216,6 +8216,34 @@
       {
        "id": "SMB-03.body.edit",
        "name": "Изменить толщину, радиус и способ развёртки",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-04",
+     "name": "Сгиб листового тела по ребру",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalbends_add.html, isheetmetalbend_bendobjects.html, isheetmetalbend_angle.html, isheetmetalbend_direction.html, isheetmetalbend_internalradius.html, isheetmetalbend_radius.html, isheetmetalbend_lengthtype.html, isheetmetalbend_length.html, ksbendlengthtypeenum.html",
+     "route": "SheetMetalBends.Add() -> BendObjects (одно ребро, владелец сверен по IUnknown с владельцем тела) / Angle / Direction / InternalRadius / Radius / LengthType / Length -> Update(); успех - счётчик +1, перечитанные значения, BendObjects = запрошенное ребро и изменившийся габарит",
+     "modes": [
+      {
+       "id": "SMB-04.bend.create",
+       "name": "Создать сгиб по ребру тела",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-05",
+     "name": "Отверстие листового тела",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalholes_add.html, isheetmetalhole_body.html, isheetmetalhole_baseplane.html, isheetmetalhole_x.html, isheetmetalhole_y.html, isheetmetalhole_diameter.html, isheetmetalhole_cuttype.html, isheetmetalhole_depth.html, ksholecuttypeenum.html",
+     "route": "SheetMetalHoles.Add() -> Body / BasePlane (грань, владелец сверен по IUnknown с владельцем тела) / X / Y / Diameter / CutType / Depth -> Update(); успех - счётчик +1, перечитанные значения и выросшее число граней тела",
+     "modes": [
+      {
+       "id": "SMB-05.hole.create",
+       "name": "Создать отверстие на грани тела",
        "level": "mcp_verified"
       }
      ]

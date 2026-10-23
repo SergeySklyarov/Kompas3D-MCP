@@ -1,9 +1,14 @@
 {
  "meta": {
   "profile_id": "sheet-metal-minimal-v1",
-  "title": "Листовое тело v24: создание из эскиза, чтение состояния, правка",
-  "revision": "1.0",
+  "title": "Листовое тело v24: создание из эскиза, чтение состояния, правка, сгиб и отверстие",
+  "revision": "1.1",
   "revision_history": [
+   {
+    "revision": "1.1",
+    "date": "23.10.2026",
+    "change": "наряд SHEET_METAL_FEATURES: добавлены режимы SMB-04 (сгиб по ребру) и SMB-05 (отверстие на грани тела); сгиб и отверстие вынесены из explicitly_out_of_scope, вырез остаётся за SHEET_METAL_CUT_PROBE, удаление из профиля убрано решением заказчика"
+   },
    {
     "revision": "1.0",
     "date": "23.10.2026",
@@ -65,11 +70,45 @@
     "geometry_validation"
    ],
    "gap": "Способ развёртки читается из МОДЕЛИ до записи: поле чужого способа отвергается INVALID_ARGUMENT с именем поля. Успех - сравнение перечитанных значений; повтор с теми же значениями идемпотентен и виден в ответе. Правка тела со сгибами работает, но сгибы этой правкой не пересчитываются и не проверяются."
+  },
+  {
+   "ref": "SMB-04.bend.create",
+   "title": "Создать сгиб листового тела по ребру",
+   "family": "SMB",
+   "queue": "SM",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "save_reopen",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Успех - счётчик SheetMetalBends +1 И перечитанные Angle/Direction/InternalRadius/Radius/LengthType/Length (допуск 1e-6) И BendObjects содержит запрошенное ребро (по тождеству COM) И габарит тела изменился. Ребро чужого тела отвергается продуктом ДО Add(): ядро его принимает и оставляет сгиб. BendObjects измерен только с одним объектом."
+  },
+  {
+   "ref": "SMB-05.hole.create",
+   "title": "Создать отверстие на грани листового тела",
+   "family": "SMB",
+   "queue": "SM",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "save_reopen",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Успех - счётчик SheetMetalHoles +1 И перечитанные X/Y/Diameter/CutType/Depth (допуск 1e-6) И число граней тела выросло по сравнению с чтением до вызова. Грань чужого тела и глубина при cut_type=by_width отвергаются продуктом ДО Add(). up_to_surface не принимается: глубину задаёт объект DepthObject."
   }
  ],
  "explicitly_out_of_scope": {
   "next_block_after_profile": [
-   "сгиб, вырез и отверстие листового тела (SHEET_METAL_FEATURES)",
+   "вырез листового тела (SHEET_METAL_CUT_PROBE)",
    "Unfold/Straighten и параметры развёртки (SHEET_METAL_UNFOLD)",
    "удаление листовых объектов: документированного работающего маршрута нет (измерено)"
   ],

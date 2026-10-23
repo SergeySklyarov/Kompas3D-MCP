@@ -280,7 +280,36 @@ public partial class Api5Session
         return new GetSheetMetalResult(
             bodies,
             counters,
-            new VerificationDto(VerificationLevel.CallReturned, checks, unverified));
+            new VerificationDto(VerificationLevel.CallReturned, checks, unverified))
+        {
+            Bends = ReadCollection(counters.Bends, index => SafeObject(() => sheet.SheetMetalBends[index])
+                as ISheetMetalBend, (bend, index) => ReadBend(bend, requestedEdge: null, ordinal: index)),
+            Holes = ReadCollection(counters.Holes, index => SafeObject(() => sheet.SheetMetalHoles[index])
+                as ISheetMetalHole, (hole, index) => ReadHole(hole, index)),
+        };
+    }
+
+    /// <summary>Every element of a collection whose counter answered, or <c>null</c> when the counter did
+    /// not — an unread counter is not an empty collection.</summary>
+    private static IReadOnlyList<TDto>? ReadCollection<TElement, TDto>(
+        int? count, Func<int, TElement?> at, Func<TElement, int, TDto> describe)
+        where TElement : class
+    {
+        if (count is not { } total)
+        {
+            return null;
+        }
+
+        var rows = new List<TDto>(total);
+        for (var index = 0; index < total; index++)
+        {
+            if (at(index) is { } element)
+            {
+                rows.Add(describe(element, index));
+            }
+        }
+
+        return rows;
     }
 
     // ─── edit ───────────────────────────────────────────────────────────────────────────────
@@ -457,6 +486,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
+        RequireKind(document, command.EdgeRef, "edge", "edge_ref", "Сгиб не создавался");
         var edge = RequireModelObject(document, bridge, command.EdgeRef, "edge", "edge_ref");
         var ownership = OwnerIsBody(body, edge);
         if (ownership == false)
@@ -641,6 +671,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
+        RequireKind(document, command.BaseFaceRef, "face", "base_face_ref", "Отверстие не создавалось");
         var face = RequireModelObject(document, bridge, command.BaseFaceRef, "face", "base_face_ref");
         var ownership = OwnerIsBody(body, face);
         if (ownership == false)
@@ -926,8 +957,31 @@ public partial class Api5Session
     private int? RecordedPrimitives(string sketchRef) =>
         _sketchProfiles.TryGetValue(sketchRef, out var profile) ? profile.Entities.Count : null;
 
+    /// <summary>The reference must carry the kind the field names: a face passed as <c>edge_ref</c> would
+    /// otherwise transfer to a model object and be refused later by the kernel, not by the contract.</summary>
+    private void RequireKind(DocumentEntry document, string reference, string kind, string field, string consequence)
+    {
+        var stored = References.Require(reference, document.Id, document.Revision);
+        if (string.Equals(stored.Kind, kind, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.InvalidArgument,
+            $"Ссылка '{reference}' несёт объект вида '{stored.Kind}', а поле {field} требует '{kind}'. "
+            + consequence + ".",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?>
+            {
+                ["field"] = field,
+                ["kind"] = stored.Kind,
+                ["expected_kind"] = kind,
+            });
+    }
+
     /// <summary>One bend as the model holds it; every field is a read value, <c>null</c> — not read.</summary>
-    private static SheetMetalBendDto ReadBend(ISheetMetalBend bend, IModelObject requestedEdge, int? ordinal) =>
+    private static SheetMetalBendDto ReadBend(ISheetMetalBend bend, IModelObject? requestedEdge, int? ordinal) =>
         new()
         {
             Ordinal = ordinal,
@@ -943,7 +997,7 @@ public partial class Api5Session
     /// <summary>Whether <c>BendObjects</c> holds the requested edge. MEASURED: the kernel hands the edge
     /// back as another wrapper, so the comparison is by COM identity; an identity that cannot be stated is
     /// "not read", never "another edge".</summary>
-    private static bool? HoldsEdge(ISheetMetalBend bend, IModelObject requestedEdge)
+    private static bool? HoldsEdge(ISheetMetalBend bend, IModelObject? requestedEdge)
     {
         var wanted = ComIdentity.Of(requestedEdge);
         if (wanted is null)

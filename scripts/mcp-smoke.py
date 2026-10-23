@@ -50458,9 +50458,9 @@ def sheet_metal_checks(client, rep, app_id, workdir):
     на единицу, толщина, радиус, способ развёртки и его поле совпали с заданными, габарит по нормали
     равен толщине. Правка подтверждается сравнением перечитанного, повтор - идемпотентностью.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Сгиба, выреза и отверстия (объём SHEET_METAL_FEATURES) и развёртки
-    (SHEET_METAL_UNFOLD). Удаления нет: у продукта нет работающего маршрута (измерено), поэтому
-    SMB.13 проверяет, что такой инструмент и не публикуется.
+    ЧЕГО ЗДЕСЬ НЕТ. Выреза (объём SHEET_METAL_CUT_PROBE) и развёртки (SHEET_METAL_UNFOLD).
+    Удаления нет: у продукта нет работающего маршрута (измерено), поэтому SMB.13 проверяет, что такой
+    инструмент и не публикуется.
     """
     import os
 
@@ -50736,6 +50736,184 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             f"после={after_body.get('thickness_mm')}/{after_body.get('bend_radius_mm')} "
             f"проверки={checks} error={code}")
 
+    # ========= SMB.14: рёбра и грань тела для сгиба и отверстия =========
+    def counters_of(doc):
+        _e, env2, _r = client.tool("kompas_get_sheet_metal", {"document_id": doc})
+        return (result(env2) or {}).get("counters") or {}
+
+    _e, topo, _r = client.tool("kompas_read_topology",
+                               {"document_id": part, "body_ref": body_ref, "include": "both"})
+    topo_result = result(topo) or {}
+    faces = topo_result.get("faces") or []
+    edges = topo_result.get("edges") or []
+    # Самое длинное ребро - сторона контура 40 мм, а не ребро толщины: сгиб ставится по стороне.
+    line_edges = [edge.get("edge_ref") for edge in
+                  sorted((edge for edge in edges if edge.get("curve_type") == "line"),
+                         key=lambda edge: edge.get("length_mm") or 0.0, reverse=True)
+                  if edge.get("edge_ref")]
+    # Опорная грань отверстия - самая большая плоская грань: D6 должно поместиться в контур.
+    plane_faces = sorted((face for face in faces if face.get("surface_type") == "plane"),
+                         key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
+    hole_face = plane_faces[0].get("face_ref") if plane_faces else None
+    rep.add("SMB.14.topology",
+            "у листового тела прочитаны два прямых ребра и плоская грань - адрес, которым продукт "
+            "называет ребро сгиба и опорную грань отверстия",
+            "PASS" if (len(line_edges) >= 2 and hole_face) else "FAIL",
+            f"рёбер={len(edges)} прямых={len(line_edges)} граней={len(faces)} грань={hole_face}")
+
+    # ========= SMB.15: сгиб по ребру и чтение назад =========
+    def bend_check(name, edge, angle, label):
+        env2, code2 = call("kompas_create_sheet_metal_bend", {
+            "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+            "edge_ref": edge, "angle_deg": angle, "direction": True, "internal_radius": True,
+            "radius_mm": 2.0, "length_type": "contour", "length_mm": 5.0})
+        created_bend = result(env2)
+        row = created_bend.get("bend") or {}
+        rows = {item.get("name"): item.get("passed")
+                for item in ((created_bend.get("verification") or {}).get("checks") or [])}
+        ref = (created_bend.get("bend_ref") or {}).get("id")
+        ok = (not code2 and ref and near(row.get("angle_deg"), angle)
+              and row.get("edge_is_requested") is True
+              and created_bend.get("bends_after") == (created_bend.get("bends_before") or 0) + 1
+              and rows.get("bend_counter_grew") is True
+              and rows.get("values_read_back") is True
+              and rows.get("bend_objects_is_requested_edge") is True)
+        rep.add(name, label,
+                "PASS" if ok else "FAIL",
+                f"bend={ref} angle={row.get('angle_deg')} direction={row.get('direction')} "
+                f"internal_radius={row.get('internal_radius')} radius={row.get('radius_mm')} "
+                f"length_type={row.get('length_type')} length={row.get('length_mm')} "
+                f"ребро_запрошено={row.get('edge_is_requested')} "
+                f"сгибов={created_bend.get('bends_before')}->{created_bend.get('bends_after')} "
+                f"проверки={rows} error={code2} {emsg(env2) or ''}")
+        return ref
+
+    first_bend = bend_check(
+        "SMB.15.bend",
+        line_edges[0], 90.0,
+        "сгиб 90 по ребру тела: счётчик сгибов +1, угол, направление, признак радиуса, радиус, способ "
+        "длины и длина прочитаны назад, BendObjects содержит запрошенное ребро")
+
+    # ========= SMB.16: второй сгиб, первый не изменился =========
+    second_bend = bend_check(
+        "SMB.16.bend_second",
+        line_edges[1], 45.0,
+        "второй сгиб 45 по другому ребру того же тела: счётчик +1, поля прочитаны назад")
+
+    _e, env, _r = client.tool("kompas_get_sheet_metal", {"document_id": part})
+    bends_read = (result(env) or {}).get("bends") or []
+    angles = [row.get("angle_deg") for row in bends_read]
+    ok_two = (len(bends_read) == 2 and near(angles[0], 90.0) and near(angles[1], 45.0))
+    rep.add("SMB.17.bends_read_back",
+            "kompas_get_sheet_metal отдаёт оба сгиба в порядке коллекции, и угол первого после второго "
+            "сгиба не изменился (90 и 45)",
+            "PASS" if ok_two else "FAIL",
+            f"сгибов={len(bends_read)} углы={angles}")
+
+    # ========= SMB.18: отверстие =========
+    env, code = call("kompas_create_sheet_metal_hole", {
+        "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+        "base_face_ref": hole_face, "x_mm": 0.0, "y_mm": 0.0, "diameter_mm": 6.0,
+        "cut_type": "by_depth", "depth_mm": 1.0})
+    hole = result(env)
+    hole_ref = (hole.get("hole_ref") or {}).get("id")
+    hole_row = hole.get("hole") or {}
+    checks = {row.get("name"): row.get("passed")
+              for row in ((hole.get("verification") or {}).get("checks") or [])}
+    ok_hole = (not code and hole_ref and near(hole_row.get("diameter_mm"), 6.0)
+               and near(hole_row.get("x_mm"), 0.0) and near(hole_row.get("y_mm"), 0.0)
+               and hole_row.get("cut_type") == "by_depth"
+               and near(hole_row.get("depth_mm"), 1.0)
+               and hole.get("holes_after") == (hole.get("holes_before") or 0) + 1
+               and checks.get("hole_counter_grew") is True
+               and checks.get("values_read_back") is True
+               and checks.get("face_count_grew") is True)
+    rep.add("SMB.18.hole",
+            "отверстие D6 в начале координат на грани тела: счётчик отверстий +1, координаты, диаметр, "
+            "тип построения и глубина прочитаны назад, число граней тела выросло по сравнению с чтением "
+            "до вызова",
+            "PASS" if ok_hole else "FAIL",
+            f"hole={hole_ref} diameter={hole_row.get('diameter_mm')} x={hole_row.get('x_mm')} "
+            f"y={hole_row.get('y_mm')} cut={hole_row.get('cut_type')} depth={hole_row.get('depth_mm')} "
+            f"отверстий={hole.get('holes_before')}->{hole.get('holes_after')} "
+            f"граней={hole.get('faces_before')}->{hole.get('faces_after')} "
+            f"проверки={checks} error={code} {emsg(env) or ''}")
+
+    # ========= SMB.19: правка тела со сгибами и отверстием =========
+    env, code = call("kompas_edit_sheet_metal_body", {
+        "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+        "thickness_mm": 2.5})
+    edited = result(env)
+    after = edited.get("body_after") or {}
+    checks = {row.get("name"): row.get("passed")
+              for row in ((edited.get("verification") or {}).get("checks") or [])}
+    counters = counters_of(part)
+    ok_feature_edit = (not code and near(after.get("thickness_mm"), 2.5)
+                       and checks.get("values_read_back") is True
+                       and counters.get("bends") == 2 and counters.get("holes") == 1)
+    rep.add("SMB.19.edit_with_features",
+            "толщина тела со сгибами и отверстием меняется на 2.5 и читается назад, а сгибы и отверстие "
+            "остаются на месте: счётчики коллекций 2 и 1 не изменились",
+            "PASS" if ok_feature_edit else "FAIL",
+            f"thickness={after.get('thickness_mm')} сгибов={counters.get('bends')} "
+            f"отверстий={counters.get('holes')} проверки={checks} error={code} {emsg(env) or ''}")
+
+    # ========= SMB.20: отказы сгиба и отверстия до создания =========
+    def feature_refusal(name, tool, args, expected_field, label, bends=None, holes=None):
+        before = counters_of(part)
+        env2, code2 = call(tool, dict(args, document_id=part, expected_revision=current_rev(part),
+                                     body_ref=body_ref))
+        after_counters = counters_of(part)
+        err = (env2 or {}).get("error") or {}
+        same = (before.get("bends") == after_counters.get("bends")
+                and before.get("holes") == after_counters.get("holes"))
+        ok = (code2 == "INVALID_ARGUMENT" and err.get("partial_effects") is False
+              and efield(env2) == expected_field and same)
+        rep.add(name, label + " - отказ INVALID_ARGUMENT до создания, счётчики сгибов и отверстий не выросли",
+                "PASS" if ok else "FAIL",
+                f"code={code2} field={efield(env2)} partial_effects={err.get('partial_effects')} "
+                f"сгибы {before.get('bends')}->{after_counters.get('bends')} "
+                f"отверстия {before.get('holes')}->{after_counters.get('holes')} {emsg(env2) or ''}")
+
+    # Грань вместо ребра: ссылка несёт объект другого вида, и это отказ контракта, а не ответ ядра.
+    feature_refusal("SMB.20.bend_face_as_edge", "kompas_create_sheet_metal_bend",
+                    {"edge_ref": hole_face, "angle_deg": 90.0}, "edge_ref",
+                    "опорная грань подана как edge_ref")
+    feature_refusal("SMB.21.bend_angle_refused", "kompas_create_sheet_metal_bend",
+                    {"edge_ref": line_edges[0], "angle_deg": 0.0}, "angle_deg",
+                    "угол сгиба 0 (страница называет только тип double)")
+    feature_refusal("SMB.22.hole_diameter_refused", "kompas_create_sheet_metal_hole",
+                    {"base_face_ref": hole_face, "x_mm": 0.0, "y_mm": 0.0, "diameter_mm": 0.0},
+                    "diameter_mm", "диаметр отверстия 0")
+    feature_refusal("SMB.23.hole_depth_of_another_type", "kompas_create_sheet_metal_hole",
+                    {"base_face_ref": hole_face, "x_mm": 0.0, "y_mm": 0.0, "diameter_mm": 6.0,
+                     "cut_type": "by_width", "depth_mm": 1.0}, "depth_mm",
+                    "глубина при типе by_width (ядро сохранит число и не применит)")
+
+    # ========= SMB.24: пустой эскиз отвергается до создания тела =========
+    empty_sketch = None
+    env, code = call("kompas_create_sketch", {
+        "document_id": part, "expected_revision": current_rev(part),
+        "plane": {"base": "xy", "offset_mm": 10}, "name": "smb-empty"})
+    empty_sketch = result(env).get("id")
+    bodies_before = bodies_count(part)
+    env, code = call("kompas_create_sheet_metal_body", {
+        "sketch_ref": empty_sketch, "expected_revision": current_rev(part),
+        "thickness_mm": 1.5, "bend_radius_mm": 2.0, "direction": "normal",
+        "unfold_type": "coefficient", "bend_coefficient": 0.4})
+    bodies_after = bodies_count(part)
+    err = (env or {}).get("error") or {}
+    ok_empty = (empty_sketch and code == "INVALID_ARGUMENT" and efield(env) == "sketch_ref"
+                and err.get("partial_effects") is False and bodies_before == bodies_after)
+    rep.add("SMB.24.empty_sketch_refused",
+            "тело по ПУСТОМУ эскизу отвергнуто INVALID_ARGUMENT с именем поля sketch_ref до обращения к "
+            "КОМПАС: ядро на пустом эскизе отвечает счётчиком +1, но тело в файл не попадает (измерено), "
+            "и счётчик тел не вырос",
+            "PASS" if ok_empty else "FAIL",
+            f"sketch={empty_sketch} code={code} field={efield(env)} "
+            f"partial_effects={err.get('partial_effects')} тел {bodies_before}->{bodies_after} "
+            f"{emsg(env) or ''}")
+
     # ========= SMB.12: сохранение и переоткрытие =========
     target = os.path.join(workdir, "sheet-metal-body")
     os.makedirs(target, exist_ok=True)
@@ -50758,18 +50936,21 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         rows = read.get("bodies") or []
         counters = read.get("counters") or {}
         row = rows[0] if rows else {}
-        ok_reopen = (not code and len(rows) == 1 and near(row.get("thickness_mm"), 2.0)
+        ok_reopen = (not code and len(rows) == 1 and near(row.get("thickness_mm"), 2.5)
                      and near(row.get("bend_radius_mm"), 3.0)
                      and row.get("unfold_type") == "bend_reduction"
                      and near(row.get("unfold_value"), 0.3)
-                     and counters.get("bodies") == 1)
+                     and counters.get("bodies") == 1
+                     and counters.get("bends") == 2 and counters.get("holes") == 1)
         detail += (f" thickness={row.get('thickness_mm')} radius={row.get('bend_radius_mm')} "
                    f"unfold={row.get('unfold_type')}/{row.get('unfold_value')} "
-                   f"bodies={counters.get('bodies')}")
+                   f"bodies={counters.get('bodies')} сгибов={counters.get('bends')} "
+                   f"отверстий={counters.get('holes')}")
         call("kompas_close_document", {"document_id": reopened, "dirty_policy": "discard"})
     rep.add("SMB.12.reopen",
             "после сохранения и переоткрытия тело читается тем же инструментом: толщина, радиус, "
-            "способ развёртки и его поле сохранились",
+            "способ развёртки и его поле сохранились, а сгибы (2) и отверстие (1) на месте по счётчикам "
+            "коллекций",
             "PASS" if ok_reopen else "FAIL", detail)
 
     # ========= SMB.13: удаления нет - названный отказ =========

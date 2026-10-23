@@ -15420,6 +15420,104 @@
         "сгибы этой правкой не пересчитываются и не проверяются: сгиб - объём SHEET_METAL_FEATURES",
         "габарит как проверка толщины применим только к телу без сгибов; при сгибах проверка названа неприменимой, а не пропущена молча"
       ]
+    },
+    {
+      "operation_id": "SMB-04.bend.create",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_create_sheet_metal_bend.json",
+      "adapter_route": "kompas_create_sheet_metal_bend: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBends.Add() -> BendObjects (одно ребро, владелец сверен по IUnknown с владельцем тела) / Angle / Direction / InternalRadius / Radius / LengthType / Length -> Update() -> RebuildModel; подтверждение - счётчик +1, перечитанные значения, BendObjects = запрошенное ребро и изменившийся габарит",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка сгиба не заявлена: страницы свойств читаются, а запись после Add() не проверялась",
+        "rebuild": "перестроение отдельным действием не заявляется: сгиб перестраивается тем же Update() и RebuildModel внутри создания",
+        "suppress_restore": "у листового объекта нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.14.topology",
+        "SMB.15.bend",
+        "SMB.16.bend_second",
+        "SMB.17.bends_read_back",
+        "SMB.19.edit_with_features",
+        "SMB.20.bend_face_as_edge",
+        "SMB.21.bend_angle_refused",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#feature-tools"
+      ],
+      "limitations": [
+        "BendObjects измерен только с одним объектом: несколько рёбер в одном сгибе не заявляются",
+        "страницы угла, радиуса и длины называют только тип double: проверяется положительность и конечность, документированного предела нет",
+        "направление сгиба страница значения не называет: true - то, что записала проба, и это сказано в описании",
+        "созданный сгиб этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и bend_ref"
+      ]
+    },
+    {
+      "operation_id": "SMB-05.hole.create",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_create_sheet_metal_hole.json",
+      "adapter_route": "kompas_create_sheet_metal_hole: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalHoles.Add() -> Body / BasePlane (грань, владелец сверен по IUnknown с владельцем тела) / X / Y / Diameter / CutType / Depth -> Update() -> RebuildModel; подтверждение - счётчик +1, перечитанные значения и выросшее число граней тела",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка отверстия не заявлена: страницы свойств читаются, а запись после Add() не проверялась",
+        "rebuild": "перестроение отдельным действием не заявляется: отверстие перестраивается тем же Update() и RebuildModel внутри создания",
+        "suppress_restore": "у листового объекта нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.14.topology",
+        "SMB.18.hole",
+        "SMB.19.edit_with_features",
+        "SMB.22.hole_diameter_refused",
+        "SMB.23.hole_depth_of_another_type",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#feature-tools"
+      ],
+      "limitations": [
+        "up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет",
+        "глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его",
+        "страницы диаметра, координат и глубины называют только тип double: проверяется положительность и конечность, документированного предела нет",
+        "созданное отверстие этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и hole_ref"
+      ]
     }
   ],
   "pending_families": [

@@ -156,7 +156,15 @@ public sealed record CreateSheetMetalBodyResult(
 public sealed record GetSheetMetalResult(
     IReadOnlyList<SheetMetalBodyDto> Bodies,
     SheetMetalCountersDto Counters,
-    VerificationDto Verification);
+    VerificationDto Verification)
+{
+    /// <summary>Every bend of the document, in collection order. Empty when the collection is empty;
+    /// <c>null</c> — the counter did not answer, so "none" is not claimed.</summary>
+    public IReadOnlyList<SheetMetalBendDto>? Bends { get; init; }
+
+    /// <summary>Every hole of the document, in collection order.</summary>
+    public IReadOnlyList<SheetMetalHoleDto>? Holes { get; init; }
+}
 
 public sealed record EditSheetMetalBodyResult(
     ReferenceDto BodyRef,

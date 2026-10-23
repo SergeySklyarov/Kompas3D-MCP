@@ -62,8 +62,10 @@ public sealed partial class Api5Session
 
         // A sketch created here is empty by construction, so replace and delete_entities are meaningful
         // from the start; a sketch this server never drew is refused instead of quietly appending.
+        // MEASURED: an empty profile must be RECORDED, not dropped - a dropped entry reads as "this
+        // session never drew it", and a body built from such a sketch would escape the empty-profile check.
         _sketchProfileBox.Remove(reference.Id);
-        _sketchProfiles.Remove(reference.Id);
+        _sketchProfiles[reference.Id] = new SketchProfile();
 
         // ONLY a named base plane is remembered. A reference support must NOT be: the frame of an offset
         // or tilted plane is not one of the three standard frames, so a remembered XY would name the

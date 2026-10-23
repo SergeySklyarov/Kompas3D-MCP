@@ -502,6 +502,7 @@ public partial class Api5Session
 
         var (container, sheet) = RequireSheetMetal(document, "Сгиб не создавался");
         var bendsBefore = ReadCount(() => sheet.SheetMetalBends.Count);
+        var facesBefore = CountFaces(document);
         var extentBefore = ExtentByNormal(document);
 
         ClearKompasResult(document);
@@ -572,6 +573,7 @@ public partial class Api5Session
         var bendsAfter = ReadCount(() => sheet.SheetMetalBends.Count);
         var read = ReadBend(created, edge, ordinal: bendsAfter is { } after ? after - 1 : null);
         var extentAfter = ExtentByNormal(document);
+        var facesAfter = CountFaces(document);
 
         BumpRevision(document, "sheet_metal.create_bend");
         var mismatched = SheetMetalFeaturePolicy.BendMismatches(
@@ -582,6 +584,10 @@ public partial class Api5Session
             && afterCount == beforeCount + 1;
         var extentRead = extentBefore is not null && extentAfter is not null;
         var extentMoved = extentRead && Math.Abs(extentAfter!.Value - extentBefore!.Value) > SheetMetalFeaturePolicy.Tolerance;
+        // MEASURED: a second bend on the opposite side can leave the extent along the normal unchanged,
+        // so "the body changed" is proven by the extent OR by a grown face count - a bend adds faces.
+        var facesGrew = facesBefore is { } facesWas && facesAfter is { } facesNow && facesNow > facesWas;
+        var bodyChanged = extentMoved || facesGrew;
 
         var checks = new List<NamedCheck>
         {
@@ -593,19 +599,19 @@ public partial class Api5Session
             new("bend_objects_is_requested_edge", read?.EdgeIsRequested != false,
                 Observed: read?.EdgeIsRequested?.ToString() ?? "BendObjects не прочитан",
                 Expected: "запрошенное ребро"),
-            new("body_extent_changed", !extentRead || extentMoved,
-                Observed: $"{Num(extentBefore)} → {Num(extentAfter)}",
-                Expected: extentRead ? "габарит тела изменился" : "габарит не прочитан"),
+            new("body_changed", bodyChanged,
+                Observed: $"габарит {Num(extentBefore)} → {Num(extentAfter)}, граней {facesBefore} → {facesAfter}",
+                Expected: "габарит тела изменился или число граней выросло"),
         };
 
         var failed = counterGrew && mismatched.Count == 0 && read?.EdgeIsRequested != false
-            && (!extentRead || extentMoved);
+            && bodyChanged;
         if (!failed)
         {
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 "Сгиб создан, но чтение назад не подтвердило запрошенное: "
-                + string.Join(", ", mismatched.DefaultIfEmpty("счётчик, ребро или габарит"))
+                + string.Join(", ", mismatched.DefaultIfEmpty("счётчик, ребро или изменение тела"))
                 + ". Сгиб остался в модели — удалить его этим продуктом нельзя.",
                 RetryPolicy.Never,
                 partialEffects: true,

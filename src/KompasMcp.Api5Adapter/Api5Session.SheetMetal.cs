@@ -1005,6 +1005,9 @@ public partial class Api5Session
     /// <summary>Whether <c>BendObjects</c> holds the requested edge. MEASURED: the kernel hands the edge
     /// back as another wrapper, so the comparison is by COM identity; an identity that cannot be stated is
     /// "not read", never "another edge".</summary>
+    /// <remarks>MEASURED: the collection was measured with one object and the kernel may hand it back
+    /// either as the object itself or as a one-element array; both shapes are read, and anything else is
+    /// "not read" rather than a mismatch.</remarks>
     private static bool? HoldsEdge(ISheetMetalBend bend, IModelObject? requestedEdge)
     {
         var wanted = ComIdentity.Of(requestedEdge);
@@ -1023,12 +1026,12 @@ public partial class Api5Session
             return null;
         }
 
-        if (held is not Array array)
+        if (held is null)
         {
             return null;
         }
 
-        foreach (var item in array)
+        foreach (var item in held is Array array ? array : new[] { held })
         {
             if (string.Equals(ComIdentity.Of(item), wanted, StringComparison.Ordinal))
             {

@@ -661,7 +661,7 @@ def file_sha256(path):
 # История: 81 → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза) → 89 (управляющий размер)
 # → 90 (COMPONENT_DELETE) → 94 (SECTION_VIEWS) → 96 (SM-12) → 97 (SM-08) → 110 (SHEET_METAL_FEATURES)
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента).
-EXPECTED_TOOL_COUNT = 113
+EXPECTED_TOOL_COUNT = 114
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -51383,6 +51383,157 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             "sketch_ref до Add(), счётчик вырезов не вырос: ядро режет владельца грани (измерено), а "
             "удалить вырез продукт не может",
             "PASS" if ok_foreign else "FAIL", foreign_detail)
+
+    # ========= SMB.40-SMB.43: развёртка листовой детали в DXF (SHEET_METAL_DXF_EXPORT) =========
+    # Проверяется СРАВНЕНИЕ, а не файл: AddStandartViews имя проекции игнорирует (измерено), поэтому
+    # габарит контура в DXF сверяется с независимо прочитанным габаритом развёрнутого тела.
+    def flat_dxf_rows():
+        import os
+
+        def flat_part(name, with_sheet_metal):
+            env0, _code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                          "name": name})
+            doc0 = doc_id(env0)
+            if not doc0:
+                return None, None, None
+            env1, _code = call("kompas_create_sketch", {
+                "document_id": doc0, "expected_revision": current_rev(doc0),
+                "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-sketch"})
+            sketch0 = result(env1).get("id")
+            if not sketch0:
+                return doc0, None, None
+            call("kompas_edit_sketch", {
+                "sketch_ref": sketch0, "expected_revision": current_rev(doc0), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [-20, -20], "width_mm": 40,
+                              "height_mm": 40}]})
+            call("kompas_finish_sketch", {"sketch_ref": sketch0, "require_closed_profile": True})
+            if not with_sheet_metal:
+                # Обычное тело: листового тела у него нет, и выгрузка развёртки к нему не применима.
+                call("kompas_extrude", {"sketch_ref": sketch0, "expected_revision": current_rev(doc0),
+                                        "operation": "base", "depth_mm": 2.0,
+                                        "direction": "positive"})
+                return doc0, None, None
+            env2, _code = call("kompas_create_sheet_metal_body", {
+                "sketch_ref": sketch0, "expected_revision": current_rev(doc0), "thickness_mm": 1.5,
+                "bend_radius_mm": 2.0, "direction": "normal", "unfold_type": "coefficient",
+                "bend_coefficient": 0.4})
+            body0 = (result(env2).get("body_ref") or {}).get("id")
+            return doc0, body0, sketch0
+
+        def wide_face(doc0, body0):
+            _e, topo, _r = client.tool("kompas_read_topology",
+                                       {"document_id": doc0, "body_ref": body0, "include": "faces"})
+            faces = sorted((face for face in ((result(topo) or {}).get("faces") or [])
+                            if face.get("surface_type") == "plane"),
+                           key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
+            return faces[0].get("face_ref") if faces else None
+
+        doc0, body0, _sketch0 = flat_part("SMB-flat-dxf", with_sheet_metal=True)
+        if not doc0 or not body0:
+            rep.add("SMB.40.flat_dxf_export", "развёртка выгружена в DXF",
+                    "FAIL", "деталь или тело не созданы: doc=" + str(doc0) + " body=" + str(body0))
+            return
+
+        face0 = wide_face(doc0, body0)
+        if face0:
+            call("kompas_create_sheet_metal_hole", {
+                "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
+                "face_ref": face0, "x_mm": 5.0, "y_mm": 5.0, "diameter_mm": 6.0,
+                "cut_type": "by_depth", "depth_mm": 2.0})
+        # Развёртка обязательна: независимый габарит читается только у развёрнутого тела.
+        call("kompas_set_sheet_metal_unfold", {
+            "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
+            "unfold": True, "fixed_face_ref": face0})
+        saved = call("kompas_save_document", {"document_id": doc0})[1]
+        target = os.path.join(workdir, "smb-flat-pattern.dxf")
+        if os.path.exists(target):
+            os.remove(target)
+
+        _e, before_docs, _r = client.tool("kompas_list_documents", {})
+        docs_before = len((result(before_docs) or {}).get("documents") or [])
+        env3, code3 = call("kompas_export_sheet_metal_flat_dxf", {
+            "document_id": doc0, "body_ref": body0, "output_path": target}, timeout=300)
+        exported = result(env3)
+        contour = exported.get("contour") or {}
+        checks3 = {row.get("name"): row.get("passed")
+                   for row in ((exported.get("verification") or {}).get("checks") or [])}
+        unverified3 = (exported.get("verification") or {}).get("unverified_aspects") or []
+        flat_w, flat_h = exported.get("flat_width_mm"), exported.get("flat_height_mm")
+        ok_export = (not code3 and os.path.exists(target) and (exported.get("byte_length") or 0) > 0
+                     and near(contour.get("width_mm"), flat_w, 0.01)
+                     and near(contour.get("height_mm"), flat_h, 0.01)
+                     and (contour.get("circle_count") or 0) >= 1
+                     and exported.get("body_unfolded") is True
+                     and checks3.get("contour_matches_flat") is True
+                     and checks3.get("view_is_not_front_view") is True
+                     and exported.get("reached_level") == "geometry_checked")
+        rep.add("SMB.40.flat_dxf_export",
+                "развёртка листовой детали выгружена в DXF: файл непустой, габарит контура из файла "
+                "совпал с независимо прочитанным габаритом развёрнутого тела (допуск 0,01 мм), "
+                "окружность отверстия в файле есть, уровень проверки geometry_checked",
+                "PASS" if ok_export else "FAIL",
+                "code=" + str(code3) + " файл=" + str(os.path.exists(target)) + " байт="
+                + str(exported.get("byte_length")) + " контур=" + str(contour.get("width_mm")) + "x"
+                + str(contour.get("height_mm")) + " развёртка=" + str(flat_w) + "x" + str(flat_h)
+                + " окружностей=" + str(contour.get("circle_count")) + " линий="
+                + str(contour.get("line_count")) + " дуг=" + str(contour.get("arc_count"))
+                + " уровень=" + str(exported.get("reached_level")) + " проверки=" + str(checks3)
+                + " непроверено=" + str(unverified3) + " " + str(emsg(env3) or ""))
+
+        _e, after_docs, _r = client.tool("kompas_list_documents", {})
+        docs_after = len((result(after_docs) or {}).get("documents") or [])
+        rep.add("SMB.43.temp_drawing_closed",
+                "временный чертёж, по которому строился вид, не остался в сеансе: число документов до и "
+                "после выгрузки одинаково, и в ответе его нет",
+                "PASS" if docs_after == docs_before else "FAIL",
+                "документов до=" + str(docs_before) + " после=" + str(docs_after))
+
+        # Перезапись: без флага - отказ, файл не тронут; с флагом - запись поверх.
+        env4, code4 = call("kompas_export_sheet_metal_flat_dxf", {
+            "document_id": doc0, "body_ref": body0, "output_path": target}, timeout=300)
+        overwritten = call("kompas_export_sheet_metal_flat_dxf", {
+            "document_id": doc0, "body_ref": body0, "output_path": target, "overwrite": True},
+            timeout=300)[1]
+        rep.add("SMB.41.flat_dxf_overwrite",
+                "повтор в тот же путь без overwrite отвергнут PATH_NOT_ALLOWED, а с overwrite=true "
+                "выгрузка прошла: правило перезаписи то же, что у kompas_export_drawing",
+                "PASS" if (code4 == "PATH_NOT_ALLOWED" and not overwritten) else "FAIL",
+                "без_флага=" + str(code4) + " с_флагом=" + str(overwritten))
+
+        # Отказы: путь вне корней, деталь без листового тела, несохранённая деталь.
+        outside = "C:" + chr(92) + "Windows" + chr(92) + "smb-flat-pattern.dxf"
+        code5 = call("kompas_export_sheet_metal_flat_dxf", {
+            "document_id": doc0, "body_ref": body0, "output_path": outside}, timeout=300)[1]
+        plain_doc, _plain_body, _plain_sketch = flat_part("SMB-flat-dxf-plain", with_sheet_metal=False)
+        code6, field6 = None, None
+        if plain_doc:
+            call("kompas_save_document", {"document_id": plain_doc})
+            env6, code6 = call("kompas_export_sheet_metal_flat_dxf", {
+                "document_id": plain_doc, "output_path": os.path.join(workdir, "smb-plain.dxf")},
+                timeout=300)
+            field6 = efield(env6)
+            call("kompas_close_document", {"document_id": plain_doc, "dirty_policy": "discard"})
+        # Несохранённая деталь: маршрут строит вид по файлу, поэтому правка без сохранения - отказ.
+        call("kompas_edit_sheet_metal_body", {
+            "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
+            "thickness_mm": 1.6})
+        code7 = call("kompas_export_sheet_metal_flat_dxf", {
+            "document_id": doc0, "body_ref": body0,
+            "output_path": os.path.join(workdir, "smb-dirty.dxf")}, timeout=300)[1]
+        no_files = (not os.path.exists(os.path.join(workdir, "smb-plain.dxf"))
+                    and not os.path.exists(os.path.join(workdir, "smb-dirty.dxf")))
+        rep.add("SMB.42.flat_dxf_refusals",
+                "отказы названы до выгрузки и файла не создают: путь вне корней - PATH_NOT_ALLOWED, "
+                "деталь без листового тела - INVALID_ARGUMENT с именем поля body_ref, несохранённая "
+                "деталь - DOCUMENT_DIRTY",
+                "PASS" if (code5 == "PATH_NOT_ALLOWED" and code6 == "INVALID_ARGUMENT"
+                           and field6 == "body_ref" and code7 == "DOCUMENT_DIRTY" and no_files) else "FAIL",
+                "вне_корней=" + str(code5) + " без_тела=" + str(code6) + "/" + str(field6)
+                + " несохранённая=" + str(code7) + " файлов_нет=" + str(no_files)
+                + " сохранилась=" + str(saved))
+        call("kompas_close_document", {"document_id": doc0, "dirty_policy": "discard"})
+
+    flat_dxf_rows()
 
 
 EXTRA_GROUP_CHECKS = {

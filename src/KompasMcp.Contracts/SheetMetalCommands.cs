@@ -428,3 +428,50 @@ public sealed record GetSheetMetalUnfoldResult(
     SheetMetalUnfoldDto Unfold,
     SheetMetalBodyDto? Body,
     VerificationDto Verification);
+
+/// <summary>Export the flat pattern of a sheet-metal part to a DXF file.</summary>
+/// <remarks>DOC: <c>iviews_addstandartviews.html</c> (a view is built from a FILE),
+/// <c>iassociationview_projectionname.html</c>, <c>iassociationview_unfold.html</c>,
+/// <c>idrawingobject_update.html</c>, <c>iconverter_convert.html</c>. INVARIANT: the view is built from the
+/// SAVED part file, so an unsaved part is refused by name instead of exported as an older file.
+/// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
+public sealed record ExportSheetMetalFlatDxfCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>The sheet-metal body. May be omitted when the part holds exactly one; a part with
+    /// several is refused by name rather than guessed.</summary>
+    public string? BodyRef { get; init; }
+
+    /// <summary>Absolute <c>.dxf</c> path inside the allowed export root.</summary>
+    public required string OutputPath { get; init; }
+
+    /// <summary>Overwrite an existing file. Default false: rewriting without an explicit flag is a silent
+    /// data loss.</summary>
+    public bool Overwrite { get; init; }
+}
+
+/// <summary>Extent of the contour the DXF carries, in file units (mm).</summary>
+public sealed record FlatDxfContourDto(
+    double WidthMm,
+    double HeightMm,
+    double MinXMm,
+    double MinYMm,
+    int LineCount,
+    int ArcCount,
+    int CircleCount);
+
+/// <summary>Result of the flat-pattern export: the file, its contour, and the independent extent it was
+/// compared against.</summary>
+/// <remarks>INVARIANT: <c>null</c> in <see cref="FlatWidthMm"/>/<see cref="FlatHeightMm"/> means «независимый
+/// габарит не прочитан», never «совпало»: the level is lowered and the reason is named.
+/// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
+public sealed record ExportSheetMetalFlatDxfResult(
+    string OutputPath,
+    long ByteLength,
+    FlatDxfContourDto? Contour,
+    double? FlatWidthMm,
+    double? FlatHeightMm,
+    bool? BodyUnfolded,
+    VerificationLevel ReachedLevel,
+    VerificationDto Verification);

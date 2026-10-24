@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 47,
-   "operations": 147,
+   "operations": 148,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 228,
+   "modes_and_variants": 229,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8286,6 +8286,20 @@
       {
        "id": "SMB-08.unfold.read",
        "name": "Прочитать состояние развёртки тела",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-09",
+     "name": "Выгрузка развёртки в DXF",
+     "level": "mcp_verified",
+     "doc_source": "iviews_addstandartviews.html, iassociationview_projectionname.html, iassociationview_unfold.html, idrawingobject_update.html, iconverter_getfilter.html, iconverter_convert.html",
+     "route": "временный чертёж -> IViews.AddStandartViews(сохранённый файл детали) -> IAssociationView.ProjectionName / Unfold -> IView.Update() -> IConverter.Convert в DXF; успех - габарит контура из файла против габарита развёрнутого тела",
+     "modes": [
+      {
+       "id": "SMB-09.flat_dxf.export",
+       "name": "Выгрузить развёртку листовой детали в DXF",
        "level": "mcp_verified"
       }
      ]

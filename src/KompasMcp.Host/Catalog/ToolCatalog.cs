@@ -1034,6 +1034,38 @@ public static class ToolCatalog
                     ("body_ref", Sch.Ref("#/$defs/reference"))),
                 WorkerCommands.GetSheetMetalUnfold),
 
+            // Route = temporary drawing -> IViews.AddStandartViews -> IAssociationView.ProjectionName /
+            // Unfold -> Update() -> IConverter.Convert to DXF. Success is the contour inside the file.
+            // History: docs/decisions/sheet-metal.md#flat-dxf-tool
+            Mutation("kompas_export_sheet_metal_flat_dxf", "Выгрузить развёртку листовой детали в DXF",
+                "Строит развёртку листовой детали и выгружает её в файл DXF документированным маршрутом: "
+                + "временный чертёж -> IViews.AddStandartViews по СОХРАНЁННОМУ файлу детали -> "
+                + "IAssociationView.ProjectionName = имя проекции развёртки -> IAssociationView.Unfold = true "
+                + "-> IView.Update() -> IConverter.Convert в DXF. Деталь должна быть сохранена: маршрут "
+                + "строит вид по файлу, поэтому несохранённая деталь — отказ DOCUMENT_DIRTY с указанием "
+                + "kompas_save_document (SaveAs детали инструмент не делает). Временный чертёж закрывается "
+                + "без сохранения в любом исходе и в ответе не появляется. УСПЕХ — СРАВНЕНИЕ, А НЕ ФАЙЛ: "
+                + "AddStandartViews имя проекции игнорирует и молча строит вид «Спереди» (измерено), "
+                + "поэтому габарит контура, измеренный по СУЩНОСТЯМ файла (LINE/ARC/CIRCLE в окне вида, "
+                + "рамка вида признаком не служит), сверяется с независимо прочитанным габаритом "
+                + "развёрнутого тела, допуск 0,01 мм. Если независимого значения нет (модель согнута), "
+                + "уровень понижается, причина названа в unverified_aspects, и «успехом» это не является. "
+                + "Совпадение контура с габаритом СОГНУТОГО тела при наличии сгибов — VERIFICATION_FAILED "
+                + "(вид подменён видом «Спереди»); расхождение с развёрткой — тоже VERIFICATION_FAILED, "
+                + "файл остаётся для разбора. В ответе: путь, размер файла, габарит контура и число "
+                + "окружностей (отверстий) в нём. Выбор грани для отверстий и вырезов — дело инструментов "
+                + "отверстия и выреза, а не выгрузки. Перезапись существующего файла — только с "
+                + "overwrite=true.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("body_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
+                    ("output_path", Sch.Ref("#/$defs/output_path")),
+                    ("overwrite", Sch.Nullable(Sch.Bool(
+                        "Перезаписать существующий файл. По умолчанию false: перезапись без явного "
+                        + "согласия — молчаливая потеря данных.", false)))),
+                WorkerCommands.ExportSheetMetalFlatDxf,
+                requiresDocument: true),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: "
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "

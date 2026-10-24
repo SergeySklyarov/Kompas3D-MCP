@@ -15661,6 +15661,51 @@
         "ExcludedBendObjects только считается: страница не называет способа вернуть сгиб в этот массив",
         "непрочитанное поле отдаётся как null и называется в unverified_aspects, а не как false"
       ]
+    },
+    {
+      "operation_id": "SMB-09.flat_dxf.export",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_export_sheet_metal_flat_dxf.json",
+      "adapter_route": "kompas_export_sheet_metal_flat_dxf: временный чертёж -> IViews.AddStandartViews(сохранённый файл детали) -> IAssociationView.ProjectionName = развёртка -> Unfold = true -> IView.Update() -> IConverter.Convert(чертёж, .dxf) -> разбор DXF (LINE/ARC/CIRCLE в окне вида)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "verified",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "create": "выгрузка ничего не создаёт в модели - файл пишется по существующей детали",
+        "edit": "выгрузка модель не меняет; состояние развёртки меняет SMB-07",
+        "suppress_restore": "у выгрузки нет режима подавления",
+        "delete_dependencies": "временный чертёж удаляется закрытием без сохранения, а не удалением объектов модели"
+      },
+      "tests": [
+        "SMB.40.flat_dxf_export",
+        "SMB.41.flat_dxf_overwrite",
+        "SMB.42.flat_dxf_refusals",
+        "SMB.43.temp_drawing_closed"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#flat-dxf-tool"
+      ],
+      "limitations": [
+        "маршрут строит вид по СОХРАНЁННОМУ файлу: несохранённая деталь - отказ DOCUMENT_DIRTY, SaveAs детали инструмент не делает",
+        "успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа",
+        "число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят"
+      ]
     }
 
   ],

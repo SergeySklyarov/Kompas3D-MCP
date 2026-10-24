@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -438,6 +438,7 @@ public sealed class CommandDispatcher
             WorkerCommands.CreateSheetMetalCut => _sta.Run(() => CreateSheetMetalCut(request), "sheet_metal.create_cut", cancellationToken),
             WorkerCommands.SetSheetMetalUnfold => _sta.Run(() => SetSheetMetalUnfold(request), "sheet_metal.set_unfold", cancellationToken),
             WorkerCommands.GetSheetMetalUnfold => _sta.Run(() => GetSheetMetalUnfold(request), "sheet_metal.get_unfold", cancellationToken),
+            WorkerCommands.ExportSheetMetalFlatDxf => _sta.Run(() => ExportSheetMetalFlatDxf(request), "sheet_metal.export_flat_dxf", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
             WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
@@ -1601,6 +1602,13 @@ public sealed class CommandDispatcher
     {
         var command = Argument<GetSheetMetalUnfoldCommand>(request);
         return _session.GetSheetMetalUnfold(command);
+    }
+
+    private object? ExportSheetMetalFlatDxf(IpcFrame request)
+    {
+        var command = Argument<ExportSheetMetalFlatDxfCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.ExportSheetMetalFlatDxf(command), document);
     }
 
     private object? InsertComponent(IpcFrame request)    {

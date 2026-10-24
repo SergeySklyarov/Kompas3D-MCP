@@ -230,19 +230,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 374
-- **строк_полностью_закрыто:** 186
-- **строк_с_каким_либо_прогрессом:** 203
+- **строк_каталога:** 375
+- **строк_полностью_закрыто:** 187
+- **строк_с_каким_либо_прогрессом:** 204
 - **семейств_в_каталоге:** 47
 - **семейств_без_строк:** 12
-- **операций:** 147
-- **режимов_и_вариантов:** 228
-- **применимых_действий:** 3048
-- **действий_verified:** 1234
-- **покрытие_действий:** 40.5%
-- **распределение_статусов:** {'not_started': 1814, 'verified': 1234, 'not_applicable': 692}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 71, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 78, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 148
+- **режимов_и_вариантов:** 229
+- **применимых_действий:** 3054
+- **действий_verified:** 1240
+- **покрытие_действий:** 40.6%
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1240, 'not_applicable': 696}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 72, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 79, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -938,6 +938,7 @@
 | `SMB-06.cut.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.25.sketch_on_face, SMB.26.cut_through, SMB.27.cut_depth, SMB.28.cut_sketch_on_plane, SMB.29.cut_empty_sketch, SMB.30.cut_depth_with_by_width, SMB.31.cut_foreign_face, SMB.12.reopen |
 | `SMB-07.unfold.set` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | SMB.32.unfold_initial_read, SMB.33.unfold_without_face_refused, SMB.34.unfold, SMB.35.fold_back, SMB.36.unfold_again, SMB.37.reopen_unfold, SMB.39.unfold_foreign_face |
 | `SMB-08.unfold.read` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.32.unfold_initial_read, SMB.37.reopen_unfold |
+| `SMB-09.flat_dxf.export` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | SMB.40.flat_dxf_export, SMB.41.flat_dxf_overwrite, SMB.42.flat_dxf_refusals, SMB.43.temp_drawing_closed |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1662,6 +1663,10 @@
 - `SMB-08.unfold.read` — закрыт целиком
   - ExcludedBendObjects только считается: страница не называет способа вернуть сгиб в этот массив
   - непрочитанное поле отдаётся как null и называется в unverified_aspects, а не как false
+- `SMB-09.flat_dxf.export` — закрыт целиком
+  - маршрут строит вид по СОХРАНЁННОМУ файлу: несохранённая деталь - отказ DOCUMENT_DIRTY, SaveAs детали инструмент не делает
+  - успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа
+  - число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

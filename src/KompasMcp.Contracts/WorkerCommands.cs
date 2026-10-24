@@ -290,6 +290,8 @@ public static class WorkerCommands
     // sheet_metal.set_unfold / sheet_metal.get_unfold: the unfold STATE of a body, not a feature.
     public const string SetSheetMetalUnfold = "sheet_metal.set_unfold";
     public const string GetSheetMetalUnfold = "sheet_metal.get_unfold";
+    // sheet_metal.export_flat_dxf: the unfolded body as a DXF file, through a temporary drawing.
+    public const string ExportSheetMetalFlatDxf = "sheet_metal.export_flat_dxf";
     // ── block DRW "drawings" (profile drawings-minimal-v1) ──
     // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →

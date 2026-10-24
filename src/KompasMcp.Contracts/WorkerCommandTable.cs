@@ -1,4 +1,4 @@
-namespace KompasMcp.Contracts.Ipc;
+﻿namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Which lane of the Worker answers a command.</summary>
 public enum WorkerLane
@@ -246,6 +246,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.CreateSheetMetalCut, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.SetSheetMetalUnfold, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.GetSheetMetalUnfold, WorkerAction.Read);
+        Cad(WorkerCommands.ExportSheetMetalFlatDxf, WorkerAction.ModelMutation, 300_000);
 
         // ---- drawings ----
         // Views and export go through the API7 bridge (TransferInterface + AddStandartViews or the

@@ -51185,9 +51185,27 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             return (result(env3).get("body_ref") or {}).get("id")
 
         first = flat_body("smc-first", 0)
-        second = flat_body("smc-second", 200)
+        # ВТОРОЕ тело - обычное тело выдавливанием, а не листовое: два листовых тела в одной детали
+        # либо сливаются в одно тело (грани одного владельца), либо второе отвергается проверкой
+        # габарита по нормали, которая читается по ДОКУМЕНТУ (оба измерены в этом прогоне). Для отказа
+        # по чужой грани нужен лишь другой ВЛАДЕЛЕЦ грани, и выдавливание его даёт.
+        env2, _code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 200}, "name": "smc-solid-sketch"})
+        solid_sketch = result(env2).get("id")
+        if solid_sketch:
+            call("kompas_edit_sketch", {
+                "sketch_ref": solid_sketch, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 40,
+                              "height_mm": 40}]})
+            call("kompas_finish_sketch", {"sketch_ref": solid_sketch,
+                                         "require_closed_profile": True})
+            call("kompas_extrude", {"sketch_ref": solid_sketch, "expected_revision": current_rev(doc),
+                                    "operation": "base", "depth_mm": 10.0,
+                                    "direction": "positive"})
+        second = "solid" if solid_sketch else None
         if not first or not second:
-            return False, f"два листовых тела не построены: first={first} second={second}"
+            return False, f"два тела не построены: first={first} second={second}"
 
         _e, listed, _r = client.tool("kompas_list_bodies", {"document_id": doc})
         solid_rows = result(listed)

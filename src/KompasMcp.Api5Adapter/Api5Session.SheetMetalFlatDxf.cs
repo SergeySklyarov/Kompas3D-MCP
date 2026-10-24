@@ -90,8 +90,11 @@ public partial class Api5Session
         // The model's own extent in the sheet plane: the unfolded body IS the flat pattern, and a bent
         // body's box is the front view's size — the two facts the contour is judged against.
         var modelBox = FlatBoxOf(document, body);
-        var flatBox = unfolded == true ? modelBox : null;
-        var bentBox = unfolded == false ? modelBox : null;
+        // INVARIANT: a sheet-metal body WITHOUT bends is already flat, so its box is the flat pattern even
+        // though the unfold parameters were never created. A bent body is flat only while Unfold is true.
+        var isFlat = unfolded == true || hasBends == false;
+        var flatBox = isFlat ? modelBox : null;
+        var bentBox = isFlat ? null : modelBox;
 
         var directory = Path.GetDirectoryName(command.OutputPath);
         if (!string.IsNullOrEmpty(directory))
@@ -267,7 +270,7 @@ public partial class Api5Session
                     contour.LineCount, contour.ArcCount, contour.CircleCount),
             flatBox?.Width,
             flatBox?.Height,
-            unfolded,
+            isFlat,
             level,
             new VerificationDto(level, checks, unverified));
     }
@@ -307,26 +310,44 @@ public partial class Api5Session
 
     /// <summary>The body's box in the sheet plane (X/Y of its own solid body), or <c>null</c> when the
     /// body or its box is not readable.</summary>
+    /// <remarks>MEASURED: a sheet-metal body is a different COM object from the solid body the part holds,
+    /// so the pointer finds nothing once a second body exists; a part with exactly ONE body falls back to the
+    /// documented "только тела" mode of <c>ksPart.GetGabarit</c>, which is then that body's box.
+    /// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
     private DxfBox? FlatBoxOf(DocumentEntry document, ISheetMetalBody body)
     {
         try
         {
-            if (FindSolidBody(document, body) is not { } solid)
+            if (FindSolidBody(document, body) is { } solid)
             {
-                return null;
+                var box = ReadBodyBox(solid);
+                if (FlatBoxOf(box) is { } own)
+                {
+                    return own;
+                }
             }
 
-            var box = ReadBodyBox(solid);
-            return box.MinMm.Count < 2 || box.MaxMm.Count < 2
-                || !double.IsFinite(box.MinMm[0]) || !double.IsFinite(box.MaxMm[1])
-                ? null
-                : new DxfBox(box.MinMm[0], box.MinMm[1], box.MaxMm[0], box.MaxMm[1]);
+            if (CountBodies(document) == 1
+                && TryReadGabaritCorners(document, full: false, customizable: false, out var min, out var max)
+                && min.Length >= 2 && max.Length >= 2
+                && double.IsFinite(min[0]) && double.IsFinite(max[1]))
+            {
+                return new DxfBox(min[0], min[1], max[0], max[1]);
+            }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             return null;
         }
+
+        return null;
     }
+
+    private static DxfBox? FlatBoxOf(BoundingBoxDto box) =>
+        box.MinMm.Count < 2 || box.MaxMm.Count < 2
+        || !double.IsFinite(box.MinMm[0]) || !double.IsFinite(box.MaxMm[1])
+            ? null
+            : new DxfBox(box.MinMm[0], box.MinMm[1], box.MaxMm[0], box.MaxMm[1]);
 
     /// <summary>Make the created view the unfold: its projection name, the unfold flag, then Update().</summary>
     /// <remarks>DOC: <c>iassociationview_projectionname.html</c>, <c>iassociationview_unfold.html</c>,
@@ -504,6 +525,11 @@ public partial class Api5Session
     }
 
     /// <summary>Close the temporary drawing without saving; a close that failed is named, not hidden.</summary>
+    /// <remarks>DOC: <c>ikompasdocument_close.html</c> — the option says what happens to unsaved changes.
+    /// MEASURED: the API7 call answers false on a drawing this route created through API7
+    /// <c>Documents.Add</c>, while the document does not stay in the session; the answer is named, not hidden.
+    /// LIMIT: the API5 2D handle has no close of its own, so no second attempt exists.
+    /// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
     private static void CloseTemporaryDrawing(IKompasDocument2D? drawing, List<string> unverified)
     {
         if (drawing is null)
@@ -515,8 +541,9 @@ public partial class Api5Session
         {
             if (!drawing.Close(DocumentCloseOptions.kdDoNotSaveChanges))
             {
-                unverified.Add("temporary_drawing_not_closed — временный чертёж не закрылся "
-                    + "(Close(kdDoNotSaveChanges) вернул false): в сеансе остался лишний документ");
+                unverified.Add("temporary_drawing_close_unconfirmed — временный чертёж закрыт без "
+                    + "сохранения, но Close(kdDoNotSaveChanges) вернул false: закрытие не подтверждено "
+                    + "ответом метода");
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)

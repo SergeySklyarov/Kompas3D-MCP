@@ -51421,8 +51421,12 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             return doc0, body0, sketch0
 
         def wide_face(doc0, body0):
+            # Топология читается по ТВЁРДОМУ телу: ссылка листового тела адресует другой объект COM.
+            _e, listed, _r = client.tool("kompas_list_bodies", {"document_id": doc0})
+            rows = result(listed)
+            solid = rows[0].get("body_ref") if isinstance(rows, list) and rows else body0
             _e, topo, _r = client.tool("kompas_read_topology",
-                                       {"document_id": doc0, "body_ref": body0, "include": "faces"})
+                                       {"document_id": doc0, "body_ref": solid, "include": "faces"})
             faces = sorted((face for face in ((result(topo) or {}).get("faces") or [])
                             if face.get("surface_type") == "plane"),
                            key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
@@ -51438,13 +51442,15 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         if face0:
             call("kompas_create_sheet_metal_hole", {
                 "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
-                "face_ref": face0, "x_mm": 5.0, "y_mm": 5.0, "diameter_mm": 6.0,
+                "base_face_ref": face0, "x_mm": 5.0, "y_mm": 5.0, "diameter_mm": 6.0,
                 "cut_type": "by_depth", "depth_mm": 2.0})
         # Развёртка обязательна: независимый габарит читается только у развёрнутого тела.
         call("kompas_set_sheet_metal_unfold", {
             "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
             "unfold": True, "fixed_face_ref": face0})
-        saved = call("kompas_save_document", {"document_id": doc0})[1]
+        saved = call("kompas_save_document", {"document_id": doc0,
+                                                "expected_revision": current_rev(doc0),
+                                                "target_path": os.path.join(workdir, "smb-flat-dxf.m3d")})[1]
         target = os.path.join(workdir, "smb-flat-pattern.dxf")
         if os.path.exists(target):
             os.remove(target)
@@ -51460,6 +51466,7 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         unverified3 = (exported.get("verification") or {}).get("unverified_aspects") or []
         flat_w, flat_h = exported.get("flat_width_mm"), exported.get("flat_height_mm")
         ok_export = (not code3 and os.path.exists(target) and (exported.get("byte_length") or 0) > 0
+                     and flat_w is not None and flat_h is not None
                      and near(contour.get("width_mm"), flat_w, 0.01)
                      and near(contour.get("height_mm"), flat_h, 0.01)
                      and (contour.get("circle_count") or 0) >= 1
@@ -51482,10 +51489,11 @@ def sheet_metal_checks(client, rep, app_id, workdir):
 
         _e, after_docs, _r = client.tool("kompas_list_documents", {})
         docs_after = len((result(after_docs) or {}).get("documents") or [])
+        closed_clean = not any("temporary_drawing_not_closed" in text for text in unverified3)
         rep.add("SMB.43.temp_drawing_closed",
                 "временный чертёж, по которому строился вид, не остался в сеансе: число документов до и "
-                "после выгрузки одинаково, и в ответе его нет",
-                "PASS" if docs_after == docs_before else "FAIL",
+                "после выгрузки одинаково, и в ответе нет строки о неудавшемся закрытии",
+                "PASS" if (docs_after == docs_before and closed_clean) else "FAIL",
                 "документов до=" + str(docs_before) + " после=" + str(docs_after))
 
         # Перезапись: без флага - отказ, файл не тронут; с флагом - запись поверх.
@@ -51507,7 +51515,9 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         plain_doc, _plain_body, _plain_sketch = flat_part("SMB-flat-dxf-plain", with_sheet_metal=False)
         code6, field6 = None, None
         if plain_doc:
-            call("kompas_save_document", {"document_id": plain_doc})
+            call("kompas_save_document", {"document_id": plain_doc,
+                                            "expected_revision": current_rev(plain_doc),
+                                            "target_path": os.path.join(workdir, "smb-plain.m3d")})
             env6, code6 = call("kompas_export_sheet_metal_flat_dxf", {
                 "document_id": plain_doc, "output_path": os.path.join(workdir, "smb-plain.dxf")},
                 timeout=300)

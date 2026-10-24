@@ -1,4 +1,4 @@
-namespace KompasMcp.Contracts;
+﻿namespace KompasMcp.Contracts;
 
 /// <summary>Sheet-metal block — profile <c>sheet-metal-minimal-v1</c>, modes <c>SMB-01…SMB-03</c>.</summary>
 /// <remarks>INVARIANT: a body is created through the documented API7 route
@@ -472,6 +472,8 @@ public sealed record ExportSheetMetalFlatDxfResult(
     FlatDxfContourDto? Contour,
     double? FlatWidthMm,
     double? FlatHeightMm,
+    /// <summary>Whether the body is flat as it stands: <c>Unfold</c> is true, or the body has no bends at
+    /// all — a sheet-metal body without bends IS its own flat pattern.</summary>
     bool? BodyUnfolded,
     VerificationLevel ReachedLevel,
     VerificationDto Verification);

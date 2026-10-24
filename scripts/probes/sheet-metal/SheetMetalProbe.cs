@@ -1280,6 +1280,17 @@ internal sealed class SheetMetalProbe : IDisposable
                 RuntimeName(asSheet), Verdict.Info);
             Record($"map_body_{i}_as_sheet_is_sheet", "этот ISheetMetalBody И ЕСТЬ запрошенное тело",
                 Flag(SameCom(asSheet, sheet)), Verdict.Info);
+            if (body?.FaceCollection() is ksFaceCollection faces && faces.GetCount() > 0
+                && As5<ksFaceDefinition>(faces.GetByIndex(0)) is { } face)
+            {
+                var face7 = Transfer7<IModelObject>(face, $"map_body_{i}_face_to7", "грань тела перенесена в API7");
+                var faceOwner = face7 is null ? null : SafeObject(() => face7.Owner);
+                Record($"map_body_{i}_face_owner_type", "тип Owner грани тела", RuntimeName(faceOwner), Verdict.Info);
+                Record($"map_body_{i}_face_owner_name", "имя Owner грани тела", NameOf(faceOwner), Verdict.Info);
+                Record($"map_body_{i}_face_owner_is_sheet_owner", "Owner грани равен ISheetMetalBody.Owner",
+                    Flag(SameCom(faceOwner, owner)), Verdict.Info);
+            }
+
             var model = As5<IModelObject>(element);
             Record($"map_body_{i}_model_name", "IModelObject.Name элемента коллекции",
                 model is null ? "не IModelObject" : (SafeObject(() => model.Name) as string ?? "(имени нет)"),
@@ -1300,7 +1311,7 @@ internal sealed class SheetMetalProbe : IDisposable
 
         var results = SafeObject(() => feature7.ResultBodies);
         Record("map_result_bodies_type", "что вернул IFeature7.ResultBodies", RuntimeName(results), Verdict.Info);
-        var produced = results is Array array ? array.Cast<object>().ToList() : new List<object>();
+        var produced = ReadBodies(results);
         Record("map_result_bodies_count", "сколько тел породил объект дерева", Count(produced.Count), Verdict.Info);
         foreach (var one in produced)
         {
@@ -1318,6 +1329,46 @@ internal sealed class SheetMetalProbe : IDisposable
                 Record("map_result_body_gabarit", "габарит тела из ResultBodies", BodyGabarit(solid), Verdict.Info);
             }
         }
+    }
+
+    /// <summary>Elements of a value documented as «Массив тел (SAFEARRAY)», read by the shape it answers:
+    /// a managed array, an indexed collection, or a dispatch object with <c>Count</c>.
+    /// </summary>
+    /// <remarks>MEASURED: the property is declared as <c>object</c>, so the shape the marshaler produces is
+    /// not stated by the signature; each documented shape is tried and named instead of assumed.
+    /// DOC: ifeature7_props.html. History: docs/decisions/sheet-metal.md#body-extent</remarks>
+    private List<object> ReadBodies(object? results)
+    {
+        if (results is object[] managed)
+        {
+            Record("map_result_shape", "форма массива тел", "управляемый массив", Verdict.Info);
+            return managed.ToList();
+        }
+
+        if (results is Array array)
+        {
+            Record("map_result_shape", "форма массива тел", "System.Array", Verdict.Info);
+            return array.Cast<object>().ToList();
+        }
+
+        var produced = new List<object>();
+        try
+        {
+            dynamic bag = results!;
+            var count = (int)bag.Count;
+            Record("map_result_shape", "форма массива тел", "объект с Count: " + Count(count), Verdict.Info);
+            for (var i = 0; i < count; i++)
+            {
+                produced.Add(bag[i]);
+            }
+        }
+        catch (Exception ex) when (ex is Microsoft.CSharp.RuntimeBinder.RuntimeBinderException
+                                       or COMException or InvalidCastException or ArgumentException)
+        {
+            Record("map_result_shape", "форма массива тел", Describe(ex), Verdict.Info);
+        }
+
+        return produced;
     }
 
     /// <summary>Name of a tree object, when it states one — the other documented identity.</summary>

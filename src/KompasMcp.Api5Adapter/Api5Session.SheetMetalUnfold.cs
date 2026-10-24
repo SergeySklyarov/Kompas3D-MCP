@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
+using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.SheetMetal;
 
@@ -323,9 +324,7 @@ public partial class Api5Session
     {
         try
         {
-            var part = document.PartNow();
-            if (MatchBodyIndexByPointer(part, body, out var rawElement) is not null
-                && AsInterface<ksBody>(rawElement) is { } solid)
+            if (FindSolidBody(document, body) is { } solid)
             {
                 var box = ReadBodyBox(solid);
                 if (ExtentOfCorners(box.MinMm, box.MaxMm) is { } own)
@@ -347,6 +346,65 @@ public partial class Api5Session
         }
 
         return (null, "unread");
+    }
+
+    /// <summary>The solid body of <paramref name="body"/> in <c>ksPart.BodyCollection()</c>: by the
+    /// object's own pointer, then by the tree object its faces name.</summary>
+    /// <remarks>MEASURED: a sheet-metal body is a different COM object from the solid body the part holds,
+    /// so the pointer finds nothing once a second body exists; a face answers <c>Owner</c> with the same
+    /// object the sheet-metal body does. DOC: <c>ksbody_facecollection.html</c>,
+    /// <c>imodelobject_props.html</c>. History: docs/decisions/sheet-metal.md#body-extent</remarks>
+    private ksBody? FindSolidBody(DocumentEntry document, ISheetMetalBody body)
+    {
+        var part = document.PartNow();
+        var collection = (ksBodyCollection)part.BodyCollection();
+        collection.refresh();
+        var ownPointer = ComIdentity.Of(body);
+        var ownOwner = ComIdentity.Of(SafeObject(() => body.Owner));
+        var bridge = ownOwner is null ? null : BridgeFor(document);
+        var count = collection.GetCount();
+        for (var i = 0; i < count; i++)
+        {
+            if (AsInterface<ksBody>(collection.GetByIndex(i)) is not { } solid)
+            {
+                continue;
+            }
+
+            if (ownPointer is not null && string.Equals(ownPointer, ComIdentity.Of(solid), StringComparison.Ordinal))
+            {
+                return solid;
+            }
+
+            if (bridge is not null && ownOwner is not null
+                && string.Equals(ownOwner, OwnerOfFirstFace(bridge, solid), StringComparison.Ordinal))
+            {
+                return solid;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Identity of the tree object that owns the first face of <paramref name="solid"/>, or
+    /// <c>null</c> when the body states none.</summary>
+    private static string? OwnerOfFirstFace(Api7Bridge bridge, ksBody solid)
+    {
+        try
+        {
+            if (solid.FaceCollection() is not ksFaceCollection faces || faces.GetCount() == 0
+                || AsInterface<ksFaceDefinition>(faces.GetByIndex(0)) is not { } face)
+            {
+                return null;
+            }
+
+            return bridge.TransferTo7(face) is IModelObject model
+                ? ComIdentity.Of(SafeObject(() => model.Owner))
+                : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Z extent of a box, or <c>null</c> for a sentinel or a box that is not three numbers.</summary>

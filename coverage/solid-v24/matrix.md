@@ -886,12 +886,12 @@
 | `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-04.title_block.set.create, DRW-04.title_block.set.negative_tests, DRW-04.title_block.set.save_reopen |
 | `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
 | `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
-| `DRW-07.section_view.create.stepped` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | DRW-07.create.stepped |
-| `DRW-07.section_view.create.simple` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.create.simple |
-| `DRW-07.section_view.read` | DRW | later | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.read |
-| `DRW-07.section_view.update` | DRW | later | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.update |
-| `DRW-07.section_view.delete` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | OK | OK | н/п | DRW-07.delete |
-| `DRW-07.section_view.save_reopen` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.save_reopen |
+| `DRW-07.section_view.create.stepped` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | DRW-07.create.stepped, DRW-07.read, DRW-07.section.read, DRW-07.save_reopen |
+| `DRW-07.section_view.create.simple` | DRW | later | — | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.create.simple, DRW-07.read, DRW-07.section.read, DRW-07.save_reopen, DRW-07.section.kind_refused |
+| `DRW-07.section_view.read` | DRW | later | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.read, DRW-07.section.read, DRW-07.save_reopen, DRW-07.section.kind_refused |
+| `DRW-07.section_view.update` | DRW | later | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.update, DRW-07.read, DRW-07.section.read, DRW-07.section.kind_refused |
+| `DRW-07.section_view.delete` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | OK | OK | н/п | DRW-07.delete, DRW-07.read, DRW-07.section.read, DRW-07.section.kind_refused |
+| `DRW-07.section_view.save_reopen` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-07.save_reopen, DRW-07.section.kind_refused |
 | `DRW-07.section_view.rebuild` | DRW | later | — | mcp_verified | н/п | н/п | OK | н/п | OK | н/п | н/п | н/п | н/п | OK | DRW-07.rebuild |
 | `DRW-07.section_view.geometry_validation` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | DRW-07.geometry_validation, DRW-07.geometry_validation.holes |
 | `DRW-07.section_view.negative_tests` | DRW | later | — | mcp_verified | н/п | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW-07.negative_tests.odd_coordinates, DRW-07.negative_tests.three_points, DRW-07.negative_tests.both_traces, DRW-07.negative_tests.unsupported_mode, DRW-07.negative_tests.trace_misses_body |

@@ -13078,7 +13078,10 @@
         "geometry_validation": "verified"
       },
       "tests": [
-        "DRW-07.create.stepped"
+        "DRW-07.create.stepped",
+        "DRW-07.read",
+        "DRW-07.section.read",
+        "DRW-07.save_reopen"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13125,7 +13128,11 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.create.simple"
+        "DRW-07.create.simple",
+        "DRW-07.read",
+        "DRW-07.section.read",
+        "DRW-07.save_reopen",
+        "DRW-07.section.kind_refused"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13173,7 +13180,10 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.read"
+        "DRW-07.read",
+        "DRW-07.section.read",
+        "DRW-07.save_reopen",
+        "DRW-07.section.kind_refused"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13221,7 +13231,10 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.update"
+        "DRW-07.update",
+        "DRW-07.read",
+        "DRW-07.section.read",
+        "DRW-07.section.kind_refused"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13270,7 +13283,10 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.delete"
+        "DRW-07.delete",
+        "DRW-07.read",
+        "DRW-07.section.read",
+        "DRW-07.section.kind_refused"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -13319,7 +13335,8 @@
         "geometry_validation": "not_applicable"
       },
       "tests": [
-        "DRW-07.save_reopen"
+        "DRW-07.save_reopen",
+        "DRW-07.section.kind_refused"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",

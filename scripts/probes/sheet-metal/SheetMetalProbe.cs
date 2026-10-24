@@ -1634,6 +1634,109 @@ internal sealed class SheetMetalProbe : IDisposable
         }
     }
 
+    /// <summary>The wide face of the sheet, chosen by documented face properties and not by index.</summary>
+    /// <remarks>DOC: ksfacedefinition_isplanar.html, ..._getarea.html, ..._getsurface.html,
+    /// kssurface_getnormal.html («GetNormal(paramU, paramV, out x, out y, out z)»).
+    /// INVARIANT: the support of a hole is the planar face of the largest area and its normal lies along
+    /// the thickness axis, so the hole is cut through the sheet instead of into an end face.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private IModelObject? HoleBaseFace()
+    {
+        var part = Part5();
+        if (part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            Record("dxf_hole_face", "опорная грань отверстия выбрана по свойствам", "FaceCollection() → null",
+                Verdict.Fail);
+            return null;
+        }
+
+        var table = new List<string>();
+        var best = -1;
+        var bestArea = double.NegativeInfinity;
+        var bestNormal = (double[]?)null;
+        for (var f = 0; f < faces.GetCount(); f++)
+        {
+            var element = faces.GetByIndex(f);
+            var face = element as ksFaceDefinition ?? (element as ksEntity)?.GetDefinition() as ksFaceDefinition;
+            if (face is null)
+            {
+                table.Add(f + ": не грань");
+                continue;
+            }
+
+            var planar = SafeBool(face.IsPlanar) == true;
+            var area = SafeDouble(() => face.GetArea(AreaMm));
+            var normal = planar ? FaceNormal(face) : null;
+            table.Add(f + ": " + (planar ? "плоская" : "неплоская") + ", S=" + Num(area ?? double.NaN)
+                + ", n=(" + Vector(normal) + ")");
+            if (planar && area is { } value && value > bestArea)
+            {
+                best = f;
+                bestArea = value;
+                bestNormal = normal;
+            }
+        }
+
+        Record("dxf_hole_faces_table", "грани тела: индекс, плоскость, площадь, нормаль",
+            string.Join("; ", table), Verdict.Info);
+        if (best < 0)
+        {
+            Record("dxf_hole_face", "опорная грань отверстия выбрана по свойствам", "плоских граней нет",
+                Verdict.Fail);
+            return null;
+        }
+
+        Record("dxf_hole_face_index", "индекс выбранной грани в массиве граней", Count(best), Verdict.Info);
+        var wide = Math.Abs(bestArea - SheetArea) <= SheetAreaTolerance;
+        Record("dxf_hole_face_area", Num(SheetArea) + " мм² (лист 40x40)", Num(bestArea),
+            wide ? Verdict.Pass : Verdict.Fail);
+        var alongThickness = bestNormal is { Length: 3 } axis && Math.Abs(axis[2]) >= ThicknessAxis;
+        Record("dxf_hole_face_normal", "(0, 0, ±1)", "(" + Vector(bestNormal) + ")",
+            alongThickness ? Verdict.Pass : Verdict.Fail);
+        var chosen = As5<ksFaceDefinition>(faces.GetByIndex(best));
+        if (chosen is null)
+        {
+            Record("dxf_hole_face_to7", "грань перенесена в API7 (IModelObject)", "элемент не ksFaceDefinition",
+                Verdict.Fail);
+            return null;
+        }
+
+        return FaceModel(chosen, "dxf_hole_face_to7");
+    }
+
+    /// <summary>The outward normal of a planar face, through the documented surface route.</summary>
+    /// <remarks>DOC: ksfacedefinition_getsurface.html, kssurface_getnormal.html («GetNormal(paramU, paramV,
+    /// out x, out y, out z)»), ..._getparamumin.html / ..._getparamumax.html; the sign comes from
+    /// ksfacedefinition_normalorientation.html («совпадает с нормалью поверхности»).
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private static double[]? FaceNormal(ksFaceDefinition face)
+    {
+        try
+        {
+            if (face.GetSurface() is not ksSurface surface)
+            {
+                return null;
+            }
+
+            var u = (surface.GetParamUMin() + surface.GetParamUMax()) / 2d;
+            var v = (surface.GetParamVMin() + surface.GetParamVMax()) / 2d;
+            if (!surface.GetNormal(u, v, out var x, out var y, out var z))
+            {
+                return null;
+            }
+
+            return face.normalOrientation ? new[] { x, y, z } : new[] { -x, -y, -z };
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    private static string Vector(double[]? values) => values is { Length: 3 }
+        ? Num(values[0]) + ", " + Num(values[1]) + ", " + Num(values[2])
+        : "не прочитана";
+
     /// <summary>A contour sketch on a face, with the support read back and compared with XOY.</summary>
     /// <remarks>INVARIANT: the read-back support must be the face entity and not the XOY plane, so a sketch
     /// that silently fell back cannot pass. DOC: kssketchdefinition_setplane.html, ..._getplane.html.
@@ -2307,13 +2410,16 @@ internal sealed class SheetMetalProbe : IDisposable
 
         Record("dxf_hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", "ISheetMetalHole", Verdict.Pass);
         TrySet("dxf_hole_body_set", () => hole.Body = (IKompasAPIObject)_body!);
-        if (FirstFace() is { } face)
+        var baseFace = HoleBaseFace();
+        Record("dxf_hole_baseplane", "опорная грань отверстия", baseFace is null ? "null" : "IModelObject",
+            baseFace is null ? Verdict.Fail : Verdict.Info);
+        if (baseFace is not null)
         {
-            TrySet("dxf_hole_baseplane_set", () => hole.BasePlane = face);
+            TrySet("dxf_hole_baseplane_set", () => hole.BasePlane = baseFace);
         }
 
-        TrySet("dxf_hole_x_set", () => hole.X = 5d);
-        TrySet("dxf_hole_y_set", () => hole.Y = 5d);
+        TrySet("dxf_hole_x_set", () => hole.X = HoleX);
+        TrySet("dxf_hole_y_set", () => hole.Y = HoleY);
         TrySet("dxf_hole_diameter_set", () => hole.Diameter = 2d * HoleRadius);
         TrySet("dxf_hole_cuttype_set", () => hole.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth);
         TrySet("dxf_hole_depth_set", () => hole.Depth = 2d);
@@ -2322,10 +2428,11 @@ internal sealed class SheetMetalProbe : IDisposable
         CheckInt("dxf_hole_count", before + 1, holes.Count);
         CheckDouble("dxf_hole_diameter_read_back", 2d * HoleRadius, SafeDouble(() => hole.Diameter));
         CheckDouble("dxf_hole_depth_read_back", 2d, SafeDouble(() => hole.Depth));
-        // The face count is what says the kernel actually cut: an accepted Update() on its own did not.
+        // A hole through the sheet's thickness adds ONE cylindrical face; any other growth is another cut.
+        var facesAfter = FaceCount();
         Record("dxf_hole_faces", "граней у тела после отверстия на глубину",
-            Count(facesBefore) + " → " + Count(FaceCount()), Verdict.Info);
-        CheckBool("dxf_hole_built", true, FaceCount() > facesBefore);
+            Count(facesBefore) + " → " + Count(facesAfter), Verdict.Info);
+        CheckInt("dxf_hole_faces_delta", 1, facesAfter - facesBefore);
         _hole = hole;
     }
 
@@ -2753,15 +2860,57 @@ internal sealed class SheetMetalProbe : IDisposable
         Record("dxf_entities_box", "габарит всех сущностей в DXF", Rect(counts.Box), Verdict.Info);
         Record("dxf_view_window_box", "габарит сущностей в окне вида",
             Rect(counts.WindowBox), Verdict.Info);
+        Record("dxf_view_window_split", "что входит в окно вида (по типам и слоям)",
+            counts.WindowSplit, Verdict.Info);
         CheckBool("dxf_has_lines", true, counts.Line + counts.Arc + counts.Circle > 0);
-        // The hole of the part is a CIRCLE in the DXF: a flat pattern without it would be a view of
-        // something else, so the check names the radius it looked for.
-        CheckBool("dxf_hole_circle", true, counts.HoleCircles > 0);
-        Record("dxf_hole_circles", "окружностей радиуса отверстия (3 мм)", Count(counts.HoleCircles),
-            Verdict.Info);
+        // The hole of the part is a CIRCLE (or two ARCs) in the DXF: a flat pattern without it would be a
+        // view of something else, so the check names the radius it looked for.
+        Record("dxf_hole_circles", "кривых радиуса отверстия (3 мм) в файле",
+            counts.HoleCurves.Count == 0
+                ? "нет"
+                : string.Join("; ", counts.HoleCurves.Select(c => "(" + Num(c.X) + ", " + Num(c.Y) + ") R"
+                    + Num(c.R))), Verdict.Info);
+        CheckBool("dxf_hole_circle", true, counts.HoleCurves.Count > 0);
+        CheckHoleCentre(counts);
         CheckBool("dxf_view_box_matches_flat", true, SameSize(counts.WindowBox, _flatExtents));
         Record("dxf_view_box_vs_frame", "геометрия вида против его рамки",
             Rect(counts.WindowBox) + " / " + Rect(_viewGabarit), Verdict.Info);
+    }
+
+    /// <summary>The hole's circle has to sit over the point where the hole was cut, in the view's frame.</summary>
+    /// <remarks>MEASURED: the view maps the flat body's box onto its own window without rotation, so the
+    /// expected centre is the hole's model point moved by the difference of the two boxes' lower corners.
+    /// LIMIT: a rotated projection moves the centre; the check then reports the distance, not a correction.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void CheckHoleCentre(DxfCounts counts)
+    {
+        if (counts.HoleCurves.Count == 0)
+        {
+            Record("dxf_hole_centre", "центр круга отверстия в координатах вида",
+                "кривых радиуса отверстия нет", Verdict.Fail);
+            return;
+        }
+
+        if (counts.WindowBox is not { Length: 4 } window || _flatExtents is not { Length: 4 } flat)
+        {
+            Record("dxf_hole_centre", "центр круга отверстия в координатах вида",
+                "окно вида или габарит развёртки не прочитаны", Verdict.Fail);
+            return;
+        }
+
+        var expectedX = HoleX + (window[0] - flat[0]);
+        var expectedY = HoleY + (window[1] - flat[1]);
+        var nearest = counts.HoleCurves
+            .OrderBy(c => Math.Abs(c.X - expectedX) + Math.Abs(c.Y - expectedY))
+            .First();
+        var distance = Math.Sqrt(((nearest.X - expectedX) * (nearest.X - expectedX))
+            + ((nearest.Y - expectedY) * (nearest.Y - expectedY)));
+        Record("dxf_hole_centre_expected", "ожидаемый центр круга в координатах вида",
+            Num(expectedX) + ", " + Num(expectedY), Verdict.Info);
+        Record("dxf_hole_centre_read", "прочитанный центр ближайшей кривой",
+            Num(nearest.X) + ", " + Num(nearest.Y), Verdict.Info);
+        Record("dxf_hole_centre", "расхождение центра, мм (допуск " + Num(SizeTolerance) + ")",
+            Num(distance), distance <= SizeTolerance ? Verdict.Pass : Verdict.Fail);
     }
 
     /// <summary>Order item 5: is the model's unfolded state required, and what survives folding back.</summary>
@@ -2917,6 +3066,22 @@ internal sealed class SheetMetalProbe : IDisposable
 
     /// <summary>The hole the probe cuts has a 6 mm diameter, so its circle is 3 mm in radius.</summary>
     private const double HoleRadius = 3d;
+
+    /// <summary>The hole centre on the sheet: the point the DXF circle has to sit over.</summary>
+    private const double HoleX = 5d;
+
+    private const double HoleY = 5d;
+
+    /// <summary>The sheet is 40x40, so its wide face measures 1600 mm² and the end faces 60 mm².</summary>
+    private const double SheetArea = 1600d;
+
+    private const double SheetAreaTolerance = 1d;
+
+    /// <summary>|n.z| at or above this is the thickness axis; a normal in the sheet's plane is 0.</summary>
+    private const double ThicknessAxis = 0.999d;
+
+    /// <summary>ksUnitEnum.ksMillimetres: the selector <c>ksFaceDefinition.GetArea</c> takes.</summary>
+    private const uint AreaMm = 1;
 
     /// <summary>Sheet coordinates are millimetres; a view gabarit and a model box agree to this.</summary>
     private const double SizeTolerance = 0.5d;
@@ -3128,13 +3293,13 @@ internal sealed class SheetMetalProbe : IDisposable
         return path is not null && File.Exists(path) ? path : null;
     }
 
-    /// <summary>Counts of the entities the order names, and their boxes, read from the written file.</summary>
-    private sealed record DxfCounts(int Line, int Arc, int Circle, int HoleCircles, double[]? Box,
-        double[]? WindowBox);
+    /// <summary>Counts of the entities the order names, their boxes, and the hole's own curves.</summary>
+    private sealed record DxfCounts(int Line, int Arc, int Circle, List<(double X, double Y, double R)> HoleCurves,
+        double[]? Box, double[]? WindowBox, string WindowSplit);
 
-    /// <summary>Reads an ASCII DXF: LINE / ARC / CIRCLE counts and the box of their points.</summary>
+    /// <summary>Reads an ASCII DXF: LINE / ARC / CIRCLE counts, their boxes and the hole's curves.</summary>
     /// <remarks>INVARIANT: the numbers come from the file, not from the converter's return code.
-    /// LIMIT: group codes 10/20/11/21/40 only; other entities are ignored, not guessed.
+    /// LIMIT: group codes 8/10/20/11/21/40 only; other entities are ignored, not guessed.
     /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
     private DxfCounts? ParseDxf(string path)
     {
@@ -3151,9 +3316,10 @@ internal sealed class SheetMetalProbe : IDisposable
         var line = 0;
         var arc = 0;
         var circle = 0;
-        var holeCircles = 0;
-        var points = new List<(double X, double Y)>();
+        var holeCurves = new List<(double X, double Y, double R)>();
+        var points = new List<(string Type, string Layer, double X, double Y)>();
         var entity = string.Empty;
+        var layer = string.Empty;
         double ax = 0, ay = 0, bx = 0, by = 0, radius = 0;
         var second = false;
 
@@ -3162,10 +3328,10 @@ internal sealed class SheetMetalProbe : IDisposable
             if (entity is "LINE")
             {
                 line++;
-                points.Add((ax, ay));
+                points.Add(("LINE", layer, ax, ay));
                 if (second)
                 {
-                    points.Add((bx, by));
+                    points.Add(("LINE", layer, bx, by));
                 }
             }
             else if (entity is "ARC" or "CIRCLE")
@@ -3177,14 +3343,15 @@ internal sealed class SheetMetalProbe : IDisposable
                 else
                 {
                     circle++;
-                    if (Math.Abs(radius - HoleRadius) <= 0.1d)
-                    {
-                        holeCircles++;
-                    }
                 }
 
-                points.Add((ax - radius, ay - radius));
-                points.Add((ax + radius, ay + radius));
+                points.Add((entity, layer, ax - radius, ay - radius));
+                points.Add((entity, layer, ax + radius, ay + radius));
+                // The hole may come out as a CIRCLE or as two ARCs: both carry the same centre and radius.
+                if (Math.Abs(radius - HoleRadius) <= 0.1d)
+                {
+                    holeCurves.Add((ax, ay, radius));
+                }
             }
 
             entity = string.Empty;
@@ -3207,6 +3374,12 @@ internal sealed class SheetMetalProbe : IDisposable
                 continue;
             }
 
+            if (code == 8)
+            {
+                layer = value;
+                continue;
+            }
+
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
             {
                 continue;
@@ -3225,19 +3398,39 @@ internal sealed class SheetMetalProbe : IDisposable
         Flush();
         if (points.Count == 0)
         {
-            return new DxfCounts(line, arc, circle, holeCircles, null, null);
+            return new DxfCounts(line, arc, circle, holeCurves, null, null, "сущностей нет");
         }
 
-        var box = BoxOf(points);
+        var box = BoxOf(points.Select(p => (p.X, p.Y)).ToList());
         // The drawing carries the sheet's frame and title block besides the view: the second box is the
         // one the view's own window holds, so the comparison is against the view and not against the sheet.
         var window = _viewGabarit is { Length: 4 } view
-            ? BoxOf(points.Where(p => p.X >= Math.Min(view[0], view[2]) - SizeTolerance
+            ? points.Where(p => p.X >= Math.Min(view[0], view[2]) - SizeTolerance
                 && p.X <= Math.Max(view[0], view[2]) + SizeTolerance
                 && p.Y >= Math.Min(view[1], view[3]) - SizeTolerance
-                && p.Y <= Math.Max(view[1], view[3]) + SizeTolerance).ToList())
-            : null;
-        return new DxfCounts(line, arc, circle, holeCircles, box, window);
+                && p.Y <= Math.Max(view[1], view[3]) + SizeTolerance).ToList()
+            : new List<(string Type, string Layer, double X, double Y)>();
+        return new DxfCounts(line, arc, circle, holeCurves, box,
+            BoxOf(window.Select(p => (p.X, p.Y)).ToList()), WindowSplitText(window));
+    }
+
+    /// <summary>What the view's window holds, split by entity type and by layer.</summary>
+    /// <remarks>MEASURED: the view's frame is not its geometry — the bend-line ends reach past the contour —
+    /// so the split says which entities carry the difference instead of leaving it as one number.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private static string WindowSplitText(List<(string Type, string Layer, double X, double Y)> points)
+    {
+        if (points.Count == 0)
+        {
+            return "в окне вида сущностей нет";
+        }
+
+        var byType = points.GroupBy(p => p.Type)
+            .Select(g => g.Key + " " + Count(g.Count()) + ": " + Rect(BoxOf(g.Select(p => (p.X, p.Y)).ToList())));
+        var byLayer = points.GroupBy(p => p.Layer)
+            .Select(g => "«" + g.Key + "» " + Count(g.Count()) + ": "
+                + Rect(BoxOf(g.Select(p => (p.X, p.Y)).ToList())));
+        return "по типам - " + string.Join("; ", byType) + "; по слоям - " + string.Join("; ", byLayer);
     }
 
     private static double[]? BoxOf(List<(double X, double Y)> points) => points.Count == 0

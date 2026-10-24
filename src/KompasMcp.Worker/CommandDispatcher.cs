@@ -436,6 +436,8 @@ public sealed class CommandDispatcher
             WorkerCommands.CreateSheetMetalBend => _sta.Run(() => CreateSheetMetalBend(request), "sheet_metal.create_bend", cancellationToken),
             WorkerCommands.CreateSheetMetalHole => _sta.Run(() => CreateSheetMetalHole(request), "sheet_metal.create_hole", cancellationToken),
             WorkerCommands.CreateSheetMetalCut => _sta.Run(() => CreateSheetMetalCut(request), "sheet_metal.create_cut", cancellationToken),
+            WorkerCommands.SetSheetMetalUnfold => _sta.Run(() => SetSheetMetalUnfold(request), "sheet_metal.set_unfold", cancellationToken),
+            WorkerCommands.GetSheetMetalUnfold => _sta.Run(() => GetSheetMetalUnfold(request), "sheet_metal.get_unfold", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.CreateSectionView => _sta.Run(() => CreateSectionView(request), "drawing.create_section_view", cancellationToken),
             WorkerCommands.GetSectionView => _sta.Run(() => GetSectionView(request), "drawing.get_section_view", cancellationToken),
@@ -1586,6 +1588,19 @@ public sealed class CommandDispatcher
         var command = Argument<CreateSheetMetalCutCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return TaggedAfter(document.Id, () => _session.CreateSheetMetalCut(command), document);
+    }
+
+    private object? SetSheetMetalUnfold(IpcFrame request)
+    {
+        var command = Argument<SetSheetMetalUnfoldCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetSheetMetalUnfold(command), document);
+    }
+
+    private object? GetSheetMetalUnfold(IpcFrame request)
+    {
+        var command = Argument<GetSheetMetalUnfoldCommand>(request);
+        return _session.GetSheetMetalUnfold(command);
     }
 
     private object? InsertComponent(IpcFrame request)    {

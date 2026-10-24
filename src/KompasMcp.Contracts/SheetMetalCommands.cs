@@ -355,3 +355,76 @@ public sealed record CreateSheetMetalHoleResult(
     int HolesAfter,
     SheetMetalBodyDto? Body,
     VerificationDto Verification);
+
+/// <summary>Unfold state of one body: the documented <c>ISheetMetalBendUnfoldParameters</c> of the
+/// container. <c>null</c> means "not read", never <c>false</c>.</summary>
+/// <remarks>DOC: <c>isheetmetalbendunfoldparameters.html</c> — «Интерфейс параметров развертки листового
+/// тела… можно получить, используя свойство контейнера объектов гибки
+/// ISheetMetalContainer::SheetMetalBendUnfoldParameters». INVARIANT: the unfold is a STATE of the body,
+/// not an operation and not a new body. History: docs/decisions/sheet-metal.md#unfold-tools</remarks>
+public sealed record SheetMetalUnfoldDto
+{
+    /// <summary><c>Unfold</c> — «Развернуть».</summary>
+    public bool? Unfold { get; init; }
+
+    /// <summary><c>IsCreated</c> — «Заданы ли параметры развертки»; read-only per its page.</summary>
+    public bool? IsCreated { get; init; }
+
+    /// <summary><c>FixedFaces</c> — «Неподвижные грани». The kernel hands ONE object back for a
+    /// one-face request, so the count is read from either shape.</summary>
+    public int? FixedFaceCount { get; init; }
+
+    /// <summary>The fixed faces as references, when the kernel answered model objects.</summary>
+    public IReadOnlyList<string>? FixedFaces { get; init; }
+
+    /// <summary><c>ExcludedBendObjects</c> — «Исключенные сгибы». Count only: the page names no way to
+    /// write a bend back into it, so a reference to one would be an address nobody can use.</summary>
+    public int? ExcludedBendCount { get; init; }
+}
+
+/// <summary>Unfold or fold back an existing sheet-metal body through
+/// <c>ISheetMetalContainer.SheetMetalBendUnfoldParameters</c>.</summary>
+/// <remarks>INVARIANT: <c>UpdateParam()</c> answers FALSE in every state (MEASURED), so success is
+/// <c>IsCreated</c> plus the extent along the normal, never the return of the write.
+/// History: docs/decisions/sheet-metal.md#unfold-tools</remarks>
+public sealed record SetSheetMetalUnfoldCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string BodyRef { get; init; }
+
+    /// <summary><c>true</c> — развернуть, <c>false</c> — согнуть обратно.</summary>
+    public required bool Unfold { get; init; }
+
+    /// <summary>A face of that body (<c>FixedFaces</c>). Required while the parameters are not created
+    /// yet (<c>IsCreated</c> = false): without it the unfold has nothing to hold still.</summary>
+    public string? FixedFaceRef { get; init; }
+
+    /// <summary>A plane reference (<c>UnfoldPlane</c>). When omitted the fixed face itself is written,
+    /// because a client has no reference to a standard plane — the geometry check still decides.</summary>
+    public string? UnfoldPlaneRef { get; init; }
+}
+
+/// <summary>Read the unfold state of one body. Writes nothing.</summary>
+public sealed record GetSheetMetalUnfoldCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required string BodyRef { get; init; }
+}
+
+public sealed record SetSheetMetalUnfoldResult(
+    ReferenceDto BodyRef,
+    SheetMetalUnfoldDto Before,
+    SheetMetalUnfoldDto After,
+    double? ExtentBeforeMm,
+    double? ExtentAfterMm,
+    SheetMetalBodyDto? Body,
+    VerificationDto Verification);
+
+public sealed record GetSheetMetalUnfoldResult(
+    SheetMetalUnfoldDto Unfold,
+    SheetMetalBodyDto? Body,
+    VerificationDto Verification);

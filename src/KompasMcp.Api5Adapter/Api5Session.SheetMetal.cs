@@ -508,7 +508,7 @@ public partial class Api5Session
         var (container, sheet) = RequireSheetMetal(document, "Сгиб не создавался");
         var bendsBefore = ReadCount(() => sheet.SheetMetalBends.Count);
         var facesBefore = CountFaces(document);
-        var extentBefore = ExtentByNormal(document);
+        var extentBefore = ExtentOfBody(document, body).Extent;
 
         ClearKompasResult(document);
         ISheetMetalBend? created;
@@ -577,7 +577,7 @@ public partial class Api5Session
         var updated = SafeBool(() => created.Update());
         var bendsAfter = ReadCount(() => sheet.SheetMetalBends.Count);
         var read = ReadBend(created, edge, ordinal: bendsAfter is { } after ? after - 1 : null);
-        var extentAfter = ExtentByNormal(document);
+        var extentAfter = ExtentOfBody(document, body).Extent;
         var facesAfter = CountFaces(document);
 
         BumpRevision(document, "sheet_metal.create_bend");
@@ -1142,26 +1142,8 @@ public partial class Api5Session
             UnfoldType = name,
             UnfoldValue = value,
             Straighten = SafeBool(() => body.Straighten),
-            ExtentByNormalMm = ExtentByNormal(document),
+            ExtentByNormalMm = ExtentOfBody(document, body).Extent,
         };
-    }
-
-    /// <summary>Extent along Z of the whole document — for a flat sheet body this is the thickness.
-    /// <c>LIMIT:</c> the normal is taken as Z, the arrangement the probe measured (sketch on XOY); a body
-    /// built on another plane reports its Z extent, which is not its thickness.</summary>
-    private static double? ExtentByNormal(DocumentEntry document)
-    {
-        if (!TryReadGabaritCorners(document, full: true, customizable: true, out var min, out var max)
-            || min.Length < 3 || max.Length < 3)
-        {
-            return null;
-        }
-
-        var extent = max[2] - min[2];
-        // MEASURED: on a part whose only body is a sheet-metal body GetGabarit answers true and hands back
-        // a sentinel around 1e300 until the model has been rebuilt once more. A sentinel is "not read",
-        // never a length: turning it into a number would confirm or refuse a geometry nobody measured.
-        return double.IsFinite(extent) && Math.Abs(extent) < 1e6 ? extent : null;
     }
 
     /// <summary>Every documented collection counter of <c>isheetmetalcontainer.html</c>. A counter the

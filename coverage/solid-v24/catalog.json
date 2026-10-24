@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 47,
-   "operations": 145,
+   "operations": 147,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 226,
+   "modes_and_variants": 228,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8175,7 +8175,7 @@
     "runtime": "измерено 23.10.2026 на build 24.0.0.2799: тело входит в модель на ISheetMetalBody.Update(); толщина, радиус и тип развёртки читаются назад; габарит по нормали плоского тела равен толщине; ядро принимает толщину 0 и -1.5 и радиус 0, отвечает Update()=TRUE и оставляет тело; ksTableBends (3) без таблицы не устанавливается; DeleteObject листовые объекты не удаляет"
    },
    "route": "API7 QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBodies.Add() -> Sketch (эскиз, перенесённый из API5) / Thickness / Radius / Direction / UnfoldType / BendCoefficient|BendValue|BendReduction -> Update() -> RebuildModel; чтение - Count коллекций и свойства тела",
-   "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body / kompas_create_sheet_metal_bend / kompas_create_sheet_metal_hole",
+   "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body / kompas_create_sheet_metal_bend / kompas_create_sheet_metal_hole / kompas_create_sheet_metal_cut / kompas_set_sheet_metal_unfold / kompas_get_sheet_metal_unfold",
    "next_step": "Группа --sheet-metal-only и профиль sheet-metal-minimal-v1. Следующее - SHEET_METAL_CUT_PROBE (вырез) и SHEET_METAL_UNFOLD (Unfold/Straighten).",
    "operations": [
     {
@@ -8258,6 +8258,34 @@
       {
        "id": "SMB-06.cut.create",
        "name": "Создать вырез по эскизу на плоской грани тела",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-07",
+     "name": "Развёртка листового тела как состояние тела",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalbendunfoldparameters.html, isheetmetalbendunfoldparameters_unfold.html, isheetmetalbendunfoldparameters_iscreated.html, isheetmetalbendunfoldparameters_fixedfaces.html, isheetmetalbendunfoldparameters_unfoldplane.html, isheetmetalbendunfoldparameters_excludedbendobjects.html, isheetmetalbendunfoldparameters_methods.html, isheetmetalbendunfoldparameters_deleteparam.html",
+     "route": "SheetMetalBendUnfoldParameters -> FixedFaces / UnfoldPlane / Unfold -> UpdateParam(); успех - прочитанные IsCreated и Unfold и габарит ТЕЛА по нормали (ksBody.GetGabarit), а не ответ UpdateParam()",
+     "modes": [
+      {
+       "id": "SMB-07.unfold.set",
+       "name": "Развернуть тело или согнуть обратно",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-08",
+     "name": "Чтение состояния развёртки",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalbendunfoldparameters_propers.html, isheetmetalbendunfoldparameters_unfold.html, isheetmetalbendunfoldparameters_iscreated.html, isheetmetalbendunfoldparameters_fixedfaces.html, isheetmetalbendunfoldparameters_excludedbendobjects.html",
+     "route": "SheetMetalBendUnfoldParameters -> Unfold / IsCreated / FixedFaces / ExcludedBendObjects; ничего не пишет",
+     "modes": [
+      {
+       "id": "SMB-08.unfold.read",
+       "name": "Прочитать состояние развёртки тела",
        "level": "mcp_verified"
       }
      ]

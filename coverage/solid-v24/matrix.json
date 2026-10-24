@@ -15365,7 +15365,8 @@
       "tests": [
         "SMB.01.discover",
         "SMB.03.read",
-        "SMB.12.reopen"
+        "SMB.12.reopen",
+        "SMB.38.extent_per_body"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -15567,6 +15568,98 @@
         "up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет",
         "глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его",
         "созданный вырез этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и cut_ref"
+      ]
+    },
+    {
+      "operation_id": "SMB-07.unfold.set",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_set_sheet_metal_unfold.json",
+      "adapter_route": "kompas_set_sheet_metal_unfold: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBendUnfoldParameters -> FixedFaces / UnfoldPlane / Unfold -> UpdateParam(); подтверждение - прочитанные IsCreated и Unfold и габарит ТЕЛА по нормали (ksBody.GetGabarit)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "rebuild": "развёртка перестраивается тем же UpdateParam()",
+        "suppress_restore": "у листового объекта нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.32.unfold_initial_read",
+        "SMB.33.unfold_without_face_refused",
+        "SMB.34.unfold",
+        "SMB.35.fold_back",
+        "SMB.36.unfold_again",
+        "SMB.37.reopen_unfold",
+        "SMB.39.unfold_foreign_face"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#unfold-tools"
+      ],
+      "limitations": [
+        "UpdateParam() отвечает FALSE во всех состояниях (измерено) и критерием успеха не служит",
+        "сгибание обратно подтверждается тем, что габарит по нормали больше не равен толщине: согнутый габарит прошлого вызова между вызовами не запоминается",
+        "плоскость развёртки по умолчанию - сама неподвижная грань: ссылки на стандартную плоскость у клиента нет",
+        "сброс параметров развёртки (DeleteParam) в профиль не входит",
+        "форма развёртки (контур и его размеры) не проверяется - только габарит по нормали"
+      ]
+    },
+    {
+      "operation_id": "SMB-08.unfold.read",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_get_sheet_metal_unfold.json",
+      "adapter_route": "kompas_get_sheet_metal_unfold: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalBendUnfoldParameters -> Unfold / IsCreated / FixedFaces / ExcludedBendObjects, только чтение",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "create": "чтение ничего не создаёт - запись это SMB-07",
+        "edit": "чтение ничего не меняет - запись это SMB-07",
+        "rebuild": "чтение не перестраивает модель",
+        "suppress_restore": "у листового объекта нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.32.unfold_initial_read",
+        "SMB.37.reopen_unfold"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#unfold-tools"
+      ],
+      "limitations": [
+        "ExcludedBendObjects только считается: страница не называет способа вернуть сгиб в этот массив",
+        "непрочитанное поле отдаётся как null и называется в unverified_aspects, а не как false"
       ]
     }
 

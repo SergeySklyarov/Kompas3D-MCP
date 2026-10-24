@@ -992,6 +992,48 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // Route = ISheetMetalContainer.SheetMetalBendUnfoldParameters -> FixedFaces / UnfoldPlane /
+            // Unfold -> UpdateParam(). The unfold is a STATE of the body, not an operation.
+            // History: docs/decisions/sheet-metal.md#unfold-tools
+            Mutation("kompas_set_sheet_metal_unfold", "Развернуть листовое тело или согнуть обратно",
+                "Разворачивает листовое тело или сгибает его обратно через параметры развёртки "
+                + "(ISheetMetalBendUnfoldParameters контейнера). Развёртка — СОСТОЯНИЕ тела, а не операция и "
+                + "не новое тело. Успех — НЕ ответ UpdateParam(): измерено, что метод отвечает FALSE и при "
+                + "созданной развёртке, поэтому подтверждение — прочитанные IsCreated = true и Unfold, "
+                + "равный запрошенному, И габарит тела по нормали: при развёртке он равен толщине (допуск "
+                + "1e-6), при сгибании обратно — больше неё. Габарит читается по ЭТОМУ телу "
+                + "(ksBody.GetGabarit); если тело не опознано в BodyCollection, а тел в детали несколько, "
+                + "габарит назван непрочитанным, а не взят по документу. Расхождение — VERIFICATION_FAILED с "
+                + "прочитанным. ПЕРВАЯ развёртка (IsCreated = false) требует fixed_face_ref — неподвижную "
+                + "грань этого тела; без неё и при грани чужого тела — INVALID_ARGUMENT с именем поля ДО "
+                + "первой записи. Плоскость развёртки задаётся unfold_plane_ref (ссылка вида plane); если не "
+                + "задана, в UnfoldPlane подаётся сама неподвижная грань, и это названо в "
+                + "unverified_aspects. Повтор с тем же значением идемпотентен. Сброс параметров "
+                + "(DeleteParam) в профиль не входит; снять развёртку этим продуктом нельзя, поэтому отказ "
+                + "после записи несёт partialEffects=true.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("unfold", Sch.Bool("true — развернуть, false — согнуть обратно (ISheetMetalBendUnfoldParameters.Unfold).")),
+                    ("fixed_face_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
+                    ("unfold_plane_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.SetSheetMetalUnfold,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_get_sheet_metal_unfold", "Прочитать развёртку листового тела",
+                "Читает состояние развёртки листового тела: Unfold, IsCreated, неподвижные грани "
+                + "(адресами) и число исключённых сгибов. Ничего не пишет. Непрочитанное поле — null и "
+                + "строка в unverified_aspects, а не false: «не прочитано» и «нет» — разные ответы. "
+                + "ExcludedBendObjects только считается: страница не называет способа вернуть сгиб в этот "
+                + "массив.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("body_ref", Sch.Ref("#/$defs/reference"))),
+                WorkerCommands.GetSheetMetalUnfold),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: "
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "

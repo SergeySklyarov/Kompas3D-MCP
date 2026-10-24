@@ -51095,6 +51095,85 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                                  current_rev, result, near, efield, emsg, bodies_count,
                                  counters_of, client)
 
+    # ========= SMB.32-SMB.36: развёртка тела - состояние, а не операция =========
+    # Порядок наряда: чтение -> отказ без неподвижной грани -> развёртка -> сгибание обратно ->
+    # развёртка снова. Сохранение и переоткрытие проверяются ниже, в SMB.12: тело уходит в файл
+    # развёрнутым, а SMB.12 читает его состояние после открытия.
+    def body_face():
+        """Самая большая плоская грань листового тела. Читается ПЕРЕД каждым вызовом: мутация поднимает
+        ревизию и отзывает адреса прошлой."""
+        _e, listed, _r = client.tool("kompas_list_bodies", {"document_id": part})
+        rows = result(listed)
+        rows = rows if isinstance(rows, list) else []
+        ref = rows[0].get("body_ref") if rows else None
+        _e, topo, _r = client.tool("kompas_read_topology",
+                                   {"document_id": part, "body_ref": ref, "include": "both"})
+        planes = sorted((face for face in ((result(topo) or {}).get("faces") or [])
+                         if face.get("surface_type") == "plane"),
+                        key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
+        return planes[0].get("face_ref") if planes else None
+
+    def unfold_state(doc, body):
+        _e, env2, _r = client.tool("kompas_get_sheet_metal_unfold",
+                                   {"document_id": doc, "body_ref": body})
+        return (result(env2) or {}).get("unfold") or {}
+
+    def unfold_set(unfold, face):
+        args = {"document_id": part, "expected_revision": current_rev(part),
+                "body_ref": body_ref, "unfold": unfold}
+        if face:
+            args["fixed_face_ref"] = face
+        env2, code2 = call("kompas_set_sheet_metal_unfold", args)
+        return result(env2) or {}, env2, code2
+
+    initial_state = unfold_state(part, body_ref)
+    rep.add("SMB.32.unfold_initial_read",
+            "до первой развёртки параметры развёртки не заданы: IsCreated = false, а инструмент чтения "
+            "ничего не пишет",
+            "PASS" if initial_state.get("is_created") is False else "FAIL",
+            f"unfold={initial_state.get('unfold')} is_created={initial_state.get('is_created')} "
+            f"граней={initial_state.get('fixed_face_count')}")
+
+    _refused, env_r, code_r = unfold_set(True, None)
+    err_r = (env_r or {}).get("error") or {}
+    state_after_refusal = unfold_state(part, body_ref)
+    ok_refusal = (code_r == "INVALID_ARGUMENT" and efield(env_r) == "fixed_face_ref"
+                  and err_r.get("partial_effects") is False
+                  and state_after_refusal.get("is_created") is False)
+    rep.add("SMB.33.unfold_without_face_refused",
+            "первая развёртка без fixed_face_ref отвергнута INVALID_ARGUMENT с именем поля до записи: "
+            "параметры развёртки не заданы, состояние тела не изменилось",
+            "PASS" if ok_refusal else "FAIL",
+            f"code={code_r} field={efield(env_r)} partial_effects={err_r.get('partial_effects')} "
+            f"is_created={state_after_refusal.get('is_created')} {emsg(env_r) or ''}")
+
+    def unfold_round(name, unfold, label, extent_ok):
+        made, env2, code2 = unfold_set(unfold, body_face())
+        state = made.get("after") or {}
+        rows = {item.get("name"): item.get("passed")
+                for item in ((made.get("verification") or {}).get("checks") or [])}
+        extent = made.get("extent_after_mm")
+        ok = (not code2 and state.get("unfold") is unfold and state.get("is_created") is True
+              and (state.get("fixed_face_count") or 0) >= 1
+              and extent_ok(extent) and all(rows.values()))
+        rep.add(name, label, "PASS" if ok else "FAIL",
+                f"unfold={state.get('unfold')} is_created={state.get('is_created')} "
+                f"граней={state.get('fixed_face_count')} габарит={made.get('extent_before_mm')}"
+                f"->{extent} проверки={rows} error={code2} {emsg(env2) or ''}")
+        return ok
+
+    unfold_round("SMB.34.unfold", True,
+                 "развёртка тела: IsCreated = true, Unfold = true, неподвижная грань прочитана, габарит "
+                 "по нормали равен толщине 2.5 (допуск 1e-6)",
+                 lambda extent: near(extent, 2.5))
+    unfold_round("SMB.35.fold_back", False,
+                 "сгибание обратно: Unfold = false, IsCreated остаётся true, габарит по нормали больше "
+                 "толщины - тело снова согнуто",
+                 lambda extent: extent is not None and extent > 2.5 + 1e-6)
+    unfold_round("SMB.36.unfold_again", True,
+                 "повторная развёртка: состояние то же, что после первой, габарит снова равен толщине",
+                 lambda extent: near(extent, 2.5))
+
     # ========= SMB.12: сохранение и переоткрытие =========
     def cut_types_kept(cuts):
         """Вырезы после переоткрытия: те же тип и глубина, что записаны до сохранения."""
@@ -51137,6 +51216,23 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                    f"bodies={counters.get('bodies')} сгибов={counters.get('bends')} "
                    f"отверстий={counters.get('holes')} вырезов={counters.get('cuts')} "
                    f"вырезы={[(cut.get('cut_type'), cut.get('depth_mm')) for cut in (read.get('cuts') or [])]}")
+        # Тело ушло в файл РАЗВЁРНУТЫМ (SMB.36): состояние развёртки читается после открытия заново.
+        unfold_reopened = {}
+        if row.get("body_ref"):
+            _e, uenv, _r = client.tool("kompas_get_sheet_metal_unfold",
+                                       {"document_id": reopened, "body_ref": row.get("body_ref")})
+            unfold_reopened = (result(uenv) or {}).get("unfold") or {}
+        ok_unfold_reopened = (unfold_reopened.get("is_created") is True
+                             and unfold_reopened.get("unfold") is True
+                             and (unfold_reopened.get("fixed_face_count") or 0) >= 1
+                             and near(row.get("extent_by_normal_mm"), 2.5))
+        rep.add("SMB.37.reopen_unfold",
+                "после сохранения и переоткрытия развёрнутое тело читается развёрнутым: IsCreated = true, "
+                "Unfold = true, неподвижная грань прочитана, габарит по нормали равен толщине 2.5",
+                "PASS" if ok_unfold_reopened else "FAIL",
+                f"is_created={unfold_reopened.get('is_created')} unfold={unfold_reopened.get('unfold')} "
+                f"граней={unfold_reopened.get('fixed_face_count')} "
+                f"габарит={row.get('extent_by_normal_mm')}")
         call("kompas_close_document", {"document_id": reopened, "dirty_policy": "discard"})
     rep.add("SMB.12.reopen",
             "после сохранения и переоткрытия тело читается тем же инструментом: толщина, радиус, "
@@ -51242,6 +51338,45 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         detail = (f"code={code3} field={efield(env3)} partial_effects={err.get('partial_effects')} "
                   f"вырезов {before.get('cuts')}->{after.get('cuts')} тел={after.get('bodies')} "
                   f"{emsg(env3) or ''}")
+
+        # ========= SMB.38: строка долга 67 - габарит по нормали читается по ТЕЛУ =========
+        # Деталь несёт листовое тело (толщина 1.5) и тело выдавливанием (10 мм по Z). Габарит ДОКУМЕНТА
+        # здесь 11.5, и прежняя проверка толщины отвергала бы верное тело; габарит по телу равен 1.5.
+        _e, senv, _r = client.tool("kompas_get_sheet_metal", {"document_id": doc, "body_ref": first})
+        sheet_rows = (result(senv) or {}).get("bodies") or []
+        sheet_row = sheet_rows[0] if sheet_rows else {}
+        extent = sheet_row.get("extent_by_normal_mm")
+        ok_extent = near(extent, 1.5)
+        rep.add("SMB.38.extent_per_body",
+                "на детали из листового тела и второго тела (выдавливание) габарит по нормали читается по "
+                "САМОМУ листовому телу и равен его толщине 1.5, а не габариту документа (11.5)",
+                "PASS" if ok_extent else "FAIL",
+                f"extent_by_normal={extent} толщина=1.5 тел={len(solid_rows)}")
+
+        # ========= SMB.39: неподвижная грань чужого тела - отказ до записи =========
+        _e, topo2, _r = client.tool("kompas_read_topology",
+                                    {"document_id": doc, "body_ref": solid_second, "include": "faces"})
+        foreign_faces = [face for face in ((result(topo2) or {}).get("faces") or [])
+                         if face.get("surface_type") == "plane"]
+        foreign_face = (max(foreign_faces, key=lambda face: face.get("area_mm2") or 0.0).get("face_ref")
+                        if foreign_faces else None)
+        env4, code4 = call("kompas_set_sheet_metal_unfold", {
+            "document_id": doc, "expected_revision": current_rev(doc), "body_ref": first,
+            "unfold": True, "fixed_face_ref": foreign_face})
+        err4 = (env4 or {}).get("error") or {}
+        _e, uenv, _r = client.tool("kompas_get_sheet_metal_unfold",
+                                   {"document_id": doc, "body_ref": first})
+        state4 = (result(uenv) or {}).get("unfold") or {}
+        ok_foreign_face = (code4 == "INVALID_ARGUMENT" and efield(env4) == "fixed_face_ref"
+                           and err4.get("partial_effects") is False
+                           and state4.get("is_created") is False)
+        rep.add("SMB.39.unfold_foreign_face",
+                "неподвижная грань ВТОРОГО тела отвергнута INVALID_ARGUMENT с именем поля fixed_face_ref "
+                "до записи: параметры развёртки не заданы",
+                "PASS" if ok_foreign_face else "FAIL",
+                f"code={code4} field={efield(env4)} partial_effects={err4.get('partial_effects')} "
+                f"is_created={state4.get('is_created')} {emsg(env4) or ''}")
+
         call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
         return ok, detail
 

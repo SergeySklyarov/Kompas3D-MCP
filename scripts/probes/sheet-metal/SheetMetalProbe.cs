@@ -2619,6 +2619,9 @@ internal sealed class SheetMetalProbe : IDisposable
         CheckBool("dxf_view_unfold_read_back", true, SafeBool(() => association.Unfold));
         Record("dxf_view_bendlines_visible", "BendLinesVisible вида",
             Flag(SafeBool(() => association.BendLinesVisible)), Verdict.Info);
+        // Hidden lines are switched on so a hole that IS projected but lies on the far side shows up as
+        // a circle instead of being dropped: the answer then separates "not projected" from "hidden".
+        TrySet("dxf_view_hiddenlines_set", () => association.HiddenLinesVisible = true);
         CheckBool("dxf_view_update_after_unfold", true, SafeBool(() => association.Update()));
         Record("dxf_view_gabarit_after_unfold", "габарит вида после Update() при Unfold = true",
             Rect(ViewGabarit(number)), Verdict.Info);
@@ -2871,6 +2874,10 @@ internal sealed class SheetMetalProbe : IDisposable
 
         var document5 = _app5!.ActiveDocument3D() as ksDocument3D;
         Record("dxf_file_gabarit", "габарит тела в сохранённом файле", GabaritOn(document5), Verdict.Info);
+        // The face count says whether the hole travelled with the file the view was built from: a hole
+        // that is in the file and not in the view is a different answer from a hole the file lost.
+        Record("dxf_file_faces", "граней у тела в сохранённом файле", Count(FaceCountOn(document5)),
+            Verdict.Info);
         Record("dxf_file_is_flat", "файл хранит развёрнутое тело", Flag(SameSize(BoxOf(document5),
             _flatExtents)), Verdict.Info);
         try

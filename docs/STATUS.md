@@ -14,6 +14,21 @@
 
 ## Текущее состояние
 
+- **Листовое тело: проба DXF (наряд `SHEET_METAL_DXF`, попытка 1, 24.10.2026):** маршрут «проекция-
+  развёртка → ассоциативный вид → DXF» проверен прибором `scripts/probes/sheet-metal/ --dxf` и **не
+  найден**: документированная цепочка исполняется до файла, но вид «Развертка» даёт согнутую деталь
+  (46,5 x 40 мм против 48,8 x 40 у развёрнутого тела) и совпадает с видом «Спереди»; в DXF 70 `LINE`,
+  0 `CIRCLE`, отверстия нет. Проекция «Развертка» (`ksVPUnfold` = 9) есть в каждом документе ДО вызова
+  `AddUnfoldProjection`, счётчик коллекции 10 → 10; `GetBaseUserOrientation` в API5 отвечает
+  `DISP_E_PARAMNOTOPTIONAL`, матрица берётся из API7 `BaseUserOrientation`; на согнутой модели
+  `AddUnfoldProjection` отдаёт `null`, `RebuildDocument()` = FALSE. Код продукта не менялся, `--all` не
+  требовался. **Проверки:** сборка прибора 0 предупреждений, `--dxf` PASS 72 / FAIL 4 / INFO 47 (каждый
+  FAIL разобран в доказательствах), стражи `long-comment-blocks` 0/0/0, `lint-dashes` 0,
+  `check-evidence-links` 0. Решение - `docs/decisions/sheet-metal.md#dxf-probe`, отчёт
+  `SHEET_METAL_DXF_REPORT_20261024.md`, доказательства -
+  `docs/acceptance/evidence/20261024-sheetmetal-dxf-probe-b89012f/`. Требование v1 «DXF плоских
+  деталей» (`docs/01_TECHNICAL_SPEC.md` §1.11) этим маршрутом не закрывается: вопрос заказчику -
+  удалять ли требование по границе документации (не долг).
 - **Листовое тело: развёртка (наряд `SHEET_METAL_UNFOLD`, попытка 1, 24.10.2026):** профиль
   `sheet-metal-minimal-v1` - режимы `SMB-07`/`SMB-08`. Новые инструменты `kompas_set_sheet_metal_unfold`
   (`body_ref`, `unfold`, `fixed_face_ref`, `unfold_plane_ref`) и `kompas_get_sheet_metal_unfold`

@@ -34,6 +34,11 @@ internal static class Program
             return probe.RunBodyMap();
         }
 
+        if (args.Contains("--dxf"))
+        {
+            return probe.RunDxf();
+        }
+
         return args.Contains("--persist") ? probe.RunPersist() : probe.Run();
     }
 

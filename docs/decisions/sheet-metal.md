@@ -39,12 +39,51 @@ IModelObject::Update». То же в `isheetmetalbends_add.html` и осталь
 развёртку как тело/вид» нет. Признак `native_sheet_metal` из `docs/01_TECHNICAL_SPEC.md` §1.11
 ставится по факту построения через `ISheetMetalBodies`, а не по расчёту.
 
-## DXF: маршрута нет
+## DXF: маршрута нет в семье листовых страниц
 
 Ни одна страница семьи не упоминает DXF. Документированная выгрузка - `ksSaveToDXF` для двумерных
-документов (`ksdocument2d_kssavetodxf.html`). Вывод: «DXF плоских деталей» по листовой детали
-документированного маршрута не имеет; двухшаговый маршрут «`Straighten` → чертёж → конвертер» -
-предложение, а не документированный путь, и решается заказчиком (отчёт §5, §7).
+документов (`ksdocument2d_kssavetodxf.html`). Поиск НЕ ограничен семьёй: кандидат вне её найден и
+измерен (`#dxf-probe`), и он семью не использует. Вывод по семье остаётся прежним: `Straighten` →
+чертёж → конвертер документированного пути не даёт.
+
+<a id="dxf-probe"></a>
+## Проба маршрута DXF: проекция-развёртка
+
+Звенья цепочки взяты из оглавления Help+Manual (`_hmcontent.js`), страницы сняты
+`_fetch_docs_wire_20261024_dxf.py` в `reference/kompas-sdk-v24/docs-wire-20261024-dxf/`
+(71 страница, 60 по ссылкам, отрицательный контроль 404 на три выдуманных имени).
+
+- **Сигнатура.** `ksviewprojectioncollection_addunfoldprojection.html` -
+  «`LPDISPATCH AddUnfoldProjection( VARIANT place );`», возвращает `ksViewProjection`.
+  `iviewprojectionmanager_addunfoldprojection.html` уточняет аргумент: «динамический массив
+  SAFEARRAY double (VT_ARRAY | VT_R8)», «16 элементов… матрицу размера 4х4».
+  `ksapi_iviewprojectionmanager_addunfoldprojection.html` называет его «матрица формирования
+  развёртки (4х4, записана построчно в массив)».
+- **Матрица.** `ksviewprojectioncollection_getbaseuserorientation.html` и
+  `iviewprojectionmanager_baseuserorientation.html` - тот же формат, «по умолчанию используется
+  единичная матрица без смещения». MEASURED: геттер API5 отвечает `DISP_E_PARAMNOTOPTIONAL`
+  (`0x8002000F`), свойство API7 отдаёт `System.Double[]` из 16 элементов - матрица берётся из API7
+  и подаётся в документированный вызов API5.
+- **Проекция.** `AddUnfoldProjection(place)` принят, отдаёт проекцию с именем «Развертка» и типом
+  `9` (`ksVPUnfold`, `ksviewprojectiontype.html`); `GetByName("Развертка", …)` находит её,
+  `refresh()` = TRUE. Счётчик коллекции 10 до и 10 после: метод отдаёт проекцию, а не удлиняет
+  массив, и «Развертка» в документе уже есть.
+- **Вид.** `iviews_addstandartviews.html` - `ProjectionName` есть «ориентация модели»; вызов с
+  именем «Развертка» принят, вид создан (`IViews.Count` +1, номер 1), габарит на листе прочитан
+  (`ksGetViewReference` + `ksGetObjGabaritRect`, `ko_RectParam` = 15).
+- **DXF.** `IConverter` из `Libs\ImpExp\dwgdxfExp.rtw`, `GetFilter(FORMAT_DXF=1)` = 1,
+  `Convert(...)` = 1, файл записан. Разбор: 70 `LINE`, 0 `ARC`, 0 `CIRCLE`; габарит всех сущностей
+  - лист 210x297 (рамка и основная надпись), габарит сущностей в окне вида совпал с габаритом вида.
+- **Геометрия не сошлась.** Вид «Развертка» на листе - 46,5 x 40 мм при развёрнутом теле
+  `x -20..28,796, y -20..20` (48,8 x 40): в контуре вида 40 + 5 (длина отгиба) + 1,5 (толщина), то
+  есть согнутая деталь, а не развёртка. Отверстия в DXF нет ни одного `CIRCLE`.
+- **Согнутое состояние.** На согнутой модели `AddUnfoldProjection` отдаёт `null`;
+  `UpdateParam()` при `Unfold = false` = FALSE; `IKompasDocument2D1.RebuildDocument()` = FALSE, и
+  вид после сгибания не перечитывается.
+
+Вывод: документированная цепочка существует и исполняется до файла, но проекция «Развертка» в
+чертеже НЕ является развёрткой плоской детали, поэтому требование v1 «DXF плоских деталей» этот
+маршрут не закрывает. Решение - за заказчиком (`SHEET_METAL_DXF_REPORT_20261024.md` §3).
 
 ## Проба: прибор и что он измерил
 

@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using Kompas6API5;
@@ -49,6 +50,12 @@ internal sealed class SheetMetalProbe : IDisposable
     private double _radius = 2d;
     private int _facesBeforeCut;
     private double _depthCutDepth;
+    private string? _projectionName;
+    private IKompasDocument2D? _drawing7;
+    private ksDocument2D? _drawing5;
+    private int? _viewNumber;
+    private double[]? _viewGabarit;
+    private double[]? _flatExtents;
 
     public SheetMetalProbe(string outPath) => _outPath = outPath;
 
@@ -2226,6 +2233,840 @@ internal sealed class SheetMetalProbe : IDisposable
             return -1;
         }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // DXF route probe
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Order items 1-5 of SHEET_METAL_DXF: projection-unfold, associative view, DXF, bent state.</summary>
+    /// <remarks>DOC: ksviewprojectioncollection_addunfoldprojection.html, iviews_addstandartviews.html,
+    /// iconverter_convert.html, ksviewprojectiontype.html (ksVPUnfold = 9).
+    /// INVARIANT: a documented refusal is the result; no other argument is tried after it.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    public int RunDxf()
+    {
+        try
+        {
+            Launch();
+            Document();
+            Container();
+            Body();
+            DxfHole();
+            Bend();
+            Unfold();
+            DxfProjection();
+            DxfView();
+            DxfExport();
+            DxfBentState();
+        }
+        catch (ProbeStop)
+        {
+            // The reason is already recorded by the step that stopped the probe.
+        }
+        catch (Exception ex)
+        {
+            Record("probe", "проба доходит до конца", Describe(ex), Verdict.Fail);
+        }
+
+        Write();
+        return Failed ? 1 : 0;
+    }
+
+    /// <summary>One THROUGH hole, so the flat pattern carries a circle the DXF can be asked about.</summary>
+    /// <remarks>DOC: isheetmetalholes_add.html, isheetmetalhole_cuttype.html, ..._diameter.html,
+    /// ..._baseplane.html. MEASURED: a hole cut by depth on the far side of the sheet leaves no circle
+    /// in a view from the other side, so this probe cuts through (ksHoleCutByWidth).
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfHole()
+    {
+        var holes = _container!.SheetMetalHoles;
+        var before = holes.Count;
+        ISheetMetalHole? hole;
+        try
+        {
+            hole = holes.Add() as ISheetMetalHole;
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (hole is null)
+        {
+            Record("dxf_hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", "null", Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_hole_add", "ISheetMetalHoles.Add() отдаёт ISheetMetalHole", "ISheetMetalHole", Verdict.Pass);
+        TrySet("dxf_hole_body_set", () => hole.Body = (IKompasAPIObject)_body!);
+        if (FirstFace() is { } face)
+        {
+            TrySet("dxf_hole_baseplane_set", () => hole.BasePlane = face);
+        }
+
+        TrySet("dxf_hole_x_set", () => hole.X = 5d);
+        TrySet("dxf_hole_y_set", () => hole.Y = 5d);
+        TrySet("dxf_hole_diameter_set", () => hole.Diameter = 2d * HoleRadius);
+        TrySet("dxf_hole_cuttype_set", () => hole.CutType = ksHoleCutTypeEnum.ksHoleCutByWidth);
+        CheckBool("dxf_hole_update", true, SafeBool(() => hole.Update()));
+        CheckInt("dxf_hole_count", before + 1, holes.Count);
+        CheckDouble("dxf_hole_diameter_read_back", 2d * HoleRadius, SafeDouble(() => hole.Diameter));
+        Record("dxf_hole_faces", "граней у тела после сквозного отверстия",
+            Count(FaceCount()), Verdict.Info);
+        _hole = hole;
+    }
+
+    /// <summary>Order item 2: the unfold projection in the model, by its documented signature.</summary>
+    /// <remarks>DOC: ksdocument3d_getviewprojectioncollection.html, ksviewprojectioncollection_addunfoldprojection.html
+    /// («AddUnfoldProjection(VARIANT place)» returns ksViewProjection), ..._getbaseuserorientation.html
+    /// (16 doubles, 4x4, identity by default), ksviewprojectioncollection_refresh.html,
+    /// ..._getbyname.html, ksviewprojection_name.html, ksviewprojection_getviewprojectontype.html.
+    /// MEASURED: the place argument is taken from the same family's documented 4x4 matrix getter, because
+    /// the method page names the argument but not its source.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfProjection()
+    {
+        ksViewProjectionCollection? collection;
+        try
+        {
+            collection = _doc5!.GetViewProjectionCollection() as ksViewProjectionCollection;
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_collection", "GetViewProjectionCollection() → ksViewProjectionCollection",
+                Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (collection is null)
+        {
+            Record("dxf_collection", "GetViewProjectionCollection() → ksViewProjectionCollection", "null",
+                Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_collection", "GetViewProjectionCollection() → ksViewProjectionCollection",
+            "ksViewProjectionCollection", Verdict.Pass);
+
+        var before = SafeInt(() => collection.GetCount());
+        Record("dxf_projection_count_before", "проекций в документе до AddUnfoldProjection",
+            Count(before ?? -1), Verdict.Info);
+        Record("dxf_projection_names_before", "проекции документа до вызова",
+            ProjectionNames(collection), Verdict.Info);
+
+        var place = PlaceMatrix(collection);
+        Record("dxf_place", "матрица 4x4 для аргумента place",
+            RuntimeName(place) + ", элементов " + ArrayLength(place), Verdict.Info);
+
+        var name = (string?)null;
+        var type = (int?)null;
+        var via = "API5 ksViewProjectionCollection.AddUnfoldProjection";
+
+        object? created = null;
+        try
+        {
+            created = collection.AddUnfoldProjection(place!);
+            Record("dxf_add_unfold_projection", "AddUnfoldProjection(place) создаёт проекцию",
+                RuntimeName(created), created is null ? Verdict.Info : Verdict.Pass);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_add_unfold_projection", "AddUnfoldProjection(place) создаёт проекцию",
+                Describe(ex), Verdict.Info);
+        }
+
+        if (created is ksViewProjection projection)
+        {
+            name = SafeString(() => projection.name);
+            type = SafeInt(() => projection.GetViewProjectonType());
+            Record("dxf_projection_user_index", "UserProjectionIndex созданной проекции",
+                Count(SafeInt(() => projection.userProjectionIndex) ?? -1), Verdict.Info);
+        }
+        else if (Manager7() is { } manager)
+        {
+            // The same documented call on the API7 manager: its page is the one that spells out the
+            // 4x4 SAFEARRAY, so a refusal here is the second half of the answer.
+            via = "API7 IViewProjectionManager.AddUnfoldProjection";
+            try
+            {
+                var created7 = manager.AddUnfoldProjection(place!);
+                Record("dxf_add_unfold_projection7", "IViewProjectionManager.AddUnfoldProjection(place)",
+                    RuntimeName(created7), created7 is null ? Verdict.Info : Verdict.Pass);
+                if (created7 is IViewProjection7 projection7)
+                {
+                    name = SafeString(() => projection7.Name);
+                    type = SafeInt(() => projection7.ViewProjectonType);
+                }
+            }
+            catch (COMException ex)
+            {
+                Record("dxf_add_unfold_projection7", "IViewProjectionManager.AddUnfoldProjection(place)",
+                    Describe(ex), Verdict.Info);
+            }
+        }
+
+        Record("dxf_projection_via", "какой документированный вызов создал проекцию",
+            name is null ? "ни один" : via, Verdict.Info);
+        _projectionName = name;
+        Record("dxf_projection_name", "имя созданной проекции", name ?? "не прочитано", Verdict.Info);
+        // 9 is ksVPUnfold («Развертка») in ksViewProjectionType: the type is what says the projection
+        // IS an unfold, not the name the kernel happened to give it.
+        CheckInt("dxf_projection_type", 9, type);
+        if (name is null)
+        {
+            return;
+        }
+
+        // The method page promises the created projection, not a longer collection: the count is
+        // evidence, and whether the projection was already there is what the names above answer.
+        Record("dxf_projection_count_after", "проекций в документе после вызова",
+            Count(SafeInt(() => collection.GetCount()) ?? -1), Verdict.Info);
+        Record("dxf_collection_refresh", "Refresh() массива проекций",
+            Flag(SafeBool(() => collection.refresh())), Verdict.Info);
+        Record("dxf_projection_count_after_refresh", "проекций после Refresh()",
+            Count(SafeInt(() => collection.GetCount()) ?? -1), Verdict.Info);
+        Record("dxf_projection_names_after", "проекции документа после вызова",
+            ProjectionNames(collection), Verdict.Info);
+        Record("dxf_projection_by_name", "GetByName(«" + name + "») находит проекцию",
+            RuntimeName(SafeObject(() => collection.GetByName(name, true, true))), Verdict.Info);
+    }
+
+    /// <summary>Every projection of the document as «index:name(type)», read by the documented getters.</summary>
+    private static string ProjectionNames(ksViewProjectionCollection collection)
+    {
+        var count = SafeInt(() => collection.GetCount()) ?? 0;
+        var parts = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                if (collection.GetByIndex(i) is not ksViewProjection projection)
+                {
+                    continue;
+                }
+
+                parts.Add(i + ":" + (SafeString(() => projection.name) ?? "?")
+                    + "(" + Count(SafeInt(() => projection.GetViewProjectonType()) ?? -99) + ")");
+            }
+            catch (COMException)
+            {
+                parts.Add(i + ":?");
+            }
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>Order item 3: an associative view of the part named by the unfold projection.</summary>
+    /// <remarks>DOC: iviews_addstandartviews.html — ProjectionName is «ориентация модели»;
+    /// ikompasdocument2d_viewsandlayersmanager.html gives IViews.
+    /// MEASURED: the view is judged by geometry — its sheet gabarit against the unfolded body's own box —
+    /// because an accepted call says only that the call was accepted.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfView()
+    {
+        if (_projectionName is null)
+        {
+            Record("dxf_view", "вид по имени проекции-развёртки", "нет имени: вид не строится", Verdict.Info);
+            return;
+        }
+
+        var partPath = SavePartForView();
+        if (partPath is null)
+        {
+            return;
+        }
+
+        _flatExtents = BodyExtents();
+        Record("dxf_flat_gabarit", "габарит развёрнутого тела", Gabarit(), Verdict.Info);
+
+        IKompasDocument2D? drawing;
+        try
+        {
+            drawing = _app7!.Documents.Add(DocumentTypeEnum.ksDocumentDrawing, false) as IKompasDocument2D;
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_drawing", "Documents.Add(ksDocumentDrawing) → IKompasDocument2D", Describe(ex),
+                Verdict.Fail);
+            return;
+        }
+
+        if (drawing is null)
+        {
+            Record("dxf_drawing", "Documents.Add(ksDocumentDrawing) → IKompasDocument2D", "не IKompasDocument2D",
+                Verdict.Fail);
+            return;
+        }
+
+        _drawing7 = drawing;
+        Record("dxf_drawing", "Documents.Add(ksDocumentDrawing) → IKompasDocument2D", "IKompasDocument2D",
+            Verdict.Pass);
+        _drawing5 = _app5!.TransferInterface(_drawing7, Api5Auto, 0) as ksDocument2D;
+        Record("dxf_drawing_api5", "API5-вид чертежа получен",
+            _drawing5 is null ? "null" : "ksDocument2D", Verdict.Info);
+
+        var views = (_drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews;
+        if (views is null)
+        {
+            Record("dxf_views", "чертёж отдаёт коллекцию видов", "null", Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_views", "чертёж отдаёт коллекцию видов", "IViews", Verdict.Pass);
+        var before = ViewNumbers(views);
+
+        // One front view in the named orientation: the projection name is the whole difference from a
+        // standard view, so the type list stays the documented minimum (vp_Front = 1).
+        if (!AddViews(views, partPath, _projectionName, "dxf_view_unfold"))
+        {
+            return;
+        }
+
+        var created = ViewNumbers(views).Except(before).ToArray();
+        Record("dxf_view_numbers", "номера новых видов", string.Join(",", created), Verdict.Info);
+        CheckBool("dxf_view_created", true, created.Length > 0);
+        if (created.Length == 0)
+        {
+            return;
+        }
+
+        _viewNumber = created[0];
+        _viewGabarit = ViewGabarit(_viewNumber);
+        Record("dxf_view_gabarit", "габарит вида-развёртки на листе", Rect(_viewGabarit), Verdict.Info);
+        CheckBool("dxf_view_gabarit_matches_flat", true, SameSize(_viewGabarit, _flatExtents));
+
+        // The same part in a standard orientation: while the model IS unfolded, a standard view shows
+        // the same flat body, so an equal gabarit here is expected and only the numbers are evidence.
+        if (AddViews(views, partPath, StandardProjectionName, "dxf_view_standard", 160d, 100d))
+        {
+            var standard = ViewNumbers(views).Except(before).Except(created).ToArray();
+            if (standard.Length > 0)
+            {
+                var standardGabarit = ViewGabarit(standard[0]);
+                Record("dxf_standard_gabarit", "габарит обычного вида той же детали",
+                    Rect(standardGabarit), Verdict.Info);
+                Record("dxf_standard_vs_unfold", "обычный вид против вида-развёртки",
+                    SameSize(standardGabarit, _viewGabarit) is true
+                        ? "совпали: модель развёрнута, оба вида показывают развёртку"
+                        : "различаются", Verdict.Info);
+            }
+        }
+    }
+
+    /// <summary>Order item 4: the drawing to DXF, then the file's own entities against the view.</summary>
+    /// <remarks>DOC: iconverter_convert.html (1 = success, 0 = failure), iconverter_getfilter.html
+    /// (FORMAT_DXF = 1), iapplication_converter.html («Library - полный путь к библиотеке»).
+    /// INVARIANT: the counts and the box come from the written DXF, not from Convert's return code.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfExport()
+    {
+        if (_drawing7 is null)
+        {
+            Record("dxf_export", "чертёж выгружен в DXF", "чертежа нет", Verdict.Info);
+            return;
+        }
+
+        var work = WorkDirectory();
+        var drawingPath = Path.Combine(work, "unfold-view.cdw");
+        var dxfPath = Path.Combine(work, "unfold-view.dxf");
+        try
+        {
+            _drawing7.SaveAs(drawingPath);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_drawing_save", "чертёж сохранён", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (!File.Exists(drawingPath))
+        {
+            Record("dxf_drawing_save", "чертёж сохранён", "файла нет: " + drawingPath, Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_drawing_save", "чертёж сохранён", drawingPath, Verdict.Pass);
+
+        var library = ExportLibraryPath();
+        if (library is null)
+        {
+            Record("dxf_converter", "библиотека выгрузки найдена",
+                "нет Libs\\ImpExp\\dwgdxfExp.rtw в установке", Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_converter", "библиотека выгрузки найдена", library, Verdict.Info);
+        IConverter? converter;
+        int commandId;
+        try
+        {
+            converter = _app7!.get_Converter(library) as IConverter;
+            if (converter is null)
+            {
+                Record("dxf_converter", "get_Converter(путь) → IConverter", "null", Verdict.Fail);
+                return;
+            }
+
+            converter.GetFilter(1, true, out commandId);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_converter", "get_Converter(путь) → IConverter", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_filter", "GetFilter(FORMAT_DXF=1) даёт команду библиотеки",
+            Count(commandId), Verdict.Info);
+        if (commandId <= 0)
+        {
+            return;
+        }
+
+        int converted;
+        try
+        {
+            converted = converter.Convert(drawingPath, dxfPath, commandId, false);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_convert", "Convert(чертёж, dxf, команда)", Describe(ex), Verdict.Info);
+            return;
+        }
+
+        Record("dxf_convert", "Convert(чертёж, dxf, команда)", Count(converted), Verdict.Info);
+        CheckBool("dxf_file_exists", true, File.Exists(dxfPath));
+        if (!File.Exists(dxfPath))
+        {
+            return;
+        }
+
+        var counts = ParseDxf(dxfPath);
+        if (counts is null)
+        {
+            Record("dxf_parse", "DXF разобран", "не ASCII DXF либо нет пар «код/значение»", Verdict.Fail);
+            return;
+        }
+
+        Record("dxf_entities", "сущности LINE / ARC / CIRCLE в файле",
+            counts.Line + " / " + counts.Arc + " / " + counts.Circle, Verdict.Info);
+        Record("dxf_entities_box", "габарит всех сущностей в DXF", Rect(counts.Box), Verdict.Info);
+        Record("dxf_view_window_box", "габарит сущностей в окне вида",
+            Rect(counts.WindowBox), Verdict.Info);
+        CheckBool("dxf_has_lines", true, counts.Line + counts.Arc + counts.Circle > 0);
+        // The hole of the part is a CIRCLE in the DXF: a flat pattern without it would be a view of
+        // something else, so the check names the radius it looked for.
+        CheckBool("dxf_hole_circle", true, counts.HoleCircles > 0);
+        Record("dxf_hole_circles", "окружностей радиуса отверстия (3 мм)", Count(counts.HoleCircles),
+            Verdict.Info);
+        CheckBool("dxf_view_box_matches_view", true, SameSize(counts.WindowBox, _viewGabarit));
+    }
+
+    /// <summary>Order item 5: is the model's unfolded state required, and what survives folding back.</summary>
+    /// <remarks>DOC: ikompasdocument2d1_rebuilddocument.html (RebuildDocument returns TRUE);
+    /// isheetmetalbendunfoldparameters_unfold.html, ..._updateparam.html.
+    /// MEASURED: the view is re-read after the rebuild, so the answer is the geometry, not the flag.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfBentState()
+    {
+        if (_drawing7 is null || _viewNumber is null)
+        {
+            Record("dxf_bent_state", "вид перестроен после сгибания", "вида нет", Verdict.Info);
+            return;
+        }
+
+        var unfold = _container!.SheetMetalBendUnfoldParameters;
+        TrySet("dxf_fold_back_set", () => unfold.Unfold = false);
+        Record("dxf_fold_back_update", "UpdateParam() при Unfold = false",
+            Flag(SafeBool(() => unfold.UpdateParam())), Verdict.Info);
+        CheckBool("dxf_fold_back_flag", false, SafeBool(() => unfold.Unfold));
+        Record("dxf_gabarit_after_fold_back", "габарит модели после сгибания", Gabarit(), Verdict.Info);
+
+        // The drawing is re-read through a fresh API5 pointer: SaveAs and the fold-back both move the
+        // document, and a stale pointer would answer about a document that no longer exists.
+        _drawing5 = _app5!.TransferInterface(_drawing7, Api5Auto, 0) as ksDocument2D ?? _drawing5;
+        var rebuilt = _drawing7 is IKompasDocument2D1 drawing2D
+            ? SafeBool(() => drawing2D.RebuildDocument())
+            : null;
+        CheckBool("dxf_rebuild", true, rebuilt);
+        var afterFold = ViewGabarit(_viewNumber);
+        Record("dxf_view_gabarit_after_fold_back", "габарит вида после сгибания и перестройки",
+            Rect(afterFold), Verdict.Info);
+        Record("dxf_view_keeps_flat", "вид сохранил габарит развёртки", Flag(SameSize(afterFold, _viewGabarit)),
+            Verdict.Info);
+
+        // The same projection on the folded model: whether the unfold state is a requirement of the
+        // route, answered by the documented call rather than by a guess.
+        ksViewProjectionCollection? collection;
+        try
+        {
+            collection = _doc5!.GetViewProjectionCollection() as ksViewProjectionCollection;
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_projection_while_bent", "AddUnfoldProjection на согнутой модели", Describe(ex),
+                Verdict.Info);
+            return;
+        }
+
+        if (collection is null)
+        {
+            return;
+        }
+
+        var place = ReadValue(() => collection.GetBaseUserOrientation(), "dxf_place_bent_read");
+        try
+        {
+            var created = collection.AddUnfoldProjection(place);
+            Record("dxf_projection_while_bent", "AddUnfoldProjection на согнутой модели",
+                RuntimeName(created), Verdict.Info);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_projection_while_bent", "AddUnfoldProjection на согнутой модели", Describe(ex),
+                Verdict.Info);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // DXF route helpers
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>The product's own name for the front orientation; the contrast view needs one.</summary>
+    private const string StandardProjectionName = "Спереди";
+
+    /// <summary>The hole the probe cuts has a 6 mm diameter, so its circle is 3 mm in radius.</summary>
+    private const double HoleRadius = 3d;
+
+    /// <summary>Sheet coordinates are millimetres; a view gabarit and a model box agree to this.</summary>
+    private const double SizeTolerance = 0.5d;
+
+    private string WorkDirectory()
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(_outPath)) ?? ".";
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    /// <summary>Saves the part: an associative view is a projection OF A FILE (help: «FileName»).</summary>
+    private string? SavePartForView()
+    {
+        var path = Path.Combine(WorkDirectory(), "sheet-metal-dxf.m3d");
+        try
+        {
+            _doc7!.SaveAs(path);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_model_save", "деталь сохранена для вида", Describe(ex), Verdict.Fail);
+            return null;
+        }
+
+        var saved = File.Exists(path);
+        Record("dxf_model_save", "деталь сохранена для вида", saved ? path : "файла нет: " + path,
+            saved ? Verdict.Pass : Verdict.Fail);
+        return saved ? path : null;
+    }
+
+    /// <summary>The 4x4 matrix the documented <c>place</c> argument carries.</summary>
+    /// <remarks>DOC: iviewprojectionmanager_baseuserorientation.html and
+    /// ksviewprojectioncollection_getbaseuserorientation.html — one 16-element array, 4x4, identity by
+    /// default. MEASURED: the API5 getter answers DISP_E_PARAMNOTOPTIONAL on this build, so the API7
+    /// property is read and handed to the same documented call; the documented default is the last resort.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private object? PlaceMatrix(ksViewProjectionCollection collection)
+    {
+        var api5 = ReadValue(() => collection.GetBaseUserOrientation(), "dxf_place_api5_read");
+        if (api5 is not null)
+        {
+            Record("dxf_place_source", "источник матрицы place", "API5 GetBaseUserOrientation", Verdict.Info);
+            return api5;
+        }
+
+        var api7 = Manager7() is { } manager
+            ? ReadValue(() => manager.BaseUserOrientation, "dxf_place_api7_read")
+            : null;
+        if (api7 is not null)
+        {
+            Record("dxf_place_source", "источник матрицы place", "API7 BaseUserOrientation", Verdict.Info);
+            return api7;
+        }
+
+        Record("dxf_place_source", "источник матрицы place",
+            "единичная матрица: документированное значение по умолчанию", Verdict.Info);
+        return new double[] { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+    }
+
+    /// <summary>The API7 projection manager of this model, or null when the document does not answer it.</summary>
+    /// <remarks>DOC: ikompasdocument3d1_viewprojectionmanager.html, iviewprojectionmanager.html.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private IViewProjectionManager? Manager7()
+    {
+        try
+        {
+            return (_doc7 as IKompasDocument3D1)?.ViewProjectionManager as IViewProjectionManager;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The model's own box, or null when the kernel does not answer.</summary>
+    private double[]? BodyExtents()
+    {
+        try
+        {
+            if (_doc5?.GetPart(-1) is not ksPart part
+                || !part.GetGabarit(true, true, out var x1, out var y1, out _, out var x2, out var y2, out _))
+            {
+                return null;
+            }
+
+            return new[] { x1, y1, x2, y2 };
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The numbers of the numbered views, re-read from the drawing's own collection.</summary>
+    private static int[] ViewNumbers(IViews views)
+    {
+        var numbers = new List<int>();
+        var count = SafeInt(() => views.Count) ?? 0;
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                if (views.get_View(i) is IView view && SafeInt(() => view.Number) is int number && number > 0)
+                {
+                    numbers.Add(number);
+                }
+            }
+            catch (COMException)
+            {
+                // An unreadable view adds no number; the difference then reports fewer new views, not more.
+            }
+        }
+
+        return numbers.ToArray();
+    }
+
+    /// <summary>One documented AddStandartViews call; returns whether the kernel accepted it.</summary>
+    private bool AddViews(IViews views, string partPath, string projectionName, string id, double x = 100d,
+        double y = 100d)
+    {
+        bool accepted;
+        try
+        {
+            // vp_Front = 1 is the documented type of a single front view (projectiontype.html): the
+            // orientation is what the name changes, not the view type.
+            accepted = views.AddStandartViews(partPath, projectionName, new object[] { 1 }, x, y, 1d, 10d, 10d);
+        }
+        catch (COMException ex)
+        {
+            Record(id, "AddStandartViews(файл, «" + projectionName + "», [vp_Front=1], …)", Describe(ex),
+                Verdict.Info);
+            return false;
+        }
+
+        Record(id, "AddStandartViews(файл, «" + projectionName + "», [vp_Front=1], …)",
+            accepted ? "принят" : "false", accepted ? Verdict.Pass : Verdict.Info);
+        return accepted;
+    }
+
+    /// <summary>A view's rectangle on the sheet, through the documented pair of API5 calls.</summary>
+    /// <remarks>DOC: ksdokument2d_ksgetviewreference.html, ksdokument2d_ksgetobjgabaritrect.html,
+    /// structtype2denum.html («ko_RectParam 15 ksRectParam»), ksrectparam_getpbot.html / _getptop.html.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private double[]? ViewGabarit(int? number)
+    {
+        if (number is not int value || _drawing5 is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var pointer = _drawing5.ksGetViewReference(value);
+            if (pointer == 0 || _app5!.GetParamStruct(RectParam) is not ksRectParam rect)
+            {
+                return null;
+            }
+
+            if (_drawing5.ksGetObjGabaritRect(pointer, rect) == 0)
+            {
+                return null;
+            }
+
+            return rect.GetpBot() is ksMathPointParam bottom && rect.GetpTop() is ksMathPointParam top
+                ? new[] { bottom.x, bottom.y, top.x, top.y }
+                : null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>ko_RectParam of StructType2DEnum: the block ksGetObjGabaritRect fills.</summary>
+    private const short RectParam = 15;
+
+    private static string Rect(double[]? box) => box is { Length: 4 }
+        ? "x " + Num(box[0]) + ".." + Num(box[2]) + ", y " + Num(box[1]) + ".." + Num(box[3])
+        : "не прочитан";
+
+    /// <summary>Two boxes are the same size; the corners may come in either order.</summary>
+    private static bool? SameSize(double[]? left, double[]? right)
+    {
+        if (left is not { Length: 4 } || right is not { Length: 4 })
+        {
+            return null;
+        }
+
+        return Math.Abs(Math.Abs(left[2] - left[0]) - Math.Abs(right[2] - right[0])) <= SizeTolerance
+            && Math.Abs(Math.Abs(left[3] - left[1]) - Math.Abs(right[3] - right[1])) <= SizeTolerance;
+    }
+
+    /// <summary>The vendor export library, resolved from the installation the interop came from.</summary>
+    /// <remarks>DOC: iapplication_converter.html — the library is chosen by full path; the installation
+    /// layout puts the interop at &lt;root&gt;\Libs\PolynomLib\Bin\Client.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private static string? ExportLibraryPath()
+    {
+        var directory = typeof(SheetMetalProbe).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == "KompasInteropDir")?.Value;
+        if (string.IsNullOrEmpty(directory))
+        {
+            return null;
+        }
+
+        var root = Directory.GetParent(directory)?.Parent?.Parent?.Parent;
+        var path = root is null ? null : Path.Combine(root.FullName, "Libs", "ImpExp", "dwgdxfExp.rtw");
+        return path is not null && File.Exists(path) ? path : null;
+    }
+
+    /// <summary>Counts of the entities the order names, and their boxes, read from the written file.</summary>
+    private sealed record DxfCounts(int Line, int Arc, int Circle, int HoleCircles, double[]? Box,
+        double[]? WindowBox);
+
+    /// <summary>Reads an ASCII DXF: LINE / ARC / CIRCLE counts and the box of their points.</summary>
+    /// <remarks>INVARIANT: the numbers come from the file, not from the converter's return code.
+    /// LIMIT: group codes 10/20/11/21/40 only; other entities are ignored, not guessed.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private DxfCounts? ParseDxf(string path)
+    {
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(path);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        var line = 0;
+        var arc = 0;
+        var circle = 0;
+        var holeCircles = 0;
+        var points = new List<(double X, double Y)>();
+        var entity = string.Empty;
+        double ax = 0, ay = 0, bx = 0, by = 0, radius = 0;
+        var second = false;
+
+        void Flush()
+        {
+            if (entity is "LINE")
+            {
+                line++;
+                points.Add((ax, ay));
+                if (second)
+                {
+                    points.Add((bx, by));
+                }
+            }
+            else if (entity is "ARC" or "CIRCLE")
+            {
+                if (entity is "ARC")
+                {
+                    arc++;
+                }
+                else
+                {
+                    circle++;
+                    if (Math.Abs(radius - HoleRadius) <= 0.1d)
+                    {
+                        holeCircles++;
+                    }
+                }
+
+                points.Add((ax - radius, ay - radius));
+                points.Add((ax + radius, ay + radius));
+            }
+
+            entity = string.Empty;
+            ax = ay = bx = by = radius = 0;
+            second = false;
+        }
+
+        for (var i = 0; i + 1 < lines.Length; i += 2)
+        {
+            if (!int.TryParse(lines[i].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var code))
+            {
+                return null;
+            }
+
+            var value = lines[i + 1].Trim();
+            if (code == 0)
+            {
+                Flush();
+                entity = value;
+                continue;
+            }
+
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+            {
+                continue;
+            }
+
+            switch (code)
+            {
+                case 10: ax = number; break;
+                case 20: ay = number; break;
+                case 11: bx = number; second = true; break;
+                case 21: by = number; second = true; break;
+                case 40: radius = number; break;
+            }
+        }
+
+        Flush();
+        if (points.Count == 0)
+        {
+            return new DxfCounts(line, arc, circle, holeCircles, null, null);
+        }
+
+        var box = BoxOf(points);
+        // The drawing carries the sheet's frame and title block besides the view: the second box is the
+        // one the view's own window holds, so the comparison is against the view and not against the sheet.
+        var window = _viewGabarit is { Length: 4 } view
+            ? BoxOf(points.Where(p => p.X >= Math.Min(view[0], view[2]) - SizeTolerance
+                && p.X <= Math.Max(view[0], view[2]) + SizeTolerance
+                && p.Y >= Math.Min(view[1], view[3]) - SizeTolerance
+                && p.Y <= Math.Max(view[1], view[3]) + SizeTolerance).ToList())
+            : null;
+        return new DxfCounts(line, arc, circle, holeCircles, box, window);
+    }
+
+    private static double[]? BoxOf(List<(double X, double Y)> points) => points.Count == 0
+        ? null
+        : new[]
+        {
+            points.Min(p => p.X), points.Min(p => p.Y), points.Max(p => p.X), points.Max(p => p.Y),
+        };
 
     // ---------------------------------------------------------------------------------------------
     // Shutdown, checks and evidence

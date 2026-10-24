@@ -2258,6 +2258,7 @@ internal sealed class SheetMetalProbe : IDisposable
             DxfView();
             DxfExport();
             DxfBentState();
+            DxfFileState();
         }
         catch (ProbeStop)
         {
@@ -2729,10 +2730,72 @@ internal sealed class SheetMetalProbe : IDisposable
         }
     }
 
+    /// <summary>What the saved model file holds: a flat body or a bent one, read after the run.</summary>
+    /// <remarks>MEASURED: the view was built from this file, so the box inside it decides whether the
+    /// view ignored the unfold or the file never carried it. DOC: ikompasdocuments_open.html.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private void DxfFileState()
+    {
+        var file = Path.Combine(WorkDirectory(), "sheet-metal-dxf.m3d");
+        if (!File.Exists(file))
+        {
+            Record("dxf_file_state", "состояние сохранённой детали", "файла нет", Verdict.Info);
+            return;
+        }
+
+        IKompasDocument opened;
+        try
+        {
+            opened = _app7!.Documents.Open(file, false, true);
+        }
+        catch (COMException ex)
+        {
+            Record("dxf_file_state", "состояние сохранённой детали", Describe(ex), Verdict.Info);
+            return;
+        }
+
+        if (opened is not IKompasDocument3D document)
+        {
+            Record("dxf_file_state", "состояние сохранённой детали", RuntimeName(opened), Verdict.Info);
+            return;
+        }
+
+        var document5 = _app5!.ActiveDocument3D() as ksDocument3D;
+        Record("dxf_file_gabarit", "габарит тела в сохранённом файле", GabaritOn(document5), Verdict.Info);
+        Record("dxf_file_is_flat", "файл хранит развёрнутое тело", Flag(SameSize(BoxOf(document5),
+            _flatExtents)), Verdict.Info);
+        try
+        {
+            document.Close(DocumentCloseOptions.kdDoNotSaveChanges);
+        }
+        catch (COMException)
+        {
+            // Closing is housekeeping: the instance is taken down by its own PID.
+        }
+    }
+
+    /// <summary>The box of a document's part, read the same way as the body box above.</summary>
+    private static double[]? BoxOf(ksDocument3D? document)
+    {
+        try
+        {
+            if (document?.GetPart(-1) is not ksPart part
+                || !part.GetGabarit(true, true, out var x1, out var y1, out _, out var x2, out var y2, out _))
+            {
+                return null;
+            }
+
+            return new[] { x1, y1, x2, y2 };
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------
     // DXF route helpers
     // ---------------------------------------------------------------------------------------------
-
     /// <summary>The product's own name for the front orientation; the contrast view needs one.</summary>
     private const string StandardProjectionName = "Спереди";
 

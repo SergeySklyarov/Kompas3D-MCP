@@ -29,10 +29,10 @@
   есть в документе ДО `AddUnfoldProjection`, счётчик 10 → 10; `GetBaseUserOrientation` в API5 отвечает
   `DISP_E_PARAMNOTOPTIONAL`; рамка вида (48,796 x 56,764) - не геометрия: в неё входят концы линий сгиба.
   Код продукта не менялся, `--all` не требовался. **Проверки:** сборка прибора 0 предупреждений, `--dxf`
-  PASS 85 / FAIL 1 (`dxf_hole_circle`) / INFO 59, стражи `long-comment-blocks` 0/0/0, `lint-dashes` 0,
+  PASS 86 / FAIL 1 (`dxf_hole_circle`) / INFO 60, стражи `long-comment-blocks` 0/0/0, `lint-dashes` 0,
   `check-evidence-links` 0. Решение - `docs/decisions/sheet-metal.md#dxf-probe`, отчёт
   `SHEET_METAL_DXF_REPORT_20261024.md`, доказательства -
-  `docs/acceptance/evidence/20261024-sheetmetal-dxf-probe2-0458e19/`. Требование v1 «DXF плоских
+  `docs/acceptance/evidence/20261024-sheetmetal-dxf-probe2-2e248a8/`. Требование v1 «DXF плоских
   деталей» (`docs/01_TECHNICAL_SPEC.md` §1.11) закрывается по контуру и не закрывается по отверстиям:
   вопрос заказчику - войдёт ли маршрут в `0.11.0` с этим остатком (не долг).
 - **Листовое тело: развёртка (наряд `SHEET_METAL_UNFOLD`, попытка 1, 24.10.2026):** профиль

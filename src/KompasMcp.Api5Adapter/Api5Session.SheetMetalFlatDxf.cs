@@ -161,7 +161,7 @@ public partial class Api5Session
             }
 
             var number = created[0];
-            ApplyUnfoldView(views, number, unverified);
+            ApplyUnfoldView(views, number, drawing5, unverified);
             frame = ReadGabaritOfView(drawing5, document, number);
             if (frame is null)
             {
@@ -351,11 +351,12 @@ public partial class Api5Session
 
     /// <summary>Make the created view the unfold: its projection name, the unfold flag, then Update().</summary>
     /// <remarks>DOC: <c>iassociationview_projectionname.html</c>, <c>iassociationview_unfold.html</c>,
-    /// <c>iassociationview_hiddenlinesvisible.html</c>, <c>idrawingobject_update.html</c>.
+    /// <c>iassociationview_hiddenlinesvisible.html</c>, <c>idrawingobject_update.html</c>,
+    /// <c>ksdocument2d_ksrebuilddocument.html</c>.
     /// MEASURED: the name has to be set on the VIEW, because <c>AddStandartViews</c> ignores its own
     /// argument and builds «Спереди»; the unfold flag alone already changes the geometry.
     /// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
-    private void ApplyUnfoldView(IViews views, int number, List<string> unverified)
+    private void ApplyUnfoldView(IViews views, int number, ksDocument2D? editor, List<string> unverified)
     {
         var association = FindViewByNumber(views, number) as IAssociationView;
         if (association is null)
@@ -370,6 +371,9 @@ public partial class Api5Session
         // MEASURED: a hole on the far side of the sheet reaches the view only with hidden lines on.
         TrySet(() => association.HiddenLinesVisible = true);
         var updated = SafeBool(() => association.Update());
+        // MEASURED: without the rebuild the view keeps the BENT geometry of the file and Unfold changes
+        // nothing in the export, so the call belongs to the route; its answer is not a criterion.
+        var rebuilt = editor is not null && SafeBool(() => editor.ksRebuildDocument()) == true;
 
         if (nameSet == false)
         {
@@ -387,6 +391,12 @@ public partial class Api5Session
         {
             unverified.Add("view_update_not_confirmed — IAssociationView.Update() не подтвердил применение "
                 + "свойств: геометрию подтверждает только контур в DXF");
+        }
+
+        if (!rebuilt)
+        {
+            unverified.Add("view_rebuild_not_confirmed — ksRebuildDocument() не подтвердил перестройку "
+                + "ассоциативных видов: развёртку подтверждает только геометрия контура");
         }
     }
 

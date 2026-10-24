@@ -2,28 +2,28 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-22T21:08:23+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-25T01:18:18+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 151, маршрутов 684.
-- Измеряемая сборка: `release_build`, коммит `8b478ed`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `c0eaff863a4791e7ce6aa3b5d76236144b035b256823550bb88b608fcd6cb7ca`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 157, маршрутов 738.
+- Измеряемая сборка: `release_build`, коммит `0cfe8fd`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `a7ba95e5e0baedd55b5cba8e91e2c17984d06a26208cdcd2f7ad195e33bc0567`.
 
 ## 2. Сверка полноты
 
 | Показатель | Значение |
 |---|---|
 | tools_on_wire | 14 |
-| schemas_on_disk | 105 |
+| schemas_on_disk | 114 |
 | tools_with_schema | 11 |
 | schemas_matching_wire_by_property_names | 11 |
 | schemas_matching_wire_by_shape | 11 |
-| matrix_rows | 199 |
-| catalog_modes_and_variants | 220 |
-| com_routes | 694 |
-| com_routes_confirmed_by_documentation | 679 |
-| com_routes_confirmed_over_wire | 679 |
+| matrix_rows | 208 |
+| catalog_modes_and_variants | 229 |
+| com_routes | 748 |
+| com_routes_confirmed_by_documentation | 733 |
+| com_routes_confirmed_over_wire | 733 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 5 |
 | com_routes_confirmed_by_name | 6 |
@@ -31,22 +31,22 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 12 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 195 |
-| rows_verified_without_any_linked_row | 3 |
+| rows_claiming_verified | 204 |
+| rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 17 |
-| rows_actions_without_required_calls | 20 |
-| rows_status_lowered_by_unsupported_actions | 20 |
-| acceptance_rows | 1807 |
-| acceptance_calls_journal | 17178 |
-| acceptance_rows_with_call_window | 1807 |
+| rows_action_without_dedicated_row | 18 |
+| rows_actions_without_required_calls | 22 |
+| rows_status_lowered_by_unsupported_actions | 22 |
+| acceptance_rows | 1881 |
+| acceptance_calls_journal | 17576 |
+| acceptance_rows_with_call_window | 1881 |
 | required_of_mismatches_matrix_vs_profile | 12 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 10, 'route_field': 4}.
-COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-twins': 10}.
+COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -69,7 +69,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 199.
+Всего строк матрицы: 208.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -165,7 +165,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `MATE-04.mate.fixed` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_set_mate_fixed | kompas_set_mate_fixed: IMateConstraint3D.Fixed = ksMateFixed | Подтверждено |
 | `MATE-05.mate.delete` | MATE | mcp_verified | kompas_delete_mate, kompas_list_documents, kompas_list_mates | kompas_delete_mate: ksDocument3D.RemoveMateConstraint(constr | Подтверждено |
 | `MATE-06.mate.placement_effect` | MATE | mcp_verified | kompas_list_components, kompas_list_documents, kompas_list_mates, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: ksPlacement.GetMatrix3D по компонент | Не подтверждено |
-| `MATE-07.mate.create_transmission` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_open_document, kompas_save_document | kompas_create_mate, constraint_type=transmission: IPart7.Mat | Не подтверждено |
+| `MATE-07.mate.create_transmission` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_open_document, kompas_save_document, kompas_set_mate_parameter | kompas_create_mate, constraint_type=transmission: IPart7.Mat | Не подтверждено |
 | `dep.mate.object_address` | dep | mcp_verified | kompas_list_documents, kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.component_insert` | dep | mcp_verified | kompas_insert_component, kompas_list_mates, kompas_measure | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.revisions` | dep | mcp_verified | kompas_list_mates, kompas_set_mate_parameter | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
@@ -272,6 +272,15 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `G11.sections.mode_snapshot` | G11 | mcp_verified | kompas_export_image, kompas_list_sections, kompas_set_section_mode | kompas_set_section_mode: IDynamicCrossSectionsManager.Dynami | Подтверждено |
 | `dep.api7.sections_interface` | G11 | None | - | IDynamicCrossSectionsManager получается ТОЛЬКО документирова | Не подтверждено |
 | `dep.api7.dismantle_interface` | G9 | None | - | IDismantleParameters получается ТОЛЬКО документированным Que | Не подтверждено |
+| `SMB-01.body.create` | SMB | mcp_verified | kompas_create_sheet_metal_body | kompas_create_sheet_metal_body: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
+| `SMB-02.body.read` | SMB | mcp_verified | kompas_get_sheet_metal | kompas_get_sheet_metal: Count коллекций ISheetMetalContainer | Не подтверждено |
+| `SMB-03.body.edit` | SMB | mcp_verified | kompas_edit_sheet_metal_body | kompas_edit_sheet_metal_body: запись свойств существующего I | Не подтверждено |
+| `SMB-04.bend.create` | SMB | mcp_verified | kompas_create_sheet_metal_bend | kompas_create_sheet_metal_bend: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
+| `SMB-05.hole.create` | SMB | mcp_verified | kompas_create_sheet_metal_hole | kompas_create_sheet_metal_hole: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
+| `SMB-06.cut.create` | SMB | mcp_verified | kompas_create_sheet_metal_cut | kompas_create_sheet_metal_cut: QI(IPart7 -> ISheetMetalConta | Не подтверждено |
+| `SMB-07.unfold.set` | SMB | mcp_verified | kompas_set_sheet_metal_unfold | kompas_set_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
+| `SMB-08.unfold.read` | SMB | mcp_verified | kompas_get_sheet_metal_unfold | kompas_get_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
+| `SMB-09.flat_dxf.export` | SMB | mcp_verified | kompas_export_sheet_metal_flat_dxf | kompas_export_sheet_metal_flat_dxf: временный чертёж -> IVie | Не подтверждено |
 
 ### Пределы, названные матрицей у режимов
 
@@ -695,7 +704,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
   - Кинематика НЕ заявляется: поворот ведущего маршрутом размещения ведомый не двигает (0 град / 0 мм), а маршрут IComponentPositioner7 отказал и на компоненте без сопряжений, в том числе в видимом документе.
   - Объект сопряжения - ГРАНЬ: с конструктивными осями в BaseObject1/2 и RotationAxis1/2 то же сопряжение читается Valid=FALSE.
   - Удаление передачи недостижимо: RemoveMateConstraint возвращает FALSE, сопряжение остаётся в модели, продукт отвечает VERIFICATION_FAILED (MM.08 проверяет именно отказ). Действие delete_dependencies принадлежит MATE-05; для передачи и там недостижимо - техдолг 53.
-  - Правка параметров существующей передачи не поддержана: kompas_set_mate_parameter её не принимает, коэффициенты и направления задаются только при создании - техдолг 52.
+  - Правка существующей передачи поддержана нарядом MATE_TRANSMISSION_EDIT: kompas_set_mate_parameter принимает scale1/scale2 (парой) и direction1/direction2, успех - сравнение перечитанных чисел, поля чужой группы отвергаются INVALID_ARGUMENT с именем поля (MM.11).
   - Вторая передача на той же паре компонентов не создаётся: Update()=False, Valid=False, отказ VERIFICATION_FAILED.
 - `dep.mate.object_address`:
   - живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)
@@ -1070,6 +1079,45 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 - `dep.api7.dismantle_interface`:
   - Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
   - Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly.
+- `SMB-01.body.create`:
+  - IsCreated у ISheetMetalBody в версии 24 нет: тело подтверждается счётчиком, свойствами и габаритом, а не признаком создания
+  - из четырёх значений ksDirectionTypeEnum на листовом теле измерено только normal; reverse, both и middle_plane приняты по странице перечисления, а не прогоном
+  - границ значения коэффициента, величины и уменьшения сгиба справка не называет: проверяется только конечность числа
+  - созданное тело этим продуктом не удаляется (DeleteObject листовые объекты не удаляет), поэтому отказ после Add() несёт partialEffects и body_ref
+- `SMB-02.body.read`:
+  - счётчик коллекции, который ядро не отдало, назван в unread: пустое значение - «не прочитано», а не ноль
+  - габарит по нормали берётся как протяжённость по Z: это раскладка пробы (эскиз на XOY), у тела на другой плоскости это не толщина
+- `SMB-03.body.edit`:
+  - сгибы этой правкой не пересчитываются и не проверяются: сгиб - объём SHEET_METAL_FEATURES
+  - габарит как проверка толщины применим только к телу без сгибов; при сгибах проверка названа неприменимой, а не пропущена молча
+- `SMB-04.bend.create`:
+  - BendObjects измерен только с одним объектом: несколько рёбер в одном сгибе не заявляются
+  - страницы угла, радиуса и длины называют только тип double: проверяется положительность и конечность, документированного предела нет
+  - направление сгиба страница значения не называет: true - то, что записала проба, и это сказано в описании
+  - созданный сгиб этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и bend_ref
+- `SMB-05.hole.create`:
+  - up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет
+  - глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его
+  - страницы диаметра, координат и глубины называют только тип double: проверяется положительность и конечность, документированного предела нет
+  - созданное отверстие этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и hole_ref
+- `SMB-06.cut.create`:
+  - форма и объём выреза не проверяются: признак успеха - рост числа граней тела
+  - up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет
+  - глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его
+  - созданный вырез этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и cut_ref
+- `SMB-07.unfold.set`:
+  - UpdateParam() отвечает FALSE во всех состояниях (измерено) и критерием успеха не служит
+  - сгибание обратно подтверждается тем, что габарит по нормали больше не равен толщине: согнутый габарит прошлого вызова между вызовами не запоминается
+  - плоскость развёртки по умолчанию - сама неподвижная грань: ссылки на стандартную плоскость у клиента нет
+  - сброс параметров развёртки (DeleteParam) в профиль не входит
+  - форма развёртки (контур и его размеры) не проверяется - только габарит по нормали
+- `SMB-08.unfold.read`:
+  - ExcludedBendObjects только считается: страница не называет способа вернуть сгиб в этот массив
+  - непрочитанное поле отдаётся как null и называется в unverified_aspects, а не как false
+- `SMB-09.flat_dxf.export`:
+  - маршрут строит вид по СОХРАНЁННОМУ файлу: несохранённая деталь - отказ DOCUMENT_DIRTY, SaveAs детали инструмент не делает
+  - успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа
+  - число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят
 
 ## 5. COM-маршруты адаптера
 
@@ -1085,10 +1133,10 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IPart7.LoadState` | api7 | property | `prop ksLoadStateEnum LoadState` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.GetSummMatrix` | api7 | method | `Object GetSummMatrix(Part7 Part)` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.InstanceCount` | api7 | property | `prop Int32 InstanceCount` | 1 | Подтверждено | перечень интерфейса |
-| `ksBodyCollection.GetCount` | api5 | method | `Int32 GetCount()` | 12 | Подтверждено | перечень интерфейса |
-| `ksBodyCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 11 | Подтверждено | перечень интерфейса |
-| `ksBody.FaceCollection` | api5 | method | `Object FaceCollection()` | 16 | Подтверждено | перечень интерфейса |
-| `ksFaceCollection.GetCount` | api5 | method | `Int32 GetCount()` | 18 | Подтверждено | перечень интерфейса |
+| `ksBodyCollection.GetCount` | api5 | method | `Int32 GetCount()` | 13 | Подтверждено | перечень интерфейса |
+| `ksBodyCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 12 | Подтверждено | перечень интерфейса |
+| `ksBody.FaceCollection` | api5 | method | `Object FaceCollection()` | 17 | Подтверждено | перечень интерфейса |
+| `ksFaceCollection.GetCount` | api5 | method | `Int32 GetCount()` | 19 | Подтверждено | перечень интерфейса |
 | `ksPlacement.GetMatrix3D` | api5 | method | `Boolean GetMatrix3D(Object& Result)` | 2 | не подтверждено | - |
 | `ksDocument3D.PartCollection` | api5 | method | `Object PartCollection(Boolean refresh)` | 1 | Подтверждено | перечень интерфейса |
 | `ksPartCollection.GetCount` | api5 | method | `Int32 GetCount()` | 1 | Подтверждено | перечень интерфейса |
@@ -1099,7 +1147,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ksPart.SetPlacement` | api5 | method | `Boolean SetPlacement(Object placement)` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.UpdatePlacement` | api5 | method | `Boolean UpdatePlacement()` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.fixedComponent` | api5 | property | `prop Boolean fixedComponent` | 1 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 15 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 16 | Подтверждено | перечень интерфейса |
 | `ksPart.GetPlacement` | api5 | method | `Object GetPlacement()` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.fileName` | api5 | property | `prop String fileName` | 6 | Подтверждено | перечень интерфейса |
 | `ksPart.Update` | api5 | method | `Boolean Update()` | 3 | Подтверждено | перечень интерфейса |
@@ -1114,8 +1162,8 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ksPart.EntityCollection` | api5 | method | `Object EntityCollection(Int16 objType)` | 19 | Подтверждено | перечень интерфейса |
 | `ksEntityCollection.GetCount` | api5 | method | `Int32 GetCount()` | 35 | Подтверждено | перечень интерфейса |
 | `ksEntityCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 25 | Подтверждено | перечень интерфейса |
-| `ksEntity.type` | api5 | property | `prop Int16 type` | 33 | Подтверждено | перечень интерфейса |
-| `ksEntity.GetDefinition` | api5 | method | `Object GetDefinition()` | 37 | Подтверждено | перечень интерфейса |
+| `ksEntity.type` | api5 | property | `prop Int16 type` | 35 | Подтверждено | перечень интерфейса |
+| `ksEntity.GetDefinition` | api5 | method | `Object GetDefinition()` | 38 | Подтверждено | перечень интерфейса |
 | `ksChamferDefinition.SetChamferParam` | api5 | method | `Boolean SetChamferParam(Boolean transfer, Double distance1, Double dis` | 2 | Подтверждено | перечень интерфейса |
 | `ksEntity.Update` | api5 | method | `Boolean Update()` | 8 | Подтверждено | перечень интерфейса |
 | `IModelContainer.CopiesGeometry` | api7 | property | `prop CopiesGeometry CopiesGeometry` | 3 | Подтверждено | перечень интерфейса |
@@ -1134,8 +1182,8 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ksDocument3D.Open` | api5 | method | `Boolean Open(String fileName, Boolean invisible)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.GetPart` | api5 | method | `Object GetPart(Int32 type)` | 4 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.close` | api5 | method | `Boolean close()` | 5 | Подтверждено | перечень интерфейса |
-| `ksPart.BodyCollection` | api5 | method | `Object BodyCollection()` | 7 | Подтверждено | перечень интерфейса |
-| `ksBodyCollection.refresh` | api5 | method | `Boolean refresh()` | 7 | Подтверждено | перечень интерфейса |
+| `ksPart.BodyCollection` | api5 | method | `Object BodyCollection()` | 8 | Подтверждено | перечень интерфейса |
+| `ksBodyCollection.refresh` | api5 | method | `Boolean refresh()` | 8 | Подтверждено | перечень интерфейса |
 | `IDismantleParameters.DismantleStepsCount` | api7 | property | `prop Int32 DismantleStepsCount` | 4 | Подтверждено | перечень интерфейса |
 | `IDismantleParameters.DeleteDismantleStep` | api7 | method | `Boolean DeleteDismantleStep(Int32 Index)` | 1 | Подтверждено | перечень интерфейса |
 | `IDismantleParameters.ClearDismantleParameters` | api7 | method | `Boolean ClearDismantleParameters()` | 2 | Подтверждено | перечень интерфейса |
@@ -1158,7 +1206,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IDraftFromEdges.Reverse` | api7 | property | `prop Boolean Reverse` | 4 | Подтверждено | перечень интерфейса |
 | `ksPart.GetMainBody` | api5 | method | `Object GetMainBody()` | 18 | Подтверждено | перечень интерфейса |
 | `ksEntity.name` | api5 | property | `prop String name` | 24 | Подтверждено | перечень интерфейса |
-| `IViews.AddStandartViews` | api7 | method | `Boolean AddStandartViews(String FileName, String ProjectionName, Objec` | 1 | Подтверждено | перечень интерфейса |
+| `IViews.AddStandartViews` | api7 | method | `Boolean AddStandartViews(String FileName, String ProjectionName, Objec` | 2 | Подтверждено | перечень интерфейса |
 | `IView.Scale` | api7 | property | `prop Double Scale` | 6 | Подтверждено | перечень интерфейса |
 | `IView.X` | api7 | property | `prop Double X` | 5 | Подтверждено | перечень интерфейса |
 | `IView.Y` | api7 | property | `prop Double Y` | 5 | Подтверждено | перечень интерфейса |
@@ -1194,8 +1242,8 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ITechnicalDemand.AutoPlacement` | api7 | property | `prop Boolean AutoPlacement` | 2 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.Update` | api7 | method | `Boolean Update()` | 2 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.IsCreated` | api7 | property | `prop Boolean IsCreated` | 2 | Подтверждено | перечень интерфейса |
-| `IConverter.GetFilter` | api7 | method | `String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)` | 1 | Подтверждено | перечень интерфейса |
-| `IConverter.Convert` | api7 | method | `Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean` | 1 | Подтверждено | перечень интерфейса |
+| `IConverter.GetFilter` | api7 | method | `String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)` | 2 | Подтверждено | перечень интерфейса |
+| `IConverter.Convert` | api7 | method | `Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean` | 2 | Подтверждено | перечень интерфейса |
 | `KompasObject.TransferInterface` | api5 | method | `Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewTyp` | 5 | Подтверждено | имя файла страницы |
 | `KompasObject.ActiveDocument3D` | api5 | method | `Object ActiveDocument3D()` | 1 | Подтверждено | перечень интерфейса |
 | `KompasObject.Document2D` | api5 | method | `Object Document2D()` | 3 | Подтверждено | перечень интерфейса |
@@ -1203,22 +1251,22 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IKompasDocument.PathName` | api7 | property | `prop String PathName` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.DocumentType` | api7 | property | `prop DocumentTypeEnum DocumentType` | 1 | Подтверждено | перечень интерфейса |
-| `IViews.Count` | api7 | property | `prop Int32 Count` | 8 | Подтверждено | перечень интерфейса |
-| `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 5 | Подтверждено | перечень интерфейса |
+| `IViews.Count` | api7 | property | `prop Int32 Count` | 10 | Подтверждено | перечень интерфейса |
+| `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 7 | Подтверждено | перечень интерфейса |
 | `IView.Reference` | api7 | property | `prop Int32 Reference` | 4 | Подтверждено | перечень интерфейса |
 | `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 6 | Подтверждено | перечень интерфейса |
-| `IView.Number` | api7 | property | `prop Int32 Number` | 5 | Подтверждено | перечень интерфейса |
+| `IView.Number` | api7 | property | `prop Int32 Number` | 7 | Подтверждено | перечень интерфейса |
 | `IView.Name` | api7 | property | `prop String Name` | 4 | Подтверждено | перечень интерфейса |
 | `IAssociationView.SourceFileName` | api7 | property | `prop String SourceFileName` | 2 | Подтверждено | перечень интерфейса |
-| `IAssociationView.ProjectionName` | api7 | property | `prop String ProjectionName` | 1 | Подтверждено | перечень интерфейса |
-| `IAssociationView.HiddenLinesVisible` | api7 | property | `prop Boolean HiddenLinesVisible` | 1 | Подтверждено | перечень интерфейса |
+| `IAssociationView.ProjectionName` | api7 | property | `prop String ProjectionName` | 2 | Подтверждено | перечень интерфейса |
+| `IAssociationView.HiddenLinesVisible` | api7 | property | `prop Boolean HiddenLinesVisible` | 2 | Подтверждено | перечень интерфейса |
 | `IAssociationView.CenterLinesVisible` | api7 | property | `prop Boolean CenterLinesVisible` | 1 | Подтверждено | перечень интерфейса |
 | `IView.ObjectCount` | api7 | property | `prop Int32 ObjectCount` | 3 | Подтверждено | перечень интерфейса |
 | `IAssociationView.Section` | api7 | property | `prop Boolean Section` | 3 | Подтверждено | перечень интерфейса |
-| `ksRectParam.GetpBot` | api5 | method | `Object GetpBot()` | 1 | Подтверждено | перечень интерфейса |
-| `ksRectParam.GetpTop` | api5 | method | `Object GetpTop()` | 1 | Подтверждено | перечень интерфейса |
-| `ksMathPointParam.x` | api5 | property | `prop Double x` | 1 | Подтверждено | групповая страница |
-| `ksMathPointParam.y` | api5 | property | `prop Double y` | 1 | Подтверждено | групповая страница |
+| `ksRectParam.GetpBot` | api5 | method | `Object GetpBot()` | 2 | Подтверждено | перечень интерфейса |
+| `ksRectParam.GetpTop` | api5 | method | `Object GetpTop()` | 2 | Подтверждено | перечень интерфейса |
+| `ksMathPointParam.x` | api5 | property | `prop Double x` | 2 | Подтверждено | групповая страница |
+| `ksMathPointParam.y` | api5 | property | `prop Double y` | 2 | Подтверждено | групповая страница |
 | `IView.Valid` | api7 | property | `prop Boolean Valid` | 1 | Подтверждено | перечень интерфейса |
 | `ILayoutSheets.Count` | api7 | property | `prop Int32 Count` | 2 | Подтверждено | перечень интерфейса |
 | `ILayoutSheet.Stamp` | api7 | property | `prop _Stamp Stamp` | 1 | Подтверждено | перечень интерфейса |
@@ -1231,7 +1279,7 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ksEdgeDefinition.GetVertex` | api5 | method | `Object GetVertex(Boolean start)` | 3 | Подтверждено | перечень интерфейса |
 | `ksVertexDefinition.GetPoint` | api5 | method | `Boolean GetPoint(Double& x, Double& y, Double& z)` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeDefinition.IsStraight` | api5 | method | `Boolean IsStraight()` | 2 | Подтверждено | перечень интерфейса |
-| `ksFaceCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 12 | Подтверждено | перечень интерфейса |
+| `ksFaceCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 13 | Подтверждено | перечень интерфейса |
 | `ksFaceDefinition.GetSurface` | api5 | method | `Object GetSurface()` | 8 | Подтверждено | перечень интерфейса |
 | `ksSurface.GetSurfaceParam` | api5 | method | `Object GetSurfaceParam()` | 8 | Подтверждено | перечень интерфейса |
 | `ksCylinderParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 5 | Подтверждено | перечень интерфейса |
@@ -1301,11 +1349,11 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ksPart.NewEntity` | api5 | method | `Object NewEntity(Int16 objType)` | 5 | Подтверждено | перечень интерфейса |
 | `ksSketchDefinition.SetPlane` | api5 | method | `Boolean SetPlane(Object plane)` | 2 | Подтверждено | перечень интерфейса |
 | `ksEntity.Create` | api5 | method | `Boolean Create()` | 7 | Подтверждено | перечень интерфейса |
+| `ksSketchDefinition.GetPlane` | api5 | method | `Object GetPlane()` | 7 | Подтверждено | перечень интерфейса |
 | `ksPlaneOffsetDefinition.SetPlane` | api5 | method | `Boolean SetPlane(Object plane)` | 1 | Подтверждено | перечень интерфейса |
 | `ksPlaneOffsetDefinition.offset` | api5 | property | `prop Double offset` | 1 | Подтверждено | перечень интерфейса |
 | `ksPlaneOffsetDefinition.direction` | api5 | property | `prop Boolean direction` | 1 | Подтверждено | перечень интерфейса |
 | `ksSketchDefinition.BeginEdit` | api5 | method | `Object BeginEdit()` | 1 | Подтверждено | перечень интерфейса |
-| `ksSketchDefinition.GetPlane` | api5 | method | `Object GetPlane()` | 5 | Подтверждено | перечень интерфейса |
 | `ksSketchDefinition.EndEdit` | api5 | method | `Boolean EndEdit()` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument2D.ksLineSeg` | api5 | method | `Int32 ksLineSeg(Double x1, Double y1, Double x2, Double y2, Int32 styl` | 5 | Подтверждено | имя файла страницы |
 | `ksDocument2D.ksCircle` | api5 | method | `Int32 ksCircle(Double xc, Double yc, Double rad, Int32 style)` | 1 | Подтверждено | имя файла страницы |
@@ -1414,8 +1462,13 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IMateConstraint3D.BaseObject2` | api7 | property | `prop IModelObject BaseObject2` | 2 | Подтверждено | перечень интерфейса |
 | `IMateConstraint3D.Alignment` | api7 | property | `prop ksMateConstraintAlignmentEnum Alignment` | 2 | Подтверждено | перечень интерфейса |
 | `IMateConstraint3D.ParamValue` | api7 | property | `prop Double ParamValue` | 4 | Подтверждено | перечень интерфейса |
-| `IMateConstraint3D.Update` | api7 | method | `Boolean Update()` | 3 | не подтверждено | - |
-| `IMateConstraint3D.Valid` | api7 | property | `prop Boolean Valid` | 1 | не подтверждено | - |
+| `IMateConstraint3D.Update` | api7 | method | `Boolean Update()` | 4 | не подтверждено | - |
+| `IMateConstraint3D.Valid` | api7 | property | `prop Boolean Valid` | 2 | не подтверждено | - |
+| `IMate3DTransmission.SetScale` | api7 | method | `Boolean SetScale(Double Scale1, Double Scale2)` | 2 | Подтверждено | перечень интерфейса |
+| `IMate3DTransmission.Direction1` | api7 | property | `prop Boolean Direction1` | 3 | Подтверждено | перечень интерфейса |
+| `IMate3DTransmission.Direction2` | api7 | property | `prop Boolean Direction2` | 3 | Подтверждено | перечень интерфейса |
+| `IMate3DTransmission.Scale1` | api7 | property | `prop Double Scale1` | 1 | Подтверждено | перечень интерфейса |
+| `IMate3DTransmission.Scale2` | api7 | property | `prop Double Scale2` | 1 | Подтверждено | перечень интерфейса |
 | `IMateConstraint3D.Fixed` | api7 | property | `prop ksMateFixedTypeEnum Fixed` | 3 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.RemoveMateConstraint` | api5 | method | `Boolean RemoveMateConstraint(Int32 constraintType, Object obj1, Object` | 1 | Подтверждено | перечень интерфейса |
 | `IMateConstraint3D.ConstraintType` | api7 | property | `prop MateConstraintType ConstraintType` | 2 | Подтверждено | перечень интерфейса |
@@ -1430,9 +1483,6 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IMate3DTransmission.MotionType2` | api7 | property | `prop ksMateMotionTypeEnum MotionType2` | 1 | Подтверждено | перечень интерфейса |
 | `IMate3DTransmission.RotationAxis1` | api7 | property | `prop IModelObject RotationAxis1` | 1 | Подтверждено | перечень интерфейса |
 | `IMate3DTransmission.RotationAxis2` | api7 | property | `prop IModelObject RotationAxis2` | 1 | Подтверждено | перечень интерфейса |
-| `IMate3DTransmission.SetScale` | api7 | method | `Boolean SetScale(Double Scale1, Double Scale2)` | 1 | Подтверждено | перечень интерфейса |
-| `IMate3DTransmission.Direction1` | api7 | property | `prop Boolean Direction1` | 1 | Подтверждено | перечень интерфейса |
-| `IMate3DTransmission.Direction2` | api7 | property | `prop Boolean Direction2` | 1 | Подтверждено | перечень интерфейса |
 | `IModelContainer.FeaturePatterns` | api7 | property | `prop FeaturePatterns FeaturePatterns` | 7 | Подтверждено | перечень интерфейса |
 | `IFeaturePattern.Owner` | api7 | property | `prop IFeature7 Owner` | 9 | Подтверждено | named_name_mismatch |
 | `IRotated.Angle` | api7 | property | `prop Double Angle` | 7 | Подтверждено | перечень интерфейса |
@@ -1462,6 +1512,59 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `IDynamicCrossSectionsManager.DynamicCrossSection` | api7 | property | `prop DynamicCrossSection DynamicCrossSection` | 1 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSection.StepsCount` | api7 | property | `prop Int32 StepsCount` | 2 | Подтверждено | перечень интерфейса |
 | `IDynamicCrossSection.Step` | api7 | property | `prop DynamicCrossSectionStep Step` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Sketch` | api7 | property | `prop Sketch Sketch` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Thickness` | api7 | property | `prop Double Thickness` | 4 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Radius` | api7 | property | `prop Double Radius` | 3 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Direction` | api7 | property | `prop ksDirectionTypeEnum Direction` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.UnfoldType` | api7 | property | `prop ksUnfoldTypeEnum UnfoldType` | 3 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Update` | api7 | method | `Boolean Update()` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalContainer.SheetMetalBodies` | api7 | property | `prop SheetMetalBodies SheetMetalBodies` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalContainer.SheetMetalBends` | api7 | property | `prop SheetMetalBends SheetMetalBends` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalContainer.SheetMetalHoles` | api7 | property | `prop SheetMetalHoles SheetMetalHoles` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.BendObject` | api7 | property | `prop IModelObject BendObject` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.Angle` | api7 | property | `prop Double Angle` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.Direction` | api7 | property | `prop Boolean Direction` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.InternalRadius` | api7 | property | `prop Boolean InternalRadius` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.Radius` | api7 | property | `prop Double Radius` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.LengthType` | api7 | property | `prop ksBendLengthTypeEnum LengthType` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.Length` | api7 | property | `prop Double Length` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.Body` | api7 | property | `prop IKompasAPIObject Body` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.X` | api7 | property | `prop Double X` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.Y` | api7 | property | `prop Double Y` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.Diameter` | api7 | property | `prop Double Diameter` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.CutType` | api7 | property | `prop ksHoleCutTypeEnum CutType` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.Depth` | api7 | property | `prop Double Depth` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalHole.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalCut.Body` | api7 | property | `prop IKompasAPIObject Body` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalCut.Sketch` | api7 | property | `prop Sketch Sketch` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalCut.CutType` | api7 | property | `prop ksHoleCutTypeEnum CutType` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalCut.Depth` | api7 | property | `prop Double Depth` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalCut.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.BendCoefficient` | api7 | property | `prop Double BendCoefficient` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.BendValue` | api7 | property | `prop Double BendValue` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.BendReduction` | api7 | property | `prop Double BendReduction` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Straighten` | api7 | property | `prop Boolean Straighten` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBend.BendObjects` | api7 | property | `prop Object BendObjects` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBody.Owner` | api7 | property | `prop IFeature7 Owner` | 2 | Подтверждено | перечень интерфейса |
+| `IModelObject.Owner` | api7 | property | `prop IFeature7 Owner` | 2 | Подтверждено | перечень интерфейса |
+| `IKompasDocument2D.ViewsAndLayersManager` | api7 | property | `prop ViewsAndLayersManager ViewsAndLayersManager` | 2 | Подтверждено | перечень интерфейса |
+| `IKompasDocument2D.SaveAs` | api7 | method | `Void SaveAs(String PathName)` | 1 | Подтверждено | перечень интерфейса |
+| `IAssociationView.Unfold` | api7 | property | `prop Boolean Unfold` | 1 | Подтверждено | перечень интерфейса |
+| `IAssociationView.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `ksDocument2D.ksRebuildDocument` | api5 | method | `Boolean ksRebuildDocument()` | 1 | Подтверждено | имя файла страницы |
+| `ksDocument2D.ksGetViewReference` | api5 | method | `Int32 ksGetViewReference(Int32 number)` | 1 | Подтверждено | имя файла страницы |
+| `ksDocument2D.ksGetObjGabaritRect` | api5 | method | `Int32 ksGetObjGabaritRect(Int32 p, Object par)` | 1 | Подтверждено | имя файла страницы |
+| `IApplication.get_Converter` | api7 | method | `Converter get_Converter(Object Library)` | 1 | Подтверждено | перечень интерфейса |
+| `IKompasDocument2D.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.FixedFaces` | api7 | property | `prop Object FixedFaces` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.UnfoldPlane` | api7 | property | `prop IModelObject UnfoldPlane` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.Unfold` | api7 | property | `prop Boolean Unfold` | 2 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.UpdateParam` | api7 | method | `Boolean UpdateParam()` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalContainer.SheetMetalBendUnfoldParameters` | api7 | property | `prop ISheetMetalBendUnfoldParameters SheetMetalBendUnfoldParameters` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.ExcludedBendObjects` | api7 | property | `prop Object ExcludedBendObjects` | 1 | Подтверждено | перечень интерфейса |
+| `ISheetMetalBendUnfoldParameters.IsCreated` | api7 | property | `prop Boolean IsCreated` | 1 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEdit` | api7 | method | `FragmentDocument BeginEdit()` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.BeginEditEx` | api7 | method | `FragmentDocument BeginEditEx(Boolean ReadOnly)` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.EndEdit` | api7 | method | `Boolean EndEdit()` | 3 | Подтверждено | перечень интерфейса |
@@ -1768,7 +1871,6 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 | `ISketch.Plane` | api7 | property | `prop IModelObject Plane` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument1.FindObjectById` | api7 | method | `IKompasAPIObject FindObjectById(String Id, IKompasAPIObject Parent)` | 1 | Подтверждено | перечень интерфейса |
-| `IKompasDocument2D.ViewsAndLayersManager` | api7 | property | `prop ViewsAndLayersManager ViewsAndLayersManager` | 1 | Подтверждено | перечень интерфейса |
 
 ## 6. Типы объектов
 
@@ -1792,27 +1894,19 @@ COM-маршрутов по сборкам: {'api7': 426, 'api5': 258, 'adapter-
 
 Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
 
-### F-06 - приписка (verified без связанной строки приёмки)
-
-Серьёзность: высокая.
-
-3 строк(и): G11.sections.create_read, G11.sections.mode_snapshot, dep.api7.sections_interface
-
-Исправление: связать строку с приёмкой или понизить заявку
-
-### F-07 - заявка не подтверждена вызовами (отказ сторожа)
+### F-06 - заявка не подтверждена вызовами (отказ сторожа)
 
 Серьёзность: средняя.
 
-20 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.geometry_validation, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission
+22 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
-### F-08 - пробел трассируемости (действие не названо строкой)
+### F-07 - пробел трассируемости (действие не названо строкой)
 
 Серьёзность: низкая.
 
-17 строк(и): DRW-07.section_view.create.simple, DRW-07.section_view.create.stepped, DRW-07.section_view.delete, DRW-07.section_view.read, DRW-07.section_view.rebuild, DRW-07.section_view.save_reopen, DRW-07.section_view.update, G11.sections.create_read, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand
+18 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create, SMB-02.body.read, SMB-03.body.edit
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

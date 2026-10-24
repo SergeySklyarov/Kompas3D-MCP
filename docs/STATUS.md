@@ -14,6 +14,24 @@
 
 ## Текущее состояние
 
+- **Связка строк разреза с их проверками (наряд `AUDIT_CLAIMS_SECTION_TESTS`, 25.10.2026):** строка
+  долга 63 закрыта. `tests[]` восьми строк `DRW-07.section_view.*` называл по ОДНОЙ строке приёмки на
+  шаг, поэтому сторож заявки отказывал по связке, а не по отсутствию проверки: вызовы `read`,
+  `save_reopen`, `negative_tests` и `discover` есть в строках той же группы, но названы не были.
+  Дописаны СУЩЕСТВУЮЩИЕ строки: `DRW-07.read` и `DRW-07.section.read` (`read`), `DRW-07.save_reopen`
+  (`save_reopen`), `DRW-07.section.kind_refused` (`negative_tests`), `DRW-07.section.read` (`discover`);
+  прибор, подпись `ACTION_CALLS`, строки приёмки и `actions` строк не менялись.
+  `rows_actions_without_required_calls` 27 -> 22, `rows_action_without_dedicated_row` 23 -> 18; из
+  счётчика вышли пять строк (`create.simple`, `read`, `update`, `delete`, `save_reopen`). Три строки
+  (`create.stepped`, `rebuild`, `geometry_validation`) остаются с названной причиной: контур сверяется
+  разбором DXF, `kompas_measure` в окнах группы `section` не встречается ни разу, и подпись прибора
+  такого доказательства не выражает - `docs/decisions/api-audit.md#section-view-row-binding`.
+  **Проверки:** `api-audit.py` 0 (`--self-test` 5 приборов, 0 FAIL), `mcp-smoke.py --self-test` 82/0,
+  стражи `long-comment-blocks` 0, `lint-dashes` 0, `check-evidence-links` 0; полный прогон не нужен -
+  таблица `AGENTS.md` (менялись матрица и документы), зачётным остаётся `--all` на `05dd54f`
+  (PASS 1872 / NAMED 6 / UNKNOWN 3, FAIL 0, дерево чистое). `docs/API_COMPLIANCE.json` пересобран
+  прибором на этом отчёте: 204 заявки, 0 приписок, 0 противоречий, 18 без посвящённой строки,
+  22 без подтверждения вызовами. Отчёт `AUDIT_CLAIMS_SECTION_TESTS_REPORT_20261025.md`.
 - **Листовое тело: DXF развёртки, живая строка со сгибом (наряд `SHEET_METAL_DXF_EXPORT`, попытка 2,
   24.10.2026):** возврат техлида закрыт. Строка `SMB.40` теперь строит тело СО СГИБОМ (90°, R 2, полка 5,
   коэффициент 0,4, толщина 1,5) и отверстие D6 в широкой грани, сохраняет деталь и выгружает DXF. Строка

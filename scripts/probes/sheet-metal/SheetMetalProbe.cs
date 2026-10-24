@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -48,6 +48,7 @@ internal sealed class SheetMetalProbe : IDisposable
     private double _thickness = 1.5d;
     private double _radius = 2d;
     private int _facesBeforeCut;
+    private double _depthCutDepth;
 
     public SheetMetalProbe(string outPath) => _outPath = outPath;
 
@@ -1208,6 +1209,488 @@ internal sealed class SheetMetalProbe : IDisposable
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Cut probe (order SHEET_METAL_CUT_PROBE): a documented route that puts a cut sketch ON a face
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Runs the cut probe alone: one flat body, then the face-support routes and refusals.</summary>
+    /// <remarks>DOC: ksfacedefinition_getentity.html, kssketchdefinition_setplane.html, isketch_plane.html,
+    /// isheetmetalcut_profile.html, isheetmetalcuts_add.html, ksholecuttypeenum.html.
+    /// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    public int RunCut()
+    {
+        try
+        {
+            Launch();
+            Document();
+            Container();
+            Body();
+            CutProbe();
+        }
+        catch (ProbeStop)
+        {
+            // The reason is already recorded by the step that stopped the probe.
+        }
+        catch (Exception ex)
+        {
+            Record("probe", "проба доходит до конца", Describe(ex), Verdict.Fail);
+        }
+
+        Write();
+        return Failed ? 1 : 0;
+    }
+
+    /// <summary>Order items 1-5: face support, cut by geometry, Profile, reopen, refusals.</summary>
+    private void CutProbe()
+    {
+        var face = PlanarFace(0, "face");
+        var support = face is null ? null : FaceSupport(face, "face_entity");
+        if (face is null || support is null)
+        {
+            return;
+        }
+
+        var faces = FaceCount();
+        Record("cut_face_faces_before", "граней у тела до вырезов", Count(faces), Verdict.Info);
+        Record("cut_face_gabarit_before", "габарит до вырезов", Gabarit(), Verdict.Info);
+
+        // Item 2, through the sheet: ksHoleCutByWidth is the through mode, ksHoleCutByDepth the other.
+        var sketch5 = MakeFaceSketch(face, support, -15d, -15d, -5d, -5d, "cut_face");
+        var sketch7 = Transfer7<ISketch>(sketch5, "cut_face_to7", "эскиз на грани перенесён в API7");
+        var afterThrough = TryFaceCut("cut_face_through", sketch7, 0, 0d, false);
+        CheckBool("cut_face_through_faces_increased", true, afterThrough > faces);
+        faces = afterThrough;
+
+        // Item 2, by depth: the second mode the enum names.
+        var depth5 = MakeFaceSketch(face, support, 5d, 5d, 15d, 15d, "cut_depth");
+        var depth7 = Transfer7<ISketch>(depth5, "cut_depth_to7", "эскиз на грани для выреза на глубину перенесён");
+        var afterDepth = TryFaceCut("cut_face_depth", depth7, 1, 0.5d, false);
+        CheckBool("cut_face_depth_faces_increased", true, afterDepth > faces);
+        faces = afterDepth;
+
+        // Item 1, second documented path: ISketch.Plane takes an IModelObject, so the face itself.
+        var plane5 = MakeRectangleSketch(-5d, 5d, 5d, 15d, "cut_api7_sketch", "эскиз на XOY для опоры-грани создан");
+        var plane7 = Transfer7<ISketch>(plane5, "cut_api7_to7", "эскиз перенесён в API7");
+        var face7 = FaceModel(face, "cut_api7_face_to7");
+        if (face7 is not null)
+        {
+            TrySet("cut_api7_plane_set", () => plane7.Plane = face7);
+            CheckBool("cut_api7_plane_is_face", true, SameCom(SafeObject(() => plane7.Plane), face7));
+            var afterApi7 = TryFaceCut("cut_api7", plane7, 0, 0d, false);
+            CheckBool("cut_api7_faces_increased", true, afterApi7 > faces);
+            faces = afterApi7;
+        }
+
+        // Item 3: Profile names only IModelObject; the sketch is that type by its documented hierarchy.
+        var profile5 = MakeFaceSketch(face, support, -15d, 5d, -5d, 15d, "cut_profile");
+        var profile7 = Transfer7<ISketch>(profile5, "cut_profile_to7", "эскиз для Profile перенесён в API7");
+        var afterProfile = TryFaceCut("cut_profile", profile7, 0, 0d, true);
+        CheckBool("cut_profile_faces_increased", true, afterProfile > faces);
+        faces = afterProfile;
+
+        // Item 1 again, but with the support set before the contour exists: the late write above cannot
+        // move a contour that was already built, so only this order can judge the API7 property.
+        if (face7 is not null)
+        {
+            var early7 = MakeApi7FaceSketch(face7, -5d, -15d, 5d, -5d, "cut_api7_early");
+            if (early7 is not null)
+            {
+                var afterEarly = TryFaceCut("cut_api7_early", early7, 0, 0d, false);
+                CheckBool("cut_api7_early_faces_increased", true, afterEarly > faces);
+            }
+        }
+
+        ReopenCut();
+        CutRefusals(face, support);
+    }
+
+    /// <summary>A sketch whose support is set through ISketch.Plane before any geometry exists.</summary>
+    /// <remarks>MEASURED: setting Plane on a sketch that already carries a contour leaves that contour on its
+    /// old plane, so only this order judges the property. DOC: isketch_plane.html.
+    /// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private ISketch? MakeApi7FaceSketch(IModelObject face7, double x1, double y1, double x2, double y2, string prefix)
+    {
+        var part = Part5();
+        if (part.NewEntity(ObjSketch) is not ksEntity sketch
+            || sketch.GetDefinition() is not ksSketchDefinition definition)
+        {
+            Record(prefix, "эскиз без опоры создан", "NewEntity(o3d_sketch) → null", Verdict.Fail);
+            return null;
+        }
+
+        var sketch7 = Transfer7<ISketch>(sketch, prefix + "_to7", "эскиз перенесён в API7 до построения");
+        TrySet(prefix + "_plane_set", () => sketch7.Plane = face7);
+        CheckBool(prefix + "_plane_is_face", true, SameCom(SafeObject(() => sketch7.Plane), face7));
+
+        sketch.Create();
+        if (definition.BeginEdit() is not ksDocument2D editor)
+        {
+            Record(prefix, "эскиз на грани создан", "BeginEdit() → не ksDocument2D", Verdict.Fail);
+            return null;
+        }
+
+        editor.ksLineSeg(x1, y1, x2, y1, 1);
+        editor.ksLineSeg(x2, y1, x2, y2, 1);
+        editor.ksLineSeg(x2, y2, x1, y2, 1);
+        editor.ksLineSeg(x1, y2, x1, y1, 1);
+        definition.EndEdit();
+        Record(prefix, "эскиз на грани создан", "4 отрезка", Verdict.Pass);
+        CheckBool(prefix + "_plane_is_face_after_create", true, SameCom(SafeObject(() => sketch7.Plane), face7));
+        CheckBool(prefix + "_plane_is_not_xoy_after_create", false,
+            SameCom(SafeObject(() => sketch7.Plane), Part5().GetDefaultEntity(PlaneXoy)));
+        return sketch7;
+    }
+
+    /// <summary>The first planar face of a body, read the way the collection page documents it.</summary>
+    /// <remarks>DOC: ksfacecollection_getbyindex.html returns ksFaceDefinition; ksfacedefinition_isplanar.html.
+    /// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private ksFaceDefinition? PlanarFace(int bodyIndex, string id)
+    {
+        var part = Part5();
+        if (part.BodyCollection() is not ksBodyCollection bodies)
+        {
+            Record(id + "_source", "массив тел получен", "BodyCollection() → null", Verdict.Fail);
+            return null;
+        }
+
+        bodies.refresh();
+        if (bodies.GetCount() <= bodyIndex || bodies.GetByIndex(bodyIndex) is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            Record(id + "_source", "тело и массив граней получены", "тела или граней нет", Verdict.Fail);
+            return null;
+        }
+
+        for (var f = 0; f < faces.GetCount(); f++)
+        {
+            var element = faces.GetByIndex(f);
+            var face = element as ksFaceDefinition ?? (element as ksEntity)?.GetDefinition() as ksFaceDefinition;
+            if (face is null)
+            {
+                Record(id + "_source", "элемент массива приводится к ksFaceDefinition", RuntimeName(element),
+                    Verdict.Fail);
+                return null;
+            }
+
+            if (SafeBool(face.IsPlanar) == true)
+            {
+                Record(id + "_source", "плоская грань тела найдена", "тело " + bodyIndex + ", грань " + f,
+                    Verdict.Pass);
+                return face;
+            }
+        }
+
+        Record(id + "_source", "плоская грань тела найдена", "плоских граней нет", Verdict.Fail);
+        return null;
+    }
+
+    /// <summary>The face as a model entity — the documented conversion a sketch support needs.</summary>
+    /// <remarks>DOC: ksfacedefinition_getentity.html — "Получить указатель на интерфейс грани ksEntity
+    /// или IEntity". History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private ksEntity? FaceSupport(ksFaceDefinition face, string id)
+    {
+        object? entity;
+        try
+        {
+            entity = face.GetEntity();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(id, "GetEntity() отдаёт ksEntity", Describe(ex), Verdict.Fail);
+            return null;
+        }
+
+        if (entity as ksEntity is not { } support)
+        {
+            Record(id, "GetEntity() отдаёт ksEntity", RuntimeName(entity), Verdict.Fail);
+            return null;
+        }
+
+        Record(id, "GetEntity() отдаёт ksEntity", "ksEntity", Verdict.Pass);
+        return support;
+    }
+
+    /// <summary>The same face as an API7 object — the input ISketch.Plane and ISheetMetalCut.Profile take.</summary>
+    private IModelObject? FaceModel(ksFaceDefinition face, string id)
+    {
+        try
+        {
+            return _app5!.TransferInterface(face, Api7Dual, 0) as IModelObject;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(id, "грань перенесена в API7 (IModelObject)", Describe(ex), Verdict.Fail);
+            return null;
+        }
+    }
+
+    /// <summary>A contour sketch on a face, with the support read back and compared with XOY.</summary>
+    /// <remarks>INVARIANT: the read-back support must be the face entity and not the XOY plane, so a sketch
+    /// that silently fell back cannot pass. DOC: kssketchdefinition_setplane.html, ..._getplane.html.
+    /// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private ksEntity MakeFaceSketch(ksFaceDefinition face, ksEntity support, double x1, double y1, double x2,
+        double y2, string prefix)
+    {
+        var sketch = MakeRectangleSketch(x1, y1, x2, y2, prefix, "эскиз на грани создан", support);
+        var plane = (sketch.GetDefinition() as ksSketchDefinition)?.GetPlane();
+        CheckBool(prefix + "_plane_is_face", true, SameCom(plane, support));
+        CheckBool(prefix + "_plane_is_not_xoy", false, SameCom(plane, Part5().GetDefaultEntity(PlaneXoy)));
+        Record(prefix + "_face", "опора эскиза - грань", RuntimeName(face), Verdict.Info);
+        return sketch;
+    }
+
+    /// <summary>One cut attempt with a named sketch or profile; returns the face count after it.</summary>
+    /// <remarks>DOC: isheetmetalcuts_add.html, isheetmetalcut_body.html, ..._sketch.html, ..._profile.html,
+    /// ..._cuttype.html, ..._depth.html. History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private int TryFaceCut(string prefix, ISketch sketch7, int cutType, double depth, bool byProfile)
+    {
+        var cuts = _container!.SheetMetalCuts;
+        var countBefore = cuts.Count;
+        ISheetMetalCut? cut;
+        try
+        {
+            cut = cuts.Add() as ISheetMetalCut;
+        }
+        catch (COMException ex)
+        {
+            Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", Describe(ex), Verdict.Fail);
+            return FaceCount();
+        }
+
+        if (cut is null)
+        {
+            Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", "Add() → null", Verdict.Fail);
+            return FaceCount();
+        }
+
+        Record(prefix + "_add", "ISheetMetalCuts.Add() отдаёт ISheetMetalCut", "ISheetMetalCut", Verdict.Pass);
+        TrySet(prefix + "_body_set", () => cut.Body = (IKompasAPIObject)_body!);
+        if (byProfile)
+        {
+            TrySet(prefix + "_profile_set", () => cut.Profile = (IModelObject)sketch7);
+            Record(prefix + "_profile_read_back", "Profile читается назад",
+                RuntimeName(ReadValue(() => cut.Profile, prefix + "_profile_read")), Verdict.Info);
+        }
+        else
+        {
+            TrySet(prefix + "_sketch_set", () => cut.Sketch = (Sketch)sketch7);
+        }
+
+        TrySet(prefix + "_cuttype_set", () => cut.CutType = (ksHoleCutTypeEnum)cutType);
+        if (cutType == 1)
+        {
+            TrySet(prefix + "_depth_set", () => cut.Depth = depth);
+        }
+
+        CheckBool(prefix + "_update", true, SafeBool(() => cut.Update()));
+        CheckInt(prefix + "_count", countBefore + 1, cuts.Count);
+        CheckInt(prefix + "_cuttype_read_back", cutType, SafeInt(() => cut.CutType));
+        if (cutType == 1)
+        {
+            CheckDouble(prefix + "_depth_read_back", depth, SafeDouble(() => cut.Depth));
+        }
+
+        _cut = cut;
+        if (cutType == 1)
+        {
+            _depthCutDepth = depth;
+        }
+
+        var faces = FaceCount();
+        Record(prefix + "_faces_after", "граней у тела после выреза", Count(faces), Verdict.Info);
+        Record(prefix + "_gabarit_after", "габарит после выреза", Gabarit(), Verdict.Info);
+        return faces;
+    }
+
+    /// <summary>Item 4: the found cut survives save and open — count, type, depth, faces.</summary>
+    private void ReopenCut()
+    {
+        var cutsAtSave = _container!.SheetMetalCuts.Count;
+        var facesAtSave = FaceCount();
+        var file = Path.Combine(Path.GetTempPath(),
+            "sheet-metal-cut-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".m3d");
+
+        try
+        {
+            _doc7!.SaveAs(file);
+        }
+        catch (COMException ex)
+        {
+            Record("cut_save", "деталь сохранена", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (!File.Exists(file))
+        {
+            Record("cut_save", "деталь сохранена", "файла нет: " + file, Verdict.Fail);
+            return;
+        }
+
+        Record("cut_save", "деталь сохранена", file, Verdict.Pass);
+
+        IKompasDocument reopened;
+        try
+        {
+            reopened = _app7!.Documents.Open(file, false, true);
+        }
+        catch (COMException ex)
+        {
+            Record("cut_reopen", "сохранённый файл открывается", Describe(ex), Verdict.Fail);
+            return;
+        }
+
+        if (reopened as IKompasDocument3D is not { TopPart: { } part }
+            || part as ISheetMetalContainer is not { } container)
+        {
+            Record("cut_reopen", "сохранённый файл открывается как листовая деталь", RuntimeName(reopened),
+                Verdict.Fail);
+            return;
+        }
+
+        Record("cut_reopen", "сохранённый файл открывается как листовая деталь", "ISheetMetalContainer", Verdict.Pass);
+        CheckInt("cut_reopen_cuts_count", cutsAtSave, container.SheetMetalCuts.Count);
+        CheckInt("cut_reopen_faces", facesAtSave, FaceCountOn(_app5?.ActiveDocument3D() as ksDocument3D));
+
+        // The index base of the collection is not documented, so every index that answers is read and the
+        // depth cut is found by its own numbers instead of by a guessed position.
+        var depthCuts = 0;
+        for (var index = 0; index <= cutsAtSave; index++)
+        {
+            if (CutAtExact(container.SheetMetalCuts, index) is not { } item)
+            {
+                continue;
+            }
+
+            var type = SafeInt(() => item.CutType);
+            var depth = SafeDouble(() => item.Depth);
+            Record("cut_reopen_item_" + index, "вырез по индексу " + index,
+                "CutType " + (type?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано")
+                + ", Depth " + (depth is null ? "не прочитано" : Num(depth.Value)), Verdict.Info);
+            if (type == 1 && depth is { } read && Math.Abs(read - _depthCutDepth) <= 1e-6)
+            {
+                depthCuts++;
+            }
+        }
+
+        CheckInt("cut_reopen_depth_cut_found", 1, depthCuts);
+    }
+
+    /// <summary>Item 5: a sketch on another body's face and an empty sketch on a face, as the kernel answers.</summary>
+    private void CutRefusals(ksFaceDefinition face, ksEntity support)
+    {
+        if (SecondBody())
+        {
+            var foreignFace = PlanarFace(1, "refusal_foreign_face");
+            var foreignSupport = foreignFace is null ? null : FaceSupport(foreignFace, "refusal_foreign_face_entity");
+            if (foreignFace is not null && foreignSupport is not null)
+            {
+                var foreign5 = MakeFaceSketch(foreignFace, foreignSupport, 65d, -5d, 75d, 5d,
+                    "refusal_foreign_face_sketch");
+                var foreign7 = Transfer7<ISketch>(foreign5, "refusal_foreign_face_to7",
+                    "эскиз на грани второго тела перенесён в API7");
+                RefusalCut("refusal_foreign_face", foreign7);
+            }
+        }
+
+        var empty5 = MakeEmptySketch("refusal_empty_face_sketch", support);
+        if (empty5 is not null)
+        {
+            Record("refusal_empty_face_support", "опора пустого эскиза - грань",
+                SameCom((empty5.GetDefinition() as ksSketchDefinition)?.GetPlane(), support) ? "грань" : "не грань",
+                Verdict.Info);
+            var empty7 = Transfer7<ISketch>(empty5, "refusal_empty_face_to7", "пустой эскиз на грани перенесён в API7");
+            RefusalCut("refusal_empty_face", empty7);
+        }
+    }
+
+    /// <summary>One cut attempt whose answer is a fact, not a requirement.</summary>
+    /// <remarks>INVARIANT: a refusal is recorded as INFO with the kernel's own answer, and the record left
+    /// in the collection is part of that answer. History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private void RefusalCut(string prefix, ISketch sketch7)
+    {
+        var cuts = _container!.SheetMetalCuts;
+        var countBefore = cuts.Count;
+        var facesBefore = (FaceCountOf(0), FaceCountOf(1));
+        ISheetMetalCut? cut;
+        try
+        {
+            cut = cuts.Add() as ISheetMetalCut;
+        }
+        catch (COMException ex)
+        {
+            Record(prefix + "_add", "вырез создан", Describe(ex), Verdict.Info);
+            return;
+        }
+
+        if (cut is null)
+        {
+            Record(prefix + "_add", "вырез создан", "Add() → null", Verdict.Info);
+            return;
+        }
+
+        try
+        {
+            cut.Body = (IKompasAPIObject)_body!;
+            cut.Sketch = (Sketch)sketch7;
+            cut.CutType = ksHoleCutTypeEnum.ksHoleCutByWidth;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Record(prefix + "_fields", "поля выреза заданы", Describe(ex), Verdict.Info);
+        }
+
+        Record(prefix + "_update", "Update() выреза", Flag(SafeBool(() => cut.Update())), Verdict.Info);
+        Record(prefix + "_cuts_count", "счётчик вырезов: осталась ли запись",
+            Count(countBefore) + " -> " + Count(cuts.Count), Verdict.Info);
+        // MEASURED: the main-body count does not separate the two bodies, so each body is counted here.
+        Record(prefix + "_faces_body0", "граней первого тела до и после выреза",
+            Count(facesBefore.Item1) + " -> " + Count(FaceCountOf(0)), Verdict.Info);
+        Record(prefix + "_faces_body1", "граней второго тела до и после выреза",
+            Count(facesBefore.Item2) + " -> " + Count(FaceCountOf(1)), Verdict.Info);
+    }
+
+    /// <summary>A second sheet body, 20x20 at x 60..80 — the "another body" a refusal needs.</summary>
+    private bool SecondBody()
+    {
+        var sketch5 = MakeRectangleSketch(60d, -10d, 80d, 10d, "cut_body2_sketch", "эскиз второго тела 20x20 создан");
+        var sketch7 = Transfer7<ISketch>(sketch5, "cut_body2_to7", "эскиз второго тела перенесён в API7");
+        try
+        {
+            _body2 = _container!.SheetMetalBodies.Add() as ISheetMetalBody;
+        }
+        catch (COMException ex)
+        {
+            Record("cut_body2_add", "второе тело создано", Describe(ex), Verdict.Fail);
+            return false;
+        }
+
+        if (_body2 is null)
+        {
+            Record("cut_body2_add", "второе тело создано", "Add() → null", Verdict.Fail);
+            return false;
+        }
+
+        _body2.Sketch = (Sketch)sketch7;
+        _body2.Thickness = 1.5d;
+        _body2.Radius = 2d;
+        _body2.Direction = ksDirectionTypeEnum.dtNormal;
+        CheckBool("cut_body2_update", true, SafeBool(() => _body2.Update()));
+        return true;
+    }
+
+    /// <summary>The cut at one index, with an out-of-range answer read as "no cut here".</summary>
+    private static ISheetMetalCut? CutAtExact(ISheetMetalCuts cuts, int index)
+    {
+        try
+        {
+            return cuts.get_SheetMetalCut(index) as ISheetMetalCut;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // API5 side: the sketch and the body edge the documented route needs as inputs
     // ---------------------------------------------------------------------------------------------
 
@@ -1247,27 +1730,28 @@ internal sealed class SheetMetalProbe : IDisposable
     }
 
     /// <summary>A sketch with no geometry at all — the input a cut must refuse.</summary>
-    private ksEntity? MakeEmptySketch()
+    private ksEntity? MakeEmptySketch(string prefix = "refusal_empty_sketch", ksEntity? support = null)
     {
         var part = Part5();
-        if (part.GetDefaultEntity(PlaneXoy) is not ksEntity plane
+        support ??= part.GetDefaultEntity(PlaneXoy) as ksEntity;
+        if (support is null
             || part.NewEntity(ObjSketch) is not ksEntity sketch
             || sketch.GetDefinition() is not ksSketchDefinition definition)
         {
-            Record("refusal_empty_sketch", "пустой эскиз создан", "NewEntity/GetDefaultEntity → null", Verdict.Info);
+            Record(prefix, "пустой эскиз создан", "NewEntity/GetDefaultEntity → null", Verdict.Info);
             return null;
         }
 
-        definition.SetPlane(plane);
+        definition.SetPlane(support);
         sketch.Create();
         if (definition.BeginEdit() is not ksDocument2D editor)
         {
-            Record("refusal_empty_sketch", "пустой эскиз создан", "BeginEdit() → не ksDocument2D", Verdict.Info);
+            Record(prefix, "пустой эскиз создан", "BeginEdit() → не ksDocument2D", Verdict.Info);
             return null;
         }
 
         definition.EndEdit();
-        Record("refusal_empty_sketch", "пустой эскиз создан", "ни одного отрезка", Verdict.Info);
+        Record(prefix, "пустой эскиз создан", "ни одного отрезка", Verdict.Info);
         return sketch;
     }
 
@@ -1507,11 +1991,30 @@ internal sealed class SheetMetalProbe : IDisposable
     }
 
     /// <summary>The main body's face count — the "did the geometry change" criterion for a cut.</summary>
-    private int FaceCount()
+    private int FaceCount() => FaceCountOn(_doc5);
+
+    /// <summary>The face count of one body of the document, by index in the body collection.</summary>
+    private int FaceCountOf(int bodyIndex)
     {
         try
         {
-            return Part5().GetMainBody() is ksBody body && body.FaceCollection() is ksFaceCollection faces
+            return Part5().BodyCollection() is ksBodyCollection bodies && bodies.GetCount() > bodyIndex
+                && bodies.GetByIndex(bodyIndex) is ksBody body && body.FaceCollection() is ksFaceCollection faces
+                ? faces.GetCount()
+                : -1;
+        }
+        catch (COMException)
+        {
+            return -1;
+        }
+    }
+
+    private static int FaceCountOn(ksDocument3D? document)
+    {
+        try
+        {
+            return document?.GetPart(-1) is ksPart part && part.GetMainBody() is ksBody body
+                && body.FaceCollection() is ksFaceCollection faces
                 ? faces.GetCount()
                 : -1;
         }

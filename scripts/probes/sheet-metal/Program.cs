@@ -24,6 +24,11 @@ internal static class Program
             return probe.RunInspect(args[args.Length - 1]);
         }
 
+        if (args.Contains("--cut"))
+        {
+            return probe.RunCut();
+        }
+
         return args.Contains("--persist") ? probe.RunPersist() : probe.Run();
     }
 

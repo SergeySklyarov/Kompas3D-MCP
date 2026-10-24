@@ -29,6 +29,11 @@ internal static class Program
             return probe.RunCut();
         }
 
+        if (args.Contains("--body-map"))
+        {
+            return probe.RunBodyMap();
+        }
+
         return args.Contains("--persist") ? probe.RunPersist() : probe.Run();
     }
 

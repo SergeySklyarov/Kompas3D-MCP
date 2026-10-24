@@ -1209,6 +1209,158 @@ internal sealed class SheetMetalProbe : IDisposable
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Body map (order SHEET_METAL_UNFOLD, debt row 67): which solid body of the part IS the sheet body
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Runs the body-map probe alone: one flat body, then every documented identity that could
+    /// tie it to an element of <c>ksPart.BodyCollection()</c>.</summary>
+    /// <remarks>DOC: ksbody_getgabarit.html, ksbody_getfeature.html, imodelobject_props.html,
+    /// ksbodycollection_getbyindex.html. History: docs/decisions/sheet-metal.md#body-extent</remarks>
+    public int RunBodyMap()
+    {
+        try
+        {
+            Launch();
+            Document();
+            Container();
+            Body();
+            BodyMap();
+        }
+        catch (ProbeStop)
+        {
+            // The reason is already recorded by the step that stopped the probe.
+        }
+        catch (Exception ex)
+        {
+            Record("probe", "проба доходит до конца", Describe(ex), Verdict.Fail);
+        }
+
+        Write();
+        return Failed ? 1 : 0;
+    }
+
+    /// <summary>Every identity the product can compare, on a part with exactly one sheet-metal body.</summary>
+    private void BodyMap()
+    {
+        var part = Part5();
+        if (part.BodyCollection() is not ksBodyCollection collection)
+        {
+            Record("map_collection", "ksPart.BodyCollection() → ksBodyCollection", "null", Verdict.Fail);
+            return;
+        }
+
+        collection.refresh();
+        var count = collection.GetCount();
+        Record("map_body_count", "тел в детали после одного листового тела", Count(count), Verdict.Info);
+
+        var sheet = _body!;
+        var owner = SafeObject(() => sheet.Owner);
+        Record("map_sheet_type", "тип ISheetMetalBody", RuntimeName(sheet), Verdict.Info);
+        Record("map_sheet_owner_type", "тип ISheetMetalBody.Owner", RuntimeName(owner), Verdict.Info);
+        Record("map_sheet_owner_name", "имя объекта дерева, породившего тело",
+            NameOf(owner), Verdict.Info);
+
+        for (var i = 0; i < count; i++)
+        {
+            var element = collection.GetByIndex(i);
+            var body = element as ksBody;
+            var feature = body is null ? null : SafeObject(() => body.GetFeature());
+            Record($"map_body_{i}_types", "типы элемента коллекции и его GetFeature",
+                RuntimeName(element) + " / " + RuntimeName(feature), Verdict.Info);
+            Record($"map_body_{i}_feature_name", "имя объекта дерева, связанного с телом",
+                NameOf(feature), Verdict.Info);
+            Record($"map_body_{i}_pointer_is_sheet", "элемент коллекции И ЕСТЬ ISheetMetalBody",
+                Flag(SameCom(element, sheet)), Verdict.Info);
+            Record($"map_body_{i}_feature_is_owner", "GetFeature тела равен ISheetMetalBody.Owner",
+                Flag(SameCom(feature, owner)), Verdict.Info);
+            Record($"map_body_{i}_gabarit", "габарит тела через ksBody.GetGabarit",
+                body is null ? "не ksBody" : BodyGabarit(body), Verdict.Info);
+            var asSheet = As5<ISheetMetalBody>(element);
+            Record($"map_body_{i}_as_sheet", "элемент коллекции приводится к ISheetMetalBody",
+                RuntimeName(asSheet), Verdict.Info);
+            Record($"map_body_{i}_as_sheet_is_sheet", "этот ISheetMetalBody И ЕСТЬ запрошенное тело",
+                Flag(SameCom(asSheet, sheet)), Verdict.Info);
+            var model = As5<IModelObject>(element);
+            Record($"map_body_{i}_model_name", "IModelObject.Name элемента коллекции",
+                model is null ? "не IModelObject" : (SafeObject(() => model.Name) as string ?? "(имени нет)"),
+                Verdict.Info);
+        }
+
+        // The other direction: the sheet-metal body asked for the body interface itself.
+        Record("map_sheet_as_body", "ISheetMetalBody приводится к ksBody",
+            RuntimeName(As5<ksBody>(sheet)), Verdict.Info);
+
+        // The documented tree route: a tree interface gives the bodies it produced (ibody7.txt, note 1).
+        var feature7 = As5<IFeature7>(sheet);
+        Record("map_sheet_as_feature", "ISheetMetalBody приводится к IFeature7", RuntimeName(feature7), Verdict.Info);
+        if (feature7 is null)
+        {
+            return;
+        }
+
+        var results = SafeObject(() => feature7.ResultBodies);
+        Record("map_result_bodies_type", "что вернул IFeature7.ResultBodies", RuntimeName(results), Verdict.Info);
+        var produced = results is Array array ? array.Cast<object>().ToList() : new List<object>();
+        Record("map_result_bodies_count", "сколько тел породил объект дерева", Count(produced.Count), Verdict.Info);
+        foreach (var one in produced)
+        {
+            Record("map_result_body_type", "тип тела из ResultBodies", RuntimeName(one), Verdict.Info);
+            Record("map_result_body_name", "имя тела из ResultBodies",
+                NameOf(one), Verdict.Info);
+            for (var i = 0; i < count; i++)
+            {
+                Record($"map_result_body_is_collection_{i}", "тело из ResultBodies И ЕСТЬ элемент коллекции",
+                    Flag(SameCom(one, collection.GetByIndex(i))), Verdict.Info);
+            }
+
+            if (As5<ksBody>(one) is { } solid)
+            {
+                Record("map_result_body_gabarit", "габарит тела из ResultBodies", BodyGabarit(solid), Verdict.Info);
+            }
+        }
+    }
+
+    /// <summary>Name of a tree object, when it states one — the other documented identity.</summary>
+    private static string NameOf(object? value)
+    {
+        if (value is null)
+        {
+            return "null";
+        }
+
+        var name = value is IModelObject model
+            ? SafeObject(() => model.Name) as string
+            : value is ksEntity entity ? entity.name : null;
+        return name ?? "(имени нет)";
+    }
+
+    private static string BodyGabarit(ksBody body)
+    {
+        try
+        {
+            return body.GetGabarit(out var x1, out var y1, out var z1, out var x2, out var y2, out var z2)
+                ? $"({Num(x1)}, {Num(y1)}, {Num(z1)})-({Num(x2)}, {Num(y2)}, {Num(z2)}) Z={Num(z2 - z1)}"
+                : "GetGabarit ответил FALSE";
+        }
+        catch (Exception ex) when (ex is COMException)
+        {
+            return Describe(ex);
+        }
+    }
+
+    private static T? As5<T>(object? value) where T : class
+    {
+        try
+        {
+            return value as T;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Cut probe (order SHEET_METAL_CUT_PROBE): a documented route that puts a cut sketch ON a face
     // ---------------------------------------------------------------------------------------------
 

@@ -33,8 +33,8 @@
   названо в `unverified_aspects`, потому что у `ksDocument2D` своего закрытия нет. **Проверки:** тесты
   Release 1563/1563, группа `--sheet-metal-only` на `af16b8f` PASS 67 / FAIL 0 (строки `SMB.40`-`SMB.43`),
   стражи `long-comment-blocks` 0/0/0, `lint-dashes` 0, `check-evidence-links` 0, схемы 114, листинг 118
-  строк, матрица 148 / 229 «целостность: OK». Зачётный `--all` запущен прибором на `af16b8f`, итог - в
-  отчёте. Решение - `docs/decisions/sheet-metal.md#flat-dxf-tool`, отчёт
+  строк, матрица 148 / 229 «целостность: OK». Зачётный `--all` на `af16b8f` (дерево чистое):
+  PASS 1872 / NAMED 6 / UNKNOWN 3, FAIL 0. Решение - `docs/decisions/sheet-metal.md#flat-dxf-tool`, отчёт
   `SHEET_METAL_DXF_EXPORT_REPORT_20261024.md`. `LIMIT:` вид строится по сохранённому файлу, поэтому
   правка детали требует сохранения; отверстия попадают в контур только если вид их проецирует.
 - **Листовое тело: проба DXF (наряд `SHEET_METAL_DXF`, попытки 1-3, 24.10.2026):** маршрут «проекция-

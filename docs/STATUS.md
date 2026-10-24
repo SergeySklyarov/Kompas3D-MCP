@@ -25,8 +25,8 @@
   с согнутым телом не совпал, окружность R3 с центром на 25 мм от дальней стороны по каждой оси, уровень
   `geometry_checked`. **Проверки:** группа `--sheet-metal-only` на Release `05dd54f` PASS 67 / FAIL 0,
   `--self-test` 82/0, тесты Release 1563/1563, стражи `long-comment-blocks` 0/0/0, `lint-dashes` 0,
-  `check-evidence-links` 0. Зачётный `--all` на `05dd54f` запущен 24.10 в 23:41 при чистом дереве, итог
-  читается следующим запуском. Решение - `docs/decisions/sheet-metal.md#flat-dxf-tool`, отчёт
+  `check-evidence-links` 0. Зачётный `--all` на `05dd54f` (дерево чистое): PASS 1872 / NAMED 6 /
+  UNKNOWN 3, FAIL 0, 34 минуты. Решение - `docs/decisions/sheet-metal.md#flat-dxf-tool`, отчёт
   `SHEET_METAL_DXF_EXPORT_REPORT_20261024.md` (раздел «Попытка 2»).
 - **Листовое тело: DXF развёртки, инструмент (наряд `SHEET_METAL_DXF_EXPORT`, попытка 1, 24.10.2026):**
   профиль `sheet-metal-minimal-v1` - режим `SMB-09`; реестр 114 инструментов. Новый инструмент

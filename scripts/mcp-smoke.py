@@ -8340,6 +8340,30 @@ def mech_mates_checks(client, rep, app_id, workdir):
             f"код={code_c} сообщение={emsg(env_c)} сопряжений {nc0} → {nc1}")
 
 
+def dxf_entities(path):
+    """DXF entities as group-code pairs: [{"type", "values"}], one entry per entity.
+
+    DOC: DXF is text where every value follows its group code and an entity starts with code 0 and
+    its type. Coordinates are read as they are, so no CAD library is needed for two dozen lines.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        lines = fh.read().splitlines()
+    entities, current = [], None
+    for i in range(len(lines) - 1):
+        if not lines[i].strip().lstrip("-").isdigit():
+            continue
+        code, value = int(lines[i].strip()), lines[i + 1].strip()
+        if code == 0:
+            if current is not None:
+                entities.append(current)
+            current = {"type": value, "values": []}
+        elif current is not None:
+            current["values"].append((code, value))
+    if current is not None:
+        entities.append(current)
+    return entities
+
+
 def section_checks(client, rep, app_id, workdir):
     """DRW-07.* — разрезы модели на чертеже (наряд SECTION_VIEWS, семейство DRW-07.section_view).
 
@@ -8371,29 +8395,6 @@ def section_checks(client, rep, app_id, workdir):
 
     def ref_id(value):
         return value.get("id") if isinstance(value, dict) else value
-
-    def dxf_entities(path):
-        """Сущности выгрузки DXF парами «код группы / значение»: [{"type", "values"}].
-
-        DOC: DXF - текстовый формат, где перед каждым значением идёт его код группы, а сущность
-        начинается кодом 0 с её типом. Разбор нужен, чтобы координаты читались как есть.
-        """
-        with open(path, "r", encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
-        entities, current = [], None
-        for i in range(len(lines) - 1):
-            if not lines[i].strip().lstrip("-").isdigit():
-                continue
-            code, value = int(lines[i].strip()), lines[i + 1].strip()
-            if code == 0:
-                if current is not None:
-                    entities.append(current)
-                current = {"type": value, "values": []}
-            elif current is not None:
-                current["values"].append((code, value))
-        if current is not None:
-            entities.append(current)
-        return entities
 
     # Типы геометрии DXF, которых разбор ниже не знает. Их присутствие делает «все объекты выгрузки»
     # неправдой, поэтому число таких объектов называется в строке приёмки, а не замалчивается.
@@ -51386,9 +51387,19 @@ def sheet_metal_checks(client, rep, app_id, workdir):
 
     # ========= SMB.40-SMB.43: развёртка листовой детали в DXF (SHEET_METAL_DXF_EXPORT) =========
     # Проверяется СРАВНЕНИЕ, а не файл: AddStandartViews имя проекции игнорирует (измерено), поэтому
-    # габарит контура в DXF сверяется с независимо прочитанным габаритом развёрнутого тела.
+    # габарит контура в DXF сверяется с габаритом развёртки, прочитанным из ТЕЛА. Независимое значение
+    # берётся из построения: заготовка 40x40, сгиб и отверстие её не меняют, поэтому развёртка обязана
+    # быть 40x40, а согнутое тело - меньше по одной стороне. Совпадение с согнутым = подмена вида.
     def flat_dxf_rows():
+        import math
         import os
+
+        blank_mm, hole_diameter_mm, hole_offset_mm = 40.0, 6.0, 5.0
+        thickness_mm, radius_mm, coefficient, flange_mm = 1.5, 2.0, 0.4, 5.0
+        # Развёртка по ПАРАМЕТРАМ ПОСТРОЕНИЯ: заготовка + полка + (угловая длина - съеденный радиус).
+        # Величина не читается ни из DXF, ни из ответа инструмента - с ней сверяются обе.
+        allowance_mm = math.pi / 2.0 * (radius_mm + coefficient * thickness_mm)
+        flat_expected_mm = blank_mm + flange_mm + (allowance_mm - (radius_mm + thickness_mm))
 
         def flat_part(name, with_sheet_metal):
             env0, _code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
@@ -51420,17 +51431,53 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             body0 = (result(env2).get("body_ref") or {}).get("id")
             return doc0, body0, sketch0
 
-        def wide_face(doc0, body0):
-            # Топология читается по ТВЁРДОМУ телу: ссылка листового тела адресует другой объект COM.
+        def solid_of(doc0, body0):
+            # Топология и габарит читаются по ТВЁРДОМУ телу: ссылка листового тела адресует другой
+            # объект COM, и по ней не находится ни граней, ни габарита.
             _e, listed, _r = client.tool("kompas_list_bodies", {"document_id": doc0})
             rows = result(listed)
-            solid = rows[0].get("body_ref") if isinstance(rows, list) and rows else body0
+            return rows[0].get("body_ref") if isinstance(rows, list) and rows else body0
+
+        def wide_face(doc0, body0):
             _e, topo, _r = client.tool("kompas_read_topology",
-                                       {"document_id": doc0, "body_ref": solid, "include": "faces"})
+                                       {"document_id": doc0, "body_ref": solid_of(doc0, body0),
+                                        "include": "faces"})
             faces = sorted((face for face in ((result(topo) or {}).get("faces") or [])
                             if face.get("surface_type") == "plane"),
                            key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
             return faces[0].get("face_ref") if faces else None
+
+        def longest_edge(doc0, body0):
+            _e, topo, _r = client.tool("kompas_read_topology",
+                                       {"document_id": doc0, "body_ref": solid_of(doc0, body0),
+                                        "include": "edges"})
+            edges = sorted((edge for edge in ((result(topo) or {}).get("edges") or [])
+                            if edge.get("curve_type") == "line"),
+                           key=lambda edge: edge.get("length_mm") or 0.0, reverse=True)
+            return edges[0].get("edge_ref") if edges else None
+
+        def body_extent(doc0, body0):
+            """Габарит тела в плоскости листа (X/Y) - величина, против которой судится контур DXF."""
+            _e, env, _r = client.tool("kompas_measure", {
+                "target_ref": solid_of(doc0, body0), "properties": ["bbox"]})
+            box = result(env).get("bbox") or {}
+            low, high = box.get("min_mm") or [], box.get("max_mm") or []
+            if len(low) < 2 or len(high) < 2:
+                return None
+            return (high[0] - low[0], high[1] - low[1])
+
+        def circles_of(path):
+            """Окружности выгрузки как (x, y, r): DOC: коды 10/20 - центр, 40 - радиус."""
+            found = []
+            for entity in dxf_entities(path):
+                if entity["type"] != "CIRCLE":
+                    continue
+                values = dict(entity["values"])
+                try:
+                    found.append((float(values[10]), float(values[20]), float(values[40])))
+                except (KeyError, ValueError):
+                    continue
+            return found
 
         doc0, body0, _sketch0 = flat_part("SMB-flat-dxf", with_sheet_metal=True)
         if not doc0 or not body0:
@@ -51438,16 +51485,26 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                     "FAIL", "деталь или тело не созданы: doc=" + str(doc0) + " body=" + str(body0))
             return
 
-        face0 = wide_face(doc0, body0)
-        if face0:
-            call("kompas_create_sheet_metal_hole", {
-                "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
-                "base_face_ref": face0, "x_mm": 5.0, "y_mm": 5.0, "diameter_mm": 6.0,
-                "cut_type": "by_depth", "depth_mm": 2.0})
-        # Развёртка обязательна: независимый габарит читается только у развёрнутого тела.
-        call("kompas_set_sheet_metal_unfold", {
+        # Сгиб идёт ПЕРВЫМ: отверстие, построенное до сгиба, ломает сгиб (измерено в пробе).
+        env_bend, code_bend = call("kompas_create_sheet_metal_bend", {
             "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
-            "unfold": True, "fixed_face_ref": face0})
+            "edge_ref": longest_edge(doc0, body0), "angle_deg": 90.0, "direction": True,
+            "internal_radius": True, "radius_mm": 2.0, "length_type": "contour", "length_mm": 5.0})
+        bends_after = result(env_bend).get("bends_after")
+        face0 = wide_face(doc0, body0)
+        env_hole, code_hole = call("kompas_create_sheet_metal_hole", {
+            "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
+            "base_face_ref": face0, "x_mm": hole_offset_mm, "y_mm": hole_offset_mm,
+            "diameter_mm": hole_diameter_mm, "cut_type": "by_depth", "depth_mm": 2.0})
+        holes_after = result(env_hole).get("holes_after")
+
+        bent_box = body_extent(doc0, body0)
+        # Развёртка задаётся ПАРАМЕТРАМИ тела, и независимый габарит развёртки читается только у
+        # развёрнутого тела - поэтому Unfold = true идёт до сохранения.
+        env_unfold, code_unfold = call("kompas_set_sheet_metal_unfold", {
+            "document_id": doc0, "expected_revision": current_rev(doc0), "body_ref": body0,
+            "unfold": True, "fixed_face_ref": wide_face(doc0, body0)})
+        flat_box = body_extent(doc0, body0)
         saved = call("kompas_save_document", {"document_id": doc0,
                                                 "expected_revision": current_rev(doc0),
                                                 "target_path": os.path.join(workdir, "smb-flat-dxf.m3d")})[1]
@@ -51465,26 +51522,54 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                    for row in ((exported.get("verification") or {}).get("checks") or [])}
         unverified3 = (exported.get("verification") or {}).get("unverified_aspects") or []
         flat_w, flat_h = exported.get("flat_width_mm"), exported.get("flat_height_mm")
+        width, height = contour.get("width_mm"), contour.get("height_mm")
+        low_x = contour.get("min_x_mm") or 0.0
+        low_y = contour.get("min_y_mm") or 0.0
+        circles = circles_of(target) if os.path.exists(target) else []
+        hole_r = hole_diameter_mm / 2.0
+        hole = next((circle for circle in circles if near(circle[2], hole_r, 0.01)), None)
+        # Отверстие стоит в (5,5) системы модели, а заготовка занимает -20..20: в контуре развёртки
+        # центр отстоит на 25 мм от ДАЛЬНЕЙ стороны по каждой оси. Мера не зависит от того, к какой
+        # стороне пристроен сгиб и как повёрнут вид, - поэтому берётся больший из двух зазоров.
+        hole_gaps = ((max(hole[0] - low_x, low_x + (width or 0.0) - hole[0]),
+                      max(hole[1] - low_y, low_y + (height or 0.0) - hole[1])) if hole else (None, None))
+        hole_ok = (hole is not None
+                   and near(hole_gaps[0], blank_mm / 2 + hole_offset_mm, 0.01)
+                   and near(hole_gaps[1], blank_mm / 2 + hole_offset_mm, 0.01))
+        flat_ok = (flat_box is not None and near(width, flat_box[0], 0.01)
+                   and near(height, flat_box[1], 0.01))
+        # Независимость от инструмента: и тело, и контур сверяются с расчётом по параметрам построения.
+        formula_ok = (flat_box is not None and near(flat_box[0], flat_expected_mm, 0.01)
+                      and near(flat_box[1], blank_mm, 0.01))
+        # Подмена вида ловится здесь: контур согнутого тела меньше развёртки по стороне сгиба.
+        bent_differs = (bent_box is not None and width is not None and height is not None
+                        and not (near(width, bent_box[0], 0.01) and near(height, bent_box[1], 0.01)))
+        unfold_changed = (bent_box is not None and flat_box is not None
+                          and not (near(flat_box[0], bent_box[0], 0.01)
+                                   and near(flat_box[1], bent_box[1], 0.01)))
         ok_export = (not code3 and os.path.exists(target) and (exported.get("byte_length") or 0) > 0
-                     and flat_w is not None and flat_h is not None
-                     and near(contour.get("width_mm"), flat_w, 0.01)
-                     and near(contour.get("height_mm"), flat_h, 0.01)
-                     and (contour.get("circle_count") or 0) >= 1
+                     and flat_ok and formula_ok and bent_differs and unfold_changed and hole_ok
                      and exported.get("body_unfolded") is True
                      and checks3.get("contour_matches_flat") is True
                      and checks3.get("view_is_not_front_view") is True
                      and exported.get("reached_level") == "geometry_checked")
         rep.add("SMB.40.flat_dxf_export",
-                "развёртка листовой детали выгружена в DXF: файл непустой, габарит контура из файла "
-                "совпал с независимо прочитанным габаритом развёрнутого тела (допуск 0,01 мм), "
-                "окружность отверстия в файле есть, уровень проверки geometry_checked",
+                "развёртка листовой детали СО СГИБОМ И ОТВЕРСТИЕМ выгружена в DXF: файл непустой, "
+                "габарит контура из файла совпал с развёрткой тела и с расчётом развёртки по "
+                "параметрам построения (допуск 0,01 мм) и НЕ совпал с габаритом согнутого тела, "
+                "окружность R3 с центром в допуске, уровень проверки geometry_checked",
                 "PASS" if ok_export else "FAIL",
                 "code=" + str(code3) + " файл=" + str(os.path.exists(target)) + " байт="
-                + str(exported.get("byte_length")) + " контур=" + str(contour.get("width_mm")) + "x"
-                + str(contour.get("height_mm")) + " развёртка=" + str(flat_w) + "x" + str(flat_h)
-                + " окружностей=" + str(contour.get("circle_count")) + " линий="
-                + str(contour.get("line_count")) + " дуг=" + str(contour.get("arc_count"))
-                + " уровень=" + str(exported.get("reached_level")) + " проверки=" + str(checks3)
+                + str(exported.get("byte_length")) + " контур=" + str(width) + "x" + str(height)
+                + " развёртка=" + str(flat_w) + "x" + str(flat_h) + " расчёт="
+                + str(round(flat_expected_mm, 4)) + "x" + str(blank_mm) + " тело_развёрнуто="
+                + str(flat_box) + " тело_согнуто=" + str(bent_box) + " окружностей="
+                + str(contour.get("circle_count")) + " круги=" + str(circles) + " дальние_зазоры="
+                + str(hole_gaps) + " линий=" + str(contour.get("line_count")) + " дуг="
+                + str(contour.get("arc_count")) + " сгибов=" + str(bends_after) + " отверстий="
+                + str(holes_after) + " сгиб=" + str(code_bend) + " отверстие=" + str(code_hole)
+                + " развёртка_код=" + str(code_unfold) + " уровень="
+                + str(exported.get("reached_level")) + " проверки=" + str(checks3)
                 + " непроверено=" + str(unverified3) + " " + str(emsg(env3) or ""))
 
         _e, after_docs, _r = client.tool("kompas_list_documents", {})

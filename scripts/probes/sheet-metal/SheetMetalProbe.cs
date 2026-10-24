@@ -56,6 +56,7 @@ internal sealed class SheetMetalProbe : IDisposable
     private int? _viewNumber;
     private double[]? _viewGabarit;
     private double[]? _flatExtents;
+    private object? _dxfBendEdge;
 
     public SheetMetalProbe(string outPath) => _outPath = outPath;
 
@@ -443,7 +444,7 @@ internal sealed class SheetMetalProbe : IDisposable
 
     private void Bend()
     {
-        var edge = FirstEdge();
+        var edge = _dxfBendEdge ?? FirstEdge();
         var edge7 = Transfer7<IModelObject>(edge, "edge_to7", "ребро тела перенесено в API7 (IModelObject)");
 
         var bends = _container!.SheetMetalBends;
@@ -2251,6 +2252,10 @@ internal sealed class SheetMetalProbe : IDisposable
             Document();
             Container();
             Body();
+            // The bend edge is taken from the body as it is built: a hole in the sheet splits the face
+            // whose first edge the bend is built on, and a bend on the hole's own circular edge is
+            // accepted and bends nothing.
+            _dxfBendEdge = FirstEdge();
             DxfHole();
             Bend();
             Unfold();
@@ -2311,12 +2316,12 @@ internal sealed class SheetMetalProbe : IDisposable
         TrySet("dxf_hole_y_set", () => hole.Y = 5d);
         TrySet("dxf_hole_diameter_set", () => hole.Diameter = 2d * HoleRadius);
         TrySet("dxf_hole_cuttype_set", () => hole.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth);
-        TrySet("dxf_hole_depth_set", () => hole.Depth = _thickness);
+        TrySet("dxf_hole_depth_set", () => hole.Depth = 2d);
         var facesBefore = FaceCount();
         CheckBool("dxf_hole_update", true, SafeBool(() => hole.Update()));
         CheckInt("dxf_hole_count", before + 1, holes.Count);
         CheckDouble("dxf_hole_diameter_read_back", 2d * HoleRadius, SafeDouble(() => hole.Diameter));
-        CheckDouble("dxf_hole_depth_read_back", _thickness, SafeDouble(() => hole.Depth));
+        CheckDouble("dxf_hole_depth_read_back", 2d, SafeDouble(() => hole.Depth));
         // The face count is what says the kernel actually cut: an accepted Update() on its own did not.
         Record("dxf_hole_faces", "граней у тела после отверстия на глубину",
             Count(facesBefore) + " → " + Count(FaceCount()), Verdict.Info);
@@ -2487,6 +2492,9 @@ internal sealed class SheetMetalProbe : IDisposable
 
         _flatExtents = BodyExtents();
         Record("dxf_flat_gabarit", "габарит развёрнутого тела", Gabarit(), Verdict.Info);
+        // A hole that is in the model but not in the view is a different fact from a hole the unfold
+        // dropped, and the face count of the body the view is built from is what tells them apart.
+        Record("dxf_flat_faces", "граней у развёрнутого тела", Count(FaceCount()), Verdict.Info);
 
         IKompasDocument2D? drawing;
         try
@@ -2549,8 +2557,9 @@ internal sealed class SheetMetalProbe : IDisposable
         }
 
         _viewGabarit = ViewGabarit(_viewNumber);
-        Record("dxf_view_gabarit", "габарит вида при Unfold = true", Rect(_viewGabarit), Verdict.Info);
-        CheckBool("dxf_view_gabarit_matches_flat", true, SameSize(_viewGabarit, _flatExtents));
+        // The frame on the sheet is not the geometry: it carries the bend-line ends as well, so the view
+        // is judged by the entities inside it (DxfExport), and the frame is only recorded here.
+        Record("dxf_view_gabarit", "рамка вида при Unfold = true", Rect(_viewGabarit), Verdict.Info);
 
         // The same part in a standard orientation: it reads the same file, so an equal box here would
         // say the unfold flag changed nothing about the view.
@@ -2571,14 +2580,17 @@ internal sealed class SheetMetalProbe : IDisposable
         }
     }
 
-    /// <summary>The view's own unfold flag, the documented property that shows a sheet part flat.</summary>
+    /// <summary>The view's own projection name and unfold flag: the documented properties that make it flat.</summary>
     /// <remarks>DOC: iassociationview.html (the interface comes from the IViews collection or from IView by
-    /// QueryInterface), iassociationview_unfold.html («Unfold - Листовая деталь в разогнутом виде», BOOL),
-    /// ..._bendlinesvisible.html; ksdokument2d_ksrebuilddocument.html («Позволяет перестроить все
-    /// ассоциативные виды чертежа»).
+    /// QueryInterface), iassociationview_projectionname.html («имя проекции из списка проекций в
+    /// документе-источнике»), iassociationview_unfold.html («Unfold - Листовая деталь в разогнутом виде»,
+    /// BOOL), ..._bendlinesvisible.html; idrawingobject_update.html («Update необходимо вызвать для
+    /// объекта, свойства которого были изменены, чтобы эти изменения вступили в силу»);
+    /// ksdokument2d_ksrebuilddocument.html («Позволяет перестроить все ассоциативные виды чертежа»).
+    /// MEASURED: AddStandartViews accepts any projection name and builds a view named «#Спереди», so the
+    /// name is set on the view itself, where the page says it belongs.
     /// LIMIT: IAssociationView.Rebuild is documented (iassociationview_rebuild.html) but the v24 interop
-    /// does not declare it, so the view is rebuilt by the documented document-level call.
-    /// INVARIANT: the flag is read back before its geometry is judged — an accepted setter says nothing.
+    /// does not declare it, so the documented Update of the object is what applies the properties.
     /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
     private bool UnfoldView(IViews views, int number)
     {
@@ -2591,14 +2603,25 @@ internal sealed class SheetMetalProbe : IDisposable
             return false;
         }
 
-        Record("dxf_view_projection_name", "ProjectionName вида",
+        Record("dxf_view_projection_name_before", "ProjectionName вида до установки",
             SafeString(() => association.ProjectionName) ?? "не прочитано", Verdict.Info);
+        TrySet("dxf_view_projection_name_set", () => association.ProjectionName = _projectionName);
+        var readName = SafeString(() => association.ProjectionName);
+        Record("dxf_view_projection_name", "ProjectionName вида после установки «" + _projectionName + "»",
+            readName ?? "не прочитано", readName == _projectionName ? Verdict.Pass : Verdict.Fail);
+        CheckBool("dxf_view_update_after_projection", true, SafeBool(() => association.Update()));
+        Record("dxf_view_gabarit_after_projection", "габарит вида с проекцией «" + _projectionName + "»",
+            Rect(ViewGabarit(number)), Verdict.Info);
+
         Record("dxf_view_unfold_before", "Unfold вида до установки",
             Flag(SafeBool(() => association.Unfold)), Verdict.Info);
         TrySet("dxf_view_unfold_set", () => association.Unfold = true);
         CheckBool("dxf_view_unfold_read_back", true, SafeBool(() => association.Unfold));
         Record("dxf_view_bendlines_visible", "BendLinesVisible вида",
             Flag(SafeBool(() => association.BendLinesVisible)), Verdict.Info);
+        CheckBool("dxf_view_update_after_unfold", true, SafeBool(() => association.Update()));
+        Record("dxf_view_gabarit_after_unfold", "габарит вида после Update() при Unfold = true",
+            Rect(ViewGabarit(number)), Verdict.Info);
         CheckBool("dxf_view_rebuild", true, SafeBool(() => _drawing5!.ksRebuildDocument()));
         return true;
     }
@@ -2733,7 +2756,9 @@ internal sealed class SheetMetalProbe : IDisposable
         CheckBool("dxf_hole_circle", true, counts.HoleCircles > 0);
         Record("dxf_hole_circles", "окружностей радиуса отверстия (3 мм)", Count(counts.HoleCircles),
             Verdict.Info);
-        CheckBool("dxf_view_box_matches_view", true, SameSize(counts.WindowBox, _viewGabarit));
+        CheckBool("dxf_view_box_matches_flat", true, SameSize(counts.WindowBox, _flatExtents));
+        Record("dxf_view_box_vs_frame", "геометрия вида против его рамки",
+            Rect(counts.WindowBox) + " / " + Rect(_viewGabarit), Verdict.Info);
     }
 
     /// <summary>Order item 5: is the model's unfolded state required, and what survives folding back.</summary>

@@ -286,6 +286,11 @@ public partial class Api5Session
                 as ISheetMetalBend, (bend, index) => ReadBend(bend, requestedEdge: null, ordinal: index)),
             Holes = ReadCollection(counters.Holes, index => SafeObject(() => sheet.SheetMetalHoles[index])
                 as ISheetMetalHole, (hole, index) => ReadHole(hole, index)),
+            // MEASURED: the cut collection is addressed from zero - the help page names no base, so the
+            // zero is a measurement. History: docs/decisions/sheet-metal.md#cut-tool
+            Cuts = ReadCollection(counters.Cuts,
+                index => SafeObject(() => sheet.SheetMetalCuts.get_SheetMetalCut(index)) as ISheetMetalCut,
+                (cut, index) => ReadCut(cut, index)),
         };
     }
 
@@ -822,6 +827,249 @@ public partial class Api5Session
             new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
     }
 
+    // ─── cut ────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>A cut in an existing body by a sketch standing on a FLAT FACE of that body.</summary>
+    /// <remarks>INVARIANT: the sketch support decides which body is cut — MEASURED: a sketch on a face of
+    /// another body cuts THAT body while <c>Body</c> names the first, so the owner is compared before
+    /// <c>Add()</c>. INVARIANT: success is the counter +1, the requested fields read back and a face count
+    /// that GREW — the extent cannot serve, a cut inside a face leaves it unchanged. <c>LIMIT:</c> the shape
+    /// and the volume of the cut are not checked, only the grown face count.
+    /// History: docs/decisions/sheet-metal.md#cut-tool</remarks>
+    public CreateSheetMetalCutResult CreateSheetMetalCut(CreateSheetMetalCutCommand command)
+    {
+        var document = RequireDocument(command.DocumentId);
+        var stored = References.Require(command.BodyRef, document.Id, document.Revision);
+        if (stored.Payload is not ISheetMetalBody body)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка '{command.BodyRef}' указывает не на листовое тело (kind={stored.Kind}).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
+        }
+
+        var refusal = SheetMetalFeaturePolicy.CheckCut(command.CutType, command.DepthMm);
+        if (refusal != SheetMetalFeaturePolicy.Refusal.None)
+        {
+            throw FeatureRefusal(refusal, "Вырез не создавался");
+        }
+
+        var target = RequireSketch(command.SketchRef);
+        if (!string.Equals(target.Document.Id, document.Id, StringComparison.Ordinal))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Эскиз '{command.SketchRef}' принадлежит другому документу: вырез строится в теле "
+                + "'" + command.BodyRef + "' того же документа. Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "sketch_ref" });
+        }
+
+        // MEASURED: the kernel refuses an empty sketch (Update() = FALSE) but KEEPS the record, and this
+        // product cannot delete a sheet-metal feature — so emptiness is refused before Add().
+        if (SheetMetalBodyPolicy.SketchIsEmpty(RecordedPrimitives(command.SketchRef)))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Эскиз выреза пуст: ядро такой вырез отвергает (Update() = FALSE), а запись в коллекции "
+                + "остаётся, и удалить её этот продукт не может. Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "sketch_ref" });
+        }
+
+        var face = RequireSketchFaceSupport(target, command.SketchRef);
+
+        var bridge = BridgeFor(document);
+        var faceModel = bridge.TransferTo7(face) as IModelObject;
+        var ownership = faceModel is null ? null : OwnerIsBody(body, faceModel);
+        if (ownership == false)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Грань-опора эскиза принадлежит другому телу, а не телу '" + command.BodyRef + "': ядро "
+                + "режет владельца грани, а не тело из body_ref (измерено), и удалить такой вырез этот "
+                + "продукт не может. Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "sketch_ref" });
+        }
+
+        if (bridge.TransferTo7(target.Sketch) is not ISketch sketch7)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Эскиз не перенесён в API7 (TransferInterface вернул не ISketch) — вырез не создавался.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var (container, sheet) = RequireSheetMetal(document, "Вырез не создавался");
+        var cutsBefore = ReadCount(() => sheet.SheetMetalCuts.Count);
+        var facesBefore = CountFaces(document);
+        var gabaritBefore = DescribeBody(document).Gabarit;
+
+        ClearKompasResult(document);
+        ISheetMetalCut? created;
+        try
+        {
+            created = sheet.SheetMetalCuts.Add() as ISheetMetalCut;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalCuts.Add() отказал: " + Describe(ex) + ". Вырез не создан.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        if (created is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ISheetMetalCuts.Add() не вернул ISheetMetalCut. Вырез не создан.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var cutRef = References.Register("sheet_metal_cut", document.Id, document.Revision, created);
+        try
+        {
+            created.Body = (IKompasAPIObject)body;
+            created.Sketch = (Sketch)sketch7;
+            created.CutType = (ksHoleCutTypeEnum)SheetMetalFeaturePolicy.CutTypeValue(command.CutType)!.Value;
+            if (command.DepthMm is { } depth)
+            {
+                created.Depth = depth;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Запись свойств выреза отказала: " + Describe(ex) + ". Вырез остался в коллекции.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["cut_ref"] = cutRef.Id });
+        }
+
+        var updated = SafeBool(() => created.Update());
+        var cutsAfter = ReadCount(() => sheet.SheetMetalCuts.Count);
+        var read = ReadCut(created, ordinal: cutsAfter is { } after ? after - 1 : null);
+        var facesAfter = CountFaces(document);
+        var gabaritAfter = DescribeBody(document).Gabarit;
+
+        BumpRevision(document, "sheet_metal.create_cut");
+        var mismatched = SheetMetalFeaturePolicy.CutMismatches(read, command.CutType, command.DepthMm);
+
+        var counterGrew = cutsBefore is { } beforeCount && cutsAfter is { } afterCount
+            && afterCount == beforeCount + 1;
+        var facesRead = facesBefore is not null && facesAfter is not null;
+        var facesGrew = FaceCountGrowth.Grew(facesBefore, facesAfter);
+
+        var checks = new List<NamedCheck>
+        {
+            new("cut_counter_grew", counterGrew,
+                Observed: $"{cutsBefore} → {cutsAfter}", Expected: "было + 1"),
+            new("values_read_back", mismatched.Count == 0,
+                Observed: DescribeCut(read), Expected: DescribeCutRequest(command)),
+            new("update_returned_true", updated == true, Observed: updated?.ToString() ?? "не прочитано"),
+            // INVARIANT: an unread face count is not a grown one - silence is never confirmation.
+            new("face_count_grew", facesGrew,
+                Observed: FaceCountGrowth.Observed(facesBefore, facesAfter),
+                Expected: FaceCountGrowth.Expected(facesBefore)),
+        };
+
+        var verified = counterGrew && mismatched.Count == 0 && updated == true && facesGrew;
+        if (!verified)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Вырез создан, но чтение назад не подтвердило запрошенное: "
+                + string.Join(", ", checks.Where(check => !check.Passed).Select(check => check.Name))
+                + ". Вырез остался в модели — удалить его этим продуктом нельзя.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["cut_ref"] = cutRef.Id,
+                    ["requested"] = DescribeCutRequest(command),
+                    ["read"] = DescribeCut(read),
+                    ["cuts_before"] = cutsBefore,
+                    ["cuts_after"] = cutsAfter,
+                    ["faces_before"] = facesBefore,
+                    ["faces_after"] = facesAfter,
+                });
+        }
+
+        var unverified = new List<string>();
+        if (ownership is null)
+        {
+            unverified.Add("face_owner_not_compared — грань-опора не перенесена в API7 как объект модели "
+                + "или владелец не прочитался: принадлежность грани телу проверена только геометрией "
+                + "после построения");
+        }
+
+        if (!facesRead)
+        {
+            unverified.Add("face_count_not_read — число граней тела не прочитано: проверка «граней стало "
+                + "больше» не выполнена");
+        }
+
+        unverified.Add("cut_shape_not_checked — форма и объём выреза не проверяются: страницы называют "
+            + "только тип и глубину, а признак успеха - рост числа граней");
+
+        return new CreateSheetMetalCutResult(
+            ToDto(cutRef, $"sheet metal cut {command.CutType}"),
+            read!,
+            cutsBefore!.Value,
+            cutsAfter!.Value,
+            facesBefore,
+            facesAfter,
+            gabaritBefore,
+            gabaritAfter,
+            ReadBody(document, body, ordinal: null),
+            new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
+    }
+
+    /// <summary>The sketch support as a <c>ksFaceDefinition</c>: a cut is measured only on a flat face, so
+    /// a sketch on a plane is refused by name before anything is written.</summary>
+    private ksFaceDefinition RequireSketchFaceSupport(SketchTarget target, string sketchRef)
+    {
+        if (target.Sketch.GetDefinition() is not ksSketchDefinition definition)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Определение эскиза '{sketchRef}' не получено: опору выреза не прочитать.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var support = SafeObject(() => definition.GetPlane());
+        if (AsInterface<ksFaceDefinition>(support) is not { } face)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Опора эскиза '{sketchRef}' — не грань: вырез режет только по эскизу на плоской грани "
+                + "тела. Создайте эскиз с face_ref (kompas_create_sketch). Обращение к КОМПАС не "
+                + "выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["field"] = "sketch_ref",
+                    ["support_type"] = support is ksEntity entity ? entity.type : null,
+                });
+        }
+
+        if (SafeBool(() => face.IsPlanar()) is not true)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Опора эскиза '{sketchRef}' — не плоская грань: вырез на криволинейной опоре не измерен, "
+                + "поэтому такой вырез не строится. Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "sketch_ref" });
+        }
+
+        return face;
+    }
+
     // ─── shared ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>The container and its sheet-metal view; a document that is not a sheet-metal part is a
@@ -1042,6 +1290,17 @@ public partial class Api5Session
         return false;
     }
 
+    /// <summary>One cut as the model holds it.</summary>
+    /// <remarks>MEASURED: <c>ISheetMetalCuts</c> is addressed from zero — every index was read and the
+    /// answers ran 0..4; the help page names no base, so the zero is a measurement, not a reading.
+    /// History: docs/decisions/sheet-metal.md#cut-tool</remarks>
+    private static SheetMetalCutDto ReadCut(ISheetMetalCut cut, int? ordinal) => new()
+    {
+        Ordinal = ordinal,
+        CutType = SheetMetalFeaturePolicy.CutTypeName(SafeInt(() => (int)cut.CutType)),
+        DepthMm = SafeDouble(() => cut.Depth),
+    };
+
     /// <summary>One hole as the model holds it.</summary>
     private static SheetMetalHoleDto ReadHole(ISheetMetalHole hole, int? ordinal) => new()
     {
@@ -1123,6 +1382,13 @@ public partial class Api5Session
     private static string DescribeHoleRequest(CreateSheetMetalHoleCommand command) =>
         $"x={Num(command.XMm)} y={Num(command.YMm)} diameter={Num(command.DiameterMm)} "
         + $"cut_type={command.CutType ?? "не задано"} depth={Num(command.DepthMm)}";
+
+    private static string DescribeCut(SheetMetalCutDto? cut) => cut is null
+        ? "не прочитано"
+        : $"cut_type={cut.CutType ?? "не прочитано"} depth={Num(cut.DepthMm)} ordinal={cut.Ordinal}";
+
+    private static string DescribeCutRequest(CreateSheetMetalCutCommand command) =>
+        $"cut_type={command.CutType} depth={Num(command.DepthMm)}";
 
     /// <summary>A refused request as a contract error naming the field — raised before any COM call.</summary>
     private static KompasContractException SheetMetalRefusal(SheetMetalBodyPolicy.Refusal refusal, string? unfoldType)

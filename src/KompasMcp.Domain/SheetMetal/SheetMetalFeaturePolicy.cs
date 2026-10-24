@@ -177,6 +177,35 @@ public static class SheetMetalFeaturePolicy
         return Refusal.None;
     }
 
+    /// <summary>The rule of a cut request, decided before anything is written. The depth belongs to the
+    /// «на глубину» type only, as it does for a hole (<c>isheetmetalcut_depth.html</c>: «Свойство доступно
+    /// при типе построения отверстия "на глубину"»).</summary>
+    public static Refusal CheckCut(string? cutType, double? depthMm)
+    {
+        if (cutType is not null && CutTypeValue(cutType) is null)
+        {
+            return Refusal.UnknownCutType;
+        }
+
+        var byDepth = string.Equals(cutType, "by_depth", StringComparison.Ordinal);
+        if (byDepth && depthMm is null)
+        {
+            return Refusal.MissingDepth;
+        }
+
+        if (!byDepth && depthMm is not null)
+        {
+            return Refusal.DepthWithoutItsCutType;
+        }
+
+        if (depthMm is { } depth && (!double.IsFinite(depth) || depth <= 0d))
+        {
+            return depth <= 0d ? Refusal.DepthNotPositive : Refusal.ValueNotFinite;
+        }
+
+        return Refusal.None;
+    }
+
     /// <summary>The field name a refusal points at.</summary>
     public static string RefusalField(Refusal refusal) => refusal switch
     {
@@ -229,6 +258,25 @@ public static class SheetMetalFeaturePolicy
             && (read?.LengthMm is not { } storedLength || Math.Abs(storedLength - wantedLength) > Tolerance))
         {
             mismatched.Add("length_mm");
+        }
+
+        return mismatched;
+    }
+
+    /// <summary>The requested cut fields that did not read back as asked.</summary>
+    public static IReadOnlyList<string> CutMismatches(
+        SheetMetalCutDto? read, string? cutType, double? depthMm)
+    {
+        var mismatched = new List<string>();
+        if (cutType is not null && !string.Equals(read?.CutType, cutType, StringComparison.Ordinal))
+        {
+            mismatched.Add("cut_type");
+        }
+
+        if (depthMm is { } wantedDepth
+            && (read?.DepthMm is not { } storedDepth || Math.Abs(storedDepth - wantedDepth) > Tolerance))
+        {
+            mismatched.Add("depth_mm");
         }
 
         return mismatched;

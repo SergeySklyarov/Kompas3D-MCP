@@ -24,16 +24,37 @@ public sealed partial class Api5Session
     // Sketches
     // ---------------------------------------------------------------------------------------------
 
-    public ReferenceDto CreateSketch(CreateSketchCommand command)
+    public CreateSketchResult CreateSketch(CreateSketchCommand command)
     {
         var document = RequireDocument(command.DocumentId);
+        var diagnostics = new List<string>();
 
         // ONE support rule for both tools. This call used to resolve the reference on its own, take it
         // while IGNORING `base`, and remember `base` as the sketch's frame — an accepted-and-ignored
         // field that reached acceptance looking like a sketch on the wrong plane. The shared rule is
         // ResolveSupportPlane (Api5Session.SketchPlane.cs).
         // History: docs/decisions/adapter-sketch.md#sketch-plane-reference
-        var support = ResolveSupportPlane(document, command.Plane, new List<string>());
+        // INVARIANT: one support — a plane OR a face. Both at once is refused, as base+reference is:
+        // the server does not pick a field for the caller.
+        var hasFace = command.FaceRef is { Length: > 0 };
+        if (hasFace == (command.Plane is not null))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                hasFace
+                    ? "Заданы одновременно plane и face_ref: опора одна. Сервер не выбирает поле за вызывающего."
+                    : "Опора не задана: нужен либо plane, либо face_ref.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["plane"] = command.Plane is null ? null : "задана",
+                    ["face_ref"] = command.FaceRef,
+                });
+        }
+
+        var support = hasFace
+            ? ResolveFaceSupport(document, command.FaceRef!, diagnostics)
+            : ResolveSupportPlane(document, command.Plane!, diagnostics);
 
         var sketch = (ksEntity)document.PartNow().NewEntity(KompasObjectTypes.Of(KompasObjectTypes.Sketch));
         sketch.name = command.Name ?? $"sketch_{document.Revision}";
@@ -58,6 +79,29 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
+        // INVARIANT: a face support is read BACK as the same face — the sketch exists from here on, so a
+        // support that did not take is a verification failure naming the partial effect, not a pass.
+        if (hasFace)
+        {
+            var readBack = SafeObject(() => definition.GetPlane());
+            var sameFace = ComIdentity.Of(readBack) is { } read
+                && string.Equals(read, ComIdentity.Of(support.Entity), StringComparison.Ordinal);
+            if (!sameFace)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.VerificationFailed,
+                    "Эскиз создан, но опора читается назад не той гранью, что запрошена: SetPlane принят, "
+                    + "привязка к грани не подтверждена. Эскиз остался в модели.",
+                    RetryPolicy.Never,
+                    partialEffects: true,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["face_ref"] = command.FaceRef,
+                        ["support_type"] = readBack is ksEntity readEntity ? readEntity.type : null,
+                    });
+            }
+        }
+
         var reference = ReferenceForObject("sketch", document, sketch);
 
         // A sketch created here is empty by construction, so replace and delete_entities are meaningful
@@ -78,7 +122,9 @@ public sealed partial class Api5Session
 
         // The plane as it was DECLARED is kept for one purpose: a refused extrusion has to say where the
         // profile lay. It is the same string the create answer carries, so the two records cannot drift.
-        _sketchPlaneHint[reference.Id] = PlaneHint(command.Plane, support.Entity);
+        _sketchPlaneHint[reference.Id] = hasFace
+            ? $"sketch on {command.FaceRef} (грань)"
+            : PlaneHint(command.Plane!, support.Entity);
 
         // INVARIANT: creating a sketch IS a mutation — an entity enters the document tree — so the
         // revision is bumped and the document turns dirty here, exactly as when the sketch is drawn
@@ -86,7 +132,16 @@ public sealed partial class Api5Session
         // the document read back not dirty, so the two edits that follow looked like the first change.
         BumpRevision(document, "sketch.create");
 
-        return ToDto(reference, PlaneHint(command.Plane, support.Entity));
+        return new CreateSketchResult
+        {
+            Id = reference.Id,
+            Kind = reference.Kind,
+            DocumentId = reference.DocumentId,
+            Revision = reference.Revision,
+            SemanticHint = _sketchPlaneHint[reference.Id],
+            Support = hasFace ? "face" : "plane",
+            FaceRef = hasFace ? command.FaceRef : null,
+        };
     }
 
     /// <summary>The reference to hand out for a model object: the one ALREADY live for this same

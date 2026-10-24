@@ -1,4 +1,4 @@
-﻿{
+{
   "meta": {
     "artifact": "coverage/solid-v24/matrix.json",
     "schema_version": "1.1",
@@ -15518,7 +15518,58 @@
         "страницы диаметра, координат и глубины называют только тип double: проверяется положительность и конечность, документированного предела нет",
         "созданное отверстие этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и hole_ref"
       ]
+    },
+    {
+      "operation_id": "SMB-06.cut.create",
+      "kind": "profile_mode",
+      "profile": "sheet-metal-minimal-v1",
+      "priority": "practical_required",
+      "queue": "SM",
+      "context": "part",
+      "catalog_ref": "SMB",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_create_sheet_metal_cut.json",
+      "adapter_route": "kompas_create_sheet_metal_cut: QI(IPart7 -> ISheetMetalContainer) -> SheetMetalCuts.Add() -> Body / Sketch / CutType / Depth -> Update(); опора эскиза - плоская грань тела (ksFaceDefinition.GetEntity -> ksSketchDefinition.SetPlane), владелец грани сверен по IUnknown; подтверждение - счётчик +1, перечитанные тип и глубина и выросшее число граней тела",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка выреза не заявлена: страницы свойств читаются, а запись после Add() не проверялась",
+        "rebuild": "перестроение отдельным действием не заявляется: вырез перестраивается тем же Update()",
+        "suppress_restore": "у листового объекта нет режима подавления",
+        "delete_dependencies": "удаление листовых объектов не поддержано продуктом (измерено)"
+      },
+      "tests": [
+        "SMB.25.sketch_on_face",
+        "SMB.26.cut_through",
+        "SMB.27.cut_depth",
+        "SMB.28.cut_sketch_on_plane",
+        "SMB.29.cut_empty_sketch",
+        "SMB.30.cut_depth_with_by_width",
+        "SMB.31.cut_foreign_face",
+        "SMB.12.reopen"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/sheet-metal.md#cut-tool"
+      ],
+      "limitations": [
+        "форма и объём выреза не проверяются: признак успеха - рост числа граней тела",
+        "up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет",
+        "глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его",
+        "созданный вырез этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и cut_ref"
+      ]
     }
+
   ],
   "pending_families": [
     "SM-06",

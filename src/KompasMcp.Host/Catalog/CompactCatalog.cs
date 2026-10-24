@@ -61,6 +61,7 @@ public static class CompactCatalog
         ["kompas_edit_sheet_metal_body"] = "sheet_metal",
         ["kompas_create_sheet_metal_bend"] = "sheet_metal",
         ["kompas_create_sheet_metal_hole"] = "sheet_metal",
+        ["kompas_create_sheet_metal_cut"] = "sheet_metal",
         ["kompas_pattern_grid"] = "pattern", ["kompas_pattern_circular"] = "pattern",
         ["kompas_pattern_mirror"] = "pattern", ["kompas_get_pattern"] = "pattern",
         ["kompas_insert_component"] = "assembly", ["kompas_replace_component"] = "assembly",

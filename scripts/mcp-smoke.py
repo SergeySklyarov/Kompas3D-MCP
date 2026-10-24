@@ -664,7 +664,7 @@ def file_sha256(path):
 # → 96 (SM-12: kompas_draft и kompas_draft_from_edges)
 # → 97 (SM-08: kompas_create_thread)
 # → 110 (SHEET_METAL_FEATURES: сгиб и отверстие листового тела).
-EXPECTED_TOOL_COUNT = 110
+EXPECTED_TOOL_COUNT = 111
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -50556,6 +50556,75 @@ def sheet_metal_feature_rows(part, body_ref, line_edges, hole_face, rep, call,
             "PASS" if ok_two else "FAIL",
             f"сгибов={len(bends_read)} углы={angles}")
 
+    # ========= SMB.25-SMB.27: вырез по эскизу на плоской грани =========
+    # Прямоугольник лежит в положительном квадранте грани 40x40 и не задевает отверстие D6 в (0,0):
+    # местная система эскиза на грани прибору не известна, поэтому обе гипотезы о начале координат
+    # (угол или центр грани) оставляют контур внутри грани.
+    def face_sketch(name, start, size):
+        env2, code2 = call("kompas_create_sketch", {
+            "document_id": part, "expected_revision": current_rev(part),
+            "face_ref": fresh("face"), "name": name})
+        made = result(env2)
+        ref = made.get("id")
+        codes = {"create_sketch": code2}
+        if ref:
+            env3, code3 = call("kompas_edit_sketch", {
+                "sketch_ref": ref, "expected_revision": current_rev(part), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": start,
+                              "width_mm": size, "height_mm": size}]})
+            codes["edit_sketch"] = code3
+            env4, code4 = call("kompas_finish_sketch", {"sketch_ref": ref,
+                                                       "require_closed_profile": True})
+            codes["finish_sketch"] = code4
+        return ref, made, codes
+
+    through_sketch, through_answer, through_codes = face_sketch("smc-through", [4, 4], 5)
+    rep.add("SMB.25.sketch_on_face",
+            "эскиз создан на ПЛОСКОЙ ГРАНИ тела: ответ называет support=face и face_ref, прямоугольник "
+            "нарисован, профиль замкнут",
+            "PASS" if (through_sketch and through_answer.get("support") == "face"
+                       and through_answer.get("face_ref") and not any(through_codes.values())) else "FAIL",
+            f"sketch={through_sketch} support={through_answer.get('support')} "
+            f"face={through_answer.get('face_ref')} коды={through_codes}")
+
+    def cut_check(name, sketch, cut_type, depth, label):
+        args = {"document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
+                "sketch_ref": sketch, "cut_type": cut_type}
+        if depth is not None:
+            args["depth_mm"] = depth
+        env2, code2 = call("kompas_create_sheet_metal_cut", args)
+        made = result(env2)
+        row = made.get("cut") or {}
+        rows = {item.get("name"): item.get("passed")
+                for item in ((made.get("verification") or {}).get("checks") or [])}
+        ref = (made.get("cut_ref") or {}).get("id")
+        ok = (not code2 and ref and row.get("cut_type") == cut_type
+              and (depth is None or near(row.get("depth_mm"), depth))
+              and made.get("cuts_after") == (made.get("cuts_before") or 0) + 1
+              and rows.get("cut_counter_grew") is True
+              and rows.get("values_read_back") is True
+              and rows.get("update_returned_true") is True
+              and rows.get("face_count_grew") is True)
+        rep.add(name, label,
+                "PASS" if ok else "FAIL",
+                f"cut={ref} cut_type={row.get('cut_type')} depth={row.get('depth_mm')} "
+                f"ordinal={row.get('ordinal')} вырезов={made.get('cuts_before')}->{made.get('cuts_after')} "
+                f"граней={made.get('faces_before')}->{made.get('faces_after')} "
+                f"габарит={made.get('gabarit_before')}->{made.get('gabarit_after')} "
+                f"проверки={rows} error={code2} {emsg(env2) or ''}")
+        return ref
+
+    through_cut = cut_check(
+        "SMB.26.cut_through", through_sketch, "by_width", None,
+        "сквозной вырез по эскизу на грани: счётчик вырезов +1, тип построения прочитан назад, Update() "
+        "вернул TRUE и число граней тела выросло по сравнению с чтением до вызова")
+
+    depth_sketch, depth_answer, depth_codes = face_sketch("smc-depth", [13, 13], 5)
+    depth_cut = cut_check(
+        "SMB.27.cut_depth", depth_sketch, "by_depth", 0.5,
+        "вырез на глубину 0.5 по второму эскизу на грани: счётчик +1, тип и глубина прочитаны назад, "
+        "число граней выросло")
+
     # ========= SMB.18: отверстие =========
     env, code = call("kompas_create_sheet_metal_hole", {
         "document_id": part, "expected_revision": current_rev(part), "body_ref": body_ref,
@@ -50636,6 +50705,49 @@ def sheet_metal_feature_rows(part, body_ref, line_edges, hole_face, rep, call,
                      "cut_type": "by_width", "depth_mm": 1.0}, "depth_mm",
                     "глубина при типе by_width (ядро сохранит число и не применит)")
 
+    # ========= SMB.28-SMB.30: отказы выреза до Add() =========
+    def cut_refusal(name, args, expected_field, label):
+        before = counters_of(part)
+        env2, code2 = call("kompas_create_sheet_metal_cut",
+                           dict(args, document_id=part, expected_revision=current_rev(part),
+                                body_ref=body_ref))
+        after_counters = counters_of(part)
+        err = (env2 or {}).get("error") or {}
+        ok = (code2 == "INVALID_ARGUMENT" and err.get("partial_effects") is False
+              and efield(env2) == expected_field
+              and before.get("cuts") == after_counters.get("cuts"))
+        rep.add(name, label + " - отказ INVALID_ARGUMENT до Add(), счётчик вырезов не вырос",
+                "PASS" if ok else "FAIL",
+                f"code={code2} field={efield(env2)} partial_effects={err.get('partial_effects')} "
+                f"вырезов {before.get('cuts')}->{after_counters.get('cuts')} {emsg(env2) or ''}")
+
+    # Эскиз на ПЛОСКОСТИ (не на грани) нарисован: иначе первым сработал бы отказ на пустой эскиз,
+    # и строка доказывала бы не то правило.
+    env, code = call("kompas_create_sketch", {
+        "document_id": part, "expected_revision": current_rev(part),
+        "plane": {"base": "xy", "offset_mm": 100}, "name": "smc-plane"})
+    plane_sketch = result(env).get("id")
+    if plane_sketch:
+        call("kompas_edit_sketch", {
+            "sketch_ref": plane_sketch, "expected_revision": current_rev(part), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 5, "height_mm": 5}]})
+        call("kompas_finish_sketch", {"sketch_ref": plane_sketch, "require_closed_profile": True})
+    cut_refusal("SMB.28.cut_sketch_on_plane",
+                {"sketch_ref": plane_sketch, "cut_type": "by_width"}, "sketch_ref",
+                "эскиз на плоскости XOY, а не на грани тела")
+
+    env, code = call("kompas_create_sketch", {
+        "document_id": part, "expected_revision": current_rev(part),
+        "face_ref": fresh("face"), "name": "smc-empty"})
+    empty_face_sketch = result(env).get("id")
+    cut_refusal("SMB.29.cut_empty_sketch",
+                {"sketch_ref": empty_face_sketch, "cut_type": "by_width"}, "sketch_ref",
+                "пустой эскиз на грани (ядро такой вырез отвергает, а запись оставляет)")
+
+    cut_refusal("SMB.30.cut_depth_with_by_width",
+                {"sketch_ref": through_sketch, "cut_type": "by_width", "depth_mm": 0.5}, "depth_mm",
+                "глубина при типе by_width (ядро сохранит число и не применит)")
+
     # ========= SMB.24: пустой эскиз отвергается до создания тела =========
     empty_sketch = None
     env, code = call("kompas_create_sketch", {
@@ -50668,9 +50780,9 @@ def sheet_metal_checks(client, rep, app_id, workdir):
     на единицу, толщина, радиус, способ развёртки и его поле совпали с заданными, габарит по нормали
     равен толщине. Правка подтверждается сравнением перечитанного, повтор - идемпотентностью.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Выреза (объём SHEET_METAL_CUT_PROBE) и развёртки (SHEET_METAL_UNFOLD).
-    Удаления нет: у продукта нет работающего маршрута (измерено), поэтому SMB.13 проверяет, что такой
-    инструмент и не публикуется.
+    ЧЕГО ЗДЕСЬ НЕТ. Развёртки (SHEET_METAL_UNFOLD) и удаления: у продукта нет работающего маршрута
+    удаления листовых объектов (измерено), поэтому SMB.13 проверяет, что такой инструмент и не
+    публикуется.
     """
     import os
 
@@ -50984,6 +51096,13 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                                  counters_of, client)
 
     # ========= SMB.12: сохранение и переоткрытие =========
+    def cut_types_kept(cuts):
+        """Вырезы после переоткрытия: те же тип и глубина, что записаны до сохранения."""
+        rows = cuts or []
+        return (len(rows) == 2
+                and [row.get("cut_type") for row in rows] == ["by_width", "by_depth"]
+                and near(rows[1].get("depth_mm"), 0.5))
+
     target = os.path.join(workdir, "sheet-metal-body")
     os.makedirs(target, exist_ok=True)
     path = os.path.join(target, "smb-body.m3d")
@@ -51010,16 +51129,19 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                      and row.get("unfold_type") == "bend_reduction"
                      and near(row.get("unfold_value"), 0.3)
                      and counters.get("bodies") == 1
-                     and counters.get("bends") == 2 and counters.get("holes") == 1)
+                     and counters.get("bends") == 2 and counters.get("holes") == 1
+                     and counters.get("cuts") == 2
+                     and cut_types_kept(read.get("cuts")))
         detail += (f" thickness={row.get('thickness_mm')} radius={row.get('bend_radius_mm')} "
                    f"unfold={row.get('unfold_type')}/{row.get('unfold_value')} "
                    f"bodies={counters.get('bodies')} сгибов={counters.get('bends')} "
-                   f"отверстий={counters.get('holes')}")
+                   f"отверстий={counters.get('holes')} вырезов={counters.get('cuts')} "
+                   f"вырезы={[(cut.get('cut_type'), cut.get('depth_mm')) for cut in (read.get('cuts') or [])]}")
         call("kompas_close_document", {"document_id": reopened, "dirty_policy": "discard"})
     rep.add("SMB.12.reopen",
             "после сохранения и переоткрытия тело читается тем же инструментом: толщина, радиус, "
-            "способ развёртки и его поле сохранились, а сгибы (2) и отверстие (1) на месте по счётчикам "
-            "коллекций",
+            "способ развёртки и его поле сохранились, а сгибы (2), отверстие (1) и вырезы (2: сквозной "
+            "и на глубину 0.5) на месте по счётчикам коллекций и по чтению элементов",
             "PASS" if ok_reopen else "FAIL", detail)
 
     # ========= SMB.13: удаления нет - названный отказ =========
@@ -51031,6 +51153,86 @@ def sheet_metal_checks(client, rep, app_id, workdir):
             "листовых объектов не работает (измерено), и обещать его нельзя",
             "PASS" if "kompas_delete_sheet_metal_object" not in published_names else "FAIL",
             f"опубликовано={len(published_names)} инструментов")
+
+
+    # ========= SMB.31: чужая грань - отказ до Add() =========
+    # MEASURED (проба): ядро режет ВЛАДЕЛЬЦА грани-опоры, а не тело из body_ref, и вырез этот продукт
+    # не удаляет. Поэтому принадлежность проверяется до Add(); доказывается на отдельной детали с
+    # ДВУМЯ листовыми телами, чтобы не менять счётчики основной.
+    def foreign_face_refusal():
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": "SMC-two-bodies"})
+        doc = doc_id(env)
+        if not doc:
+            return False, f"деталь не создана: code={code}"
+
+        def flat_body(name, offset):
+            env2, _code = call("kompas_create_sketch", {
+                "document_id": doc, "expected_revision": current_rev(doc),
+                "plane": {"base": "xy", "offset_mm": offset}, "name": name + "-sketch"})
+            sketch2 = result(env2).get("id")
+            if not sketch2:
+                return None
+            call("kompas_edit_sketch", {
+                "sketch_ref": sketch2, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 40,
+                              "height_mm": 40}]})
+            call("kompas_finish_sketch", {"sketch_ref": sketch2, "require_closed_profile": True})
+            env3, _code = call("kompas_create_sheet_metal_body", {
+                "sketch_ref": sketch2, "expected_revision": current_rev(doc), "thickness_mm": 1.5,
+                "bend_radius_mm": 2.0, "direction": "normal", "unfold_type": "coefficient",
+                "bend_coefficient": 0.4})
+            return (result(env3).get("body_ref") or {}).get("id")
+
+        first = flat_body("smc-first", 0)
+        second = flat_body("smc-second", 200)
+        if not first or not second:
+            return False, f"два листовых тела не построены: first={first} second={second}"
+
+        _e, listed, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        solid_rows = result(listed)
+        solid_rows = solid_rows if isinstance(solid_rows, list) else []
+        solid_second = solid_rows[1].get("body_ref") if len(solid_rows) > 1 else None
+        _e, topo, _r = client.tool("kompas_read_topology",
+                                   {"document_id": doc, "body_ref": solid_second, "include": "faces"})
+        plane_faces = [face for face in ((result(topo) or {}).get("faces") or [])
+                       if face.get("surface_type") == "plane"]
+        face_ref = (max(plane_faces, key=lambda face: face.get("area_mm2") or 0.0).get("face_ref")
+                    if plane_faces else None)
+        if not face_ref:
+            return False, f"грань второго тела не прочитана: bodies={len(solid_rows)}"
+
+        env2, _code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc), "face_ref": face_ref,
+            "name": "smc-foreign"})
+        sketch2 = result(env2).get("id")
+        if not sketch2:
+            return False, "эскиз на грани второго тела не создан"
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch2, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [4, 4], "width_mm": 5, "height_mm": 5}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch2, "require_closed_profile": True})
+
+        before = counters_of(doc)
+        env3, code3 = call("kompas_create_sheet_metal_cut", {
+            "document_id": doc, "expected_revision": current_rev(doc), "body_ref": first,
+            "sketch_ref": sketch2, "cut_type": "by_width"})
+        after = counters_of(doc)
+        err = (env3 or {}).get("error") or {}
+        ok = (code3 == "INVALID_ARGUMENT" and efield(env3) == "sketch_ref"
+              and err.get("partial_effects") is False and before.get("cuts") == after.get("cuts"))
+        detail = (f"code={code3} field={efield(env3)} partial_effects={err.get('partial_effects')} "
+                  f"вырезов {before.get('cuts')}->{after.get('cuts')} тел={after.get('bodies')} "
+                  f"{emsg(env3) or ''}")
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return ok, detail
+
+    ok_foreign, foreign_detail = foreign_face_refusal()
+    rep.add("SMB.31.cut_foreign_face",
+            "эскиз на грани ВТОРОГО тела при body_ref первого отвергнут INVALID_ARGUMENT с именем поля "
+            "sketch_ref до Add(), счётчик вырезов не вырос: ядро режет владельца грани (измерено), а "
+            "удалить вырез продукт не может",
+            "PASS" if ok_foreign else "FAIL", foreign_detail)
 
 
 EXTRA_GROUP_CHECKS = {

@@ -230,19 +230,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 371
-- **строк_полностью_закрыто:** 183
-- **строк_с_каким_либо_прогрессом:** 200
+- **строк_каталога:** 372
+- **строк_полностью_закрыто:** 184
+- **строк_с_каким_либо_прогрессом:** 201
 - **семейств_в_каталоге:** 47
 - **семейств_без_строк:** 12
-- **операций:** 144
-- **режимов_и_вариантов:** 225
-- **применимых_действий:** 3030
-- **действий_verified:** 1216
-- **покрытие_действий:** 40.1%
-- **распределение_статусов:** {'not_started': 1814, 'verified': 1216, 'not_applicable': 680}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 68, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 75, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 145
+- **режимов_и_вариантов:** 226
+- **применимых_действий:** 3036
+- **действий_verified:** 1222
+- **покрытие_действий:** 40.3%
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1222, 'not_applicable': 684}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 69, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 76, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -935,6 +935,7 @@
 | `SMB-03.body.edit` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | SMB.01.discover, SMB.08.edit_thickness_radius, SMB.09.edit_unfold_types, SMB.10.foreign_field_refused, SMB.11.idempotent, SMB.12.reopen |
 | `SMB-04.bend.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.14.topology, SMB.15.bend, SMB.16.bend_second, SMB.17.bends_read_back, SMB.19.edit_with_features, SMB.20.bend_face_as_edge, SMB.21.bend_angle_refused, SMB.12.reopen |
 | `SMB-05.hole.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.14.topology, SMB.18.hole, SMB.19.edit_with_features, SMB.22.hole_diameter_refused, SMB.23.hole_depth_of_another_type, SMB.12.reopen |
+| `SMB-06.cut.create` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.25.sketch_on_face, SMB.26.cut_through, SMB.27.cut_depth, SMB.28.cut_sketch_on_plane, SMB.29.cut_empty_sketch, SMB.30.cut_depth_with_by_width, SMB.31.cut_foreign_face, SMB.12.reopen |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1645,6 +1646,11 @@
   - глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его
   - страницы диаметра, координат и глубины называют только тип double: проверяется положительность и конечность, документированного предела нет
   - созданное отверстие этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и hole_ref
+- `SMB-06.cut.create` — закрыт целиком
+  - форма и объём выреза не проверяются: признак успеха - рост числа граней тела
+  - up_to_surface не принимается: глубину того типа задаёт объект DepthObject, которого вызывающий не называет
+  - глубина принимается только при cut_type=by_depth: при by_width ядро сохранит число и не применит его
+  - созданный вырез этим продуктом не удаляется, поэтому отказ после Add() несёт partialEffects и cut_ref
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

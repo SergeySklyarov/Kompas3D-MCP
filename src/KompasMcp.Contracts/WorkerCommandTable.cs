@@ -243,6 +243,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.EditSheetMetalBody, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.CreateSheetMetalBend, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.CreateSheetMetalHole, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.CreateSheetMetalCut, WorkerAction.ModelMutation, 240_000);
 
         // ---- drawings ----
         // Views and export go through the API7 bridge (TransferInterface + AddStandartViews or the

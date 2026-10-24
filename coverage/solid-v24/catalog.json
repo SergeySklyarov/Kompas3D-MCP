@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/catalog.json",
   "stage": "P6.0",
@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 47,
-   "operations": 144,
+   "operations": 145,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 225,
+   "modes_and_variants": 226,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8244,6 +8244,20 @@
       {
        "id": "SMB-05.hole.create",
        "name": "Создать отверстие на грани тела",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SMB-06",
+     "name": "Вырез листового тела",
+     "level": "mcp_verified",
+     "doc_source": "isheetmetalcuts_add.html, isheetmetalcut_body.html, isheetmetalcut_sketch.html, isheetmetalcut_cuttype.html, isheetmetalcut_depth.html, ksholecuttypeenum.html, ksfacedefinition_getentity.html, kssketchdefinition_setplane.html",
+     "route": "SheetMetalCuts.Add() -> Body / Sketch (эскиз на плоской грани: ksFaceDefinition.GetEntity -> ksSketchDefinition.SetPlane) / CutType / Depth -> Update(); успех - счётчик +1, перечитанные тип и глубина и выросшее число граней тела",
+     "modes": [
+      {
+       "id": "SMB-06.cut.create",
+       "name": "Создать вырез по эскизу на плоской грани тела",
        "level": "mcp_verified"
       }
      ]

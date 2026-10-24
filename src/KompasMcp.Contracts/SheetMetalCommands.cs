@@ -164,6 +164,9 @@ public sealed record GetSheetMetalResult(
 
     /// <summary>Every hole of the document, in collection order.</summary>
     public IReadOnlyList<SheetMetalHoleDto>? Holes { get; init; }
+
+    /// <summary>Every cut of the document, in collection order.</summary>
+    public IReadOnlyList<SheetMetalCutDto>? Cuts { get; init; }
 }
 
 public sealed record EditSheetMetalBodyResult(
@@ -283,6 +286,59 @@ public sealed record SheetMetalHoleDto
 
     public double? DepthMm { get; init; }
 }
+
+/// <summary>A cut in an existing sheet-metal body, made by a sketch whose support is a FLAT FACE of that
+/// body.</summary>
+/// <remarks>INVARIANT: the cut follows the sketch support, not <see cref="BodyRef"/> — MEASURED: a sketch
+/// standing on a face of another body cuts THAT body while <c>Body</c> names the first one, so the owner is
+/// checked before <c>Add()</c>. INVARIANT: only <c>Sketch</c> is written; <c>Profile</c> was measured to
+/// accept the same sketch, and the page does not say what object it takes.
+/// History: docs/decisions/sheet-metal.md#cut-tool</remarks>
+public sealed record CreateSheetMetalCutCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    public required string BodyRef { get; init; }
+
+    /// <summary>The sketch that cuts, from <c>kompas_create_sketch</c> with <c>face_ref</c>.</summary>
+    public required string SketchRef { get; init; }
+
+    /// <summary>By name: <c>by_width</c> (0, through the thickness), <c>by_depth</c> (1) —
+    /// <c>ksHoleCutTypeEnum</c>, the enum <c>isheetmetalcut_cuttype.html</c> names.
+    /// <c>up_to_surface</c> (2) is NOT a value: its depth is set by <c>DepthObject</c>, a face.</summary>
+    public required string CutType { get; init; }
+
+    /// <summary><c>ISheetMetalCut.Depth</c>, mm — only with <c>cut_type = by_depth</c>.</summary>
+    public double? DepthMm { get; init; }
+}
+
+/// <summary>One cut as the MODEL holds it. <c>null</c> means "not read", never zero.</summary>
+public sealed record SheetMetalCutDto
+{
+    public string? CutRef { get; init; }
+
+    /// <summary>Ordinal in <c>ISheetMetalContainer.SheetMetalCuts</c>, counted from zero.</summary>
+    public int? Ordinal { get; init; }
+
+    /// <summary>By name, as in <see cref="CreateSheetMetalCutCommand.CutType"/>.</summary>
+    public string? CutType { get; init; }
+
+    public double? DepthMm { get; init; }
+}
+
+public sealed record CreateSheetMetalCutResult(
+    ReferenceDto CutRef,
+    SheetMetalCutDto Cut,
+    int CutsBefore,
+    int CutsAfter,
+    double? FacesBefore,
+    double? FacesAfter,
+    string GabaritBefore,
+    string GabaritAfter,
+    SheetMetalBodyDto? Body,
+    VerificationDto Verification);
 
 public sealed record CreateSheetMetalBendResult(
     ReferenceDto BendRef,

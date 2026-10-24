@@ -121,5 +121,30 @@ public class SheetMetalFeaturePolicyTests
     {
         Assert.NotEmpty(SheetMetalFeaturePolicy.BendMismatches(null, 90d, null, null, null, null, null));
         Assert.NotEmpty(SheetMetalFeaturePolicy.HoleMismatches(null, 5d, 5d, 6d, null, null));
+        Assert.NotEmpty(SheetMetalFeaturePolicy.CutMismatches(null, "by_depth", 1d));
+    }
+
+    [Theory]
+    [InlineData("by_width", null, SheetMetalFeaturePolicy.Refusal.None)]
+    [InlineData("by_depth", 0.5d, SheetMetalFeaturePolicy.Refusal.None)]
+    [InlineData("up_to_surface", null, SheetMetalFeaturePolicy.Refusal.UnknownCutType)]
+    // The depth belongs to the «на глубину» type, as the cut page states.
+    [InlineData("by_width", 0.5d, SheetMetalFeaturePolicy.Refusal.DepthWithoutItsCutType)]
+    [InlineData("by_depth", null, SheetMetalFeaturePolicy.Refusal.MissingDepth)]
+    [InlineData("by_depth", 0d, SheetMetalFeaturePolicy.Refusal.DepthNotPositive)]
+    [InlineData("by_depth", double.NaN, SheetMetalFeaturePolicy.Refusal.ValueNotFinite)]
+    public void Cut_Rule(
+        string cutType, double? depth, SheetMetalFeaturePolicy.Refusal expected) =>
+        Assert.Equal(expected, SheetMetalFeaturePolicy.CheckCut(cutType, depth));
+
+    [Fact]
+    public void Cut_ReadBack_Mismatch_IsNamedPerField()
+    {
+        var read = new SheetMetalCutDto { CutType = "by_depth", DepthMm = 0.5d };
+
+        Assert.Empty(SheetMetalFeaturePolicy.CutMismatches(read, "by_depth", 0.5d));
+        var mismatched = SheetMetalFeaturePolicy.CutMismatches(read, "by_width", 1d);
+        Assert.Contains("cut_type", mismatched);
+        Assert.Contains("depth_mm", mismatched);
     }
 }

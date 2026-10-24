@@ -333,12 +333,18 @@ public class ToolCatalogTests
 
     /// <summary>INVARIANT: ONE form for both tools. A second dialect would make "the same support" mean
     /// two different things, and a client reading one tool would learn the wrong rule for the other.</summary>
+    /// <remarks>The CREATE tool takes <c>plane</c> OR <c>face_ref</c>, so its <c>plane</c> is optional
+    /// while the edit tool's is not; the form itself — the description and the two fields — is still one,
+    /// and that is what is compared here. History: docs/decisions/sheet-metal.md#cut-tool</remarks>
     [Fact]
     public void SketchPlane_IsTheSameFormForBothTools()
     {
+        var create = PlaneProperty("kompas_create_sketch");
+        var edit = PlaneProperty("kompas_set_sketch_plane");
+        Assert.Equal(edit["description"]!.ToJsonString(), create["description"]!.ToJsonString());
         Assert.Equal(
-            PlaneProperty("kompas_create_sketch").ToJsonString(),
-            PlaneProperty("kompas_set_sketch_plane").ToJsonString());
+            ((JsonObject)edit["properties"]!).ToJsonString(),
+            ((JsonObject)create["properties"]!).ToJsonString());
     }
 
     /// <summary>The published <c>direction</c> text must state the measured cut inversion, not the old

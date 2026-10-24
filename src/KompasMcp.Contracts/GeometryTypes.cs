@@ -80,6 +80,30 @@ public sealed record PlaneRefDto
     public double OffsetMm { get; init; }
 }
 
+/// <summary>The created sketch: the reference plus the support the kernel actually took.</summary>
+/// <remarks>INVARIANT: the reference fields are FLAT (<c>id</c>, <c>kind</c>, <c>revision</c>) because that
+/// is the shape this answer has always had; <c>support</c> and <c>face_ref</c> are added beside them so a
+/// caller can tell a sketch on a plane from one standing on a face without reading the hint text.
+/// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+public sealed record CreateSketchResult
+{
+    public required string Id { get; init; }
+
+    public required string Kind { get; init; }
+
+    public required string DocumentId { get; init; }
+
+    public required long Revision { get; init; }
+
+    public string? SemanticHint { get; init; }
+
+    /// <summary><c>plane</c> or <c>face</c> — what the sketch stands on.</summary>
+    public required string Support { get; init; }
+
+    /// <summary>The face reference the sketch stands on; <c>null</c> for a plane support.</summary>
+    public string? FaceRef { get; init; }
+}
+
 public enum PlaneBase
 {
     Xy,

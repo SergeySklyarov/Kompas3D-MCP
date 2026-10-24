@@ -285,6 +285,8 @@ public static class WorkerCommands
     // sheet_metal.create_bend → SMB-04, sheet_metal.create_hole → SMB-05: the two features of a body.
     public const string CreateSheetMetalBend = "sheet_metal.create_bend";
     public const string CreateSheetMetalHole = "sheet_metal.create_hole";
+    // sheet_metal.create_cut: a cut by a sketch standing on a flat face of the body.
+    public const string CreateSheetMetalCut = "sheet_metal.create_cut";
     // ── block DRW "drawings" (profile drawings-minimal-v1) ──
     // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →
@@ -979,7 +981,15 @@ public sealed record CreateSketchCommand
 {
     public required string DocumentId { get; init; }
 
-    public required PlaneRefDto Plane { get; init; }
+    /// <summary>Support as a plane: <c>base</c>+<c>offset_mm</c> or a <c>plane</c> reference. Exactly one
+    /// of <see cref="Plane"/> and <see cref="FaceRef"/>.</summary>
+    public PlaneRefDto? Plane { get; init; }
+
+    /// <summary>Support as a flat FACE of the model — a <c>face:</c> reference from
+    /// <c>kompas_read_topology</c>.</summary>
+    /// <remarks>MEASURED: the kernel takes the face's own entity as the sketch plane, and that is the only
+    /// measured way to stand a sketch on a face. History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    public string? FaceRef { get; init; }
 
     public string? Name { get; init; }
 

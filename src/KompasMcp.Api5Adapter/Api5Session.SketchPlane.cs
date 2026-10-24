@@ -272,6 +272,67 @@ public sealed partial class Api5Session
         return new SketchSupport(entity, null);
     }
 
+    /// <summary>A flat FACE of the model as the sketch support (<c>face_ref</c> of
+    /// <c>kompas_create_sketch</c>).</summary>
+    /// <remarks>DOC: <c>ksFaceDefinition.GetEntity()</c> — «Получить указатель на интерфейс грани ksEntity
+    /// или IEntity» (<c>ksfacedefinition_getentity.html</c>); <c>ksSketchDefinition.SetPlane</c> takes that
+    /// entity (<c>kssketchdefinition_setplane.html</c>). MEASURED: the collection element itself is NOT a
+    /// <c>ksEntity</c>, which is why the documented conversion is called rather than the element cast.
+    /// INVARIANT: the kind is checked in the registry BEFORE COM, and a non-flat face is refused — a cut
+    /// built on a curved support is not measured.
+    /// History: docs/decisions/sheet-metal.md#cut-probe</remarks>
+    private SketchSupport ResolveFaceSupport(
+        DocumentEntry document, string faceRef, List<string> diagnostics)
+    {
+        var stored = References.Require(faceRef, document.Id, document.Revision);
+        if (!string.Equals(stored.Kind, "face", StringComparison.Ordinal))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка '{faceRef}' несёт объект вида «{stored.Kind}», а поле face_ref требует «face». "
+                + "Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["field"] = "face_ref",
+                    ["kind"] = stored.Kind,
+                    ["expected_kind"] = "face",
+                });
+        }
+
+        if (AsInterface<ksFaceDefinition>(stored.Payload) is not { } face)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка '{faceRef}' не несёт грани: опору эскиза взять не из чего.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
+        }
+
+        if (SafeBool(() => face.IsPlanar()) is not true)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Опорная грань не плоская: эскиз на криволинейной грани и вырез по нему не измерены, "
+                + "поэтому такой опоры продукт не принимает. Обращение к КОМПАС не выполнялось.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "face_ref" });
+        }
+
+        if (SafeObject(() => face.GetEntity()) is not ksEntity entity)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"ksFaceDefinition.GetEntity() не отдал объект модели для ссылки '{faceRef}': "
+                + "документированное приведение грани в ksEntity не выполнено, эскиз не создавался.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?> { ["field"] = "face_ref" });
+        }
+
+        diagnostics.Add($"Опора: грань по ссылке '{faceRef}' (ksFaceDefinition.GetEntity → ksEntity).");
+        return new SketchSupport(entity, null);
+    }
+
     /// <summary>The MODEL object behind a reference of kind <c>plane</c> — the one handed to
     /// <c>SetPlane</c>. Two payload shapes are NOT interchangeable: the server's own offset-plane route
     /// carries an API5 <c>ksEntity</c>; <c>kompas_create_aux_geometry</c> carries an API7 <c>IPlane3D</c>.

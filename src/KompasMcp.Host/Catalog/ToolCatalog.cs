@@ -842,7 +842,9 @@ public static class ToolCatalog
                 + "этого способа, флаг Straighten (это ФЛАГ состояния, геометрию он не перестраивает) и "
                 + "габарит по нормали. Свойства IsCreated у листового тела в версии 24 НЕТ — о теле судят по "
                 + "счётчику, свойствам и габариту. Счётчик, который ядро не отдало, назван в unread: пустое "
-                + "значение означает «не прочитано», а не ноль. Созданный листовой элемент MCP не удаляет; "
+                + "значение означает «не прочитано», а не ноль. Вырезы читаются элементами коллекции "
+                + "ISheetMetalCuts в поле cuts: индекс — место в коллекции, счёт с НУЛЯ (измерено, база "
+                + "в справке не названа). Созданный листовой элемент MCP не удаляет; "
                 + "удалить его можно в интерфейсе КОМПАС.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
@@ -957,6 +959,39 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // Route = ISheetMetalCuts.Add() -> Body / Sketch / CutType / Depth -> IModelObject.Update().
+            // The cut follows the sketch SUPPORT, so the sketch must stand on a flat face of this body.
+            // History: docs/decisions/sheet-metal.md#cut-tool
+            Mutation("kompas_create_sheet_metal_cut", "Создать вырез листового тела",
+                "Вырезает листовое тело по ЭСКИЗУ, опора которого — плоская грань этого тела. Успех — НЕ "
+                + "ответ Update(): счётчик SheetMetalCuts вырос на 1, тип построения и глубина прочитаны "
+                + "назад равными (допуск 1e-6), Update() вернул TRUE и число граней тела выросло по "
+                + "сравнению с чтением ДО вызова. ГАБАРИТ признаком не служит: вырез внутри грани его не "
+                + "меняет (измерено). Расхождение — VERIFICATION_FAILED с запрошенным и прочитанным. "
+                + "ЯДРО РЕЖЕТ ВЛАДЕЛЬЦА ГРАНИ, а не тело из body_ref (измерено: эскиз на грани второго "
+                + "тела при body_ref первого режет второе), поэтому до Add() проверяется: опора эскиза — "
+                + "плоская грань, грань принадлежит телу из body_ref (сравнение владельца по IUnknown), "
+                + "эскиз непустой. Отказ — INVALID_ARGUMENT с именем поля. Тип построения: by_width "
+                + "(сквозной по толщине) и by_depth (на глубину); up_to_surface не входит — его глубину "
+                + "задаёт объект DepthObject, а не число. depth_mm передаётся только с by_depth. Форма и "
+                + "объём выреза не проверяются — только рост числа граней. Созданный листовой элемент MCP "
+                + "не удаляет; удалить его можно в интерфейсе КОМПАС, поэтому отказ после Add() несёт "
+                + "partialEffects=true и cut_ref оставшейся записи.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("sketch_ref", Sch.Ref("#/$defs/reference")),
+                    ("cut_type", Sch.Enum(
+                        "Тип построения выреза по ksHoleCutTypeEnum. up_to_surface не принимается: "
+                        + "глубину того типа задаёт объект DepthObject.",
+                        "by_width", "by_depth")),
+                    ("depth_mm", Sch.Nullable(Sch.Num("Глубина выреза, мм — только при cut_type=by_depth."))),
+                    ("operation_id", Sch.Ref("#/$defs/operation_id"))),
+                WorkerCommands.CreateSheetMetalCut,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: "
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "
@@ -995,9 +1030,15 @@ public static class ToolCatalog
             Mutation("kompas_create_sketch", "Создать эскиз",
                 "Эскиз на плоскости: base (стандартная xy/xz/yz, при необходимости со смещением "
                 + "offset_mm) ЛИБО reference (ссылка вида plane — смещённая или вспомогательная "
-                + "плоскость, например построенная от грани инструментом kompas_create_aux_geometry). "
-                + "Грань и ребро опорой не являются и отвергаются по виду ссылки. Координаты дальше "
-                + "задаются в локальной системе эскиза. "
+                + "плоскость, например построенная от грани инструментом kompas_create_aux_geometry) "
+                + "ЛИБО face_ref (ссылка вида face из kompas_read_topology — плоская грань тела, "
+                + "документированный маршрут ksFaceDefinition.GetEntity → ksSketchDefinition.SetPlane). "
+                + "Ровно одно из трёх: plane (со своим base/reference) и face_ref вместе отвергаются. "
+                + "Грань как plane.reference отвергается по виду ссылки: у плоскости и грани разные поля. "
+                + "Опорой годится только ПЛОСКАЯ грань — на криволинейной эскиз не измерен. Ответ "
+                + "называет support (plane или face) и face_ref; для грани опора перечитывается назад "
+                + "сравнением по IUnknown, и несовпадение — VERIFICATION_FAILED с partialEffects. "
+                + "Координаты дальше задаются в локальной системе эскиза. "
                 + "ССЫЛКА НА СОЗДАННЫЙ ЭСКИЗ живёт до перестроения или переоткрытия документа: после "
                 + "них прежняя отвергается STALE_REFERENCE, а новую даёт kompas_list_sketches — тот же "
                 + "эскиз носит ОДНУ живую ссылку, и перечень возвращает именно её, а не вторую. "
@@ -1005,7 +1046,8 @@ public static class ToolCatalog
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
-                    ("plane", PlaneSchema()),
+                    ("plane", Sch.Nullable(PlaneSchema())),
+                    ("face_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
                     ("name", Sch.Nullable(Sch.Str("Имя эскиза.", maxLength: 256)))),
                 WorkerCommands.CreateSketch,
                 requiresDocument: true,

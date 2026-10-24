@@ -2273,10 +2273,11 @@ internal sealed class SheetMetalProbe : IDisposable
         return Failed ? 1 : 0;
     }
 
-    /// <summary>One THROUGH hole, so the flat pattern carries a circle the DXF can be asked about.</summary>
-    /// <remarks>DOC: isheetmetalholes_add.html, isheetmetalhole_cuttype.html, ..._diameter.html,
-    /// ..._baseplane.html. MEASURED: a hole cut by depth on the far side of the sheet leaves no circle
-    /// in a view from the other side, so this probe cuts through (ksHoleCutByWidth).
+    /// <summary>One hole the kernel builds, so the flat pattern carries a circle the DXF can be asked about.</summary>
+    /// <remarks>DOC: isheetmetalholes_add.html, isheetmetalhole_cuttype.html, ..._depth.html («доступно при
+    /// типе построения отверстия "на глубину"»), ..._diameter.html, ..._baseplane.html.
+    /// MEASURED: the through mode (ksHoleCutByWidth) is not built by this kernel — Update() false, faces
+    /// 6 → 6 — so the hole is cut to the sheet thickness, the mode the vertical scenario builds.
     /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
     private void DxfHole()
     {
@@ -2309,12 +2310,17 @@ internal sealed class SheetMetalProbe : IDisposable
         TrySet("dxf_hole_x_set", () => hole.X = 5d);
         TrySet("dxf_hole_y_set", () => hole.Y = 5d);
         TrySet("dxf_hole_diameter_set", () => hole.Diameter = 2d * HoleRadius);
-        TrySet("dxf_hole_cuttype_set", () => hole.CutType = ksHoleCutTypeEnum.ksHoleCutByWidth);
+        TrySet("dxf_hole_cuttype_set", () => hole.CutType = ksHoleCutTypeEnum.ksHoleCutByDepth);
+        TrySet("dxf_hole_depth_set", () => hole.Depth = _thickness);
+        var facesBefore = FaceCount();
         CheckBool("dxf_hole_update", true, SafeBool(() => hole.Update()));
         CheckInt("dxf_hole_count", before + 1, holes.Count);
         CheckDouble("dxf_hole_diameter_read_back", 2d * HoleRadius, SafeDouble(() => hole.Diameter));
-        Record("dxf_hole_faces", "граней у тела после сквозного отверстия",
-            Count(FaceCount()), Verdict.Info);
+        CheckDouble("dxf_hole_depth_read_back", _thickness, SafeDouble(() => hole.Depth));
+        // The face count is what says the kernel actually cut: an accepted Update() on its own did not.
+        Record("dxf_hole_faces", "граней у тела после отверстия на глубину",
+            Count(facesBefore) + " → " + Count(FaceCount()), Verdict.Info);
+        CheckBool("dxf_hole_built", true, FaceCount() > facesBefore);
         _hole = hole;
     }
 
@@ -2534,12 +2540,20 @@ internal sealed class SheetMetalProbe : IDisposable
         }
 
         _viewNumber = created[0];
+        Record("dxf_view_gabarit_before_unfold", "габарит вида сразу после AddStandartViews",
+            Rect(ViewGabarit(_viewNumber)), Verdict.Info);
+
+        if (!UnfoldView(views, _viewNumber.Value))
+        {
+            return;
+        }
+
         _viewGabarit = ViewGabarit(_viewNumber);
-        Record("dxf_view_gabarit", "габарит вида-развёртки на листе", Rect(_viewGabarit), Verdict.Info);
+        Record("dxf_view_gabarit", "габарит вида при Unfold = true", Rect(_viewGabarit), Verdict.Info);
         CheckBool("dxf_view_gabarit_matches_flat", true, SameSize(_viewGabarit, _flatExtents));
 
-        // The same part in a standard orientation: while the model IS unfolded, a standard view shows
-        // the same flat body, so an equal gabarit here is expected and only the numbers are evidence.
+        // The same part in a standard orientation: it reads the same file, so an equal box here would
+        // say the unfold flag changed nothing about the view.
         if (AddViews(views, partPath, StandardProjectionName, "dxf_view_standard", 160d, 100d))
         {
             var standard = ViewNumbers(views).Except(before).Except(created).ToArray();
@@ -2548,12 +2562,70 @@ internal sealed class SheetMetalProbe : IDisposable
                 var standardGabarit = ViewGabarit(standard[0]);
                 Record("dxf_standard_gabarit", "габарит обычного вида той же детали",
                     Rect(standardGabarit), Verdict.Info);
-                Record("dxf_standard_vs_unfold", "обычный вид против вида-развёртки",
+                Record("dxf_standard_vs_unfold", "обычный вид против вида при Unfold = true",
                     SameSize(standardGabarit, _viewGabarit) is true
-                        ? "совпали: модель развёрнута, оба вида показывают развёртку"
+                        ? "совпали: признак развёртки вида на геометрию не повлиял"
                         : "различаются", Verdict.Info);
+                CheckBool("dxf_standard_differs", false, SameSize(standardGabarit, _viewGabarit));
             }
         }
+    }
+
+    /// <summary>The view's own unfold flag, the documented property that shows a sheet part flat.</summary>
+    /// <remarks>DOC: iassociationview.html (the interface comes from the IViews collection or from IView by
+    /// QueryInterface), iassociationview_unfold.html («Unfold - Листовая деталь в разогнутом виде», BOOL),
+    /// ..._bendlinesvisible.html; ksdokument2d_ksrebuilddocument.html («Позволяет перестроить все
+    /// ассоциативные виды чертежа»).
+    /// LIMIT: IAssociationView.Rebuild is documented (iassociationview_rebuild.html) but the v24 interop
+    /// does not declare it, so the view is rebuilt by the documented document-level call.
+    /// INVARIANT: the flag is read back before its geometry is judged — an accepted setter says nothing.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private bool UnfoldView(IViews views, int number)
+    {
+        var association = FindView(views, number) as IAssociationView;
+        Record("dxf_view_association", "вид отдаёт IAssociationView",
+            association is null ? "null" : "IAssociationView",
+            association is null ? Verdict.Fail : Verdict.Pass);
+        if (association is null)
+        {
+            return false;
+        }
+
+        Record("dxf_view_projection_name", "ProjectionName вида",
+            SafeString(() => association.ProjectionName) ?? "не прочитано", Verdict.Info);
+        Record("dxf_view_unfold_before", "Unfold вида до установки",
+            Flag(SafeBool(() => association.Unfold)), Verdict.Info);
+        TrySet("dxf_view_unfold_set", () => association.Unfold = true);
+        CheckBool("dxf_view_unfold_read_back", true, SafeBool(() => association.Unfold));
+        Record("dxf_view_bendlines_visible", "BendLinesVisible вида",
+            Flag(SafeBool(() => association.BendLinesVisible)), Verdict.Info);
+        CheckBool("dxf_view_rebuild", true, SafeBool(() => _drawing5!.ksRebuildDocument()));
+        return true;
+    }
+
+    /// <summary>The view with this number, re-read from the drawing's own collection.</summary>
+    /// <remarks>DOC: iviews.html, iview_number.html. The collection hands out a throwaway reference, so the
+    /// caller uses it at once and never stores it.
+    /// History: docs/decisions/sheet-metal.md#dxf-probe</remarks>
+    private static IView? FindView(IViews views, int number)
+    {
+        var count = SafeInt(() => views.Count) ?? 0;
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                if (views.get_View(i) is IView view && SafeInt(() => view.Number) == number)
+                {
+                    return view;
+                }
+            }
+            catch (COMException)
+            {
+                // An unreadable view is not the one asked about; the caller sees null and says so.
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Order item 4: the drawing to DXF, then the file's own entities against the view.</summary>
@@ -2687,15 +2759,27 @@ internal sealed class SheetMetalProbe : IDisposable
         // The drawing is re-read through a fresh API5 pointer: SaveAs and the fold-back both move the
         // document, and a stale pointer would answer about a document that no longer exists.
         _drawing5 = _app5!.TransferInterface(_drawing7, Api5Auto, 0) as ksDocument2D ?? _drawing5;
-        var rebuilt = _drawing7 is IKompasDocument2D1 drawing2D
+        // The document-level rebuild is recorded, not judged: its page promises TRUE, and the view has a
+        // rebuild of its own (iassociationview_rebuild.html), which is the documented call for a view.
+        var rebuiltDocument = _drawing7 is IKompasDocument2D1 drawing2D
             ? SafeBool(() => drawing2D.RebuildDocument())
             : null;
-        CheckBool("dxf_rebuild", true, rebuilt);
+        Record("dxf_rebuild_document", "RebuildDocument() после сгибания модели",
+            Flag(rebuiltDocument), Verdict.Info);
+
+        bool? rebuiltView = null;
+        if (_drawing5 is not null)
+        {
+            rebuiltView = SafeBool(() => _drawing5.ksRebuildDocument());
+        }
+
+        Record("dxf_view_rebuild_after_fold", "ksRebuildDocument() после сгибания модели",
+            Flag(rebuiltView), Verdict.Info);
         var afterFold = ViewGabarit(_viewNumber);
-        Record("dxf_view_gabarit_after_fold_back", "габарит вида после сгибания и перестройки",
+        Record("dxf_view_gabarit_after_fold_back", "габарит вида после сгибания и перестройки вида",
             Rect(afterFold), Verdict.Info);
-        Record("dxf_view_keeps_flat", "вид сохранил габарит развёртки", Flag(SameSize(afterFold, _viewGabarit)),
-            Verdict.Info);
+        Record("dxf_view_keeps_flat", "вид сохранил габарит развёртки после сгибания модели",
+            Flag(SameSize(afterFold, _flatExtents)), Verdict.Info);
 
         // The same projection on the folded model: whether the unfold state is a requirement of the
         // route, answered by the documented call rather than by a guess.

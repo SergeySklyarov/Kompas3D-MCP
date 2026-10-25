@@ -300,9 +300,10 @@ scripts is disabled on this system`, код 1. Поставка 0.11.0 поэт�
 **Документированный маршрут.** Справка Microsoft `about_Execution_Policies`
 (`learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies`):
 параметр `-ExecutionPolicy` у `powershell.exe` задаёт политику НОВОЙ сессии, «The policy affects only
-the current session and child sessions»; значение «isn't stored in the configuration file», а живёт в
+the current session and child sessions»; значение «isn't stored in the registry», а живёт в
 `$Env:PSExecutionPolicyPreference` до закрытия сессии; `Bypass` - «Nothing is blocked and there are no
-warnings or prompts». Политика машины и пользователя при этом не меняется.
+warnings or prompts» (страница вида 5.1: скрипт запускает `powershell.exe`, а не `pwsh`). Политика
+машины и пользователя при этом не меняется.
 
 **Что решено.** Поставка собирается командой (она же - в шапке скрипта):
 

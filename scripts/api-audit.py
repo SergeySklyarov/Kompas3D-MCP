@@ -1,6 +1,6 @@
 """The whole API compliance audit in one command (work order `API_AUDIT_TOOLS`, item 6).
 
-  python scripts/api-audit.py [--host <KompasMcp.Host.exe>] [--report <all-report.json>]
+  python scripts/api-audit.py --report <all-report.json> [--host <KompasMcp.Host.exe>]
   python scripts/api-audit.py --self-test
 
 Runs the four measurements in order and then the generator, so `docs/API_COMPLIANCE.json` and
@@ -14,15 +14,20 @@ Runs the four measurements in order and then the generator, so `docs/API_COMPLIA
 
 The acceptance report of step 4 is the `--all` run of the delivery; without it the claims cannot be
 judged, and the audit refuses rather than reporting an empty, "clean" claim table.
+
+INVARIANT: `--report` is an argument, not a default. A report belongs to ONE run; a search over
+`docs/acceptance/evidence/*` answers with whatever file is newest, and nothing in the result says
+which run that was.
 """
 
 from __future__ import annotations
 
 import argparse
-import glob
+import json
 import os
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api_audit_common import ROOT, default_out, evidence_dir  # noqa: E402
@@ -41,23 +46,55 @@ def run(script, extra):
     return done.returncode
 
 
-def latest_acceptance_report(evidence):
-    """The `--all` report of the audited run: this audit's own copy first, then the newest on disk.
+def resolve_report(named):
+    """The acceptance report the claims are judged by, or a refusal naming what is missing.
 
-    A report left over from ANOTHER run is what a hand-written default would silently read, and a
-    stale report makes the claims read as over-claims that do not exist.
+    MEASURED: a hand-written default read a report taken before a whole block of rows existed, and
+    the matrix claims then read as over-claims that do not exist; the result never said which run it
+    came from. So the caller names the run, and the instrument only checks that the file is there.
+    History: docs/decisions/api-audit.md#report-is-an-argument
     """
-    local = os.path.join(evidence, "all-report.json")
-    if os.path.isfile(local):
-        return local
-    found = glob.glob(os.path.join(ROOT, "docs", "acceptance", "evidence", "*", "all-report.json"))
-    found += glob.glob(os.path.join(ROOT, "docs", "acceptance", "evidence", "*", "*all*.json"))
-    found = [path for path in found if os.path.isfile(path)]
-    return max(found, key=os.path.getmtime) if found else None
+    if not named:
+        raise SystemExit("нужен --report: отчёт приёмки --all, на котором судятся заявки матрицы "
+                         "(прибор не выбирает отчёт за вызывающего)")
+    if not os.path.isfile(named):
+        raise SystemExit(f"нет отчёта приёмки по указанному пути: {named}")
+    return os.path.abspath(named)
+
+
+def refuses(call):
+    """True when the call refuses through `SystemExit`: the refusal is what the arm checks."""
+    try:
+        call()
+    except SystemExit:
+        return True
+    return False
 
 
 def self_test():
     failures = []
+
+    def check(name, condition, detail=""):
+        print(f"  [{'PASS' if condition else 'FAIL'}] {name}" + (f" - {detail}" if detail else ""))
+        if not condition:
+            failures.append(name)
+
+    with tempfile.TemporaryDirectory(prefix="_api-audit-selftest-") as scratch:
+        stale = os.path.join(scratch, "docs", "acceptance", "evidence", "20260101-all-0000000")
+        os.makedirs(stale)
+        stale_report = os.path.join(stale, "all-report.json")
+        named = os.path.join(scratch, "other-run.json")
+        for path in (stale_report, named):
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"rows": [], "calls": []}, fh)
+
+        check("без --report прибор отказывает",
+              refuses(lambda: resolve_report(None)))
+        check("названный отчёт берётся как указан, а не самый свежий на диске",
+              resolve_report(named) == os.path.abspath(named), named)
+        check("несуществующий отчёт назван отказом",
+              refuses(lambda: resolve_report(os.path.join(scratch, "нет.json"))))
+
     for script in STEPS:
         path = os.path.join(ROOT, "scripts", script)
         done = subprocess.run([PYTHON, path, "--self-test"], cwd=ROOT, capture_output=True, text=True)
@@ -67,7 +104,7 @@ def self_test():
               f"{tail[-1] if tail else 'нет итоговой строки'}")
         if not ok:
             failures.append(script)
-    print(f"\nСамопроверка аудита: {len(STEPS)} приборов, {len(failures)} FAIL"
+    print(f"\nСамопроверка аудита: {len(STEPS)} приборов и правило отчёта приёмки, {len(failures)} FAIL"
           + (f" - {failures}" if failures else ""))
     return 1 if failures else 0
 
@@ -83,11 +120,9 @@ def main():
     if args.self_test:
         return self_test()
 
+    report = resolve_report(args.report)
+    print(f"Отчёт приёмки: {report}")
     evidence = args.evidence or evidence_dir()
-    report = args.report or latest_acceptance_report(evidence)
-    if not report:
-        raise SystemExit("не найден отчёт приёмки --all: заявки матрицы судить не по чему "
-                         "(нужен --report)")
 
     host_args = ["--host", args.host] if args.host else []
     run("api-audit-wire.py", host_args + ["--out", os.path.join(evidence, "wire.json")])

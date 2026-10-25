@@ -90,8 +90,9 @@
   `%LOCALAPPDATA%\KompasMCP\current\KompasMcp.Host.exe` (установка `v0.11.0`), `verify-client-entry.py`
   PASS 15 / FAIL 0; устаревшее подтверждение `A05` - строка долга 71.
 - **Строка «конец сеанса» клиентской приёмки 0.11.0 - за владельцем:** закрыть диалог приёмки и
-  прогнать `scripts/check-session-end.py --baseline docs/acceptance/evidence/delivery-v0.11.0-56cd3af/
-  client/session-end-baseline.json`; до закрытия диалога прибор отвечает FAIL на живых процессах, и это
+  прогнать канонический прибор `scripts/check-session-end.py --baseline docs/acceptance/evidence/
+  delivery-v0.11.0-56cd3af/client/session-end-baseline.json`; отчёт он пишет рядом с базовой линией -
+  `client/session-end-check.json`. До закрытия диалога прибор отвечает FAIL на живых процессах, и это
   верный ответ, а не дефект (разбор - `DEBT_REVIEW_0_11_0_REPORT_20261025.md` §2).
 - Проверка установщика `Install-KompasMcp.ps1` на машине владельца - за владельцем.
 - **Действующая очередь нарядов** - `coverage/solid-v24/implementation-plan.md`, датированная поправка

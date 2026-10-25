@@ -286,6 +286,8 @@ def manifest_counts(passport, schemas):
 
 
 # Paths whose content decides the binaries. Docs, coverage and scripts do not reach a delivery.
+# INVARIANT: the build commit and the passport commit may differ; the sources below may not.
+# History: docs/decisions/releases.md#build-passport-commits
 PRODUCT_SOURCES = ["src", "Directory.Build.props", "Directory.Build.targets",
                    "Directory.Packages.props", "global.json", "NuGet.config"]
 

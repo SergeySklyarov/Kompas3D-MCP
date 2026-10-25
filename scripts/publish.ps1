@@ -4,6 +4,13 @@ any vendor КОМПАС binary. The second property is as important as the first
 referenced at build time only, and scripts/inspect-package.ps1 verifies nothing leaked.
 
 Usage:  .\scripts\publish.ps1 [-Configuration Release] [-OutDir artifacts\publish]
+
+DOC: where the effective policy is Restricted this script is refused ("running scripts is disabled").
+Run it with the session-only override: the parameter is not stored in any policy scope, and the
+machine and user policies stay untouched (about_Execution_Policies, the `-ExecutionPolicy` parameter).
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish.ps1 -Configuration Release
+INVARIANT: no step of a delivery changes the execution policy of the machine or of the user.
+History: docs/decisions/releases.md#publish-restricted
 #>
 param(
     [string]$Configuration = "Release",

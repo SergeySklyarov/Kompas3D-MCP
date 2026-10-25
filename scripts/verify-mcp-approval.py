@@ -66,6 +66,11 @@ REQUIRED_ACTION = (
 )
 
 
+# The release step that removes stale approvals. The A05 detail points at it instead of describing
+# the cleanup here: removing them is the release order's job, and the instrument only reads.
+STALE_STEP = "docs/decisions/releases.md#stale-approval"
+
+
 def argument(name, default=None):
     if name in sys.argv:
         index = sys.argv.index(name)
@@ -95,6 +100,32 @@ def config_hash(entry):
     else:
         material = json.dumps(entry, sort_keys=True)
     return hashlib.sha256(material.encode("utf-8")).hexdigest(), material
+
+
+def stale_approvals(approvals, key, name, config_path, command):
+    """Stale approvals of the same server name: (keys, detail for the A05 row).
+
+    INVARIANT: a stale approval stays a FAIL. It is not "expected until Trust": the entry was
+    edited after the user approved it, so the client matches this entry to no stored approval.
+    LIMIT: the store holds the hash and the issue time only, so the path a stale key was issued for
+    is not recoverable from it; the detail names the current entry instead of guessing a former one.
+    History: docs/decisions/releases.md#stale-approval
+    """
+    keys = sorted(k for k in approvals if k.endswith("::" + name) and k != key)
+    if not keys:
+        return keys, "нет"
+    named = []
+    for stale in keys:
+        try:
+            when = datetime.fromtimestamp(approvals[stale] / 1000, timezone.utc)
+            named.append("%s (выдано %s)" % (stale, when.isoformat(timespec="seconds")))
+        except (TypeError, ValueError, OverflowError, OSError):
+            named.append(stale)
+    return keys, ("есть %d под другим хешем - запись правилась после подтверждения: %s. "
+                  "Хранилище хранит только хеш и время выдачи, поэтому путь записи устаревшего "
+                  "ключа из него не восстанавливается; действующая запись - %s, команда %s. "
+                  "Снять устаревшие подтверждения: шаг выпуска %s"
+                  % (len(keys), "; ".join(named), config_path, command or "не названа", STALE_STEP))
 
 
 # ─────────────────────── DEFAULT `--out`: THE DELIVERY'S EVIDENCE DIRECTORY ───────────────────────
@@ -166,6 +197,21 @@ def self_test():
         legacy = os.path.join("scratch", "mcp-smoke")
         leaked = [r for r in results if r[2] and legacy in str(r[2])]
         checks.append(not leaked)
+
+        # (4) A05: the stale key is NAMED and the row stays a FAIL; one active key is a PASS.
+        server = "kompas"
+        active, _ = config_hash({"command": "C:\\install\\current\\KompasMcp.Host.exe"})
+        former, _ = config_hash({"command": "C:\\repo\\artifacts\\publish\\KompasMcp.Host.exe"})
+        key = "%s::%s" % (active, server)
+        for label, store, want in (
+                ("один действующий", {key: 1792930000000}, 0),
+                ("действующий и устаревший", {key: 1792930000000,
+                                              "%s::%s" % (former, server): 1792900000000}, 1),
+                ("без действующего", {}, 0),
+        ):
+            got, detail = stale_approvals(store, key, server, command, command)
+            checks.append(len(got) == want and (want == 0 or former in detail))
+            results.append(("A05 " + label, command, "FAIL, назван ключ: " + detail if got else "PASS"))
 
         print("=== батарея прибора (самопроверка) ===")
         for label, subject, got in results:
@@ -269,12 +315,9 @@ def main():
                   "(`buildDesiredConfigs: skipping untrusted server`), Host не запускается, "
                   "инструменты агенту не видны"))
 
-        stale = sorted(k for k in approvals if k.endswith("::" + name) and k != key)
-        row("A05", "устаревших подтверждений того же имени нет",
-            not stale,
-            ("нет" if not stale
-             else "есть %d под другим хешем — запись правилась после подтверждения: %s"
-                  % (len(stale), ", ".join(k.split("::")[0][:12] + "…" for k in stale))))
+        stale, stale_detail = stale_approvals(approvals, key, name, config_path,
+                                              entry.get("command") or "")
+        row("A05", "устаревших подтверждений того же имени нет", not stale, stale_detail)
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
     failed = [r for r in rows if r["verdict"] != "PASS"]

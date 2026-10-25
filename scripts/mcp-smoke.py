@@ -39,6 +39,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zlib
 
 # The console on this machine is cp1250/cp866 and every message here is Russian: without an
 # explicit UTF-8 reconfigure the reporter dies on the first Cyrillic print.
@@ -1614,6 +1615,35 @@ def instrument_self_test():
     check("отказ без снимка называет причину, а не молчит",
           isinstance(fields["failure_snapshot"], str) and bool(fields["failure_snapshot"]),
           str(fields["failure_snapshot"]))
+
+    # Пустой кадр: счёт цветов обязан отличать плоское полотно от рисунка и НЕ выдавать формат без
+    # читателя за «не пусто». Отрицательный контроль стоит рядом с положительным, а фильтры PNG
+    # проверяются своим случаем: без снятия фильтра два одинаковых пикселя дали бы два цвета.
+    def png_chunk(kind, payload):
+        body = kind + payload
+        return (len(payload).to_bytes(4, "big") + body
+                + zlib.crc32(body).to_bytes(4, "big"))
+
+    def png_of(raw, width, height):
+        return (b"\x89PNG\r\n\x1a\n"
+                + png_chunk(b"IHDR", width.to_bytes(4, "big") + height.to_bytes(4, "big")
+                            + bytes([8, 2, 0, 0, 0]))
+                + png_chunk(b"IDAT", zlib.compress(raw))
+                + png_chunk(b"IEND", b""))
+
+    flat = png_of(b"".join(b"\x00" + bytes([255, 255, 255] * 4) for _ in range(3)), 4, 3)
+    check("плоский кадр насчитан как один цвет", png_colors(flat) == 1, str(png_colors(flat)))
+    check("плоский кадр назван blank_snapshot", blank_snapshot({"data": flat}) is True)
+    drawn = png_of(b"".join(b"\x00" + bytes([0, 0, 0, 255, 255, 255] * 2) for _ in range(3)), 4, 3)
+    check("кадр с содержимым пустым не назван",
+          png_colors(drawn) == 2 and blank_snapshot({"data": drawn}) is False,
+          str(png_colors(drawn)))
+    sub = png_of(b"\x01" + bytes([10, 20, 30, 0, 0, 0]), 2, 1)
+    check("фильтр Sub снят: два одинаковых пикселя — один цвет", png_colors(sub) == 1,
+          str(png_colors(sub)))
+    check("формат без читателя — «не измерено», а не «не пусто»",
+          png_colors(b"\xff\xd8\xff\xe0" + b"\x00" * 64) is None
+          and blank_snapshot({"data": b"\xff\xd8\xff\xe0" + b"\x00" * 64}) is None)
 
     # Сверка параметров после переоткрытия обязана называть РАЗОШЕДШИЙСЯ параметр машинно, а не
     # прятать его в обрезанном тексте (наряд RARE_FLAKES_SOAK §2.1). Обе половины: расхождение
@@ -43003,6 +43033,86 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
 # (TYPE_NOT_FOUND, измерено прибором tools/KompasMcp.InteropScan). Удалены ПРОВЕРКИ неверного
 # требования, а не результат: прежние отчёты с их FAIL остаются историей и не переписываются, а
 # удаление проверки НЕ является реализованной функцией.
+# MEASURED: a blank frame is a refusal of rasterisation, not a difference of projections: the saved
+# run had ONE colour on every snapshot of the group while the body existed (revision 5, one body,
+# volume 79999.99999999999 mm3), and content snapshots of the same plate carry 7-9 colours. The
+# threshold is therefore 2 - it names the flat canvas without failing a sparse line drawing.
+# LIMIT: only 8-bit non-interlaced PNG is counted; JPG has no reader here and is not judged.
+MIN_DISTINCT_COLORS = 2
+
+
+def png_colors(data):
+    """Count distinct colours of an 8-bit non-interlaced PNG; `None` when it cannot be counted.
+
+    INVARIANT: `None` means "not measured", never "not blank". A caller that gates on blankness
+    treats it as no evidence and says so, rather than as a pass.
+    """
+    if not data or len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    depth, color_type, interlace = data[24], data[25], data[28]
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
+    if depth != 8 or interlace != 0 or channels is None or width <= 0 or height <= 0:
+        return None
+    packed = bytearray()
+    offset = 8
+    while offset + 8 <= len(data):
+        length = int.from_bytes(data[offset:offset + 4], "big")
+        kind = data[offset + 4:offset + 8]
+        if kind == b"IDAT":
+            packed += data[offset + 8:offset + 8 + length]
+        elif kind == b"IEND":
+            break
+        offset += 12 + length
+    try:
+        raw = zlib.decompress(bytes(packed))
+    except zlib.error:
+        return None
+    stride = width * channels
+    if len(raw) < height * (stride + 1):
+        return None
+    prior = bytes(stride)
+    seen = set()
+    for row in range(height):
+        base = row * (stride + 1)
+        kind = raw[base]
+        if kind not in (0, 1, 2, 3, 4):
+            return None
+        line = bytearray(raw[base + 1:base + 1 + stride])
+        if kind:
+            for i in range(stride):
+                left = line[i - channels] if i >= channels else 0
+                up = prior[i]
+                if kind == 1:
+                    line[i] = (line[i] + left) & 0xFF
+                elif kind == 2:
+                    line[i] = (line[i] + up) & 0xFF
+                elif kind == 3:
+                    line[i] = (line[i] + ((left + up) >> 1)) & 0xFF
+                else:
+                    corner = prior[i - channels] if i >= channels else 0
+                    estimate = left + up - corner
+                    dl, du, dc = (abs(estimate - left), abs(estimate - up),
+                                  abs(estimate - corner))
+                    line[i] = (line[i] + (left if dl <= du and dl <= dc
+                                          else (up if du <= dc else corner))) & 0xFF
+        prior = bytes(line)
+        for i in range(0, stride, channels):
+            seen.add(bytes(line[i:i + channels]))
+    return len(seen)
+
+
+def blank_snapshot(shot):
+    """`True`/`False` when the picture is counted, `None` when it cannot be; memoised as `colors`."""
+    if "colors" not in shot:
+        shot["colors"] = png_colors(shot.get("data") or b"")
+    colors = shot["colors"]
+    if colors is None:
+        return None
+    return colors < MIN_DISTINCT_COLORS
+
+
 def image_checks(client, rep, app_id, workdir):
     """IMG.* — растровый снимок модели, строка матрицы `AUX-IMAGE.raster_export`.
 
@@ -43129,9 +43239,13 @@ def image_checks(client, rep, app_id, workdir):
     first = export(doc, rev, format="png", resolution=100, scale=1.0)
     facts = png_facts(first["data"])
     res = first["result"]
+    # A block with a flat canvas is a refusal, not a picture: without this gate a white frame passes
+    # every row that reads bytes, magic and geometry, which is exactly how the saved run hid it.
+    is_blank = blank_snapshot(first)
     passed = (first["code"] is None and first["block"] is not None
               and first["block"].get("mimeType") == "image/png"
               and first["data"][:8] == PNG_MAGIC and facts is not None
+              and not is_blank
               and res.get("raster_route") == "memory"
               and res.get("bytes_count") == len(first["data"])
               and sorted(os.listdir(memory_dir)) == before)
@@ -43140,8 +43254,9 @@ def image_checks(client, rep, app_id, workdir):
             "PASS" if passed else "FAIL",
             f"code={first['code']} mime={first['block'].get('mimeType') if first['block'] else None} "
             f"байт={len(first['data'])} магия={first['data'][:8].hex()} габарит={facts and (facts['width'], facts['height'])} "
-            f"маршрут={res.get('raster_route')} каталог_не_изменился={sorted(os.listdir(memory_dir)) == before}",
-            details={"result": res, "pixel_facts": facts})
+            f"маршрут={res.get('raster_route')} каталог_не_изменился={sorted(os.listdir(memory_dir)) == before} "
+            f"цветов={first['colors']} признак={'blank_snapshot' if is_blank else '-'}",
+            details={"result": res, "pixel_facts": facts, "distinct_colors": first["colors"]})
 
     # IMG.02 — файловый режим: файл записан ядром по названному пути и опознаётся по магии.
     file_dir = os.path.join(shot, "file")
@@ -43164,9 +43279,12 @@ def image_checks(client, rep, app_id, workdir):
                     return_image_content=False, save_path=file_path)
     file_bytes = open(file_path, "rb").read() if os.path.exists(file_path) else b""
     file_facts = png_facts(file_bytes)
+    file_shot = {"data": file_bytes}
+    file_blank = blank_snapshot(file_shot)
     res2 = second["result"]
     passed = (absent_before and second["code"] is None and len(file_bytes) > 0
               and file_bytes[:8] == PNG_MAGIC and file_facts is not None
+              and not file_blank
               and second["block"] is None
               and res2.get("raster_route") == "file"
               and res2.get("save_path") == file_path
@@ -43176,8 +43294,10 @@ def image_checks(client, rep, app_id, workdir):
             "PASS" if passed else "FAIL",
             f"code={second['code']} файл={len(file_bytes)} байт магия={file_bytes[:8].hex()} "
             f"маршрут={res2.get('raster_route')} image-блок={'нет' if second['block'] is None else 'есть'} "
-            f"файла_не_было_до_вызова={absent_before}",
-            details={"result": res2, "file_facts": file_facts, "save_path": file_path})
+            f"файла_не_было_до_вызова={absent_before} "
+            f"цветов={file_shot['colors']} признак={'blank_snapshot' if file_blank else '-'}",
+            details={"result": res2, "file_facts": file_facts, "save_path": file_path,
+                     "distinct_colors": file_shot["colors"]})
 
     # IMG.03 — второй формат: JPG опознаётся по своей магии, и габарит НЕ выдумывается.
     third = export(doc, rev, format="jpg", resolution=100, scale=1.0)
@@ -43206,7 +43326,9 @@ def image_checks(client, rep, app_id, workdir):
     res4 = fourth["result"]
     same = (len(both_bytes) > 0 and hashlib.sha256(both_bytes).hexdigest()
             == hashlib.sha256(fourth["data"]).hexdigest())
+    both_blank = blank_snapshot(fourth)
     passed = (both_absent_before and fourth["code"] is None and same
+              and not both_blank
               and res4.get("save_path_from_memory") is True
               and res4.get("raster_route") == "memory")
     rep.add("IMG.04.create",
@@ -43215,8 +43337,10 @@ def image_checks(client, rep, app_id, workdir):
             f"code={fourth['code']} совпали_побайтово={same} "
             f"файл={len(both_bytes)} байт ответ={len(fourth['data'])} байт "
             f"save_path_from_memory={res4.get('save_path_from_memory')} "
-            f"файла_не_было_до_вызова={both_absent_before}",
-            details={"result": res4, "save_path": both_path})
+            f"файла_не_было_до_вызова={both_absent_before} "
+            f"цветов={fourth['colors']} признак={'blank_snapshot' if both_blank else '-'}",
+            details={"result": res4, "save_path": both_path,
+                     "distinct_colors": fourth["colors"]})
 
     # ══ read ════════════════════════════════════════════════════════════════════════════════════
     # IMG.05 — габарит в ответе равен габариту, прочитанному прибором ИЗ САМОГО ЗАГОЛОВКА.
@@ -43249,14 +43373,19 @@ def image_checks(client, rep, app_id, workdir):
                 and hashlib.sha256(repeat["data"]).hexdigest()
                 == hashlib.sha256(first["data"]).hexdigest())
     repeat_facts = png_facts(repeat["data"])
-    passed = (repeat["code"] is None and repeat_facts == facts and same_sha)
+    # Two identical flat canvases satisfy "same geometry and same bytes" without being a picture.
+    repeat_blank = blank_snapshot(repeat)
+    passed = (repeat["code"] is None and repeat_facts == facts and same_sha
+              and not repeat_blank)
     rep.add("IMG.07.geometry_validation",
             "AUX-IMAGE.raster_export: два снимка одного вида совпали габаритом и байтами",
             "PASS" if passed else "FAIL",
             f"code={repeat['code']} габарит_1={facts and (facts['width'], facts['height'])} "
             f"габарит_2={repeat_facts and (repeat_facts['width'], repeat_facts['height'])} "
-            f"побайтово={same_sha}",
-            details={"result": repeat["result"], "pixel_facts": repeat_facts})
+            f"побайтово={same_sha} цветов={repeat['colors']} "
+            f"признак={'blank_snapshot' if repeat_blank else '-'}",
+            details={"result": repeat["result"], "pixel_facts": repeat_facts,
+                     "distinct_colors": repeat["colors"]})
 
     # IMG.08 — серия разрешений: габарит растёт предсказуемо (числа измерены пробой P6).
     measured_res = {50: (165, 224), 100: (328, 448), 200: (655, 894)}
@@ -43285,32 +43414,57 @@ def image_checks(client, rep, app_id, workdir):
             details={"series": {str(k): list(v) for k, v in seen_scale.items()}})
 
     # ══ geometry_validation: проекция ═══════════════════════════════════════════════════════════
-    # IMG.17 — проекция МЕНЯЕТ снимок, а не только состояние API. Это измерение обязательно: без
-    # него «вид применён» было бы утверждением по возврату SetCurrent, а возврат не является
-    # результатом (наряд п.1). Сравнивается ГАБАРИТ И БАЙТЫ двух проекций на несимметричной
-    # пластине: одинаковые снимки у разных проекций означали бы, что проекция не применена.
+    # IMG.17 — проекция МЕНЯЕТ снимок, а не только состояние API. Сравнивается ГАБАРИТ И БАЙТЫ двух
+    # проекций на несимметричной пластине: одинаковые снимки у разных проекций означали бы, что
+    # проекция не применена. Первый вызов идёт БЕЗ `keep_view` на свежем документе и обязан вернуть
+    # диметрию - это ещё одно измерение того же решения; закрепление перед сравнением держит вид на
+    # входе ИЗВЕСТНЫМ (`front`), а не зависящим от предыдущей строки.
     #
-    # ЧТО ИЗМЕНИЛОСЬ ПОСЛЕ ПУБЛИКАЦИИ `dimetric` (п. 2 наряда). Прежняя редакция закрепляла вид
-    # (`keep_view=true`) ПЕРВЫМ вызовом, потому что прежняя проекция свежего документа — диметрия —
-    # не имела опубликованного имени и первый `view` без `keep_view` отказывал. Теперь диметрия
-    # опубликована и восстановима, поэтому первый вызов БЕЗ `keep_view` обязан отработать. Он и стоит
-    # здесь первым, без `keep_view`: это ЕЩЁ ОДНО измерение того же решения. Закрепление оставлено
-    # перед сравнением, чтобы вид на входе сравнения был ИЗВЕСТЕН (`front`, читаемый), а не зависел от
-    # того, что оставила предыдущая строка.
-    first = export(doc, rev, format="png", resolution=100, view="front")
-    export(doc, rev, format="png", resolution=100, view="front", keep_view=True)
-    front = export(doc, rev, format="png", resolution=100, view="front")
-    rear = export(doc, rev, format="png", resolution=100, view="rear")
+    # INVARIANT: пустой кадр называется `blank_snapshot`, а не «байты не различаются»: плоское
+    # полотно удовлетворяет сравнению видов, ничего не показав. При отказе строка отдаёт ОБА снимка
+    # целиком - вид, габарит, байты, sha256, число цветов, порядок вызовов и время между ними, -
+    # чтобы разбор не требовал повторного прогона.
+    shot_started = time.monotonic()
+    shot_log = []
+
+    def timed(**payload):
+        started = time.monotonic()
+        answer = export(doc, rev, format="png", resolution=100, **payload)
+        blank = blank_snapshot(answer)
+        shape = png_facts(answer["data"])
+        shot_log.append({
+            "order": len(shot_log) + 1,
+            "requested_view": payload.get("view"),
+            "keep_view": bool(payload.get("keep_view")),
+            "code": answer["code"],
+            "applied_view": answer["result"].get("applied_view"),
+            "previous_view": answer["result"].get("previous_view"),
+            "size": [shape and shape["width"], shape and shape["height"]],
+            "bytes": len(answer["data"]),
+            "sha256": hashlib.sha256(answer["data"]).hexdigest(),
+            "colors": answer["colors"],
+            "blank_snapshot": blank,
+            "started_s": round(started - shot_started, 3),
+            "took_ms": round((time.monotonic() - started) * 1000, 1),
+        })
+        return answer
+
+    first = timed(view="front")
+    timed(view="front", keep_view=True)
+    front = timed(view="front")
+    rear = timed(view="rear")
     rf = png_facts(front["data"])
     rr = png_facts(rear["data"])
     differs_bytes = (len(front["data"]) > 0 and len(rear["data"]) > 0
                      and hashlib.sha256(front["data"]).hexdigest()
                      != hashlib.sha256(rear["data"]).hexdigest())
+    blank_shots = [shot for shot in shot_log if shot["blank_snapshot"]]
     passed = (first["code"] is None
               and first["result"].get("previous_view") == "dimetric"
               and first["result"].get("view_restored") is True
               and front["code"] is None and rear["code"] is None
               and rf is not None and rr is not None
+              and not blank_shots
               and (rf != rr or differs_bytes)
               and front["result"].get("applied_view") == "front"
               and rear["result"].get("applied_view") == "rear")
@@ -43324,9 +43478,12 @@ def image_checks(client, rep, app_id, workdir):
             f"габарит_front={rf and (rf['width'], rf['height'])} "
             f"габарит_rear={rr and (rr['width'], rr['height'])} "
             f"байты_различаются={differs_bytes} "
-            f"применено={front['result'].get('applied_view')}/{rear['result'].get('applied_view')}",
+            f"применено={front['result'].get('applied_view')}/{rear['result'].get('applied_view')} "
+            f"цветов={front['colors']}/{rear['colors']} "
+            f"признак={'blank_snapshot' if blank_shots else '-'}",
             details={"first_without_keep": first["result"], "front": front["result"],
-                     "rear": rear["result"]})
+                     "rear": rear["result"], "blank_snapshot": blank_shots or None,
+                     "calls": shot_log})
 
     # IMG.18 — применённая проекция ПОДТВЕРЖДАЕТСЯ обратным чтением, а не возвратом SetCurrent.
     #

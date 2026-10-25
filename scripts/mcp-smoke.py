@@ -1616,9 +1616,9 @@ def instrument_self_test():
           isinstance(fields["failure_snapshot"], str) and bool(fields["failure_snapshot"]),
           str(fields["failure_snapshot"]))
 
-    # Пустой кадр: счёт цветов обязан отличать плоское полотно от рисунка и НЕ выдавать формат без
-    # читателя за «не пусто». Отрицательный контроль стоит рядом с положительным, а фильтры PNG
-    # проверяются своим случаем: без снятия фильтра два одинаковых пикселя дали бы два цвета.
+    # TEST: the colour count must tell a flat canvas from a drawing, and must not report a format
+    # without a reader as "not blank". The negative control sits beside the positive one, and the PNG
+    # filters get their own case: without undoing the filter two equal pixels would count as two.
     def png_chunk(kind, payload):
         body = kind + payload
         return (len(payload).to_bytes(4, "big") + body
@@ -43033,10 +43033,11 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
 # (TYPE_NOT_FOUND, измерено прибором tools/KompasMcp.InteropScan). Удалены ПРОВЕРКИ неверного
 # требования, а не результат: прежние отчёты с их FAIL остаются историей и не переписываются, а
 # удаление проверки НЕ является реализованной функцией.
+
 # MEASURED: a blank frame is a refusal of rasterisation, not a difference of projections - a snapshot
-# taken with the body present carried ONE colour on every pixel, while content snapshots of the same
-# plate carry 7-9. The threshold is therefore 2: it names the flat canvas and does not fail a sparse
-# line drawing. History: docs/decisions/tests.md#blank-frame
+# taken with the body present carried ONE colour on every pixel, a drawing carries several.
+# INVARIANT: the threshold is 2, so a flat canvas is named and a sparse line drawing is not failed.
+# History: docs/decisions/tests.md#blank-frame
 # LIMIT: only 8-bit non-interlaced PNG is counted; JPG has no reader here and is not judged.
 MIN_DISTINCT_COLORS = 2
 
@@ -43414,16 +43415,13 @@ def image_checks(client, rep, app_id, workdir):
             details={"series": {str(k): list(v) for k, v in seen_scale.items()}})
 
     # ══ geometry_validation: проекция ═══════════════════════════════════════════════════════════
-    # IMG.17 — проекция МЕНЯЕТ снимок, а не только состояние API. Сравнивается ГАБАРИТ И БАЙТЫ двух
-    # проекций на несимметричной пластине: одинаковые снимки у разных проекций означали бы, что
-    # проекция не применена. Первый вызов идёт БЕЗ `keep_view` на свежем документе и обязан вернуть
-    # диметрию - это ещё одно измерение того же решения; закрепление перед сравнением держит вид на
-    # входе ИЗВЕСТНЫМ (`front`), а не зависящим от предыдущей строки.
-    #
-    # INVARIANT: пустой кадр называется `blank_snapshot`, а не «байты не различаются»: плоское
-    # полотно удовлетворяет сравнению видов, ничего не показав. При отказе строка отдаёт ОБА снимка
-    # целиком - вид, габарит, байты, sha256, число цветов, порядок вызовов и время между ними, -
-    # чтобы разбор не требовал повторного прогона.
+    # IMG.17 — a projection CHANGES the snapshot, not only the API state. Geometry and bytes of two
+    # projections on an asymmetric plate are compared: equal snapshots of different projections would
+    # mean the projection was not applied. The first call goes WITHOUT `keep_view` and must return
+    # dimetric; pinning before the comparison keeps the input view KNOWN (`front`).
+    # INVARIANT: a flat canvas is named `blank_snapshot`, not "the bytes do not differ" - it satisfies
+    # the view comparison while showing nothing; a refusal carries both snapshots whole, so no rerun.
+    # History: docs/decisions/tests.md#blank-frame
     shot_started = time.monotonic()
     shot_log = []
 

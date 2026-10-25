@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-25T01:18:18+02:00, часы машины +02:00",
+  "date": "2026-10-25T02:48:41+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -61,8 +61,8 @@
    "worker_sha256": "3289c9642e76cbb07e16dac9ea4b1e9cd1b42c7324243aec22796019a35a5587",
    "worker_dll_sha256": "150d06588440696884436256bf1a1ef1bd5f2d938b4f766b46bc27b9e72e4a0a",
    "adapter_sha256": "3a98cfb5dbf30edb80e727547d9940470659e30b3d8320ff43c69c9894b39452",
-   "source_commit": "0cfe8fd",
-   "source_tree_dirty": true,
+   "source_commit": "64f579c",
+   "source_tree_dirty": false,
    "tools_count": 14,
    "rows_complete_run": 1881,
    "failed": null,
@@ -45805,23 +45805,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-0cfe8fd/routes.json",
+  "source": "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 4361.6,
-  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
+  "lag_seconds": 1219.0,
+  "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/win-x64/KompasMcp.Api5Adapter.deps.json",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-0cfe8fd/wire.json",
+  "source": "docs/acceptance/evidence/20261025-api-audit-56cd3af/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 25.6,
+  "lag_seconds": 5364.4,
   "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "свеж"
  },
@@ -47914,7 +47914,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-0cfe8fd/routes.json"
+    "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json"
    ]
   },
   {
@@ -47924,7 +47924,7 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-0cfe8fd/routes.json"
+    "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json"
    ]
   },
   {

@@ -854,6 +854,12 @@ public sealed class Options
     /// the acceptance group only OPENS the file. History: docs/decisions/variables-material.md</summary>
     public string? VmReference { get; private set; }
 
+    /// <summary><c>--step-budget &lt;сек&gt;</c>: how long one <c>--vm-reference</c> step may stay inside a
+    /// COM call before the watchdog writes the snapshot and ends the run.
+    /// TEST: a budget of 1 s fires the refusal on the first step, so that path is exercised, not trusted.
+    /// History: docs/decisions/variables-material.md#vm-reference-watchdog</summary>
+    public int StepBudgetSeconds { get; private set; } = VmReferenceProbe.DefaultStepBudgetSeconds;
+
     /// <summary><c>--g3-parameter-route</c>: throwaway measurement — which object exposes an extrusion's
     /// parameter variables (block G3 §3.2 route vs the API7 view vs the tree entity).</summary>
     public bool G3ParameterRoute { get; private set; }
@@ -979,6 +985,7 @@ public sealed class Options
         string? vmOpen = null;
         string? filletRebuild = null;
         var iterations = 20;
+        var stepBudget = VmReferenceProbe.DefaultStepBudgetSeconds;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -1148,8 +1155,15 @@ public sealed class Options
                 case "--work" when i + 1 < args.Length:
                     workOverride = args[++i];
                     break;
+                case "--step-budget" when i + 1 < args.Length:
+                    stepBudget = int.TryParse(args[i + 1], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var budgetSeconds) && budgetSeconds > 0
+                        ? budgetSeconds
+                        : stepBudget;
+                    i++;
+                    break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--mech-mates] [--draft-base-edit] [--visible] [--iterations N] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--section-route] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--mech-mates] [--draft-base-edit] [--visible] [--iterations N] [--step-budget SEC] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -1254,6 +1268,7 @@ public sealed class Options
             ShutdownVisible = shutdownVisible,
             FilletRebuild = filletRebuild,
             Iterations = iterations,
+            StepBudgetSeconds = stepBudget,
         };
     }
 

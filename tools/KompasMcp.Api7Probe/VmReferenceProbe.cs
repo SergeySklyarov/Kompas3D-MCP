@@ -50,9 +50,23 @@ internal sealed class VmReferenceProbe
     public const string IllegalDepthName = "Глубина";
     public const string IllegalTotalName = "ПолнаяГлубина";
 
+    /// <summary>How long one step may stay inside a COM call before the watchdog reports and ends the run.</summary>
+    /// <remarks>
+    /// INVARIANT: a step that does not return is REPORTED, never waited on - a hung run writes no report.
+    /// MEASURED: a whole reference build takes about 30 s, so 120 s per step is far above any real step.
+    /// LIMIT: a COM call cannot be aborted from outside, so the snapshot is written and the process ends;
+    /// a KOMPAS instance that was inside the call can survive, and the snapshot names its PID.
+    /// History: docs/decisions/variables-material.md#vm-reference-watchdog
+    /// </remarks>
+    public const int DefaultStepBudgetSeconds = 120;
+
+
     private readonly ProbeReport _report;
     private readonly Options _options;
     private readonly HashSet<int> _pidsBefore = new();
+
+    /// <summary>Guards the step marker the watchdog reads; the STA thread writes it, the watchdog reads.</summary>
+    private readonly object _stepGate = new();
 
     private KompasObject _app = null!;
     private int _ownPid;
@@ -60,6 +74,10 @@ internal sealed class VmReferenceProbe
     /// <summary>The step currently running, so an unhandled exception is attributed to the step that
     /// raised it rather than to the first one — the defect the first version of this probe had.</summary>
     private ProbeStep? _current;
+
+    private string _stepId = "VR.0";
+    private long _stepStarted;
+    private volatile bool _finished;
 
     public VmReferenceProbe(ProbeReport report, Options options)
     {
@@ -78,17 +96,29 @@ internal sealed class VmReferenceProbe
     private ProbeStep Begin(string id, string title, string question)
     {
         _current = _report.Begin(id, title, question);
+        lock (_stepGate)
+        {
+            _stepId = id;
+            _stepStarted = Stopwatch.GetTimestamp();
+        }
+
         return _current;
     }
 
     public void Run(string path)
     {
+        // INVARIANT: the fixture path does not depend on the process's current directory.
+        // MEASURED: SaveAs with a relative name answered TRUE and wrote nothing, so the probe's own
+        // File.Exists check failed and no reference appeared; the absolute name writes the file.
+        path = Path.GetFullPath(path);
+
         foreach (var process in Process.GetProcessesByName("KOMPAS"))
         {
             _pidsBefore.Add(process.Id);
             process.Dispose();
         }
 
+        StartWatchdog(path);
         Launch();
         try
         {
@@ -97,7 +127,90 @@ internal sealed class VmReferenceProbe
         finally
         {
             Shutdown();
+            _finished = true;
         }
+    }
+
+    /// <summary>Watch the running step and end the run with a snapshot when it overruns its budget.</summary>
+    /// <remarks>TEST: <c>--step-budget 1</c> fires it on the first step without a real hang, so the
+    /// refusal path is exercised rather than trusted.</remarks>
+    private void StartWatchdog(string path)
+    {
+        var budget = TimeSpan.FromSeconds(_options.StepBudgetSeconds);
+        var thread = new System.Threading.Thread(() => Watch(budget, path))
+        {
+            IsBackground = true,
+            Name = "vm-reference-watchdog",
+        };
+        thread.Start();
+    }
+
+    private void Watch(TimeSpan budget, string path)
+    {
+        while (!_finished)
+        {
+            System.Threading.Thread.Sleep(500);
+            string id;
+            TimeSpan elapsed;
+            lock (_stepGate)
+            {
+                id = _stepId;
+                elapsed = Stopwatch.GetElapsedTime(_stepStarted);
+            }
+
+            if (elapsed <= budget || _finished)
+            {
+                continue;
+            }
+
+            _finished = true;
+            var snapshot = Snapshot(id, elapsed, budget, path);
+            snapshot.Fail("шаг " + id + " не ответил за " + (int)budget.TotalSeconds
+                + " с — проба остановлена снимком, а не ожиданием");
+            try
+            {
+                Flush(_report, _options);
+                Console.Error.WriteLine("[VM] снимок записан: " + snapshot.Conclusion);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[VM] снимок не записан: " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            Environment.Exit(2);
+        }
+    }
+
+    /// <summary>The facts a hung step leaves behind: which step, how long, and what the processes are.</summary>
+    private ProbeStep Snapshot(string id, TimeSpan elapsed, TimeSpan budget, string path)
+    {
+        var step = _report.Begin("VR.W", "Снимок шага, не вернувшегося за бюджет",
+            "Какой шаг не ответил, сколько он идёт и что осталось в процессах?");
+        step.Observe("шаг " + id + " идёт " + (int)elapsed.TotalSeconds + " с при бюджете "
+            + (int)budget.TotalSeconds + " с");
+        step.Observe("проба: pid " + Environment.ProcessId + ", эталон «" + path + "» на диске: "
+            + (File.Exists(path) ? "есть" : "нет"));
+        step.Observe("процессов KOMPAS до запуска: " + _pidsBefore.Count
+            + (_pidsBefore.Count == 0 ? string.Empty : " (" + string.Join(",", _pidsBefore) + ")"));
+        var pids = new List<int>();
+        foreach (var process in Process.GetProcessesByName("KOMPAS"))
+        {
+            pids.Add(process.Id);
+            step.Observe("KOMPAS.exe pid " + process.Id + ", отвечает: " + process.Responding
+                + ", окно: «" + process.MainWindowTitle + "»");
+            process.Dispose();
+        }
+
+        step.Observe("процессов KOMPAS сейчас: " + pids.Count
+            + (pids.Count == 0 ? string.Empty : " (" + string.Join(",", pids) + ")"));
+        step.Data["hung_step"] = id;
+        step.Data["elapsed_s"] = (int)elapsed.TotalSeconds;
+        step.Data["budget_s"] = (int)budget.TotalSeconds;
+        step.Data["probe_pid"] = Environment.ProcessId;
+        step.Data["kompas_pids_before"] = _pidsBefore.ToArray();
+        step.Data["kompas_pids_now"] = pids.ToArray();
+        step.Data["reference_written"] = File.Exists(path);
+        return step;
     }
 
     private void Launch()

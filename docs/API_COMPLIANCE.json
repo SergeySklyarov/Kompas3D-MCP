@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-25T02:48:41+02:00, часы машины +02:00",
+  "date": "2026-10-25T14:22:45+01:00, часы машины +01:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -55,13 +55,13 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "31ef239a0213d5c1e2c93cfaa711f0d79fa481fb87bd9a5287311e24a5a24ce1",
-   "host_dll_sha256": "a7ba95e5e0baedd55b5cba8e91e2c17984d06a26208cdcd2f7ad195e33bc0567",
+   "host_sha256": "4e883b3791dd05a69a18a46d1fb913f664b5c38e092a77e93438b0f938a4619c",
+   "host_dll_sha256": "0e7d4d29920949a0b1c92824ebadb09911ef72e0877d66027026c4ed462e99cc",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "3289c9642e76cbb07e16dac9ea4b1e9cd1b42c7324243aec22796019a35a5587",
-   "worker_dll_sha256": "150d06588440696884436256bf1a1ef1bd5f2d938b4f766b46bc27b9e72e4a0a",
-   "adapter_sha256": "3a98cfb5dbf30edb80e727547d9940470659e30b3d8320ff43c69c9894b39452",
-   "source_commit": "64f579c",
+   "worker_sha256": "a9ca0c15605c2676ea9b45ba76dcd4d30b925f2fb71346fc7cd4e2cde8eb83a1",
+   "worker_dll_sha256": "4eab7dbc011814fdd0f115fd0b3a81eda3d6c09cd3f9b9874f1b100041fcb5a6",
+   "adapter_sha256": "24b3253c1d58bce2cbfabf47bd56c0fda11aba299c5770583f7b287c275ce867",
+   "source_commit": "f41f3ab",
    "source_tree_dirty": false,
    "tools_count": 14,
    "rows_complete_run": 1881,
@@ -45805,23 +45805,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json",
+  "source": "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 1219.0,
-  "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/win-x64/KompasMcp.Api5Adapter.deps.json",
+  "lag_seconds": 9417.6,
+  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-56cd3af/wire.json",
+  "source": "docs/acceptance/evidence/20261025-api-audit-d4c5fae/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 5364.4,
+  "lag_seconds": 50738.8,
   "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "свеж"
  },
@@ -47914,7 +47914,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json"
+    "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json"
    ]
   },
   {
@@ -47924,7 +47924,7 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-56cd3af/routes.json"
+    "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json"
    ]
   },
   {

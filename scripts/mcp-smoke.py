@@ -43033,10 +43033,10 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
 # (TYPE_NOT_FOUND, измерено прибором tools/KompasMcp.InteropScan). Удалены ПРОВЕРКИ неверного
 # требования, а не результат: прежние отчёты с их FAIL остаются историей и не переписываются, а
 # удаление проверки НЕ является реализованной функцией.
-# MEASURED: a blank frame is a refusal of rasterisation, not a difference of projections: the saved
-# run had ONE colour on every snapshot of the group while the body existed (revision 5, one body,
-# volume 79999.99999999999 mm3), and content snapshots of the same plate carry 7-9 colours. The
-# threshold is therefore 2 - it names the flat canvas without failing a sparse line drawing.
+# MEASURED: a blank frame is a refusal of rasterisation, not a difference of projections - a snapshot
+# taken with the body present carried ONE colour on every pixel, while content snapshots of the same
+# plate carry 7-9. The threshold is therefore 2: it names the flat canvas and does not fail a sparse
+# line drawing. History: docs/decisions/tests.md#blank-frame
 # LIMIT: only 8-bit non-interlaced PNG is counted; JPG has no reader here and is not judged.
 MIN_DISTINCT_COLORS = 2
 

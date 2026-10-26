@@ -228,10 +228,11 @@ public partial class Api5Session
     }
 
     /// <summary>The address of a TOP-LEVEL component: its index in the flat
-    /// <c>ksDocument3D.PartCollection(true)</c>, found by matching (see <see cref="ComponentAddress"/>).</summary>
-    /// <remarks>DOC: <c>kspart_filename.html</c>, <c>ipart7_filename.html</c>, <c>kspart_getplacement.html</c>
-    /// → <c>ksPlacement.GetMatrix3D</c>, <c>ipart7_getsummmatrix.html</c>, <c>kspart_excluded.html</c>,
-    /// <c>kspartcollection_getbyindex.html</c>.
+    /// <c>ksDocument3D.PartCollection(true)</c>, FOUND by matching (see <see cref="ComponentAddress"/>).</summary>
+    /// <param name="ranks">Rank per source file over one enumeration; <c>null</c> — a just-inserted record,
+    /// which the insert appends, so its rank is the LAST one of its file.</param>
+    /// <remarks>DOC: <c>kspart_filename.html</c>, <c>ipart7_filename.html</c>, <c>kspart_getplacement.html</c>,
+    /// <c>ipart7_getsummmatrix.html</c>, <c>kspart_excluded.html</c>, <c>kspartcollection_getbyindex.html</c>.
     /// INVARIANT: no unambiguous match → NO address and a named note; a neighbour's index is never used.
     /// History: docs/decisions/assembly.md#identity</remarks>
     private int AddressOf(
@@ -246,7 +247,7 @@ public partial class Api5Session
 
         // THE RANK IS COUNTED PER SOURCE FILE, not across the whole enumeration: the same-file instances are
         // the only ones a counter can shift, because an excluded instance is the only one PartsEx omits.
-        var rank = 0;
+        var rank = ComponentAddress.LastRank(instances, source);
         if (ranks is not null && !string.IsNullOrWhiteSpace(source))
         {
             ranks.TryGetValue(source, out rank);
@@ -650,6 +651,7 @@ public partial class Api5Session
         // The component row is built FROM THE INSERTED INSTANCE (inserted7), not by a file-name search:
         // with two instances of one part, a name search would return the wrong instance. Its address is
         // found by matching (see AddressOf), so the row and the mutation route cannot disagree.
+        // ranks: null names the insert case — the new instance is the LAST record of its file.
         var inserted = top7 is null
             ? null
             : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0, ranks: null,

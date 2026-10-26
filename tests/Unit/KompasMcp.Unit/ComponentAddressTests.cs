@@ -99,8 +99,39 @@ public class ComponentAddressTests
     }
 
     [Fact]
-    public void ExcludedInstance_IsNeverTheTargetOfARecord()
+    public void InsertedInstance_IsTheLastRecordOfItsFile()
     {
+        // INVARIANT: the insert appends, so the new instance is the LAST record of its file. The rank must
+        // follow it: with rank 0 a second instance at the same placement resolves to the FIRST one, and every
+        // later mutation lands on that neighbour instead of the new component.
+        List<ComponentInstance> collection =
+        [
+            Instance(Path.Combine(DirA, "part.m3d"), 0),
+            Instance(Path.Combine(DirA, "part.m3d"), 0),
+            Instance(Path.Combine(DirB, "part.m3d"), 200),
+        ];
+
+        var rank = ComponentAddress.LastRank(collection, Path.Combine(DirA, "part.m3d"));
+        var verdict = ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection, rank);
+
+        Assert.Equal(1, rank);
+        Assert.Equal(1, verdict.Index);
+    }
+
+    [Fact]
+    public void LastRank_SkipsExcludedInstancesAndAnUnknownSource()
+    {
+        // An excluded instance is not a record of PartsEx, so it never consumes a rank — the same rule the
+        // address search itself follows. An unread source has no rank to compute and stays at the first one.
+        var collection = FixtureCollection();
+
+        Assert.Equal(1, ComponentAddress.LastRank(collection, Path.Combine(DirA, "part.m3d")));
+        Assert.Equal(0, ComponentAddress.LastRank(collection, Path.Combine(DirB, "part.m3d")));
+        Assert.Equal(0, ComponentAddress.LastRank(collection, null));
+    }
+
+    [Fact]
+    public void ExcludedInstance_IsNeverTheTargetOfARecord()    {
         // INVARIANT: an excluded instance is exactly the one PartsEx omits, so it is not a candidate even
         // when its path is the only one that matches.
         List<ComponentInstance> collection =

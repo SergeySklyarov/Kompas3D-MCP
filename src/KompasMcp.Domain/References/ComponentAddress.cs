@@ -111,6 +111,31 @@ public static class ComponentAddress
             + $"{byPlacement.Count}, а порядковый номер записи {recordRank} вне их числа");
     }
 
+    /// <summary>The rank of the LAST record of <paramref name="source"/> — the rank an instance gets when it
+    /// was just inserted.</summary>
+    /// <remarks>MEASURED: the insert APPENDS the instance, so the new record is the last one of its file; a
+    /// rank of 0 instead resolves to the FIRST instance, and every later mutation lands on that neighbour.
+    /// The count skips excluded instances, because <see cref="Locate"/> never ranks them.
+    /// History: docs/decisions/assembly.md#identity</remarks>
+    public static int LastRank(IReadOnlyList<ComponentInstance> collection, string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        for (var index = 0; index < collection.Count; index++)
+        {
+            if (collection[index].Excluded != true && SameSource(source, collection[index].SourcePath))
+            {
+                count++;
+            }
+        }
+
+        return Math.Max(0, count - 1);
+    }
+
     /// <summary>Whether two values name the same FILE: the FULL path, normalised, case-insensitive.</summary>
     /// <remarks>INVARIANT: file NAMES are never compared — two different files of one name are exactly the
     /// pair a name comparison confirms as "the same component". A path that cannot be normalised falls

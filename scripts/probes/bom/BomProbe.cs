@@ -36,6 +36,7 @@ internal sealed class BomProbe : IDisposable
     private readonly JsonArray _rows = new();
     private readonly JsonArray _reads = new();
     private readonly JsonArray _specReads = new();
+    private readonly JsonArray _specWritten = new();
     private (int Number, string Name) _writtenSection;
     private KompasObject? _app5;
     private IApplication? _app7;
@@ -284,6 +285,7 @@ internal sealed class BomProbe : IDisposable
             // RECORDED as is; the check rests on what the document shows afterwards.
             Record($"specification_end_{written}", "ksSpcObjectEnd() вернул",
                 specification.ksSpcObjectEnd().ToString(CultureInfo.InvariantCulture), "INFO");
+            _specWritten.Add(item.Marking);
             written++;
         }
 
@@ -613,6 +615,7 @@ internal sealed class BomProbe : IDisposable
             ["rows"] = _rows,
             ["reads"] = _reads,
             ["specification_reads"] = _specReads,
+            ["spec_written"] = _specWritten,
             ["counts"] = new JsonObject
             {
                 ["pass"] = _rows.Count(r => r?["verdict"]?.GetValue<string>() == "PASS"),

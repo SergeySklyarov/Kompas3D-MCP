@@ -2,7 +2,7 @@
   "meta": {
     "profile_id": "bom-minimal-v1",
     "title": "BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл",
-    "revision": "1.1",
+    "revision": "1.2",
     "revision_history": [
       {
         "revision": "1.0",
@@ -13,12 +13,18 @@
         "revision": "1.1",
         "date": "26.10.2026",
         "change": "наряд BOM_PROPERTIES закрыл третий инструмент профиля: BOM-03.component.properties читает восемь документированных свойств ksPart по ссылке из kompas_list_components (`docs/decisions/bom.md#component-properties`); контракт не расширен полями без страницы справки"
+      },
+      {
+        "revision": "1.2",
+        "date": "26.10.2026",
+        "change": "наряд BOM_SPEC_READ закрыл уровень «б»: BOM-04.specification.read читает объекты родной спецификации модели через ISpecificationDescription.Objects и ksSpecification (docs/decisions/bom.md#spec-read); .spw остаётся вне профиля — его единственный документированный вход адресует активный документ сеанса"
       }
     ],
     "target_build": "24.0.0.2799",
     "queue": {
       "BOM_MINIMAL": "Блок BOM - первый наряд кода цикла 0.12.0, поправка плана тридцать четвёртая",
-      "BOM_PROPERTIES": "Второй наряд кода цикла 0.12.0: свойства компонента по ссылке"
+      "BOM_PROPERTIES": "Второй наряд кода цикла 0.12.0: свойства компонента по ссылке",
+      "BOM_SPEC_READ": "Третий наряд кода цикла 0.12.0: чтение родной спецификации модели"
     }
   },
   "modes": [
@@ -65,13 +71,28 @@
         "negative_tests"
       ],
       "gap": "Ссылка разрешается тем же реестром и тем же порядковым адресом, что у kompas_delete_component (ksDocument3D.PartCollection(true) -> ksPartCollection.GetByIndex), поэтому неверная или устаревшая ссылка отвергается, а не читает чужой компонент. Восемь полей - каждое со своей страницей справки IPart: file (kspart_filename), name (kspart_name), marking (kspart_marking), material (kspart_material), hidden (kspart_hidden), excluded (kspart_excluded), standard (kspart_standardcomponent), multi_body (kspart_multibodyparts). Поле, которого не прочитано, возвращается null. Материал читается тем же свойством, что у kompas_get_material и у kompas_get_bom. Вложенный компонент адреса не имеет и отвергается CAPABILITY_UNAVAILABLE."
+    },
+    {
+      "ref": "BOM-04.specification.read",
+      "title": "Объекты родной спецификации модели: раздел, позиция, обозначение, наименование, количество",
+      "family": "BOM",
+      "queue": "BOM_SPEC_READ",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Список объектов - ISpecificationDescription.Objects (весь список, порядок визуальный); адрес - UniqueNumber объекта через ksGetSpcObject, номер читается обратно ksGetSpcObjectNumber и обязан совпасть, иначе строка не публикуется. Тексты и название раздела - ksGetSpcObjectColumnText по ТИПУ колонки (ksSColumnPosition/Mark/Name/Count) и ksGetSpcSectionName. Номер раздела принадлежит стилю, а не порядку ГОСТ. Пустая спецификация - пустой список и заметка. .spw вне объёма: SpcDocument/SpcActiveDocument адресует активный документ сеанса."
     }
   ],
   "common_dependencies": [],
   "explicitly_out_of_scope": [
     "Раздел спецификации компонента: IPropertyMng в COM-справке нет (только KsAPI), а IPropertyKeeper.GetPropertyValue требует объект IProperty; маршрут не документирован, поэтому раздел в профиль не входит (решение техлида `#profile-scope`, вопрос 2).",
     "Исполнения (IEmbodiment, IEmbodimentsManager): точка входа страницей не подтверждена, отложены решением техлида (вопрос 3).",
-    "Родная спецификация КОМПАС (ksSpecification в модели и документ .spw): отдельный наряд BOM_SPEC_READ.",
+    "Документ-спецификация .spw: единственный документированный вход KompasObject.SpcDocument/SpcActiveDocument адресует активный документ сеанса, а не запрошенный document_id, и типа документа .spw у инструментов открытия нет (решение наряда BOM_SPEC_READ, docs/decisions/bom.md#spec-read).",
     "Признак использования в спецификации (IProductDataManager.ObjectSpcUsed): документирован, живьём не проверен, в профиль не входит.",
     "Запись объектов спецификации: наряд BOM_SPEC_WRITE, в цикл 0.12.0 не входит.",
     "Признак «деталь или подсборка» без открытия файла: документированных членов ksPart для него нет, поэтому recurse открывает файл каждого компонента - деталь даёт пустой список вложенных."

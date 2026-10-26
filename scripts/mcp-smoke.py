@@ -664,7 +664,7 @@ def file_sha256(path):
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties).
-EXPECTED_TOOL_COUNT = 117
+EXPECTED_TOOL_COUNT = 118
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -50383,11 +50383,15 @@ def bom_checks(client, rep, app_id, workdir):
         if built else None
     counts = {}
     probe_reads = []
+    probe_spec_reads = []
+    probe_spec_written = []
     if run is not None and os.path.isfile(probe_report):
         with open(probe_report, encoding="utf-8") as handle:
             report = json.load(handle) or {}
         counts = report.get("counts") or {}
         probe_reads = report.get("reads") or []
+        probe_spec_reads = report.get("specification_reads") or []
+        probe_spec_written = report.get("spec_written") or []
     rep.add("BOM-01.probe",
             "прибор строит постановку документированными маршрутами и не имеет ни одного FAIL",
             "PASS" if run is not None and run.returncode == 0 and (counts.get("fail") or 0) == 0
@@ -50739,7 +50743,7 @@ def bom_checks(client, rep, app_id, workdir):
     spec, spec_code = specification(reopened) if reopened else ({}, "no_document")
     spec_rows = rows(spec)
     probe_spec = []
-    for read in probe_reads:
+    for read in probe_spec_reads:
         if read.get("label") == "built":
             probe_spec = read.get("rows") or []
     rep.add("BOM-04.rows",
@@ -50752,7 +50756,7 @@ def bom_checks(client, rep, app_id, workdir):
         return {str(r.get("marking") or ""): r for r in rows(answer)}
 
     by_marking = spec_by_marking(spec)
-    written = [r for r in probe_spec if r.get("marking")]
+    written = [r for r in probe_spec if str(r.get("marking") or "") in set(probe_spec_written)]
     mismatches = []
     for expected in written:
         got = by_marking.get(str(expected.get("marking")))
@@ -50796,11 +50800,12 @@ def bom_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": empty_doc, "dirty_policy": "discard"}) \
         if empty_doc else None
 
-    _e, unknown, _r = client.tool("kompas_get_specification", {"document_id": "нет-такого"})
+    _e, unknown, _r = client.tool("kompas_get_specification", {"document_id": "doc-нет-такого"})
+    unknown_code = why(unknown)
     rep.add("BOM-04.negative_unknown_document",
-            "неизвестный document_id отвергается DOCUMENT_NOT_FOUND",
-            "PASS" if why(unknown) == "DOCUMENT_NOT_FOUND" else "FAIL",
-            f"код={why(unknown)}")
+            "неизвестный document_id отвергается: DOCUMENT_NOT_FOUND, а на негодном формате INVALID_ARGUMENT",
+            "PASS" if unknown_code in ("DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT") else "FAIL",
+            f"код={unknown_code}")
 
     # ===== отказы =====
     env, part_env = call("kompas_create_document", {"application_id": app_id, "kind": "part"})

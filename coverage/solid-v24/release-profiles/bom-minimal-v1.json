@@ -2,17 +2,23 @@
   "meta": {
     "profile_id": "bom-minimal-v1",
     "title": "BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл",
-    "revision": "1.0",
+    "revision": "1.1",
     "revision_history": [
       {
         "revision": "1.0",
         "date": "26.10.2026",
         "change": "профиль заведён нарядом BOM_MINIMAL по решению техлида `docs/decisions/bom.md#profile-scope`: сводка BOM (группировка по полному пути, фильтры hidden/excluded/standard, рекурсия открытием файла подсборки) и выгрузка в CSV/JSON; раздел спецификации и исполнения в профиль не входят"
+      },
+      {
+        "revision": "1.1",
+        "date": "26.10.2026",
+        "change": "наряд BOM_PROPERTIES закрыл третий инструмент профиля: BOM-03.component.properties читает восемь документированных свойств ksPart по ссылке из kompas_list_components (`docs/decisions/bom.md#component-properties`); контракт не расширен полями без страницы справки"
       }
     ],
     "target_build": "24.0.0.2799",
     "queue": {
-      "BOM_MINIMAL": "Блок BOM - первый наряд кода цикла 0.12.0, поправка плана тридцать четвёртая"
+      "BOM_MINIMAL": "Блок BOM - первый наряд кода цикла 0.12.0, поправка плана тридцать четвёртая",
+      "BOM_PROPERTIES": "Второй наряд кода цикла 0.12.0: свойства компонента по ссылке"
     }
   },
   "modes": [
@@ -44,6 +50,21 @@
         "negative_tests"
       ],
       "gap": "Файл пишется из тех же строк, что ответ kompas_get_bom (один код построения строк), формат выбирается расширением (.csv или .json), CSV - UTF-8 с BOM-меткой и разделителем «;». Путь проверяется существующей политикой путей записи, существующий файл перезаписывается. Ответ - размер и SHA256 файла, который лежит на диске; файл читается обратно и даёт те же строки."
+    },
+    {
+      "ref": "BOM-03.component.properties",
+      "title": "Свойства одного компонента по ссылке из kompas_list_components",
+      "family": "BOM",
+      "queue": "BOM_PROPERTIES",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Ссылка разрешается тем же реестром и тем же порядковым адресом, что у kompas_delete_component (ksDocument3D.PartCollection(true) -> ksPartCollection.GetByIndex), поэтому неверная или устаревшая ссылка отвергается, а не читает чужой компонент. Восемь полей - каждое со своей страницей справки IPart: file (kspart_filename), name (kspart_name), marking (kspart_marking), material (kspart_material), hidden (kspart_hidden), excluded (kspart_excluded), standard (kspart_standardcomponent), multi_body (kspart_multibodyparts). Поле, которого не прочитано, возвращается null. Материал читается тем же свойством, что у kompas_get_material и у kompas_get_bom. Вложенный компонент адреса не имеет и отвергается CAPABILITY_UNAVAILABLE."
     }
   ],
   "common_dependencies": [],

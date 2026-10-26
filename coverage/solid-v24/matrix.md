@@ -38,13 +38,13 @@
 
 ### профиль bom-minimal-v1 — BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл
 
-- **обязательных_режимов:** 2
-- **режимов_закрыто:** 2
+- **обязательных_режимов:** 3
+- **режимов_закрыто:** 3
 - **общих_зависимостей:** 0
 - **зависимостей_закрыто:** 0
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** BOM_MINIMAL 2/2
+- **по_очередям:** BOM_MINIMAL 2/2; BOM_PROPERTIES 1/1
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -242,19 +242,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 377
-- **строк_полностью_закрыто:** 189
-- **строк_с_каким_либо_прогрессом:** 206
+- **строк_каталога:** 378
+- **строк_полностью_закрыто:** 190
+- **строк_с_каким_либо_прогрессом:** 207
 - **семейств_в_каталоге:** 48
 - **семейств_без_строк:** 12
-- **операций:** 150
-- **режимов_и_вариантов:** 231
-- **применимых_действий:** 3061
-- **действий_verified:** 1247
-- **покрытие_действий:** 40.7%
-- **распределение_статусов:** {'not_started': 1814, 'verified': 1247, 'not_applicable': 709}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 74, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 81, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 151
+- **режимов_и_вариантов:** 232
+- **применимых_действий:** 3065
+- **действий_verified:** 1251
+- **покрытие_действий:** 40.8%
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1251, 'not_applicable': 715}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 75, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 82, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -305,6 +305,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
+| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 
 ### Общие зависимости профиля `bom-minimal-v1`
 
@@ -965,6 +966,7 @@
 | `SMB-09.flat_dxf.export` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | SMB.40.flat_dxf_export, SMB.41.flat_dxf_overwrite, SMB.42.flat_dxf_refusals, SMB.43.temp_drawing_closed |
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
+| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1702,6 +1704,11 @@
   - Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.
   - Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.
   - Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет.
+- `BOM-03.component.properties` — закрыт целиком
+  - У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.
+  - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).
+  - Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.
+  - Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

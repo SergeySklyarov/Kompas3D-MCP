@@ -48,6 +48,39 @@ public sealed record ExportBomCommand
     public required string OutputPath { get; init; }
 }
 
+/// <summary>Read one component's properties — block <c>BOM_PROPERTIES</c>, mode <c>BOM-03</c>.</summary>
+/// <remarks>INVARIANT: the reference is the one <c>kompas_list_components</c> issued and is resolved by
+/// the SAME registry as <c>kompas_delete_component</c>; the address is the ordinal in the flat
+/// <c>ksDocument3D.PartCollection(true)</c>. History: docs/decisions/bom.md#component-properties</remarks>
+public sealed record GetComponentPropertiesCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Component reference from <c>kompas_list_components</c>.</summary>
+    public required string ComponentRef { get; init; }
+}
+
+/// <summary>The properties as <c>ksPart</c> answers them. A null value means "not read", never empty,
+/// zero or false.</summary>
+/// <remarks>INVARIANT: every field here rests on its own help page of <c>IPart</c>; a field with no page
+/// does not enter the contract, and the unit test holds this list to the page table.
+/// History: docs/decisions/bom.md#component-properties</remarks>
+public sealed record ComponentPropertiesDto(
+    string? File,
+    string? Name,
+    string? Marking,
+    string? Material,
+    bool? Hidden,
+    bool? Excluded,
+    bool? Standard,
+    bool? MultiBody);
+
+/// <summary>One component's documented properties, the route they were read by, and the notes.</summary>
+public sealed record GetComponentPropertiesResult(
+    ComponentPropertiesDto Properties,
+    string Route,
+    IReadOnlyList<string> Notes);
+
 /// <summary>One BOM row. A null field means "not read", not an empty value.</summary>
 public sealed record BomLineDto(string? File, string? Name, string? Marking, string? Material, int Instances);
 

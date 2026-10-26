@@ -50348,6 +50348,21 @@ def bom_checks(client, rep, app_id, workdir):
                                  "group_by"} - set(export_props))) else "FAIL",
             f"поля={export_props} обязательные={export_required}")
 
+    # ===== BOM-03: обнаружение и схема свойств компонента =====
+    properties_entry = entry_of(client, "kompas_get_component_properties")
+    properties_schema = (properties_entry or {}).get("inputSchema") or {}
+    properties_props = set(properties_schema.get("properties") or {})
+    properties_required = set(properties_schema.get("required") or [])
+    rep.add("BOM-03.discovery", "инструмент свойств компонента есть в реестре каталога",
+            "PASS" if "kompas_get_component_properties" in registry else "FAIL",
+            f"в реестре={len(registry)}")
+    rep.add("BOM-03.schema",
+            "схема свойств требует document_id и component_ref и не несёт других полей",
+            "PASS" if (properties_entry is not None
+                       and {"document_id", "component_ref"} <= properties_required
+                       and properties_props == {"document_id", "component_ref"}) else "FAIL",
+            f"поля={sorted(properties_props)} обязательные={sorted(properties_required)}")
+
     # ===== BOM-01: постановка прибором =====
     probe = os.path.join(ROOT, "scripts", "probes", "bom", "bin", "x64", "Release",
                          "net10.0-windows", "BomProbe.exe")
@@ -50366,9 +50381,12 @@ def bom_checks(client, rep, app_id, workdir):
     run = subprocess.run([probe, probe_report], cwd=ROOT, capture_output=True, text=True, timeout=1800) \
         if built else None
     counts = {}
+    probe_reads = []
     if run is not None and os.path.isfile(probe_report):
         with open(probe_report, encoding="utf-8") as handle:
-            counts = (json.load(handle) or {}).get("counts") or {}
+            report = json.load(handle) or {}
+        counts = report.get("counts") or {}
+        probe_reads = report.get("reads") or []
     rep.add("BOM-01.probe",
             "прибор строит постановку документированными маршрутами и не имеет ни одного FAIL",
             "PASS" if run is not None and run.returncode == 0 and (counts.get("fail") or 0) == 0
@@ -50466,6 +50484,72 @@ def bom_checks(client, rep, app_id, workdir):
             "PASS" if not left else "FAIL",
             f"подсборка_в_списке={left} документов={len(open_paths)}")
 
+    # ===== BOM-03: свойства компонента против постановки прибора =====
+    def probe_components():
+        """Записи прибора по экземплярам в порядке коллекции ksPartCollection."""
+        for read in probe_reads:
+            components = (read or {}).get("components") or []
+            if components:
+                return components
+        return []
+
+    def probe_flag(value):
+        """Прибор пишет значение строкой («True»/«False»), а не bool."""
+        return str(value).strip().lower() == "true"
+
+    def snapshot(doc):
+        """Свойства КАЖДОГО адресуемого ссылкой экземпляра: полный путь и поля ответа."""
+        _e, listed, _r = client.tool("kompas_list_components", {"document_id": doc, "recursive": False}) \
+            if doc else ({}, {}, None)
+        entries = ((listed or {}).get("result") or {}).get("components") or []
+        items, failures = [], []
+        for entry in entries:
+            env, code = call("kompas_get_component_properties",
+                             {"document_id": doc, "component_ref": entry.get("component_ref")})
+            if code:
+                failures.append((os.path.basename(str(entry.get("source_path") or "")), code))
+                continue
+            items.append((str(entry.get("source_path") or "").lower(),
+                          result(env).get("properties") or {}))
+        return items, failures
+
+    expected_by_file = {}
+    for component in probe_components():
+        expected_by_file.setdefault(str(component.get("file") or "").lower(), []).append(component)
+
+    def mismatches(items):
+        """Строки, не совпавшие с записью прибора: имя, обозначение, материал, standard, multi_body."""
+        bad = []
+        for path, props in items:
+            key = (props.get("name"), props.get("marking"), props.get("material"),
+                   props.get("standard"), props.get("multi_body"))
+            found = [c for c in expected_by_file.get(path) or []
+                     if (c.get("name"), c.get("marking"), c.get("material"),
+                         probe_flag(c.get("standard")), probe_flag(c.get("multi_body"))) == key]
+            if not found:
+                bad.append((os.path.basename(path), key))
+        return bad
+
+    before, before_failures = snapshot(asm)
+    gaps = mismatches(before)
+    bom_material = {str(row.get("file") or "").lower(): row.get("material") for row in rows(full)}
+    material_gap = [os.path.basename(path) for path, props in before
+                    if path in bom_material and props.get("material") != bom_material[path]]
+    rep.add("BOM-03.matches_probe",
+            "у каждого экземпляра из kompas_list_components file, name, marking, material, standard и "
+            "multi_body совпадают с записанными прибором, а материал — со строкой kompas_get_bom того же "
+            "файла",
+            "PASS" if (before and not before_failures and not gaps and not material_gap) else "FAIL",
+            f"экземпляров={len(before)} отказов={before_failures} расхождений={gaps} "
+            f"материал_против_bom={material_gap}")
+    hidden_true = [os.path.basename(path) for path, props in before if props.get("hidden") is True]
+    excluded_true = [os.path.basename(path) for path, props in before if props.get("excluded") is True]
+    rep.add("BOM-03.flags",
+            "hidden=true ровно у одного скрытого экземпляра, excluded=false у всех доступных ссылкой: "
+            "исключённый в API7-перечисление не попадает, значит ссылки на него нет",
+            "PASS" if (len(hidden_true) == 1 and not excluded_true) else "FAIL",
+            f"hidden_true={hidden_true} excluded_true={excluded_true} экземпляров={len(before)}")
+
     # ===== BOM-01: save -> reopen даёт те же числа =====
     saved, save_code = call("kompas_save_document",
                             {"document_id": asm, "expected_revision": revision(asm),
@@ -50482,6 +50566,14 @@ def bom_checks(client, rep, app_id, workdir):
                        and again.get("unique_files") == 3 and by_file(again) == counts_full) else "FAIL",
             f"код_сохранения={save_code} код_открытия={reopen_code} экземпляров={again.get('instances')} "
             f"по_имени={by_file(again)}")
+
+    # ===== BOM-03: свойства после save -> close -> open =====
+    after, after_failures = snapshot(reopened)
+    same = [props for _path, props in after] == [props for _path, props in before]
+    rep.add("BOM-03.save_reopen",
+            "после save -> close -> open свойства те же, что до сохранения: те же значения у тех же файлов",
+            "PASS" if (after and not after_failures and same) else "FAIL",
+            f"экземпляров={len(after)} отказов={after_failures} совпало={same}")
 
     # ===== BOM-02: выгрузка CSV и JSON =====
     def export(path):

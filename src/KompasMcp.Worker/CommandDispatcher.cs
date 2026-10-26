@@ -414,6 +414,8 @@ public sealed class CommandDispatcher
             WorkerCommands.DeleteSketchConstraint => _sta.Run(() => DeleteSketchConstraint(request), "sketch.constraint.delete", cancellationToken),
             WorkerCommands.GetBom => _sta.Run(() => GetBom(request), "bom.get", cancellationToken),
             WorkerCommands.ExportBom => _sta.Run(() => ExportBom(request), "bom.export", cancellationToken),
+            WorkerCommands.GetComponentProperties => _sta.Run(() => GetComponentProperties(request),
+                "bom.component_properties", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
             WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
@@ -1518,6 +1520,9 @@ public sealed class CommandDispatcher
 
     private object? ExportBom(IpcFrame request) =>
         _session.ExportBom(Argument<ExportBomCommand>(request));
+
+    private object? GetComponentProperties(IpcFrame request) =>
+        _session.GetComponentProperties(Argument<GetComponentPropertiesCommand>(request));
 
     private object? ListComponents(IpcFrame request) =>
         _session.ListComponents(Argument<ListComponentsCommand>(request));

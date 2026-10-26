@@ -116,6 +116,32 @@
   `file_path` наряда: политика Host судит поля по имени, и новое имя обошло бы её), существующий файл
   перезаписывается. Ответ несёт размер и SHA256 файла, который лежит на диске.
 
+## #component-properties — инструмент `kompas_get_component_properties` (наряд `BOM_PROPERTIES`)
+
+- **Требование v1 `docs/01_TECHNICAL_SPEC.md` §1.11 (BOM)** закрывается третьей строкой матрицы
+  `BOM-03.component.properties`: свойства экземпляра читаются по той же ссылке, что выдают
+  `kompas_list_components`, а не по имени и не по номеру в чужом перечислении.
+- **Адрес — существующий.** `component_ref` разрешается тем же реестром ссылок и тем же порядковым
+  адресом, что у `kompas_delete_component` (`ksDocument3D.PartCollection(true)` →
+  `ksPartCollection.GetByIndex`), включая сверку источника: иначе ответ описал бы ЧУЖОЙ компонент
+  после сдвига номеров. Нового формата ссылки нет.
+- **Восемь полей — восемь страниц `IPart`.** `file` — `kspart_filename.html`, `name` —
+  `kspart_name.html`, `marking` — `kspart_marking.html`, `material` — `kspart_material.html`,
+  `hidden` — `kspart_hidden.html`, `excluded` — `kspart_excluded.html`, `standard` —
+  `kspart_standardcomponent.html`, `multi_body` — `kspart_multibodyparts.html` («MultiBodyParts —
+  Признак того, что компонент состоит из нескольких частей», тип `BOOL`). Список полей лежит в
+  `ComponentPropertyPages` (Domain), и модульный тест сверяет его с контрактом: поле без страницы в
+  контракт не входит. Полей «на будущее» (`null` без маршрута) нет.
+- **Материал — тем же свойством, что у `kompas_get_material` и `kompas_get_bom`** (`ksPart.material`):
+  расхождение ответов по одному экземпляру было бы дефектом, а не разными источниками.
+- **Вложенный компонент отвергается.** Адреса API5 у него нет, а восемь полей документированы только
+  на `IPart`; поэтому ответ — `CAPABILITY_UNAVAILABLE` с названной причиной, а не частичный набор
+  полей с `null`. Это `LIMIT:` в описании инструмента и в матрице.
+- **`excluded` у доступной ссылки всегда `false`.** Исключённый из расчёта экземпляр не попадает в
+  API7-перечисление `kompas_list_components` (измерено в `BOM_MINIMAL`), значит ссылки на него не
+  существует. Поле остаётся в контракте, потому что оно документировано, но обхода этого предела нет.
+- **Непрочитанное поле — `null`.** «Не прочитано» не превращается ни в пустую строку, ни в `false`.
+
 ## #probe — прибор
 
 `scripts/probes/bom/` — отдельный проект, не входит в `KompasMcp.sln` и ничего не берёт из `src/`:

@@ -210,6 +210,8 @@ public static class WorkerCommandTable
         // the budget covers the opens as well. The export writes a file and changes no model.
         Cad(WorkerCommands.GetBom, WorkerAction.Read, 300_000);
         Cad(WorkerCommands.ExportBom, WorkerAction.FileWrite, 300_000);
+        // One COM read per property on one component; the reference is resolved in memory.
+        Cad(WorkerCommands.GetComponentProperties, WorkerAction.Read, 120_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

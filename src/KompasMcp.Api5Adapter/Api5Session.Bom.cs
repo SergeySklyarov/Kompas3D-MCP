@@ -93,6 +93,45 @@ public partial class Api5Session
         + "standardComponent)"
         + (recurse ? "; вложенные — открытием файла подсборки" : string.Empty);
 
+    // ── BOM-03 ──
+
+    /// <summary>Properties of ONE component, read from the <c>ksPart</c> its reference addresses.</summary>
+    /// <remarks>DOC: <c>kspart_props.html</c> lists the eight properties, each with its own page
+    /// (<c>kspart_filename</c>, <c>_name</c>, <c>_marking</c>, <c>_material</c>, <c>_hidden</c>,
+    /// <c>_excluded</c>, <c>_standardcomponent</c>, <c>_multibodyparts</c>).
+    /// INVARIANT: the reference is resolved by the SAME registry and the SAME ordinal route as
+    /// <c>kompas_delete_component</c>, so a stale reference is refused instead of reading a foreign
+    /// component. A nested component has no address at all — refused, not guessed.
+    /// History: docs/decisions/bom.md#component-properties</remarks>
+    public GetComponentPropertiesResult GetComponentProperties(GetComponentPropertiesCommand command)
+    {
+        var document = RequireAssemblyForBom(command.DocumentId, "свойства компонента");
+        var stored = References.Require(command.ComponentRef, document.Id, document.Revision);
+        if (stored.Payload is not ComponentPayload payload)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка «{command.ComponentRef}» не адресует компонент: это {stored.Kind}.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var part = ComponentPart5(document, payload, out var addressNote, "чтение свойств");
+
+        return new GetComponentPropertiesResult(
+            new ComponentPropertiesDto(
+                Text(() => part.fileName),
+                Text(() => part.name),
+                Text(() => part.marking),
+                Text(() => part.material),
+                Bool(() => part.hidden),
+                Bool(() => part.excluded),
+                Bool(() => part.standardComponent),
+                Bool(() => part.MultiBodyParts)),
+            "api5:ksDocument3D.PartCollection(true) → ksPartCollection.GetByIndex → ksPart(fileName, name, "
+            + "marking, material, hidden, excluded, standardComponent, MultiBodyParts)",
+            [addressNote]);
+    }
+
     // ── walk ──
 
     /// <summary>The rows plus the number of instances the walk enumerated, which the sum is checked against.</summary>
@@ -374,14 +413,14 @@ public partial class Api5Session
 
     /// <summary>The assembly document, refused with <c>WRONG_DOCUMENT_KIND</c>: a BOM is a fact about an
     /// assembly, and a part or a drawing has no component tree to summarise.</summary>
-    private DocumentEntry RequireAssemblyForBom(string documentId)
+    private DocumentEntry RequireAssemblyForBom(string documentId, string operation = "сводка BOM")
     {
         var document = RequireDocument(documentId);
         if (document.Kind != DocumentKind.Assembly)
         {
             throw new KompasContractException(
                 ErrorCodes.WrongDocumentKind,
-                $"Документ «{documentId}» имеет тип {document.Kind}: сводка BOM строится только по "
+                $"Документ «{documentId}» имеет тип {document.Kind}: {operation} — только по "
                 + "документу-сборке.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>

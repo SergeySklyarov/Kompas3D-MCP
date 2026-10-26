@@ -430,6 +430,29 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: true),
 
+            // BOM-03: the SAME reference registry and the SAME ordinal route as kompas_delete_component,
+            // so a stale reference is refused rather than answered from a foreign component.
+            // History: docs/decisions/bom.md#component-properties
+            ReadOnly("kompas_get_component_properties", "Свойства компонента",
+                "Свойства одного экземпляра сборки: {file, name, marking, material, hidden, excluded, "
+                + "standard, multi_body}. Ссылка — component_ref из kompas_list_components; разрешается "
+                + "тем же кодом, что у kompas_delete_component, поэтому неверная или устаревшая ссылка "
+                + "отвергается, а не читает чужой компонент. Читается документированными свойствами "
+                + "ksPart (fileName, name, marking, material, hidden, excluded, standardComponent, "
+                + "MultiBodyParts) по номеру в плоском ksDocument3D.PartCollection(true). Поле, которого "
+                + "не прочитано, возвращается null — «не прочитано», а не пусто и не false. Материал "
+                + "читается тем же свойством, что у kompas_get_material и у kompas_get_bom. "
+                + "ПРЕДЕЛ: у вложенного компонента адреса API5 нет, поэтому его свойства отвергаются "
+                + "CAPABILITY_UNAVAILABLE; исключённый из расчёта экземпляр не попадает в "
+                + "kompas_list_components, значит ссылки на него не существует и excluded у доступных "
+                + "ссылок всегда false.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("component_ref", Sch.Str("Ссылка на экземпляр из kompas_list_components."))),
+                WorkerCommands.GetComponentProperties,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
             // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.

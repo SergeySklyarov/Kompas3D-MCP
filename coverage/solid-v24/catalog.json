@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 48,
-   "operations": 150,
+   "operations": 151,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 231,
+   "modes_and_variants": 232,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8315,9 +8315,9 @@
     "metadata": "kAPI5.tlb: ksDocument3D.PartCollection, ksPartCollection (GetCount/GetByIndex), ksPart (fileName, name, marking, material, hidden, excluded, standardComponent)",
     "runtime": "измерено 26.10.2026 на build 24.0.0.2799 прибором scripts/probes/bom/ и группой --bom-only: 6 экземпляров и 3 уникальных файла верхнего уровня; два разных part.m3d с одним именем файла не склеиваются при группировке по полному пути; скрытый и исключённый экземпляры остаются в коллекции и в числе экземпляров; исключённый не появляется в API7-перечислении IPart7.PartsEx; флаги переживают save -> reopen"
    },
-   "route": "ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent; рекурсия - открытием файла компонента тем же маршрутом и закрытием в finally; выгрузка - те же строки в CSV (UTF-8 с BOM-меткой, «;») или JSON",
-   "mcp_support": "kompas_get_bom / kompas_export_bom",
-   "next_step": "Группа --bom-only и профиль bom-minimal-v1. Следующее - BOM_PROPERTIES (kompas_get_component_properties) и BOM_SPEC_READ (родная спецификация).",
+   "route": "ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts; рекурсия - открытием файла компонента тем же маршрутом и закрытием в finally; выгрузка - те же строки в CSV (UTF-8 с BOM-меткой, «;») или JSON",
+   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties",
+   "next_step": "Группа --bom-only и профиль bom-minimal-v1. Следующее - BOM_SPEC_READ (родная спецификация).",
    "operations": [
     {
      "id": "BOM-01",
@@ -8343,6 +8343,20 @@
       {
        "id": "BOM-02.bom.export",
        "name": "Выгрузить BOM в CSV или JSON",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "BOM-03",
+     "name": "Свойства одного компонента",
+     "level": "mcp_verified",
+     "doc_source": "kspartcollection_getbyindex.html, kspart_props.html, kspart_filename.html, kspart_name.html, kspart_marking.html, kspart_material.html, kspart_hidden.html, kspart_excluded.html, kspart_standardcomponent.html, kspart_multibodyparts.html",
+     "route": "component_ref из kompas_list_components -> тот же реестр ссылок и тот же порядковый адрес, что у kompas_delete_component -> PartCollection(true) -> ksPartCollection.GetByIndex -> ksPart; восемь свойств, каждое со своей страницей справки; непрочитанное поле возвращается null, вложенный компонент отвергается CAPABILITY_UNAVAILABLE",
+     "modes": [
+      {
+       "id": "BOM-03.component.properties",
+       "name": "Прочитать свойства компонента по ссылке",
        "level": "mcp_verified"
       }
      ]

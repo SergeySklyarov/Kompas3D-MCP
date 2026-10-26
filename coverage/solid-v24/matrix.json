@@ -15831,6 +15831,58 @@
         "Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.",
         "Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет."
       ]
+    },
+    {
+      "operation_id": "BOM-03.component.properties",
+      "context": "assembly.instances",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "bom-minimal-v1",
+      "queue": "BOM_PROPERTIES",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "scripts/probes/bom/",
+        "docs/decisions/bom.md#component-properties"
+      ],
+      "parameters_schema": "schemas/kompas_get_component_properties.json",
+      "adapter_route": "kompas_get_component_properties: component_ref из kompas_list_components -> тот же реестр ссылок и тот же порядковый адрес, что у kompas_delete_component -> ksDocument3D.PartCollection(true) -> ksPartCollection.GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts (kspartcollection_getbyindex.html, kspart_props.html, kspart_filename.html, kspart_name.html, kspart_marking.html, kspart_material.html, kspart_hidden.html, kspart_excluded.html, kspart_standardcomponent.html, kspart_multibodyparts.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "свойства читаются у существующего компонента; постановку строит прибор scripts/probes/bom/",
+        "edit": "инструмент только читает свойства",
+        "rebuild": "перестроение не требуется: чтение не меняет модель",
+        "suppress_restore": "у чтения свойств нет режима подавления; флаги hidden/excluded читаются, но не пишутся",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "свойства не измеряют геометрию: значения сверяются с записанными прибором и со строкой kompas_get_bom"
+      },
+      "tests": [
+        "BOM-03.discovery",
+        "BOM-03.schema",
+        "BOM-03.matches_probe",
+        "BOM-03.flags",
+        "BOM-03.save_reopen",
+        "BOM-03.negative_part",
+        "BOM-03.negative_ref"
+      ],
+      "limitations": [
+        "У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.",
+        "Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).",
+        "Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.",
+        "Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope)."
+      ]
     }
 
   ],

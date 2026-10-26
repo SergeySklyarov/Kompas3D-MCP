@@ -1442,7 +1442,8 @@ public partial class Api5Session
     /// <c>IPart7.Reference</c> is not a component number. The <c>ksPartCollection</c>↔<c>IPart7.PartsEx</c>
     /// order is an ASSUMPTION, so identity is checked before a mutation (<see cref="IdentityMatches"/>).
     /// </remarks>
-    private ksPart ComponentPart5(DocumentEntry document, ComponentPayload payload, out string note)
+    private ksPart ComponentPart5(DocumentEntry document, ComponentPayload payload, out string note,
+        string operation = "мутация")
     {
         if (payload.Ordinal == NestedComponentOrdinal)
         {
@@ -1453,8 +1454,8 @@ public partial class Api5Session
                 ErrorCodes.CapabilityUnavailable,
                 "Компонент вложен в подсборку, и адресовать его API5-маршрутом нельзя: " +
                 "ksDocument3D.PartCollection(true) перечисляет компоненты сборки ПЛОСКО, поэтому " +
-                "порядковый номер вложенного компонента адресом не является. Размещение и замена " +
-                "вложенного компонента этим выпуском не поддерживаются; работайте с компонентом " +
+                "порядковый номер вложенного компонента адресом не является. Поэтому " + operation +
+                " вложенного компонента этим выпуском не выполняется; работайте с компонентом " +
                 "верхнего уровня.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
@@ -1487,14 +1488,15 @@ public partial class Api5Session
                     identity == false
                         ? "Адрес компонента НЕ подтверждён: по порядковому номеру "
                           + $"{payload.Ordinal} в ksDocument3D.PartCollection(true) лежит ДРУГОЙ " +
-                          "компонент (расходится файл-источник). Мутация по неподтверждённому номеру " +
-                          "попала бы в ЧУЖОЙ компонент, поэтому она не выполняется. Перечитайте " +
-                          "структуру сборки kompas_list_components и возьмите свежую ссылку."
+                          "компонент (расходится файл-источник). Поэтому " + operation +
+                          " по неподтверждённому номеру не выполняется: она попала бы в ЧУЖОЙ " +
+                          "компонент. Перечитайте структуру сборки kompas_list_components и возьмите " +
+                          "свежую ссылку."
                         : "Адрес компонента НЕ подтверждён: файл-источник компонента не прочитан с " +
                           "одной из сторон, а имя и матрица размещения отказом не управляют, поэтому " +
-                          "подтвердить адрес НЕЧЕМ. Мутация по НЕПОДТВЕРЖДЁННОМУ адресу не выполняется " +
-                          "— перечитайте структуру сборки kompas_list_components и возьмите свежую " +
-                          "ссылку.",
+                          "подтвердить адрес НЕЧЕМ. " + operation + " по НЕПОДТВЕРЖДЁННОМУ адресу не " +
+                          "выполняется — перечитайте структуру сборки kompas_list_components и " +
+                          "возьмите свежую ссылку.",
                     RetryPolicy.ReacquireContext,
                     details: new Dictionary<string, object?>
                     {

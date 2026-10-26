@@ -662,8 +662,9 @@ def file_sha256(path):
 # История: 81 → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза) → 89 (управляющий размер)
 # → 90 (COMPONENT_DELETE) → 94 (SECTION_VIEWS) → 96 (SM-12) → 97 (SM-08) → 110 (SHEET_METAL_FEATURES)
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
-# → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom).
-EXPECTED_TOOL_COUNT = 116
+# → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
+# → 117 (BOM_PROPERTIES: kompas_get_component_properties).
+EXPECTED_TOOL_COUNT = 117
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из

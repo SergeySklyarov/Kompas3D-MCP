@@ -2,28 +2,28 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-25T14:22:45+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-10-26T22:16:41+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 157, маршрутов 738.
-- Измеряемая сборка: `release_build`, коммит `f41f3ab`, дерево чистое; `KompasMcp.Host.dll` sha256 `0e7d4d29920949a0b1c92824ebadb09911ef72e0877d66027026c4ed462e99cc`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 160, маршрутов 750.
+- Измеряемая сборка: `release_build`, коммит `45d9783`, дерево чистое; `KompasMcp.Host.dll` sha256 `b975d51bdb976982c21be7768a713a6d07373fd3474b6d860d28932ac4c471db`.
 
 ## 2. Сверка полноты
 
 | Показатель | Значение |
 |---|---|
 | tools_on_wire | 14 |
-| schemas_on_disk | 114 |
+| schemas_on_disk | 118 |
 | tools_with_schema | 11 |
 | schemas_matching_wire_by_property_names | 11 |
 | schemas_matching_wire_by_shape | 11 |
-| matrix_rows | 208 |
-| catalog_modes_and_variants | 229 |
-| com_routes | 748 |
-| com_routes_confirmed_by_documentation | 733 |
-| com_routes_confirmed_over_wire | 733 |
+| matrix_rows | 212 |
+| catalog_modes_and_variants | 233 |
+| com_routes | 760 |
+| com_routes_confirmed_by_documentation | 745 |
+| com_routes_confirmed_over_wire | 745 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 5 |
 | com_routes_confirmed_by_name | 6 |
@@ -31,22 +31,22 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 12 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 204 |
+| rows_claiming_verified | 208 |
 | rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 18 |
-| rows_actions_without_required_calls | 22 |
-| rows_status_lowered_by_unsupported_actions | 22 |
-| acceptance_rows | 1881 |
-| acceptance_calls_journal | 17576 |
-| acceptance_rows_with_call_window | 1881 |
+| rows_action_without_dedicated_row | 22 |
+| rows_actions_without_required_calls | 26 |
+| rows_status_lowered_by_unsupported_actions | 26 |
+| acceptance_rows | 1915 |
+| acceptance_calls_journal | 17646 |
+| acceptance_rows_with_call_window | 1915 |
 | required_of_mismatches_matrix_vs_profile | 12 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 10, 'route_field': 4}.
-COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-twins': 10}.
+COM-маршрутов по сборкам: {'api7': 480, 'api5': 270, 'adapter-twins': 10}.
 
 ## 3. Инструменты
 
@@ -69,7 +69,7 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 208.
+Всего строк матрицы: 212.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -281,6 +281,10 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `SMB-07.unfold.set` | SMB | mcp_verified | kompas_set_sheet_metal_unfold | kompas_set_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
 | `SMB-08.unfold.read` | SMB | mcp_verified | kompas_get_sheet_metal_unfold | kompas_get_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
 | `SMB-09.flat_dxf.export` | SMB | mcp_verified | kompas_export_sheet_metal_flat_dxf | kompas_export_sheet_metal_flat_dxf: временный чертёж -> IVie | Не подтверждено |
+| `BOM-01.bom.summary` | BOM | mcp_verified | kompas_get_bom | kompas_get_bom: ksDocument3D.PartCollection(true) -> ksPartC | Подтверждено |
+| `BOM-02.bom.export` | BOM | mcp_verified | kompas_export_bom, kompas_get_bom | kompas_export_bom: те же строки, что kompas_get_bom (один по | Не подтверждено |
+| `BOM-03.component.properties` | BOM | mcp_verified | kompas_delete_component, kompas_get_component_properties, kompas_list_components | kompas_get_component_properties: component_ref из kompas_lis | Не подтверждено |
+| `BOM-04.specification.read` | BOM | mcp_verified | kompas_get_specification | kompas_get_specification: IKompasDocument.SpecificationDescr | Подтверждено |
 
 ### Пределы, названные матрицей у режимов
 
@@ -628,52 +632,52 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
   - приёмка image-блоков КЛИЕНТОМ (propagation коннектором WorkBuddy) — часть клиентской приёмки и этим нарядом не исполняется; штатный фолбэк — save_path и чтение файла средствами клиента
 - `ASM-01.document.create_open`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-02.component.insert`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-03.structure.read`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-04.placement.set_read`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
   - Отказ по адресу компонента решает ТОЛЬКО файл-источник; имя компонента и матрица размещения — примечания (решение 05.10.2026, регрессия п. 1). Раскладка IPart7.GetSummMatrix НЕ измерена — гипотеза, не основание отказа (п. 2). Строка ASM.04.repeat_after_mutation — живая проверка второй мутации по той же ссылке, требует прогона на бинарях поставки.
 - `ASM-05.component.replace`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-06.links.check`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-07.save_reopen`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.document_lifecycle`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.source_file`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.component_address`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.revisions`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.idempotency`:
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `MATE-01.mate.create`:
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
@@ -1118,6 +1122,26 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
   - маршрут строит вид по СОХРАНЁННОМУ файлу: несохранённая деталь - отказ DOCUMENT_DIRTY, SaveAs детали инструмент не делает
   - успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа
   - число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят
+- `BOM-01.bom.summary`:
+  - Признака «деталь или подсборка» у ksPart в документированном списке нет, поэтому recurse ОТКРЫВАЕТ файл каждого компонента: деталь даёт пустой список вложенных. Цена обхода - открытие файла на каждый компонент.
+  - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components (5 записей на 6 экземпляров ksPartCollection); скрытый появляется. Сверка BOM с kompas_list_components возможна только при пропуске исключённых.
+  - Материал компонента-подсборки читается как материал детали (измерено пробой), поэтому материал подсборки не доказывает материал изделия.
+  - Раздел спецификации и исполнения в профиль не входят: документированного COM-маршрута к IProperty нет (docs/decisions/bom.md#profile-scope).
+- `BOM-02.bom.export`:
+  - Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.
+  - Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.
+  - Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет.
+- `BOM-03.component.properties`:
+  - У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.
+  - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).
+  - Два экземпляра одного файла в одном размещении документированными свойствами не различаются: такая запись адреса не получает и отвергается STALE_REFERENCE, а не адресуется по догадке.
+  - Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.
+  - Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope).
+- `BOM-04.specification.read`:
+  - Документ-спецификация .spw не читается: единственный документированный вход KompasObject.SpcDocument/SpcActiveDocument адресует активный документ сеанса, а не запрошенный document_id, и типа документа .spw у инструментов открытия нет (DocumentKind).
+  - Номер раздела принадлежит стилю спецификации, а не порядку разделов ГОСТ (измерено: Документация 5, Детали 20); поэтому раздел читается, но не выводится из названия и обратно.
+  - Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.
+  - Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd.
 
 ## 5. COM-маршруты адаптера
 
@@ -1127,10 +1151,12 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `IPart7.Reference` | api7 | property | `prop Int32 Reference` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.Name` | api7 | property | `prop String Name` | 2 | Подтверждено | перечень интерфейса |
 | `IPart7.Marking` | api7 | property | `prop String Marking` | 1 | Подтверждено | перечень интерфейса |
-| `IPart7.FileName` | api7 | property | `prop String FileName` | 4 | Подтверждено | перечень интерфейса |
+| `IPart7.FileName` | api7 | property | `prop String FileName` | 5 | Подтверждено | перечень интерфейса |
 | `IPart7.Detail` | api7 | property | `prop Boolean Detail` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.Fixed` | api7 | property | `prop Boolean Fixed` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.LoadState` | api7 | property | `prop ksLoadStateEnum LoadState` | 1 | Подтверждено | перечень интерфейса |
+| `ksPart.fileName` | api5 | property | `prop String fileName` | 9 | Подтверждено | перечень интерфейса |
+| `ksPart.excluded` | api5 | property | `prop Boolean excluded` | 3 | Подтверждено | перечень интерфейса |
 | `IPart7.GetSummMatrix` | api7 | method | `Object GetSummMatrix(Part7 Part)` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.InstanceCount` | api7 | property | `prop Int32 InstanceCount` | 1 | Подтверждено | перечень интерфейса |
 | `ksBodyCollection.GetCount` | api5 | method | `Int32 GetCount()` | 13 | Подтверждено | перечень интерфейса |
@@ -1138,9 +1164,9 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ksBody.FaceCollection` | api5 | method | `Object FaceCollection()` | 17 | Подтверждено | перечень интерфейса |
 | `ksFaceCollection.GetCount` | api5 | method | `Int32 GetCount()` | 19 | Подтверждено | перечень интерфейса |
 | `ksPlacement.GetMatrix3D` | api5 | method | `Boolean GetMatrix3D(Object& Result)` | 2 | не подтверждено | - |
-| `ksDocument3D.PartCollection` | api5 | method | `Object PartCollection(Boolean refresh)` | 1 | Подтверждено | перечень интерфейса |
-| `ksPartCollection.GetCount` | api5 | method | `Int32 GetCount()` | 1 | Подтверждено | перечень интерфейса |
-| `ksPartCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 1 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.PartCollection` | api5 | method | `Object PartCollection(Boolean refresh)` | 2 | Подтверждено | перечень интерфейса |
+| `ksPartCollection.GetCount` | api5 | method | `Int32 GetCount()` | 2 | Подтверждено | перечень интерфейса |
+| `ksPartCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.DefaultPlacement` | api5 | method | `placement DefaultPlacement()` | 1 | Подтверждено | перечень интерфейса |
 | `ksPlacement.InitByMatrix3D` | api5 | method | `Boolean InitByMatrix3D(Object mtr)` | 2 | Подтверждено | перечень интерфейса |
 | `IKompasDocument3D.TopPart` | api7 | property | `prop Part7 TopPart` | 1 | Подтверждено | перечень интерфейса |
@@ -1149,16 +1175,25 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ksPart.fixedComponent` | api5 | property | `prop Boolean fixedComponent` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 16 | Подтверждено | перечень интерфейса |
 | `ksPart.GetPlacement` | api5 | method | `Object GetPlacement()` | 2 | Подтверждено | перечень интерфейса |
-| `ksPart.fileName` | api5 | property | `prop String fileName` | 6 | Подтверждено | перечень интерфейса |
 | `ksPart.Update` | api5 | method | `Boolean Update()` | 3 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.DeleteObject` | api5 | method | `Boolean DeleteObject(Object obj)` | 3 | Подтверждено | перечень интерфейса |
 | `ksMateConstraint.GetBaseObj` | api5 | method | `Object GetBaseObj(Int16 number)` | 7 | Подтверждено | перечень интерфейса |
 | `IModelObject.Part` | api7 | property | `prop Part7 Part` | 1 | Подтверждено | перечень интерфейса |
-| `ksPart.name` | api5 | property | `prop String name` | 2 | Подтверждено | перечень интерфейса |
+| `ksPart.name` | api5 | property | `prop String name` | 4 | Подтверждено | перечень интерфейса |
 | `ksPart.GetDefaultEntity` | api5 | method | `Object GetDefaultEntity(Int16 objType)` | 5 | Подтверждено | перечень интерфейса |
 | `IAuxiliaryGeomContainer.Planes3D` | api7 | property | `prop Planes3D Planes3D` | 3 | Подтверждено | перечень интерфейса |
 | `IAuxiliaryGeomContainer.Axes3D` | api7 | property | `prop Axes3D Axes3D` | 3 | Подтверждено | перечень интерфейса |
 | `IModelContainer.Points3D` | api7 | property | `prop Points3D Points3D` | 5 | Подтверждено | перечень интерфейса |
+| `ksPart.marking` | api5 | property | `prop String marking` | 3 | Подтверждено | перечень интерфейса |
+| `ksPart.material` | api5 | property | `prop String material` | 4 | Подтверждено | перечень интерфейса |
+| `ksPart.hidden` | api5 | property | `prop Boolean hidden` | 2 | Подтверждено | перечень интерфейса |
+| `ksPart.standardComponent` | api5 | property | `prop Boolean standardComponent` | 2 | Подтверждено | перечень интерфейса |
+| `ksPart.MultiBodyParts` | api5 | property | `prop Boolean MultiBodyParts` | 1 | Подтверждено | перечень интерфейса |
+| `KompasObject.Document3D` | api5 | method | `Object Document3D()` | 2 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.Open` | api5 | method | `Boolean Open(String fileName, Boolean invisible)` | 3 | Подтверждено | перечень интерфейса |
+| `KompasObject.TransferInterface` | api5 | method | `Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewTyp` | 6 | Подтверждено | имя файла страницы |
+| `IKompasDocument.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 3 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.close` | api5 | method | `Boolean close()` | 6 | Подтверждено | перечень интерфейса |
 | `ksPart.EntityCollection` | api5 | method | `Object EntityCollection(Int16 objType)` | 19 | Подтверждено | перечень интерфейса |
 | `ksEntityCollection.GetCount` | api5 | method | `Int32 GetCount()` | 35 | Подтверждено | перечень интерфейса |
 | `ksEntityCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 25 | Подтверждено | перечень интерфейса |
@@ -1179,9 +1214,7 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ICopyGeometry.MirrorCopy` | api7 | property | `prop Boolean MirrorCopy` | 1 | Подтверждено | перечень интерфейса |
 | `ICopyGeometry.ByCollectionGeometry` | api7 | property | `prop Boolean ByCollectionGeometry` | 1 | Подтверждено | перечень интерфейса |
 | `ICopyGeometry.Synhronise` | api7 | method | `Boolean Synhronise()` | 1 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.Open` | api5 | method | `Boolean Open(String fileName, Boolean invisible)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.GetPart` | api5 | method | `Object GetPart(Int32 type)` | 4 | Подтверждено | перечень интерфейса |
-| `ksDocument3D.close` | api5 | method | `Boolean close()` | 5 | Подтверждено | перечень интерфейса |
 | `ksPart.BodyCollection` | api5 | method | `Object BodyCollection()` | 8 | Подтверждено | перечень интерфейса |
 | `ksBodyCollection.refresh` | api5 | method | `Boolean refresh()` | 8 | Подтверждено | перечень интерфейса |
 | `IDismantleParameters.DismantleStepsCount` | api7 | property | `prop Int32 DismantleStepsCount` | 4 | Подтверждено | перечень интерфейса |
@@ -1244,7 +1277,6 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ITechnicalDemand.IsCreated` | api7 | property | `prop Boolean IsCreated` | 2 | Подтверждено | перечень интерфейса |
 | `IConverter.GetFilter` | api7 | method | `String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)` | 2 | Подтверждено | перечень интерфейса |
 | `IConverter.Convert` | api7 | method | `Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean` | 2 | Подтверждено | перечень интерфейса |
-| `KompasObject.TransferInterface` | api5 | method | `Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewTyp` | 5 | Подтверждено | имя файла страницы |
 | `KompasObject.ActiveDocument3D` | api5 | method | `Object ActiveDocument3D()` | 1 | Подтверждено | перечень интерфейса |
 | `KompasObject.Document2D` | api5 | method | `Object Document2D()` | 3 | Подтверждено | перечень интерфейса |
 | `IApplication.Documents` | api7 | property | `prop Documents Documents` | 2 | Подтверждено | перечень интерфейса |
@@ -1292,12 +1324,10 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ksCylinderParam.height` | api5 | property | `prop Double height` | 5 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.Init` | api5 | method | `Boolean Init()` | 3 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.format` | api5 | property | `prop Int16 format` | 3 | Подтверждено | перечень интерфейса |
-| `KompasObject.Document3D` | api5 | method | `Object Document3D()` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.Create` | api5 | method | `Boolean Create(Boolean invisible, Boolean typeDoc)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.AdditionFormatParam` | api5 | method | `Object AdditionFormatParam()` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.LoadFromAdditionFormat` | api5 | method | `Boolean LoadFromAdditionFormat(String fileName, Object additionPar)` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.UpdateDocumentParam` | api5 | method | `Boolean UpdateDocumentParam()` | 2 | Подтверждено | перечень интерфейса |
-| `IKompasDocument.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 2 | Подтверждено | перечень интерфейса |
 | `ksFaceDefinition.EdgeCollection` | api5 | method | `Object EdgeCollection()` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeCollection.GetCount` | api5 | method | `Int32 GetCount()` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 3 | Подтверждено | перечень интерфейса |
@@ -1597,6 +1627,14 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `IPoint3D.X` | api7 | property | `prop Double X` | 7 | Подтверждено | перечень интерфейса |
 | `IPoint3D.Y` | api7 | property | `prop Double Y` | 7 | Подтверждено | перечень интерфейса |
 | `IPoint3D.Z` | api7 | property | `prop Double Z` | 7 | Подтверждено | перечень интерфейса |
+| `ISpecificationDescription.Objects` | api7 | property | `prop Object Objects` | 1 | Подтверждено | перечень интерфейса |
+| `ksDocument3D.GetSpecification` | api5 | method | `Object GetSpecification()` | 1 | Подтверждено | перечень интерфейса |
+| `ISpecificationBaseObject.UniqueNumber` | api7 | property | `prop Double UniqueNumber` | 1 | Подтверждено | перечень интерфейса |
+| `ISpecificationBaseObject.Section` | api7 | property | `prop Int32 Section` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcObject` | api5 | method | `Int32 ksGetSpcObject(Double objNumb)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcObjectNumber` | api5 | method | `Double ksGetSpcObjectNumber(Int32 spcObj)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcSectionName` | api5 | method | `String ksGetSpcSectionName(Int32 spcObj)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcObjectColumnText` | api5 | method | `String ksGetSpcObjectColumnText(Int32 spcObj, Int32 columnType, Int32 ` | 1 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.formatBinary` | api5 | property | `prop Boolean formatBinary` | 2 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.length` | api5 | property | `prop Double length` | 2 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.angle` | api5 | property | `prop Double angle` | 2 | Подтверждено | перечень интерфейса |
@@ -1619,7 +1657,6 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ksFeature.VariableCollection` | api5 | property | `prop Object VariableCollection` | 1 | Подтверждено | перечень интерфейса |
 | `ksVariableCollection.GetCount` | api5 | method | `Int32 GetCount()` | 2 | Подтверждено | перечень интерфейса |
 | `ksVariableCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 2 | Подтверждено | перечень интерфейса |
-| `ksPart.material` | api5 | property | `prop String material` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.density` | api5 | property | `prop Double density` | 1 | Подтверждено | named_name_mismatch |
 | `ksPart.CalcMassInertiaProperties` | api5 | method | `Object CalcMassInertiaProperties(UInt32 bitVector)` | 1 | Подтверждено | перечень интерфейса |
 | `ksMassInertiaParam.r` | api5 | property | `prop Double r` | 1 | Подтверждено | перечень интерфейса |
@@ -1642,7 +1679,6 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 | `ksDocument2D.ksSaveDocument` | api5 | method | `Boolean ksSaveDocument(String fileName)` | 2 | Подтверждено | имя файла страницы |
 | `IKompasDocument.SaveAs` | api7 | method | `Void SaveAs(String PathName)` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument2D.ksCloseDocument` | api5 | method | `Boolean ksCloseDocument()` | 2 | Подтверждено | имя файла страницы |
-| `ksPart.marking` | api5 | property | `prop String marking` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocumentParam.Init` | api5 | method | `Boolean Init()` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocumentParam.type` | api5 | property | `prop Int16 type` | 1 | Подтверждено | перечень интерфейса |
 | `ksDocumentParam.regime` | api5 | property | `prop Int16 regime` | 1 | Подтверждено | перечень интерфейса |
@@ -1898,7 +1934,7 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 
 Серьёзность: средняя.
 
-22 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create
+26 строк(и): BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
@@ -1906,7 +1942,7 @@ COM-маршрутов по сборкам: {'api7': 477, 'api5': 261, 'adapter-
 
 Серьёзность: низкая.
 
-18 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create, SMB-02.body.read, SMB-03.body.edit
+22 строк(и): BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

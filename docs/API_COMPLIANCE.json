@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-25T14:22:45+01:00, часы машины +01:00",
+  "date": "2026-10-26T22:16:41+01:00, часы машины +01:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -15,12 +15,12 @@
   "documentation_source": {
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
-   "retrieved": "2026-10-25",
-   "pages_read": 157,
-   "routes_checked": 738,
+   "retrieved": "2026-10-26",
+   "pages_read": 160,
+   "routes_checked": 750,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 733,
+    "wire": 745,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -45,8 +45,8 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 738,
-    "ok": 733,
+    "checked": 750,
+    "ok": 745,
     "failed": 5,
     "not_verified": 0
    }
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "4e883b3791dd05a69a18a46d1fb913f664b5c38e092a77e93438b0f938a4619c",
-   "host_dll_sha256": "0e7d4d29920949a0b1c92824ebadb09911ef72e0877d66027026c4ed462e99cc",
+   "host_sha256": "18ab99d6d87d9986a6df023341a4ae1384a86a0a5bc09d57ff6c5fd046155b3e",
+   "host_dll_sha256": "b975d51bdb976982c21be7768a713a6d07373fd3474b6d860d28932ac4c471db",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "a9ca0c15605c2676ea9b45ba76dcd4d30b925f2fb71346fc7cd4e2cde8eb83a1",
-   "worker_dll_sha256": "4eab7dbc011814fdd0f115fd0b3a81eda3d6c09cd3f9b9874f1b100041fcb5a6",
-   "adapter_sha256": "24b3253c1d58bce2cbfabf47bd56c0fda11aba299c5770583f7b287c275ce867",
-   "source_commit": "f41f3ab",
+   "worker_sha256": "685e134197cdd45c810994dc4dab39c6aa9ca283c864a1a1960c6ee435d93eed",
+   "worker_dll_sha256": "b91f7d71090de41d45c1d56fe2d570076ebfd240ef78f28f04cb1ae9d47a1198",
+   "adapter_sha256": "a3f8f039163c57476fd3446117607fb5255ba75f3e93df7d956f92b162604a3d",
+   "source_commit": "45d9783",
    "source_tree_dirty": false,
    "tools_count": 14,
-   "rows_complete_run": 1881,
+   "rows_complete_run": 1915,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -89,7 +89,7 @@
   },
   "completeness": {
    "tools_on_wire": 14,
-   "schemas_on_disk": 114,
+   "schemas_on_disk": 118,
    "tools_with_schema": 11,
    "schemas_matching_wire_by_property_names": 11,
    "schemas_matching_wire_by_shape": 11,
@@ -132,16 +132,16 @@
     "absent": 10,
     "route_field": 4
    },
-   "matrix_rows": 208,
-   "catalog_modes_and_variants": 229,
-   "com_routes": 748,
+   "matrix_rows": 212,
+   "catalog_modes_and_variants": 233,
+   "com_routes": 760,
    "com_routes_by_assembly": {
-    "api7": 477,
-    "api5": 261,
+    "api7": 480,
+    "api5": 270,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 733,
-   "com_routes_confirmed_over_wire": 733,
+   "com_routes_confirmed_by_documentation": 745,
+   "com_routes_confirmed_over_wire": 745,
    "com_routes_confirmed_from_mirror": 0,
    "com_routes_unconfirmed": 5,
    "com_routes_confirmed_by_name": 6,
@@ -149,15 +149,15 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 204,
+   "rows_claiming_verified": 208,
    "rows_verified_without_any_linked_row": 0,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 18,
-   "rows_actions_without_required_calls": 22,
-   "rows_status_lowered_by_unsupported_actions": 22,
-   "acceptance_rows": 1881,
-   "acceptance_calls_journal": 17576,
-   "acceptance_rows_with_call_window": 1881,
+   "rows_action_without_dedicated_row": 22,
+   "rows_actions_without_required_calls": 26,
+   "rows_status_lowered_by_unsupported_actions": 26,
+   "acceptance_rows": 1915,
+   "acceptance_calls_journal": 17646,
+   "acceptance_rows_with_call_window": 1915,
    "required_of_mismatches_matrix_vs_profile": 12,
    "dependency_verdict_control_proved": null
   }
@@ -4928,11 +4928,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -7531,11 +7531,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -7892,11 +7892,11 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -9567,6 +9567,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ksPart.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksEntity.excluded",
      "documentation": "Подтверждено"
     },
@@ -9577,7 +9581,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 3
+    "members": 4
    },
    "actions": {
     "discover": "not_started",
@@ -11285,7 +11289,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11364,7 +11368,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11436,7 +11440,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11514,7 +11518,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился.",
     "Отказ по адресу компонента решает ТОЛЬКО файл-источник; имя компонента и матрица размещения — примечания (решение 05.10.2026, регрессия п. 1). Раскладка IPart7.GetSummMatrix НЕ измерена — гипотеза, не основание отказа (п. 2). Строка ASM.04.repeat_after_mutation — живая проверка второй мутации по той же ссылке, требует прогона на бинарях поставки."
    ]
@@ -11699,7 +11703,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11760,7 +11764,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11834,7 +11838,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -11927,7 +11931,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -12017,7 +12021,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -12111,7 +12115,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -12202,7 +12206,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -12287,7 +12291,7 @@
    ],
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
-    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ]
   },
@@ -16546,11 +16550,11 @@
    "declared_route": "API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании массив заполняется объектами указанного типа, содержащимися в компоненте» (kspart_entitycollection.html); тип «o3d_sketch 5 эскиз» → ksSketchDefinition / ISketch (obj3dtype.html). Тот же набор документирован в API7 (IModelContainer::Sketchs → ISketchs, isketchs.html), но взят маршрут API5: строка обязана нести тот же ksEntity, которым адресует эскиз остальной сервер, и эта коллекция ИЗМЕРЕНА на переоткрытом документе (проба L: два эскиза с читаемыми ksSketchDefinition после save → close → reopen).",
    "com": [
     {
-     "member": "ksDocument3D.close",
+     "member": "IKompasDocument.Close",
      "documentation": "Подтверждено"
     },
     {
-     "member": "IKompasDocument.Close",
+     "member": "ksDocument3D.close",
      "documentation": "Подтверждено"
     },
     {
@@ -24719,6 +24723,592 @@
     "успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа",
     "число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят"
    ]
+  },
+  {
+   "operation_id": "BOM-01.bom.summary",
+   "family": "BOM",
+   "queue": "BOM_MINIMAL",
+   "kind": "profile_mode",
+   "context": "assembly.instances",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_get_bom"
+   ],
+   "schemas": [
+    "schemas/kompas_get_bom.json"
+   ],
+   "declared_route": "kompas_get_bom: ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent (kspartcollection_getcount.html, kspartcollection_getbyindex.html, kspart_props.html, kspart_hidden.html, kspart_excluded.html); рекурсия - открытием файла компонента тем же PartCollection и закрытием в finally",
+   "com": [
+    {
+     "member": "ksPart.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFeature.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.FileName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.fileName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPartCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFaceCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEdgeCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraintCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariableCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksViewProjectionCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFaceCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPartCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEdgeCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksIntersectionResult.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraintCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariableCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksViewProjectionCollection.GetCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.hidden",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Marking",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.marking",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.material",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IView.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFeature.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IModelObject.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.PartCollection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.standardComponent",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 44
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "BOM-01.discovery",
+    "BOM-01.schema",
+    "BOM-01.probe",
+    "BOM-01.open",
+    "BOM-01.top_level",
+    "BOM-01.grouping",
+    "BOM-01.filters",
+    "BOM-01.include_filters",
+    "BOM-01.recurse",
+    "BOM-01.sum_against_components",
+    "BOM-01.walk_closed",
+    "BOM-01.save_reopen",
+    "BOM-01.negative_part"
+   ],
+   "limitations": [
+    "Признака «деталь или подсборка» у ksPart в документированном списке нет, поэтому recurse ОТКРЫВАЕТ файл каждого компонента: деталь даёт пустой список вложенных. Цена обхода - открытие файла на каждый компонент.",
+    "Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components (5 записей на 6 экземпляров ksPartCollection); скрытый появляется. Сверка BOM с kompas_list_components возможна только при пропуске исключённых.",
+    "Материал компонента-подсборки читается как материал детали (измерено пробой), поэтому материал подсборки не доказывает материал изделия.",
+    "Раздел спецификации и исполнения в профиль не входят: документированного COM-маршрута к IProperty нет (docs/decisions/bom.md#profile-scope)."
+   ]
+  },
+  {
+   "operation_id": "BOM-02.bom.export",
+   "family": "BOM",
+   "queue": "BOM_MINIMAL",
+   "kind": "profile_mode",
+   "context": "assembly.instances",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_export_bom",
+    "kompas_get_bom"
+   ],
+   "schemas": [
+    "schemas/kompas_export_bom.json"
+   ],
+   "declared_route": "kompas_export_bom: те же строки, что kompas_get_bom (один построитель), запись во временный файл рядом с целевым и публикация через AtomicPublish; CSV - UTF-8 с BOM-меткой и разделителем «;», JSON - массив объектов; ответ несёт размер и SHA256 файла на диске",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "маршрут не назвал ни одного COM-члена"
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "BOM-02.discovery",
+    "BOM-02.schema",
+    "BOM-02.export_csv",
+    "BOM-02.export_json",
+    "BOM-02.path_denied"
+   ],
+   "limitations": [
+    "Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.",
+    "Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.",
+    "Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет."
+   ]
+  },
+  {
+   "operation_id": "BOM-03.component.properties",
+   "family": "BOM",
+   "queue": "BOM_PROPERTIES",
+   "kind": "profile_mode",
+   "context": "assembly.instances",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_delete_component",
+    "kompas_get_component_properties",
+    "kompas_list_components"
+   ],
+   "schemas": [
+    "schemas/kompas_get_component_properties.json"
+   ],
+   "declared_route": "kompas_get_component_properties: component_ref из kompas_list_components -> тот же реестр ссылок и тот же адрес, что у kompas_delete_component -> адрес = индекс в плоском ksDocument3D.PartCollection(true), найденный сопоставлением записи с экземпляром по полному пути файла (ksPart.fileName/IPart7.FileName) и размещению (ksPart.GetPlacement/GetMatrix3D, IPart7.GetSummMatrix) -> ksPartCollection.GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts (kspartcollection_getbyindex.html, kspart_props.html, kspart_filename.html, kspart_name.html, kspart_marking.html, kspart_material.html, kspart_hidden.html, kspart_excluded.html, kspart_standardcomponent.html, kspart_multibodyparts.html)",
+   "com": [
+    {
+     "member": "ksPart.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFeature.excluded",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.FileName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.fileName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPartCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFaceCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEdgeCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksMateConstraintCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariableCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksViewProjectionCollection.GetByIndex",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPlacement.GetMatrix3D",
+     "documentation": "не подтверждено"
+    },
+    {
+     "member": "ksPart.GetPlacement",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksCylinderParam.GetPlacement",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPlaneParam.GetPlacement",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksCircle3dParam.GetPlacement",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.GetSummMatrix",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.hidden",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Marking",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.marking",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.material",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.MultiBodyParts",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IView.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksFeature.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IModelObject.Name",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.PartCollection",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.standardComponent",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "members": 42,
+    "counts": {
+     "Подтверждено": 41,
+     "не подтверждено": 1
+    }
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "BOM-03.discovery",
+    "BOM-03.schema",
+    "BOM-03.matches_probe",
+    "BOM-03.flags",
+    "BOM-03.address_same_name",
+    "BOM-03.address_delete",
+    "BOM-03.address_replace",
+    "BOM-03.save_reopen",
+    "BOM-03.negative_part",
+    "BOM-03.negative_ref"
+   ],
+   "limitations": [
+    "У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.",
+    "Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).",
+    "Два экземпляра одного файла в одном размещении документированными свойствами не различаются: такая запись адреса не получает и отвергается STALE_REFERENCE, а не адресуется по догадке.",
+    "Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.",
+    "Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope)."
+   ]
+  },
+  {
+   "operation_id": "BOM-04.specification.read",
+   "family": "BOM",
+   "queue": "BOM_SPEC_READ",
+   "kind": "profile_mode",
+   "context": "assembly.instances",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_get_specification"
+   ],
+   "schemas": [
+    "schemas/kompas_get_specification.json"
+   ],
+   "declared_route": "kompas_get_specification: IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (VARIANT: SAFEARRAY|VT_DISPATCH, порядок = визуальный) -> ISpecificationBaseObject.UniqueNumber/Section -> ksDocument3D.GetSpecification().ksGetSpcObject(uniqueNumber) -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcSectionName + ksGetSpcObjectColumnText(тип колонки ksSColumnPosition/ksSColumnMark/ksSColumnName/ksSColumnCount, ispoln=1, block=0) (ikompasdocument_specificationdescriptions.html, ispecificationdescriptions_active.html, ispecificationdescription_objects.html, ispecificationobject_section.html, ispecificationobject_uniquenumber.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html)",
+   "com": [
+    {
+     "member": "ksDocument3D.GetSpecification",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectNumber",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcSectionName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescription.Objects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.Section",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Section",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.UniqueNumber",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 9
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "BOM-04.discovery",
+    "BOM-04.schema",
+    "BOM-04.rows",
+    "BOM-04.matches_probe",
+    "BOM-04.section_read",
+    "BOM-04.not_mixed_with_bom",
+    "BOM-04.empty",
+    "BOM-04.negative_unknown_document"
+   ],
+   "limitations": [
+    "Документ-спецификация .spw не читается: единственный документированный вход KompasObject.SpcDocument/SpcActiveDocument адресует активный документ сеанса, а не запрошенный document_id, и типа документа .spw у инструментов открытия нет (DocumentKind).",
+    "Номер раздела принадлежит стилю спецификации, а не порядку разделов ГОСТ (измерено: Документация 5, Детали 20); поэтому раздел читается, но не выводится из названия и обратно.",
+    "Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.",
+    "Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd."
+   ]
   }
  ],
  "families": [
@@ -25200,6 +25790,16 @@
     "mcp_verified": 9
    },
    "mcp_support": "kompas_create_sheet_metal_body / kompas_get_sheet_metal / kompas_edit_sheet_metal_body / kompas_create_sheet_metal_bend / kompas_create_sheet_metal_hole / kompas_create_sheet_metal_cut / kompas_set_sheet_metal_unfold / kompas_get_sheet_metal_unfold"
+  },
+  {
+   "family": "BOM",
+   "title": "Сводка BOM по сборке, свойства компонентов и родная спецификация КОМПАС",
+   "catalog_level": "mcp_verified",
+   "operations": 4,
+   "operation_levels": {
+    "mcp_verified": 4
+   },
+   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties / kompas_get_specification"
   }
  ],
  "com_routes": [
@@ -25215,7 +25815,7 @@
    "signature": "Object get_PartsEx(Object PartCollectionType)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:135"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:139"
    ],
    "receivers": [
     "node"
@@ -25241,7 +25841,7 @@
    "signature": "prop Int32 Reference",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:176"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:180"
    ],
    "receivers": [
     "part"
@@ -25267,8 +25867,8 @@
    "signature": "prop String Name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1545",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:201"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1614",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:206"
    ],
    "receivers": [
     "part",
@@ -25295,7 +25895,7 @@
    "signature": "prop String Marking",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:202"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:207"
    ],
    "receivers": [
     "part"
@@ -25321,10 +25921,11 @@
    "signature": "prop String FileName",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1540",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:203",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:811",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:876"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1611",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:208",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:246",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:858",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:923"
    ],
    "receivers": [
     "part",
@@ -25351,7 +25952,7 @@
    "signature": "prop Boolean Detail",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:204"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:209"
    ],
    "receivers": [
     "part"
@@ -25377,7 +25978,7 @@
    "signature": "prop Boolean Fixed",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:210"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:215"
    ],
    "receivers": [
     "part"
@@ -25403,7 +26004,7 @@
    "signature": "prop ksLoadStateEnum LoadState",
    "type": "ksLoadStateEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:211"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:216"
    ],
    "receivers": [
     "part"
@@ -25418,6 +26019,70 @@
    }
   },
   {
+   "route": "ksPart.fileName",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "fileName",
+   "kind": "property",
+   "signature": "prop String fileName",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1610",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:243",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:858",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:870",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:884",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:994",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:122",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:273",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1271"
+   ],
+   "receivers": [
+    "part",
+    "part5"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_filename.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksPart.excluded",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "excluded",
+   "kind": "property",
+   "signature": "prop Boolean excluded",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:244",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:127",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:278"
+   ],
+   "receivers": [
+    "part",
+    "part5"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_excluded.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
    "route": "IPart7.GetSummMatrix",
    "assembly": "api7",
    "interface": "IPart7",
@@ -25429,7 +26094,7 @@
    "signature": "Object GetSummMatrix(Part7 Part)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:245"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:290"
    ],
    "receivers": [
     "parent"
@@ -25455,7 +26120,7 @@
    "signature": "prop Int32 InstanceCount",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:263"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:308"
    ],
    "receivers": [
     "parent"
@@ -25481,8 +26146,8 @@
    "signature": "Int32 GetCount()",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:291",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:305",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:336",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:350",
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:410",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2265",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2391",
@@ -25520,7 +26185,7 @@
    "signature": "Object GetByIndex(Int32 index)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:306",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:351",
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:410",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2268",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2397",
@@ -25558,7 +26223,7 @@
    "signature": "Object FaceCollection()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:307",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:352",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:323",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:353",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:76",
@@ -25601,7 +26266,7 @@
    "signature": "Int32 GetCount()",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:308",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:353",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:328",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:358",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:81",
@@ -25646,8 +26311,8 @@
    "signature": "Boolean GetMatrix3D(Object& Result)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1592",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:328"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1661",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:373"
    ],
    "receivers": [
     "placement"
@@ -25671,9 +26336,11 @@
    "signature": "Object PartCollection(Boolean refresh)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:353"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:398",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:247"
    ],
    "receivers": [
+    "document",
     "document.Document3D"
    ],
    "documentation": {
@@ -25697,7 +26364,8 @@
    "signature": "Int32 GetCount()",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:358"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:403",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:254"
    ],
    "receivers": [
     "collection"
@@ -25723,7 +26391,8 @@
    "signature": "Object GetByIndex(Int32 index)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:361"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:406",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:257"
    ],
    "receivers": [
     "collection"
@@ -25749,7 +26418,7 @@
    "signature": "placement DefaultPlacement()",
    "type": "placement",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:381"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:426"
    ],
    "receivers": [
     "document.Document3D"
@@ -25775,8 +26444,8 @@
    "signature": "Boolean InitByMatrix3D(Object mtr)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:396",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:723"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:441",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:770"
    ],
    "receivers": [
     "placement",
@@ -25803,7 +26472,7 @@
    "signature": "prop Part7 TopPart",
    "type": "Part7",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:431"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:476"
    ],
    "receivers": [
     "document7"
@@ -25829,8 +26498,8 @@
    "signature": "Boolean SetPlacement(Object placement)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:535",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:724"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:580",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:771"
    ],
    "receivers": [
     "createdPart",
@@ -25857,8 +26526,8 @@
    "signature": "Boolean UpdatePlacement()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:536",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:725"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:581",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:772"
    ],
    "receivers": [
     "createdPart",
@@ -25885,7 +26554,7 @@
    "signature": "prop Boolean fixedComponent",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:562"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:607"
    ],
    "receivers": [
     "createdPart"
@@ -25911,9 +26580,9 @@
    "signature": "Boolean RebuildDocument()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:578",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:736",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:869",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:623",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:783",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:916",
     "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:118",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:255",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:666",
@@ -25956,8 +26625,8 @@
    "signature": "Object GetPlacement()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1592",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:714"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1661",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:761"
    ],
    "receivers": [
     "part",
@@ -25967,38 +26636,6 @@
     "status": "Подтверждено",
     "source": [
      "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_getplacement.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksPart"
-   }
-  },
-  {
-   "route": "ksPart.fileName",
-   "assembly": "api5",
-   "interface": "ksPart",
-   "declared_on": "ksPart",
-   "receiver_type": "ksPart",
-   "inherited": false,
-   "member": "fileName",
-   "kind": "property",
-   "signature": "prop String fileName",
-   "type": "String",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1539",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:811",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:823",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:837",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:947",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1271"
-   ],
-   "receivers": [
-    "part",
-    "part5"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_filename.html"
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksPart"
@@ -26016,7 +26653,7 @@
    "signature": "Boolean Update()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:835",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:882",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:534",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:845"
    ],
@@ -26045,7 +26682,7 @@
    "signature": "Boolean DeleteObject(Object obj)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:983",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1030",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:428",
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:655"
    ],
@@ -26073,7 +26710,7 @@
    "signature": "Object GetBaseObj(Int16 number)",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1241",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1288",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:1153",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:1154",
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:789",
@@ -26107,7 +26744,7 @@
    "signature": "prop Part7 Part",
    "type": "Part7",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1252"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299"
    ],
    "receivers": [
     "model"
@@ -26133,7 +26770,9 @@
    "signature": "prop String name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1544",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1613",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:123",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:274",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:835"
    ],
    "receivers": [
@@ -26265,6 +26904,294 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "IModelContainer"
+   }
+  },
+  {
+   "route": "ksPart.marking",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "marking",
+   "kind": "property",
+   "signature": "prop String marking",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:124",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:275",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:840"
+   ],
+   "receivers": [
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_marking.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksPart.material",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "material",
+   "kind": "property",
+   "signature": "prop String material",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:125",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:276",
+    "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:387",
+    "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:545"
+   ],
+   "receivers": [
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_material.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksPart.hidden",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "hidden",
+   "kind": "property",
+   "signature": "prop Boolean hidden",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:126",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:277"
+   ],
+   "receivers": [
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_hidden.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksPart.standardComponent",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "standardComponent",
+   "kind": "property",
+   "signature": "prop Boolean standardComponent",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:128",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:279"
+   ],
+   "receivers": [
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_standardcomponent.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "ksPart.MultiBodyParts",
+   "assembly": "api5",
+   "interface": "ksPart",
+   "declared_on": "ksPart",
+   "receiver_type": "ksPart",
+   "inherited": false,
+   "member": "MultiBodyParts",
+   "kind": "property",
+   "signature": "prop Boolean MultiBodyParts",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:129"
+   ],
+   "receivers": [
+    "part"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_multibodyparts.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksPart"
+   }
+  },
+  {
+   "route": "KompasObject.Document3D",
+   "assembly": "api5",
+   "interface": "KompasObject",
+   "declared_on": "KompasObject",
+   "receiver_type": "KompasObject",
+   "inherited": false,
+   "member": "Document3D",
+   "kind": "method",
+   "signature": "Object Document3D()",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:302",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:242"
+   ],
+   "receivers": [
+    "application.Application"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_document3d.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "KompasObject"
+   }
+  },
+  {
+   "route": "ksDocument3D.Open",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "Open",
+   "kind": "method",
+   "signature": "Boolean Open(String fileName, Boolean invisible)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:303",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:334",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:874"
+   ],
+   "receivers": [
+    "document",
+    "opened"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_open.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "KompasObject.TransferInterface",
+   "assembly": "api5",
+   "interface": "KompasObject",
+   "declared_on": "KompasObject",
+   "receiver_type": "KompasObject",
+   "inherited": false,
+   "member": "TransferInterface",
+   "kind": "method",
+   "signature": "Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewType)",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:328",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1779",
+    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1809",
+    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:103",
+    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:123",
+    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:76"
+   ],
+   "receivers": [
+    "_application5",
+    "application.Application"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_transferinterface.html"
+    ],
+    "how": "имя файла страницы",
+    "documented_on": "KompasObject"
+   }
+  },
+  {
+   "route": "IKompasDocument.Close",
+   "assembly": "api7",
+   "interface": "IKompasDocument",
+   "declared_on": "IKompasDocument",
+   "receiver_type": "IKompasDocument",
+   "inherited": false,
+   "member": "Close",
+   "kind": "method",
+   "signature": "Boolean Close(DocumentCloseOptions closeOptions)",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:331",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:370",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1732"
+   ],
+   "receivers": [
+    "document7",
+    "kompasDocument"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompasdocument_close.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IKompasDocument"
+   }
+  },
+  {
+   "route": "ksDocument3D.close",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "close",
+   "kind": "method",
+   "signature": "Boolean close()",
+   "type": "Boolean",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:339",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:361",
+    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:390",
+    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:388",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1718",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:588"
+   ],
+   "receivers": [
+    "document",
+    "document.Document",
+    "source.Document5",
+    "source5"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
    }
   },
   {
@@ -26974,34 +27901,6 @@
    }
   },
   {
-   "route": "ksDocument3D.Open",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "Open",
-   "kind": "method",
-   "signature": "Boolean Open(String fileName, Boolean invisible)",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:334",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:874"
-   ],
-   "receivers": [
-    "document",
-    "opened"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_open.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
    "route": "ksDocument3D.GetPart",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -27026,39 +27925,6 @@
     "status": "Подтверждено",
     "source": [
      "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_getpart.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksDocument3D"
-   }
-  },
-  {
-   "route": "ksDocument3D.close",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "close",
-   "kind": "method",
-   "signature": "Boolean close()",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:361",
-    "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:390",
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:388",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1718",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:588"
-   ],
-   "receivers": [
-    "document",
-    "document.Document",
-    "source.Document5",
-    "source5"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html"
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksDocument3D"
@@ -28797,37 +29663,6 @@
    }
   },
   {
-   "route": "KompasObject.TransferInterface",
-   "assembly": "api5",
-   "interface": "KompasObject",
-   "declared_on": "KompasObject",
-   "receiver_type": "KompasObject",
-   "inherited": false,
-   "member": "TransferInterface",
-   "kind": "method",
-   "signature": "Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewType)",
-   "type": "Object",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1779",
-    "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:1809",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:103",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:123",
-    "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:76"
-   ],
-   "receivers": [
-    "_application5",
-    "application.Application"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_transferinterface.html"
-    ],
-    "how": "имя файла страницы",
-    "documented_on": "KompasObject"
-   }
-  },
-  {
    "route": "KompasObject.ActiveDocument3D",
    "assembly": "api5",
    "interface": "KompasObject",
@@ -30183,32 +31018,6 @@
    }
   },
   {
-   "route": "KompasObject.Document3D",
-   "assembly": "api5",
-   "interface": "KompasObject",
-   "declared_on": "KompasObject",
-   "receiver_type": "KompasObject",
-   "inherited": false,
-   "member": "Document3D",
-   "kind": "method",
-   "signature": "Object Document3D()",
-   "type": "Object",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:242"
-   ],
-   "receivers": [
-    "application.Application"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_document3d.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "KompasObject"
-   }
-  },
-  {
    "route": "ksDocument3D.Create",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -30314,34 +31123,6 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ksDocument3D"
-   }
-  },
-  {
-   "route": "IKompasDocument.Close",
-   "assembly": "api7",
-   "interface": "IKompasDocument",
-   "declared_on": "IKompasDocument",
-   "receiver_type": "IKompasDocument",
-   "inherited": false,
-   "member": "Close",
-   "kind": "method",
-   "signature": "Boolean Close(DocumentCloseOptions closeOptions)",
-   "type": "Boolean",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:370",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1732"
-   ],
-   "receivers": [
-    "document7",
-    "kompasDocument"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompasdocument_close.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "IKompasDocument"
    }
   },
   {
@@ -38448,6 +39229,214 @@
    }
   },
   {
+   "route": "ISpecificationDescription.Objects",
+   "assembly": "api7",
+   "interface": "ISpecificationDescription",
+   "declared_on": "ISpecificationDescription",
+   "receiver_type": "ISpecificationDescription",
+   "inherited": false,
+   "member": "Objects",
+   "kind": "property",
+   "signature": "prop Object Objects",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:112"
+   ],
+   "receivers": [
+    "description"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationdescription_objects.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationDescription"
+   }
+  },
+  {
+   "route": "ksDocument3D.GetSpecification",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "GetSpecification",
+   "kind": "method",
+   "signature": "Object GetSpecification()",
+   "type": "Object",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:159"
+   ],
+   "receivers": [
+    "document.Document3D"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_getspecification.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksDocument3D"
+   }
+  },
+  {
+   "route": "ISpecificationBaseObject.UniqueNumber",
+   "assembly": "api7",
+   "interface": "ISpecificationBaseObject",
+   "declared_on": "ISpecificationBaseObject",
+   "receiver_type": "ISpecificationBaseObject",
+   "inherited": false,
+   "member": "UniqueNumber",
+   "kind": "property",
+   "signature": "prop Double UniqueNumber",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:190"
+   ],
+   "receivers": [
+    "item"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationobject_uniquenumber.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationObject"
+   }
+  },
+  {
+   "route": "ISpecificationBaseObject.Section",
+   "assembly": "api7",
+   "interface": "ISpecificationBaseObject",
+   "declared_on": "ISpecificationBaseObject",
+   "receiver_type": "ISpecificationBaseObject",
+   "inherited": false,
+   "member": "Section",
+   "kind": "property",
+   "signature": "prop Int32 Section",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:191"
+   ],
+   "receivers": [
+    "item"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationobject_section.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationObject"
+   }
+  },
+  {
+   "route": "ksSpecification.ksGetSpcObject",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksGetSpcObject",
+   "kind": "method",
+   "signature": "Int32 ksGetSpcObject(Double objNumb)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:199"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksgetspcobject.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksGetSpcObjectNumber",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksGetSpcObjectNumber",
+   "kind": "method",
+   "signature": "Double ksGetSpcObjectNumber(Int32 spcObj)",
+   "type": "Double",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:207"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksgetspcobjectnumber.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksGetSpcSectionName",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksGetSpcSectionName",
+   "kind": "method",
+   "signature": "String ksGetSpcSectionName(Int32 spcObj)",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:216"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksgetspcsectionname.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksGetSpcObjectColumnText",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksGetSpcObjectColumnText",
+   "kind": "method",
+   "signature": "String ksGetSpcObjectColumnText(Int32 spcObj, Int32 columnType, Int32 ispoln, Int32 block)",
+   "type": "String",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:232"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksgetspcobjectcolumntext.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
    "route": "ksAdditionFormatParam.formatBinary",
    "assembly": "api5",
    "interface": "ksAdditionFormatParam",
@@ -39031,33 +40020,6 @@
    }
   },
   {
-   "route": "ksPart.material",
-   "assembly": "api5",
-   "interface": "ksPart",
-   "declared_on": "ksPart",
-   "receiver_type": "ksPart",
-   "inherited": false,
-   "member": "material",
-   "kind": "property",
-   "signature": "prop String material",
-   "type": "String",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:387",
-    "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:545"
-   ],
-   "receivers": [
-    "part"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_material.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksPart"
-   }
-  },
-  {
    "route": "ksPart.density",
    "assembly": "api5",
    "interface": "ksPart",
@@ -39637,32 +40599,6 @@
     ],
     "how": "имя файла страницы",
     "documented_on": "ksDocument2D"
-   }
-  },
-  {
-   "route": "ksPart.marking",
-   "assembly": "api5",
-   "interface": "ksPart",
-   "declared_on": "ksPart",
-   "receiver_type": "ksPart",
-   "inherited": false,
-   "member": "marking",
-   "kind": "property",
-   "signature": "prop String marking",
-   "type": "String",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:840"
-   ],
-   "receivers": [
-    "part"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_marking.html"
-    ],
-    "how": "перечень интерфейса",
-    "documented_on": "ksPart"
    }
   },
   {
@@ -45805,24 +46741,24 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json",
+  "source": "docs/acceptance/evidence/20261026-api-audit-ed5e479/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 9417.6,
-  "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
+  "lag_seconds": 3426.7,
+  "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/win-x64/KompasMcp.Api5Adapter.deps.json",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261025-api-audit-d4c5fae/wire.json",
+  "source": "docs/acceptance/evidence/20261026-api-audit-ed5e479/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 50738.8,
-  "newest_input": "coverage/solid-v24/matrix.json",
+  "lag_seconds": 9885.6,
+  "newest_input": "schemas/kompas_synchronise_copy.json",
   "reason": "свеж"
  },
  "reflection_access": {
@@ -45843,18 +46779,18 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 8052,
+  "total": 8177,
   "by_kind": {
-   "foreign-receiver": 7503,
-   "unknown": 450,
-   "unknown-member": 99
+   "foreign-receiver": 7615,
+   "unknown": 462,
+   "unknown-member": 100
   },
   "by_reason": {
-   "head-not-declared": 7503,
-   "head-type-not-established": 201,
+   "head-not-declared": 7615,
+   "head-type-not-established": 212,
    "head-type-not-com": 246,
-   "member-not-on-interface": 99,
-   "chain-broken-on-com-type": 3
+   "member-not-on-interface": 100,
+   "chain-broken-on-com-type": 4
   },
   "sites": {
    "foreign-receiver": [
@@ -45865,214 +46801,226 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:9:KompasMcp.Domain",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:10:KompasMcp.Domain",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:12:KompasMcp",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:50:StringComparer",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:64:r",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:135:ksPart7CollectionTypeEnum",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:185:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:198:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:390:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:393:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:415:beforeParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:416:beforeParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:416:p",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:422:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:425:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:428:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:436:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:55:StringComparer",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:65:StringComparer",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:69:r",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:139:ksPart7CollectionTypeEnum",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:190:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:203:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:250:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:251:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:257:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:260:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:435:ErrorCodes",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:438:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:444:parts7",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:449:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:451:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:458:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:472:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:475:candidate",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:476:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:477:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:478:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:479:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:480:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:481:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:482:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:507:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:513:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:519:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:543:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:546:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:569:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:572:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:586:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:588:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:589:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:460:beforeParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:beforeParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:p",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:467:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:470:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:473:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:481:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:483:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:489:parts7",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:494:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:496:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:503:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:506:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:517:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:520:candidate",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:521:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:522:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:523:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:524:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:525:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:526:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:527:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:552:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:558:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:564:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:588:ErrorCodes",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:591:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:616:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:619:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:625:inserted",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:627:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:627:inserted",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:632:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:642:fixedAfter.Value",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:680:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:681:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:696:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:697:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:700:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:702:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:717:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:720:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:730:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:732:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:760:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:764:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:789:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:789:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:801:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:802:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:805:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:807:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:828:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:830:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:838:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:839:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:841:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:850:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:857:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:884:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:884:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:915:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:916:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:934:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:935:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:938:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:940:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:958:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:962:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:976:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:989:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:992:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1002:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1014:ComponentRemoval",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1015:before.Select(e => e.Key)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1015:after.Select(e => e.Key)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1016:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1017:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1018:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1019:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1020:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1020:e",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:e",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1091:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1095:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1100:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1101:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1102:left",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1120:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1121:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1123:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1124:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1138:DocumentKind",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1141:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1144:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1180:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1183:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1189:storedMate",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1207:DependentMates",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1208:agreement",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1210:agreement",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1215:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1220:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1247:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1275:mates",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:Matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:Math.Round(v, 6)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1331:l",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1344:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1345:broken",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1345:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1350:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1351:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1361:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1365:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1380:DocumentKind",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1383:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1386:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1402:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1404:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1418:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1420:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1428:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1434:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1453:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1459:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1486:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1498:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1518:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1521:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1526:sample",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1541:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1542:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1553:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1554:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1554:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1555:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1556:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1559:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1561:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1562:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1564:ComponentIdentity",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1568:verdict",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1572:verdict",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1578:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1578:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1580:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1583:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1583:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1584:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1585:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1632:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1643:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1644:Array",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1644:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1654:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1681:a",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1681:b",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1698:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1724:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1726:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1728:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1731:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1734:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1736:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1738:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1740:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1743:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1747:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:1:System.Runtime",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:4:KompasMcp.Api5Adapter",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:5:KompasMcp"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:614:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:617:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:631:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:633:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:634:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:636:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:663:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:666:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:672:inserted",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:674:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:674:inserted",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:679:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:689:fixedAfter.Value",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:727:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:728:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:743:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:744:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:747:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:749:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:764:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:767:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:777:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:779:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:807:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:811:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:836:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:836:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:848:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:849:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:852:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:854:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:875:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:877:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:885:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:886:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:888:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:897:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:904:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:931:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:931:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:962:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:963:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:981:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:982:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:985:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:987:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1005:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1009:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1023:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1036:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1039:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1049:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1061:ComponentRemoval",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1062:before.Select(e => e.Key)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1062:after.Select(e => e.Key)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1063:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1064:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1065:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1066:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1067:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1067:e",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:e",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1138:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1142:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1147:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1148:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1149:left",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1167:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1168:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1170:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1171:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1185:DocumentKind",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1191:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1227:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1230:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1235:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1236:storedMate",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1254:DependentMates",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1255:agreement",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1257:agreement",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1262:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1267:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1294:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1322:mates",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:Matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:Math.Round(v, 6)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1378:l",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1391:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1392:broken",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1392:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1397:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1398:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1408:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1412:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1427:DocumentKind",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1430:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1433:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1449:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1451:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1465:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1467:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1475:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1481:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1501:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1507:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1522:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1526:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1528:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1555:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1568:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1588:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1591:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1596:sample",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1621:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1621:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1622:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1623:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1624:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1625:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1628:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1630:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1631:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1633:ComponentIdentity",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1637:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1641:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1647:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1647:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1649:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1652:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1652:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1653:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1654:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1701:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1712:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1713:Array",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1713:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1723:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1748:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1751:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1777:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1779:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1781:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1784:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1787:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1789:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1791:SafeRead"
    ],
    "unknown": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:109:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:114:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:122:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:124:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:643:command.Fixed",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1286:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1310:part",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1344:links.Count",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1359:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1363:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1366:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1369:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:113:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:118:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:126:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:128:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:690:command.Fixed",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1235:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1333:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1357:part",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1391:links.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1406:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1410:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1413:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1416:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:215:children",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:369:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:370:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:371:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:372:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:373:row.Instances",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:400:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:401:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:402:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:403:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:404:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:428:document.Kind",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
@@ -46247,22 +47195,11 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs:923:mode.Value",
     "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:202:format",
     "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:215:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:234:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:269:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:285:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:388:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:389:format",
-    "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:219:hits.Select(h => h.Type)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:339:command.Object1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:339:command.Object1",
-    "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:340:command.Object2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Interference.cs:340:command.Object2",
-    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:324:probe",
-    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:978:element",
-    "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:981:element"
+    "src/KompasMcp.Api5Adapter/Api5Session.ImageExport.cs:234:format"
    ],
    "unknown-member": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:766:IModelObject.Points3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:419:ksDocument3D.Kind",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:770:IDiametralDimension.X1",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:771:IDiametralDimension.Y1",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:772:IDiametralDimension.X2",
@@ -46372,211 +47309,222 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:9:KompasMcp.Domain",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:10:KompasMcp.Domain",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:12:KompasMcp",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:50:StringComparer",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:64:r",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:135:ksPart7CollectionTypeEnum",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:185:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:198:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:390:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:393:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:415:beforeParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:416:beforeParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:416:p",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:422:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:425:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:428:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:436:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:55:StringComparer",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:65:StringComparer",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:69:r",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:139:ksPart7CollectionTypeEnum",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:190:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:203:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:250:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:251:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:257:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:260:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:435:ErrorCodes",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:438:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:444:parts7",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:449:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:451:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:458:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:472:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:475:candidate",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:476:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:477:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:478:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:479:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:480:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:481:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:482:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:507:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:513:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:519:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:543:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:546:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:569:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:572:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:586:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:588:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:589:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:460:beforeParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:beforeParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:461:p",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:467:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:470:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:473:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:481:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:483:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:489:parts7",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:494:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:496:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:503:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:506:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:517:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:520:candidate",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:521:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:522:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:523:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:524:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:525:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:526:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:527:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:552:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:558:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:564:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:588:ErrorCodes",
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:591:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:616:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:619:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:625:inserted",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:627:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:627:inserted",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:632:afterParts",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:642:fixedAfter.Value",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:680:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:681:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:696:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:697:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:700:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:702:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:717:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:720:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:730:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:732:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:760:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:764:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:789:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:789:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:801:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:802:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:805:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:807:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:828:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:830:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:838:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:839:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:841:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:850:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:857:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:884:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:884:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:915:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:916:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:934:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:935:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:938:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:940:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:958:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:962:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:976:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:989:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:992:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1002:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1014:ComponentRemoval",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1015:before.Select(e => e.Key)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1015:after.Select(e => e.Key)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1016:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1017:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1018:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1019:removal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1020:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1020:e",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1043:e",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1091:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1095:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1100:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1101:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1102:left",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1120:before",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1121:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1123:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1124:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1138:DocumentKind",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1141:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1144:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1180:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1183:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1189:storedMate",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1207:DependentMates",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1208:agreement",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1210:agreement",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1215:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1220:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1247:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1275:mates",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:Matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:Math.Round(v, 6)",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1299:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1331:l",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1344:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1345:broken",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1345:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1350:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1351:VerificationLevel",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1361:References",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1365:stored",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1380:DocumentKind",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1383:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1386:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1402:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1404:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1418:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1420:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1428:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1434:bridge",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1453:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1459:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1486:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1498:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1518:ErrorCodes",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1521:RetryPolicy",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1526:sample",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1541:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1542:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1553:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1554:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1554:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1555:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1556:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1559:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1561:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1562:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1564:ComponentIdentity",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1568:verdict",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1572:verdict",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1578:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1578:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1580:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1583:string",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1583:StringComparison",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1584:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1585:ComponentIdentitySignal",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1632:CultureInfo",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1643:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1644:Array",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1644:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1654:after",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1681:a",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1681:b",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1698:matrix",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1703:v",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1724:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1726:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1728:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1731:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1734:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1736:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1738:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1740:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1743:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1747:SafeRead",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:1:System.Runtime",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:4:KompasMcp.Api5Adapter",
-    "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:5:KompasMcp"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:614:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:617:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:631:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:633:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:634:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:636:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:663:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:666:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:672:inserted",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:674:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:674:inserted",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:679:afterParts",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:689:fixedAfter.Value",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:727:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:728:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:743:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:744:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:747:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:749:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:764:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:767:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:777:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:779:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:807:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:811:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:836:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:836:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:848:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:849:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:852:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:854:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:875:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:877:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:885:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:886:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:888:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:897:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:904:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:931:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:931:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:962:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:963:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:981:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:982:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:985:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:987:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1005:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1009:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1023:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1036:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1039:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1049:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1061:ComponentRemoval",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1062:before.Select(e => e.Key)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1062:after.Select(e => e.Key)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1063:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1064:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1065:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1066:removal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1067:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1067:e",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1090:e",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1138:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1142:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1147:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1148:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1149:left",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1167:before",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1168:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1170:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1171:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1185:DocumentKind",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1191:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1227:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1230:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1235:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1236:storedMate",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1254:DependentMates",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1255:agreement",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1257:agreement",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1262:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1267:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1294:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1322:mates",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:Matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:Math.Round(v, 6)",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1346:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1378:l",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1391:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1392:broken",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1392:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1397:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1398:VerificationLevel",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1408:References",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1412:stored",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1427:DocumentKind",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1430:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1433:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1449:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1451:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1465:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1467:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1475:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1481:bridge",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1501:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1507:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1522:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1526:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1528:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1555:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1568:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1588:ErrorCodes",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1591:RetryPolicy",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1596:sample",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1621:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1621:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1622:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1623:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1624:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1625:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1628:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1630:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1631:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1633:ComponentIdentity",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1637:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1641:verdict",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1647:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1647:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1649:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1652:string",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1652:StringComparison",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1653:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1654:ComponentIdentitySignal",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1701:CultureInfo",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1712:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1713:Array",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1713:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1723:after",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1748:ComponentAddress",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1751:matrix",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1756:v",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1777:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1779:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1781:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1784:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1787:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1789:SafeRead",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1791:SafeRead"
    ],
    "head-type-not-established": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:109:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:114:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:122:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:124:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1188:row",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1310:part",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1359:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1363:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1366:child",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1369:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:113:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:118:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:126:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:128:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1235:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1357:part",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1406:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1410:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1413:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1416:child",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:215:children",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:369:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:370:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:371:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:372:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:373:row.Instances",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:400:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:401:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:402:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:403:row",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:404:row",
     "src/KompasMcp.Api5Adapter/Api5Session.Dismantle.cs:331:part",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2723:format.Trim()",
     "src/KompasMcp.Api5Adapter/Api5Session.EdgePlacement.cs:130:edge",
@@ -46755,23 +47703,12 @@
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:68:cached",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:70:cached",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:1682:input",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:44:rot",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:46:enumerator",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:73:rot",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:113:rot",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:115:enumerator",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:159:name",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:165:name",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:166:name",
-    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:167:name",
-    "src/KompasMcp.Api5Adapter/Sta/StaExecutor.cs:196:item.CancellationToken",
-    "src/KompasMcp.Api5Adapter/Sta/StaExecutor.cs:199:item",
-    "src/KompasMcp.Api5Adapter/Sta/StaExecutor.cs:204:item"
+    "src/KompasMcp.Api5Adapter/Com/RunningObjectTable.cs:44:rot"
    ],
    "head-type-not-com": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:643:command.Fixed",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1286:ex.GetType()",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1344:links.Count",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:690:command.Fixed",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1333:ex.GetType()",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1391:links.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:136:baseObjects.Length",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:414:matches.Count",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:651:command.Distance1Mm",
@@ -46972,6 +47909,7 @@
    ],
    "member-not-on-interface": [
     "src/KompasMcp.Api5Adapter/Api5Session.AuxGeometry.cs:766:IModelObject.Points3D",
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:419:ksDocument3D.Kind",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:770:IDiametralDimension.X1",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:771:IDiametralDimension.Y1",
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:772:IDiametralDimension.X2",
@@ -47072,6 +48010,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2469:ksEntity.Index"
    ],
    "chain-broken-on-com-type": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:428:document.Kind",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:45:document.Document3D",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:55:document.Document3D",
     "src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs:112:definition.GetType()"
@@ -47083,7 +48022,7 @@
   {
    "interface": "IPart7",
    "member": "InstanceCount",
-   "site": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:263"
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:308"
   },
   {
    "interface": "ICopiesGeometry",
@@ -47535,6 +48474,7 @@
   "profiles_read": [
    "assemblies-minimal-v1.json",
    "assembly-interference-minimal-v1.json",
+   "bom-minimal-v1.json",
    "dismantle-minimal-v1.json",
    "drafts-minimal-v1.json",
    "drawings-minimal-v1.json",
@@ -47742,11 +48682,15 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "scratch/mcp-smoke/runs/20261024-214142-all-05dd54f/smoke-all-report.json",
-  "rows_claiming_verified": 204,
+  "source": "scratch/mcp-smoke/runs/20261026-195901-all-ed5e479/smoke-all-report.json",
+  "rows_claiming_verified": 208,
   "rows_without_any_linked_row": [],
   "rows_contradicted_by_fail": [],
   "rows_action_without_dedicated_row": [
+   "BOM-01.bom.summary",
+   "BOM-02.bom.export",
+   "BOM-03.component.properties",
+   "BOM-04.specification.read",
    "DRW-07.section_view.create.stepped",
    "DRW-07.section_view.rebuild",
    "G11.sections.mode_snapshot",
@@ -47767,6 +48711,10 @@
    "dep.api7.dismantle_interface"
   ],
   "rows_actions_without_required_calls": [
+   "BOM-01.bom.summary",
+   "BOM-02.bom.export",
+   "BOM-03.component.properties",
+   "BOM-04.specification.read",
    "DRW-07.section_view.create.stepped",
    "DRW-07.section_view.geometry_validation",
    "DRW-07.section_view.rebuild",
@@ -47914,7 +48862,7 @@
    "statement": "5 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: ksPlacement.GetMatrix3D (HTTP 404); IDismantleStep.Update (HTTP 404); IMateConstraint3D.Update (HTTP 404); IMateConstraint3D.Valid (HTTP 404); IMateConstraints3D.Count (HTTP 404)",
    "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json"
+    "docs/acceptance/evidence/20261026-api-audit-ed5e479/routes.json"
    ]
   },
   {
@@ -47924,27 +48872,27 @@
    "statement": "5 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: ksPlacement.GetMatrix3D; IDismantleStep.Update; IMateConstraint3D.Update; IMateConstraint3D.Valid; IMateConstraints3D.Count",
    "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
    "evidence": [
-    "docs/acceptance/evidence/20261025-api-audit-d4c5fae/routes.json"
+    "docs/acceptance/evidence/20261026-api-audit-ed5e479/routes.json"
    ]
   },
   {
    "id": "F-06",
    "class": "заявка не подтверждена вызовами (отказ сторожа)",
    "severity": "средняя",
-   "statement": "22 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create",
+   "statement": "26 строк(и): BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, MATE-07.mate.create_transmission, SM-08.thread.mode_auto, SM-08.thread.mode_hand",
    "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261024-214142-all-05dd54f/smoke-all-report.json"
+    "scratch/mcp-smoke/runs/20261026-195901-all-ed5e479/smoke-all-report.json"
    ]
   },
   {
    "id": "F-07",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "18 строк(и): DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object, SM-12.incline.mode_base_face_or_plane, SMB-01.body.create, SMB-02.body.read, SMB-03.body.edit",
+   "statement": "22 строк(и): BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand, SM-08.thread.mode_inner_by_face, SM-12.draft_from_edges.mode_dir_by_object",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "scratch/mcp-smoke/runs/20261024-214142-all-05dd54f/smoke-all-report.json"
+    "scratch/mcp-smoke/runs/20261026-195901-all-ed5e479/smoke-all-report.json"
    ]
   },
   {

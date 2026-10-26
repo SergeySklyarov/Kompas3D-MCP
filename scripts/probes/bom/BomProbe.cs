@@ -15,6 +15,12 @@ namespace BomProbe;
 /// DOC: BOM_RESEARCH_DEVELOPER_PROMPT.md §1.5. History: docs/decisions/bom.md#probe</remarks>
 internal sealed class BomProbe : IDisposable
 {
+    // INVARIANT: hidden is TRUE exactly at instance 1 and excluded exactly at instance 2 (collection
+    // order, see MarkFilterFlags), FALSE at the other four — "the flag reads" and "the flag sits where
+    // it was put" are different facts.
+    private const string ExpectedHidden = "0:False,1:True,2:False,3:False,4:False,5:False";
+    private const string ExpectedExcluded = "0:False,1:False,2:True,3:False,4:False,5:False";
+
     private readonly string _outPath;
     private readonly JsonArray _rows = new();
     private readonly JsonArray _reads = new();
@@ -144,6 +150,7 @@ internal sealed class BomProbe : IDisposable
         Insert(asm, partA, 3);
         Insert(asm, partB, 1);
         Insert(asm, subPath, 2);
+        MarkFilterFlags(asm, hiddenIndex: 1, excludedIndex: 2);
         Save(asm, asmPath);
 
         Record("fixture", "сборка собрана: 3 x a/part.m3d + 1 x b/part.m3d + 2 x sub.m3d",
@@ -183,6 +190,25 @@ internal sealed class BomProbe : IDisposable
             Record("insert", $"AddFromFile({Path.GetFileName(path)}) #{index + 1}",
                 inserted is null ? "null" : "Part7", inserted is null ? "FAIL" : "PASS");
         }
+    }
+
+    /// <summary>Sets the two §1.11 filters to TRUE on two named instances: a flag that was never seen
+    /// true cannot be shown to filter anything, and FALSE everywhere proves nothing.</summary>
+    /// <remarks>DOC: kspart_hidden.html «iPart.SetHidden (hidden)», kspart_excluded.html
+    /// «iEntity.SetExcluded(excluded)». The excluded page warns that the flag takes effect at once, so it
+    /// is set last, after the update the hidden flag needs. History: docs/decisions/bom.md#probe</remarks>
+    private void MarkFilterFlags((ksDocument3D Doc5, IKompasDocument3D Doc7) document, int hiddenIndex,
+        int excludedIndex)
+    {
+        var parts = Components(document.Doc5);
+        parts[hiddenIndex].hidden = true;
+        parts[hiddenIndex].Update();
+        parts[excludedIndex].excluded = true;
+        var hidden = Safe(() => parts[hiddenIndex].hidden);
+        var excluded = Safe(() => parts[excludedIndex].excluded);
+        Record("filters_set", "hidden=True и excluded=True читаются сразу после записи",
+            $"hidden={hidden}, excluded={excluded}",
+            hidden == "True" && excluded == "True" ? "PASS" : "FAIL");
     }
 
     private void Save((ksDocument3D Doc5, IKompasDocument3D Doc7) document, string path)
@@ -234,6 +260,12 @@ internal sealed class BomProbe : IDisposable
         Record($"{label}_nested", "подсборка как отдельный документ даёт 2 экземпляра",
             nested.ToString(CultureInfo.InvariantCulture), nested == 2 ? "PASS" : "FAIL");
 
+        var hiddenFlags = Flags(parts, part => part.hidden);
+        var excludedFlags = Flags(parts, part => part.excluded);
+        Record($"{label}_hidden", ExpectedHidden, hiddenFlags, hiddenFlags == ExpectedHidden ? "PASS" : "FAIL");
+        Record($"{label}_excluded", ExpectedExcluded, excludedFlags,
+            excludedFlags == ExpectedExcluded ? "PASS" : "FAIL");
+
         var result = new JsonObject
         {
             ["label"] = label,
@@ -250,6 +282,8 @@ internal sealed class BomProbe : IDisposable
                 ["count"] = g.count,
             }).ToArray()),
             ["nested_children"] = nested,
+            ["hidden_flags"] = hiddenFlags,
+            ["excluded_flags"] = excludedFlags,
         };
         _reads.Add(result);
         return result;
@@ -314,6 +348,11 @@ internal sealed class BomProbe : IDisposable
 
         return parts;
     }
+
+    /// <summary>One flag per instance in collection order, so the check names the instance a flag must
+    /// sit on instead of counting trues.</summary>
+    private static string Flags(List<ksPart> parts, Func<ksPart, object?> read) =>
+        string.Join(",", parts.Select((part, index) => $"{index}:{Safe(() => read(part))}"));
 
     private static JsonObject Describe(ksPart part) => new()
     {

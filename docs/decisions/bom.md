@@ -18,8 +18,8 @@
 |---|---|---|---|
 | экземпляры верхнего уровня | `ksDocument3D.PartCollection(bool)` → `ksPartCollection.GetCount/GetByIndex` | `kspartcollection_getcount.html`, `kspartcollection_getbyindex.html` | есть |
 | обозначение, наименование, материал | `ksPart.marking`, `.name`, `.material` | `kspart_props.html` | есть |
-| фильтр «скрытый» | `ksPart.hidden` | `kspart_props.html` | есть |
-| фильтр «исключён из расчёта» | `ksPart.excluded` | `kspart_props.html` | есть |
+| фильтр «скрытый» | `ksPart.hidden`, `SetHidden(bool)` | `kspart_hidden.html` | есть, чтение и запись |
+| фильтр «исключён из расчёта» | `ksPart.excluded`, `SetExcluded(bool)` | `kspart_excluded.html` | есть, чтение и запись |
 | признак стандартного изделия | `ksPart.standardComponent` | `kspart_props.html` | есть |
 | файл компонента (полный путь) | `ksPart.fileName` | `kspart_props.html` | есть |
 | вставка компонента из файла | `IPart7.Parts` → `IParts7.AddFromFile(FileName, ExternalFile, Redraw)` | `iparts7_addfromfile.html` | есть |
@@ -66,7 +66,19 @@
 
 ## #profile — профиль `bom-minimal-v1`
 
-См. `BOM_RESEARCH_REPORT_20261026.md`, раздел «Проект минимального профиля».
+Объём профиля и решения по спорным маршрутам — `#profile-scope`; состав инструментов и их проверки —
+`BOM_RESEARCH_REPORT_20261026.md`, раздел «Проект минимального профиля».
+
+## #profile-scope — объём профиля (решение техлида, поправка тридцать третья)
+
+- **Профиль.** `bom-minimal-v1` — три инструмента из §4 отчёта (`kompas_get_bom`,
+  `kompas_get_component_properties`, `kompas_export_bom`). Чтение родной спецификации (`BOM_SPEC_READ`)
+  — отдельным нарядом после.
+- **Раздел спецификации — вне профиля** до появления документированного COM-маршрута (вариант «в»
+  вопроса 2 отчёта). Отдельная проба точки входа `IPropertyMng` не делается: это KsAPI, искать COM-вход
+  — угадывание.
+- **Исполнения отложены:** точка входа `IEmbodimentsManager` страницей не подтверждена, в профиль не
+  входят.
 
 ## #probe — прибор
 
@@ -78,3 +90,8 @@
 Два запуска: первый строит и читает, второй (`--verify <файл сборки>`) переоткрывает сборку
 отдельным процессом. Разделение вынужденное: КОМПАС отказывается открывать путь, который ещё
 загружен, а закрытый документ остаётся загруженным, пока жив хоть один указатель на него.
+
+Флаги фильтров ставятся документированными сеттерами тех же страниц (`iPart.SetHidden`,
+`iEntity.SetExcluded`) на два названных экземпляра: флаг, ни разу не виденный истинным, не доказывает,
+что фильтр работает. Проверка сравнивает флаги по номерам экземпляров в порядке коллекции — до и после
+переоткрытия.

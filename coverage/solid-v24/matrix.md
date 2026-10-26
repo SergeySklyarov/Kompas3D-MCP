@@ -38,13 +38,13 @@
 
 ### профиль bom-minimal-v1 — BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл
 
-- **обязательных_режимов:** 3
-- **режимов_закрыто:** 3
+- **обязательных_режимов:** 4
+- **режимов_закрыто:** 4
 - **общих_зависимостей:** 0
 - **зависимостей_закрыто:** 0
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** BOM_MINIMAL 2/2; BOM_PROPERTIES 1/1
+- **по_очередям:** BOM_MINIMAL 2/2; BOM_PROPERTIES 1/1; BOM_SPEC_READ 1/1
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -306,6 +306,7 @@
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
 | `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
+| `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
 
 ### Общие зависимости профиля `bom-minimal-v1`
 

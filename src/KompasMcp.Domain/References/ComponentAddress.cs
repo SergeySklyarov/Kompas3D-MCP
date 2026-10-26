@@ -1,9 +1,12 @@
 namespace KompasMcp.Domain.References;
 
-/// <summary>One instance as the address search sees it: the source file and the placement matrix.</summary>
+/// <summary>One instance as the address search sees it: the source file, the placement matrix and the
+/// "excluded from the calculation" flag.</summary>
 /// <remarks>An unread value stays <c>null</c>: "not read" and "read and matched" are different claims.
-/// <paramref name="Matrix"/> is 16 numbers of the 4×4 rigid transform, or <c>null</c> if not read.</remarks>
-public sealed record ComponentInstance(string? SourcePath, IReadOnlyList<double>? Matrix);
+/// <paramref name="Matrix"/> is 16 numbers of the 4×4 rigid transform, or <c>null</c> if not read.
+/// <paramref name="Excluded"/> is <c>ksPart.excluded</c>: an EXCLUDED instance is exactly the one
+/// <c>IPart7.PartsEx</c> does not list, so it can never be the target of a record.</remarks>
+public sealed record ComponentInstance(string? SourcePath, IReadOnlyList<double>? Matrix, bool? Excluded);
 
 /// <summary>The address found for one record: the index in the flat collection, or <c>null</c> with a
 /// reason.</summary>
@@ -27,10 +30,13 @@ public static class ComponentAddress
         + "сдвигает все следующие адреса на чужой компонент.";
 
     /// <summary>Find the index of <paramref name="record"/> among <paramref name="collection"/>.</summary>
+    /// <param name="recordRank">How many records of the SAME source file came before this one. Used only
+    /// when the documented properties leave several candidates: the relative order of the instances of one
+    /// file is MEASURED, and an excluded instance never consumes a rank.</param>
     /// <returns>The index, or <c>null</c> when no element matches unambiguously; the detail names which
     /// stage decided it, so "not found" is distinguishable from "found twice".</returns>
     public static ComponentAddressVerdict Locate(
-        ComponentInstance record, IReadOnlyList<ComponentInstance> collection)
+        ComponentInstance record, IReadOnlyList<ComponentInstance> collection, int recordRank = 0)
     {
         var total = collection.Count;
         if (string.IsNullOrWhiteSpace(record.SourcePath))
@@ -40,10 +46,12 @@ public static class ComponentAddress
                 + $"(экземпляров в коллекции {total})");
         }
 
+        // AN EXCLUDED INSTANCE IS NEVER THE TARGET: it is in the collection and absent from PartsEx, which
+        // is exactly why a counter over the records shifted every later address.
         var bySource = new List<int>();
         for (var index = 0; index < total; index++)
         {
-            if (SameSource(record.SourcePath, collection[index].SourcePath))
+            if (collection[index].Excluded != true && SameSource(record.SourcePath, collection[index].SourcePath))
             {
                 bySource.Add(index);
             }
@@ -53,7 +61,7 @@ public static class ComponentAddress
         {
             return new ComponentAddressVerdict(null,
                 $"адрес не назначен: по полному пути «{record.SourcePath}» в коллекции нет ни одного "
-                + $"экземпляра (всего {total})");
+                + $"неисключённого экземпляра (всего {total})");
         }
 
         if (bySource.Count == 1)
@@ -86,9 +94,21 @@ public static class ComponentAddress
                 + "совпало у одного");
         }
 
+        // LAST RESORT — the relative order of the instances of ONE file, MEASURED: the excluded instance is
+        // the only one absent from the records, so the k-th record of a file is the k-th non-excluded
+        // instance of that file. Placements of the remaining candidates are equal, so no documented
+        // property can tell them apart; "no address" here would refuse every assembly of identical parts.
+        var pool = byPlacement.Count > 1 ? byPlacement : bySource;
+        if (recordRank >= 0 && recordRank < pool.Count)
+        {
+            return new ComponentAddressVerdict(pool[recordRank],
+                $"адрес {pool[recordRank]} — размещение не различает {pool.Count} экземпляра(ов) этого "
+                + "файла, поэтому решает их относительный порядок (измерен)");
+        }
+
         return new ComponentAddressVerdict(null,
             $"адрес не назначен: с этим путём {bySource.Count} экземпляра(ов), размещение совпало у "
-            + $"{byPlacement.Count} — однозначного сопоставления нет");
+            + $"{byPlacement.Count}, а порядковый номер записи {recordRank} вне их числа");
     }
 
     /// <summary>Whether two values name the same FILE: the FULL path, normalised, case-insensitive.</summary>

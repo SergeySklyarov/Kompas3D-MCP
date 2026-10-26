@@ -23,15 +23,15 @@ public class ComponentAddressTests
         x, 0, 0, 1,
     ];
 
-    private static ComponentInstance Instance(string? path, double? x) =>
-        new(path, x is null ? null : At(x.Value));
+    private static ComponentInstance Instance(string? path, double? x, bool? excluded = false) =>
+        new(path, x is null ? null : At(x.Value), excluded);
 
     /// <summary>The measured collection: a#1, a#2 (hidden), a#3 (EXCLUDED), b#1, sub#1, sub#2.</summary>
     private static List<ComponentInstance> FixtureCollection() =>
     [
         Instance(Path.Combine(DirA, "part.m3d"), 0),
         Instance(Path.Combine(DirA, "part.m3d"), 100),
-        Instance(Path.Combine(DirA, "part.m3d"), 150),
+        Instance(Path.Combine(DirA, "part.m3d"), 150, excluded: true),
         Instance(Path.Combine(DirB, "part.m3d"), 200),
         Instance(@"C:\fixture\sub.m3d", 300),
         Instance(@"C:\fixture\sub.m3d", 400),
@@ -76,10 +76,11 @@ public class ComponentAddressTests
     }
 
     [Fact]
-    public void TwoInstancesAtOnePlacement_GetNoAddress()
+    public void InstancesAtOnePlacement_AreToldApartByTheirRelativeOrder()
     {
-        // LIMIT, named: the documented properties cannot tell two such instances apart, so the record gets NO
-        // address — a guessed index would address a foreign component.
+        // MEASURED last resort: with equal placements no documented property tells the instances of one file
+        // apart, so the k-th record of that file takes the k-th instance of that file. "No address" here would
+        // refuse every assembly of identical parts.
         List<ComponentInstance> collection =
         [
             Instance(Path.Combine(DirA, "part.m3d"), 0),
@@ -87,10 +88,30 @@ public class ComponentAddressTests
             Instance(Path.Combine(DirB, "part.m3d"), 200),
         ];
 
-        var verdict = ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection);
+        var first = ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection, 0);
+        var second = ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection, 1);
+        var beyond = ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection, 2);
+
+        Assert.Equal(0, first.Index);
+        Assert.Equal(1, second.Index);
+        Assert.Null(beyond.Index);
+        Assert.Contains("относительный порядок", first.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExcludedInstance_IsNeverTheTargetOfARecord()
+    {
+        // INVARIANT: an excluded instance is exactly the one PartsEx omits, so it is not a candidate even
+        // when its path is the only one that matches.
+        List<ComponentInstance> collection =
+        [
+            Instance(Path.Combine(DirB, "part.m3d"), 200, excluded: true),
+        ];
+
+        var verdict = ComponentAddress.Locate(Instance(Path.Combine(DirB, "part.m3d"), 200), collection);
 
         Assert.Null(verdict.Index);
-        Assert.Contains("однозначного сопоставления нет", verdict.Detail, StringComparison.Ordinal);
+        Assert.Contains("неисключённого", verdict.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,7 +131,7 @@ public class ComponentAddressTests
     {
         // "Placement not read" is not a mismatch: with a single instance of that file the path decides.
         var verdict = ComponentAddress.Locate(
-            new ComponentInstance(Path.Combine(DirB, "part.m3d"), null), FixtureCollection());
+            new ComponentInstance(Path.Combine(DirB, "part.m3d"), null, Excluded: false), FixtureCollection());
 
         Assert.Equal(3, verdict.Index);
         Assert.Contains("размещение не сверено", verdict.Detail, StringComparison.Ordinal);
@@ -122,7 +143,7 @@ public class ComponentAddressTests
         var verdict = ComponentAddress.Locate(Instance(@"C:\fixture\c\part.m3d", 0), FixtureCollection());
 
         Assert.Null(verdict.Index);
-        Assert.Contains("нет ни одного экземпляра", verdict.Detail, StringComparison.Ordinal);
+        Assert.Contains("неисключённого экземпляра", verdict.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -62,8 +62,9 @@ public partial class Api5Session
         }
 
         var enumerated = 0;
+        var ranks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         Walk(top, parentRef: null, depth: 0, command.Recursive, document, rows, uniqueParts,
-            ref enumerated, notes);
+            ref enumerated, ranks, notes);
 
         if (rows.Any(r => r.Depth > 0))
         {
@@ -89,6 +90,7 @@ public partial class Api5Session
         List<ComponentRowDto> rows,
         HashSet<string> uniqueParts,
         ref int enumerated,
+        Dictionary<string, int> ranks,
         List<string> notes)
     {
         if (depth > MaxStructureDepth)
@@ -106,7 +108,7 @@ public partial class Api5Session
             // THE ADDRESS IS MATCHED, NOT COUNTED: `IPart7.PartsEx` omits an excluded instance, so a
             // counter would shift every later address onto a FOREIGN component. A record that cannot be
             // matched gets NO address (see AddressOf), never a neighbour's.
-            var row = ReadComponent(document, node, child, parentRef, depth, notes);
+            var row = ReadComponent(document, node, child, parentRef, depth, ranks, notes);
             rows.Add(row);
             if (row.SourcePath is { Length: > 0 } path)
             {
@@ -124,7 +126,7 @@ public partial class Api5Session
             else if (recursive && row.IsDetail == false)
             {
                 Walk(child, row.ComponentRef, depth + 1, recursive: true, document, rows,
-                    uniqueParts, ref enumerated, notes);
+                    uniqueParts, ref enumerated, ranks, notes);
             }
         }
     }
@@ -171,7 +173,7 @@ public partial class Api5Session
 
     private ComponentRowDto ReadComponent(
         DocumentEntry document, IPart7 parent, IPart7 part, string? parentRef, int depth,
-        List<string> notes)
+        Dictionary<string, int>? ranks, List<string> notes)
     {
         // Reference is a diagnostic number, NOT an address (see ComponentPayload). An unread value
         // stays null, not 0: "not read" and "0" are different claims.
@@ -182,7 +184,7 @@ public partial class Api5Session
         // It is the placement AT READ TIME; it is NOT stored in the REFERENCE (see ComponentPayload),
         // and is read only for a top-level component — a nested one has no address.
         var matrix7 = depth == 0 ? SummMatrix7(parent, part) : null;
-        var ordinal = depth == 0 ? AddressOf(document, part, matrix7, notes) : NestedComponentOrdinal;
+        var ordinal = depth == 0 ? AddressOf(document, part, matrix7, ranks, notes) : NestedComponentOrdinal;
         var addressable = ordinal != NestedComponentOrdinal && ordinal != UnaddressedComponentOrdinal;
 
         var stored = References.Register(
@@ -227,18 +229,32 @@ public partial class Api5Session
 
     /// <summary>The address of a TOP-LEVEL component: its index in the flat
     /// <c>ksDocument3D.PartCollection(true)</c>, found by matching (see <see cref="ComponentAddress"/>).</summary>
-    /// <remarks>DOC: <c>kspart_filename.html</c> (ksPart.fileName), <c>ipart7_filename.html</c>
-    /// (IPart7.FileName), <c>kspart_getplacement.html</c> → <c>ksPlacement.GetMatrix3D</c>,
-    /// <c>ipart7_getsummmatrix.html</c>, <c>kspartcollection_getbyindex.html</c>.
+    /// <remarks>DOC: <c>kspart_filename.html</c>, <c>ipart7_filename.html</c>, <c>kspart_getplacement.html</c>
+    /// → <c>ksPlacement.GetMatrix3D</c>, <c>ipart7_getsummmatrix.html</c>, <c>kspart_excluded.html</c>,
+    /// <c>kspartcollection_getbyindex.html</c>.
     /// INVARIANT: no unambiguous match → NO address and a named note; a neighbour's index is never used.
     /// History: docs/decisions/assembly.md#identity</remarks>
-    private int AddressOf(DocumentEntry document, IPart7 part, double[]? matrix7, List<string> notes)
+    private int AddressOf(
+        DocumentEntry document, IPart7 part, double[]? matrix7, Dictionary<string, int>? ranks,
+        List<string> notes)
     {
         var instances = ComponentParts5(document)
-            .Select(part5 => new ComponentInstance(Ref(() => part5.fileName), ReadPlacementMatrix(part5)))
+            .Select(part5 => new ComponentInstance(Ref(() => part5.fileName), ReadPlacementMatrix(part5),
+                Bool(() => part5.excluded)))
             .ToList();
+        var source = Text(() => part.FileName);
+
+        // THE RANK IS COUNTED PER SOURCE FILE, not across the whole enumeration: the same-file instances are
+        // the only ones a counter can shift, because an excluded instance is the only one PartsEx omits.
+        var rank = 0;
+        if (ranks is not null && !string.IsNullOrWhiteSpace(source))
+        {
+            ranks.TryGetValue(source, out rank);
+            ranks[source] = rank + 1;
+        }
+
         var verdict = ComponentAddress.Locate(
-            new ComponentInstance(Text(() => part.FileName), matrix7), instances);
+            new ComponentInstance(source, matrix7, Excluded: false), instances, rank);
 
         if (verdict.Index is { } index)
         {
@@ -636,7 +652,8 @@ public partial class Api5Session
         // found by matching (see AddressOf), so the row and the mutation route cannot disagree.
         var inserted = top7 is null
             ? null
-            : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0, notes);
+            : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0, ranks: null,
+                notes);
 
         if (inserted is null)
         {

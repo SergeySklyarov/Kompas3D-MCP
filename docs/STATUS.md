@@ -14,6 +14,23 @@
 
 ## Текущее состояние
 
+- **Наряд `BOM_SPEC_READ` (26.10.2026, блок BOM, поправка тридцать четвёртая, `0.12.0`) - ВЫПОЛНЕН.**
+  Инструмент `kompas_get_specification` (только чтение) отдаёт строки объектов РОДНОЙ спецификации
+  модели: `section`, `section_number`, `position`, `marking`, `name`, `quantity`, `count`, `notes`;
+  с деревом сборки не смешивается и ничего не считает. Маршрут - `ksDocument3D.GetSpecification()` ->
+  `ksSpecification` (`ksGetSpcObject`, `ksGetSpcObjectColumnText` по документированному типу колонки,
+  `ksGetSpcSectionName`) плюс перечень `IKompasDocument.SpecificationDescriptions.Active`; таблица
+  «поле - метод - страница» в отчёте. Поля без документированного маршрута в контракт не вошли
+  (`unique_number`, `object_type`, `state`, масса, материал - причины в отчёте). `.spw` вне объёма:
+  единственный документированный вход `KompasObject.SpcDocument` адресует АКТИВНЫЙ документ сеанса, а
+  не названный `document_id`, поэтому `LIMIT:` в описании инструмента и в строке матрицы. Каталог
+  117 -> 118, схема `schemas/kompas_get_specification.json`, строка матрицы
+  `BOM-04.specification.read`, 8 строк приёмки `BOM-04.*` на постановке прибора, профиль
+  `bom-minimal-v1` 1.2, 4 модульных теста. Приёмка: Release-тесты **1600/1600**, `--bom-only`
+  **PASS 57 / FAIL 0**, `--self-test` **87 проверок / 0 FAIL**; зачётный `--all` на `d7407ea`
+  (Release, дерево чистое, 35 минут) - **PASS 1906 / NAMED 6 / UNKNOWN 3 / FAIL 0**, группа `bom`
+  PASS 34. Решение - `docs/decisions/bom.md#spec-read`. Новых строк долга нет, открытых пунктов 9.
+  Отчёт - `BOM_SPEC_READ_REPORT_20261026.md`. Следующее по плану - `RELEASE_0_12_0`.
 - **Наряд `BOM_PROPERTIES` (26.10.2026, блок BOM, `0.12.0`) — ВЫПОЛНЕН.** Инструмент
   `kompas_get_component_properties` читает восемь документированных свойств `IPart` (`file`, `name`,
   `marking`, `material`, `hidden`, `excluded`, `standard`, `multi_body`) по ссылке из

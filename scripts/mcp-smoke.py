@@ -50719,6 +50719,89 @@ def bom_checks(client, rep, app_id, workdir):
             f"код={json_code} строк={len(json_rows)} экземпляров_в_файле="
             f"{sum(int(r.get('instances') or 0) for r in json_rows)} в_ответе={again.get('instances')}")
 
+    # ===== BOM-04: родная спецификация (уровень «б») =====
+    spec_entry = entry_of(client, "kompas_get_specification")
+    spec_props = set(((spec_entry or {}).get("inputSchema") or {}).get("properties") or {}) - {"timeout_ms"}
+    spec_required = set(((spec_entry or {}).get("inputSchema") or {}).get("required") or [])
+    rep.add("BOM-04.discovery", "инструмент чтения спецификации есть в реестре каталога",
+            "PASS" if "kompas_get_specification" in registry else "FAIL",
+            f"в реестре={len(registry)}")
+    rep.add("BOM-04.schema",
+            "схема чтения спецификации требует document_id и не несёт других полей",
+            "PASS" if (spec_entry is not None and spec_required == {"document_id"}
+                       and spec_props == {"document_id"}) else "FAIL",
+            f"поля={sorted(spec_props)} обязательные={sorted(spec_required)}")
+
+    def specification(doc):
+        env, code = call("kompas_get_specification", {"document_id": doc})
+        return result(env), code
+
+    spec, spec_code = specification(reopened) if reopened else ({}, "no_document")
+    spec_rows = rows(spec)
+    probe_spec = []
+    for read in probe_reads:
+        if read.get("label") == "built":
+            probe_spec = read.get("rows") or []
+    rep.add("BOM-04.rows",
+            "инструмент возвращает те же объекты спецификации, что постановка прибора, и то же их число",
+            "PASS" if (not spec_code and spec_rows and len(spec_rows) == len(probe_spec)
+                       and spec.get("count") == len(spec_rows)) else "FAIL",
+            f"код={spec_code} строк={len(spec_rows)} count={spec.get('count')} у_прибора={len(probe_spec)}")
+
+    def spec_by_marking(answer):
+        return {str(r.get("marking") or ""): r for r in rows(answer)}
+
+    by_marking = spec_by_marking(spec)
+    written = [r for r in probe_spec if r.get("marking")]
+    mismatches = []
+    for expected in written:
+        got = by_marking.get(str(expected.get("marking")))
+        if got is None:
+            mismatches.append(f"{expected.get('marking')}: строки нет")
+            continue
+        for field in ("section", "name", "quantity"):
+            if str(got.get(field) or "") != str(expected.get(field) or ""):
+                mismatches.append(f"{expected.get('marking')}.{field}: "
+                                  f"{got.get(field)!r} != {expected.get(field)!r}")
+    rep.add("BOM-04.matches_probe",
+            "по каждой записанной прибором строке раздел, наименование и количество совпадают",
+            "PASS" if written and not mismatches else "FAIL",
+            f"строк_постановки={len(written)} расхождений={mismatches}")
+
+    numbered = [r for r in spec_rows
+                if not str(r.get("section") or "").strip() or r.get("section_number") is None]
+    rep.add("BOM-04.section_read",
+            "у каждой строки прочитаны и название раздела, и его номер",
+            "PASS" if spec_rows and not numbered else "FAIL",
+            f"строк={len(spec_rows)} без раздела={len(numbered)}")
+
+    # Уровни не смешиваются: объекты спецификации, заведённые постановкой, в BOM по дереву не попадают.
+    bom_marks = {str(r.get("marking") or "") for r in rows(again)}
+    mixed = [m for m in (str(r.get("marking") or "") for r in written) if m in bom_marks]
+    rep.add("BOM-04.not_mixed_with_bom",
+            "объекты спецификации постановки не появляются в BOM по дереву: источники разные",
+            "PASS" if written and not mixed else "FAIL",
+            f"пересечение={mixed}")
+
+    # Пустая спецификация — пустой список и заметка, а не отказ.
+    env, part_for_spec = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    empty_doc = doc_id(env)
+    empty, empty_code = specification(empty_doc) if empty_doc else ({}, "no_document")
+    notes = " ".join(str(n) for n in (empty.get("notes") or []))
+    rep.add("BOM-04.empty",
+            "модель без объектов спецификации даёт пустой список, count=0 и заметку, а не отказ",
+            "PASS" if (not empty_code and empty.get("count") == 0 and not rows(empty)
+                       and "specification" in notes) else "FAIL",
+            f"код={empty_code} count={empty.get('count')} заметки={notes[:120]!r}")
+    call("kompas_close_document", {"document_id": empty_doc, "dirty_policy": "discard"}) \
+        if empty_doc else None
+
+    _e, unknown, _r = client.tool("kompas_get_specification", {"document_id": "нет-такого"})
+    rep.add("BOM-04.negative_unknown_document",
+            "неизвестный document_id отвергается DOCUMENT_NOT_FOUND",
+            "PASS" if why(unknown) == "DOCUMENT_NOT_FOUND" else "FAIL",
+            f"код={why(unknown)}")
+
     # ===== отказы =====
     env, part_env = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
     part = doc_id(env)

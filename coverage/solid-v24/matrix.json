@@ -15723,8 +15723,7 @@
         "успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа",
         "число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят"
       ]
-    }
-    ,
+    },
     {
       "operation_id": "BOM-01.bom.summary",
       "context": "assembly.instances",
@@ -15888,8 +15887,60 @@
         "Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.",
         "Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope)."
       ]
+    },
+    {
+      "operation_id": "BOM-04.specification.read",
+      "context": "assembly.instances",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "bom-minimal-v1",
+      "queue": "BOM_SPEC_READ",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "scripts/probes/bom/",
+        "docs/decisions/bom.md#spec-read"
+      ],
+      "parameters_schema": "schemas/kompas_get_specification.json",
+      "adapter_route": "kompas_get_specification: IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (VARIANT: SAFEARRAY|VT_DISPATCH, порядок = визуальный) -> ISpecificationBaseObject.UniqueNumber/Section -> ksDocument3D.GetSpecification().ksGetSpcObject(uniqueNumber) -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcSectionName + ksGetSpcObjectColumnText(тип колонки ksSColumnPosition/ksSColumnMark/ksSColumnName/ksSColumnCount, ispoln=1, block=0) (ikompasdocument_specificationdescriptions.html, ispecificationdescriptions_active.html, ispecificationdescription_objects.html, ispecificationobject_section.html, ispecificationobject_uniquenumber.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "чтение только показывает объекты спецификации; запись - отдельный наряд BOM_SPEC_WRITE, постановку строит прибор scripts/probes/bom/",
+        "edit": "инструмент только читает объекты спецификации",
+        "rebuild": "перестроение не требуется: чтение не меняет модель",
+        "suppress_restore": "у чтения спецификации нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "объекты спецификации не измеряют геометрию: строки сверяются с записанными прибором и с kompas_get_bom по marking+name+количеству"
+      },
+      "tests": [
+        "BOM-04.discovery",
+        "BOM-04.schema",
+        "BOM-04.rows",
+        "BOM-04.matches_probe",
+        "BOM-04.section_read",
+        "BOM-04.not_mixed_with_bom",
+        "BOM-04.empty",
+        "BOM-04.negative_unknown_document"
+      ],
+      "limitations": [
+        "Документ-спецификация .spw не читается: единственный документированный вход KompasObject.SpcDocument/SpcActiveDocument адресует активный документ сеанса, а не запрошенный document_id, и типа документа .spw у инструментов открытия нет (DocumentKind).",
+        "Номер раздела принадлежит стилю спецификации, а не порядку разделов ГОСТ (измерено: Документация 5, Детали 20); поэтому раздел читается, но не выводится из названия и обратно.",
+        "Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.",
+        "Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd."
+      ]
     }
-
   ],
   "pending_families": [
     "SM-06",

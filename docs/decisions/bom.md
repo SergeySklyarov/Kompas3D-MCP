@@ -159,3 +159,33 @@
 `iEntity.SetExcluded`) на два названных экземпляра: флаг, ни разу не виденный истинным, не доказывает,
 что фильтр работает. Проверка сравнивает флаги по номерам экземпляров в порядке коллекции — до и после
 переоткрытия.
+
+## #spec-read — чтение родной спецификации (наряд `BOM_SPEC_READ`)
+
+- **Уровень «б» отдельным инструментом.** `kompas_get_specification` показывает объекты спецификации
+  модели и ничего не считает; `kompas_get_bom` строит BOM по экземплярам. Общего ключа строк нет,
+  сверка — по `marking`+`name`+количеству, и расхождение выдаётся как есть.
+- **Перечисление — API7.** `IKompasDocument.SpecificationDescriptions.Active` →
+  `ISpecificationDescription.Objects` возвращает ВЕСЬ список объектов (VARIANT: один объект
+  `VT_DISPATCH`, несколько — `VT_ARRAY|VT_DISPATCH`) в визуальном порядке
+  (`ikompasdocument_specificationdescriptions.html`, `ispecificationdescriptions_active.html`,
+  `ispecificationdescription_objects.html`). Пустое описание (`Active` = NULL) — пустой список и
+  заметка, а не отказ.
+- **Тексты и раздел — API5.** `UniqueNumber` объекта → `ksGetSpcObject` →
+  `ksGetSpcObjectColumnText(тип колонки, ispoln=1, block=0)` и `ksGetSpcSectionName`
+  (`ksspecification_ksgetspcobject.html`, `_ksgetspcobjectcolumntext.html`, `_ksgetspcsectionname.html`).
+  Колонка называется ТИПОМ (`ksspecificationcolumntypeenum.html`), а не номером столбца: номер зависит
+  от стиля, тип — нет.
+- **Указатель сверяется.** Номер, прочитанный обратно `ksGetSpcObjectNumber`, обязан совпасть с
+  `UniqueNumber`: иначе строка не публикуется. Без этой сверки чужой объект ответил бы под чужим
+  именем, а это неверный ответ, а не пропуск.
+- **Номер раздела принадлежит стилю.** Измерено прибором: Документация 5, Комплексы 10, Сборочные
+  единицы 15, Детали 20, Программные изделия 23 — это не порядок разделов ГОСТ. Поэтому раздел
+  читается (`section` — название, `section_number` — номер), но не выводится один из другого.
+- **`.spw` вне объёма.** Единственный документированный вход `KompasObject.SpcDocument`/
+  `SpcActiveDocument` адресует АКТИВНЫЙ документ сеанса, а не запрошенный `document_id`, и типа
+  документа для `.spw` у инструментов открытия нет (`DocumentKind`). Обход этого ограничения не
+  делается: `LIMIT:` в описании инструмента и в матрице.
+- **Запись — только постановка.** Прибор `scripts/probes/bom/` создаёт объекты
+  `ksSpcObjectCreate`/`ksSetSpcObjectColumnText`/`ksSpcCount`/`ksSpcPosition`/`ksSpcObjectEnd` и
+  читает их обратно независимым маршрутом. Инструмент ничего не пишет.

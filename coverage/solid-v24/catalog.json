@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 48,
-   "operations": 151,
+   "operations": 152,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 232,
+   "modes_and_variants": 233,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8308,16 +8308,16 @@
   },
   {
    "id": "BOM",
-   "title": "Сводка BOM по сборке и её выгрузка через ksDocument3D.PartCollection",
+   "title": "Сводка BOM по сборке, свойства компонентов и родная спецификация КОМПАС",
    "classification": "assembly",
    "level": "mcp_verified",
    "evidence": {
     "metadata": "kAPI5.tlb: ksDocument3D.PartCollection, ksPartCollection (GetCount/GetByIndex), ksPart (fileName, name, marking, material, hidden, excluded, standardComponent)",
     "runtime": "измерено 26.10.2026 на build 24.0.0.2799 прибором scripts/probes/bom/ и группой --bom-only: 6 экземпляров и 3 уникальных файла верхнего уровня; два разных part.m3d с одним именем файла не склеиваются при группировке по полному пути; скрытый и исключённый экземпляры остаются в коллекции и в числе экземпляров; исключённый не появляется в API7-перечислении IPart7.PartsEx; флаги переживают save -> reopen"
    },
-   "route": "ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts; рекурсия - открытием файла компонента тем же маршрутом и закрытием в finally; выгрузка - те же строки в CSV (UTF-8 с BOM-меткой, «;») или JSON",
-   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties",
-   "next_step": "Группа --bom-only и профиль bom-minimal-v1. Следующее - BOM_SPEC_READ (родная спецификация).",
+   "route": "ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts; рекурсия - открытием файла компонента тем же маршрутом и закрытием в finally; выгрузка - те же строки в CSV (UTF-8 с BOM-меткой, «;») или JSON; объекты спецификации - через ISpecificationDescription.Objects и ksSpecification (ksGetSpcObject/ksGetSpcSectionName/ksGetSpcObjectColumnText)",
+   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties / kompas_get_specification",
+   "next_step": "Профиль bom-minimal-v1. Запись объектов спецификации - BOM_SPEC_WRITE, только по слову заказчика.",
    "operations": [
     {
      "id": "BOM-01",
@@ -8357,6 +8357,20 @@
       {
        "id": "BOM-03.component.properties",
        "name": "Прочитать свойства компонента по ссылке",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "BOM-04",
+     "name": "Чтение родной спецификации модели",
+     "level": "mcp_verified",
+     "doc_source": "ikompasdocument_specificationdescriptions.html, ispecificationdescriptions_active.html, ispecificationdescription_objects.html, ispecificationobject_section.html, ispecificationobject_uniquenumber.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html",
+     "route": "IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (весь список, порядок визуальный) -> UniqueNumber -> ksGetSpcObject -> ksGetSpcSectionName + ksGetSpcObjectColumnText по типу колонки; пустая спецификация - пустой список и заметка; .spw вне объёма",
+     "modes": [
+      {
+       "id": "BOM-04.specification.read",
+       "name": "Прочитать объекты спецификации модели: раздел, позиция, обозначение, наименование, количество",
        "level": "mcp_verified"
       }
      ]

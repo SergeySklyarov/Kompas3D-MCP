@@ -212,6 +212,8 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.ExportBom, WorkerAction.FileWrite, 300_000);
         // One COM read per property on one component; the reference is resolved in memory.
         Cad(WorkerCommands.GetComponentProperties, WorkerAction.Read, 120_000);
+        // One COM call per column of every specification object; the list itself is one VARIANT read.
+        Cad(WorkerCommands.GetSpecification, WorkerAction.Read, 120_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

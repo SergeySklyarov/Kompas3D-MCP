@@ -21,9 +21,22 @@ internal sealed class BomProbe : IDisposable
     private const string ExpectedHidden = "0:False,1:True,2:False,3:False,4:False,5:False";
     private const string ExpectedExcluded = "0:False,1:False,2:True,3:False,4:False,5:False";
 
+    // The specification the fixture writes and then reads back: three objects with known marking, name,
+    // quantity and position. Known values are the whole point — a read that returns "something" proves
+    // nothing. The section is NOT among them: its number belongs to the style and is read from the
+    // document (see WriteSpecification).
+    private static readonly (string Marking, string Name, string Quantity, int Position)[] SpecObjects =
+    [
+        ("ABV.301.001", "Пластина", "3", 1),
+        ("ABV.301.002", "Плита", "2", 2),
+        ("ГОСТ 7798-70", "Болт М8", "6", 3),
+    ];
+
     private readonly string _outPath;
     private readonly JsonArray _rows = new();
     private readonly JsonArray _reads = new();
+    private readonly JsonArray _specReads = new();
+    private (int Number, string Name) _writtenSection;
     private KompasObject? _app5;
     private IApplication? _app7;
     private string _fixtureDir = string.Empty;
@@ -151,6 +164,10 @@ internal sealed class BomProbe : IDisposable
         Insert(asm, partB, 1);
         Insert(asm, subPath, 2);
         MarkFilterFlags(asm, hiddenIndex: 1, excludedIndex: 2);
+        // The description of a freshly built assembly does not exist yet, so the write adds it; the save
+        // afterwards is what makes the objects part of the file the reader opens.
+        Save(asm, asmPath);
+        WriteSpecification(asm);
         Save(asm, asmPath);
 
         Record("fixture", "сборка собрана: 3 x a/part.m3d + 1 x b/part.m3d + 2 x sub.m3d",
@@ -211,6 +228,128 @@ internal sealed class BomProbe : IDisposable
             hidden == "True" && excluded == "True" ? "PASS" : "FAIL");
     }
 
+    /// <summary>Writes the specification objects the read side must then find.</summary>
+    /// <remarks>DOC: <c>ispecificationdescriptions_add.html</c> («Если LayoutName и StyleID не заданы, то
+    /// добавляется описание спецификации по умолчанию»), <c>ispecificationstyle_sections.html</c> and
+    /// <c>ispecificationsectionstyle_number.html</c> (the section numbers of the style),
+    /// <c>ksspecification_ksspcobjectcreate.html</c> (creation ends with <c>ksSpcObjectEnd</c>),
+    /// <c>ksspecification_kssetspcobjectcolumntext.html</c>, <c>ksspecification_ksspccount.html</c>,
+    /// <c>ksspecification_ksspcposition.html</c>.
+    /// MEASURED: a fresh assembly has NO description and NO objects, and the number a section carries is
+    /// not its place in the specification (Документация is 5, Детали is 20), so the numbers are read from
+    /// the style instead of taken from a list of names. History: docs/decisions/bom.md#spec-read</remarks>
+    private void WriteSpecification((ksDocument3D Doc5, IKompasDocument3D Doc7) document)
+    {
+        var specification = document.Doc5.GetSpecification() as ksSpecification;
+        Record("specification_write_route", "ksDocument3D.GetSpecification() даёт ksSpecification",
+            specification is null ? "не приводится" : "ksSpecification",
+            specification is null ? "FAIL" : "PASS");
+        if (specification is null)
+        {
+            return;
+        }
+
+        var description = DefaultDescription(document.Doc7);
+        var sections = description is null ? [] : StyleSections(description);
+        Record("specification_style_sections", "стиль перечисляет разделы спецификации",
+            string.Join("; ", sections.Select(s => $"{s.Number}={s.Name}")),
+            sections.Count > 0 ? "PASS" : "FAIL");
+        if (sections.Count == 0)
+        {
+            return;
+        }
+
+        // The object goes into a section other than the first one, so a row that lands in the wrong
+        // section is visible instead of being hidden by a single-section specification.
+        _writtenSection = sections.Count > 1 ? sections[1] : sections[0];
+        var written = 0;
+        foreach (var item in SpecObjects)
+        {
+            // typeObj 0 — базовый объект; numb 0 — тип атрибута по умолчанию.
+            var created = specification.ksSpcObjectCreate(string.Empty, 0, _writtenSection.Number, 0, 0, 0);
+            Record($"specification_create_{written}", $"ksSpcObjectCreate в разделе {_writtenSection.Number}",
+                created.ToString(CultureInfo.InvariantCulture), created == 1 ? "PASS" : "FAIL");
+            if (created != 1)
+            {
+                continue;
+            }
+
+            specification.ksSetSpcObjectColumnText(
+                (int)ksSpecificationColumnTypeEnum.ksSColumnMark, 1, 0, item.Marking);
+            specification.ksSetSpcObjectColumnText(
+                (int)ksSpecificationColumnTypeEnum.ksSColumnName, 1, 0, item.Name);
+            specification.ksSpcCount(1, item.Quantity);
+            specification.ksSpcPosition(item.Position);
+            // The return of ksSpcObjectEnd is not documented as 1-on-success (measured 0), so it is
+            // RECORDED as is; the check rests on what the document shows afterwards.
+            Record($"specification_end_{written}", "ksSpcObjectEnd() вернул",
+                specification.ksSpcObjectEnd().ToString(CultureInfo.InvariantCulture), "INFO");
+            written++;
+        }
+
+        Record("specification_written", $"объектов спецификации записано {SpecObjects.Length}",
+            written.ToString(CultureInfo.InvariantCulture), written == SpecObjects.Length ? "PASS" : "FAIL");
+    }
+
+    /// <summary>The description of the document, added in the default style when the document has none.</summary>
+    /// <remarks>DOC: <c>ispecificationdescriptions_add.html</c> — the empty layout name and style 0 add the
+    /// DEFAULT description; <c>ispecificationdescriptions_active.html</c> — the current one.
+    /// History: docs/decisions/bom.md#spec-read</remarks>
+    private static ISpecificationDescription? DefaultDescription(IKompasDocument3D document7)
+    {
+        try
+        {
+            var descriptions = document7.SpecificationDescriptions;
+            if (descriptions is null)
+            {
+                return null;
+            }
+
+            var active = descriptions.Active;
+            if (active is not null)
+            {
+                return active;
+            }
+
+            return descriptions.Add(string.Empty, 0, string.Empty) as ISpecificationDescription;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Console.WriteLine("INFO description: " + Describe(ex));
+            return null;
+        }
+    }
+
+    /// <summary>The sections of the specification style, in style order, with the columns each carries.</summary>
+    /// <remarks>DOC: <c>ispecificationstyle_sections.html</c> and
+    /// <c>ispecificationsectionstyle_number.html</c>/<c>_name.html</c>. The collection is walked by index
+    /// from 0 until it ends — the base collection documents index 0 as the first element
+    /// (<c>ikompascollection.html</c>), and no page gives it a count.
+    /// History: docs/decisions/bom.md#spec-read</remarks>
+    private static List<(int Number, string Name)> StyleSections(ISpecificationDescription description)
+    {
+        var sections = new List<(int Number, string Name)>();
+        try
+        {
+            var collection = description.SpecificationStyle?.Sections;
+            for (var index = 0; collection is not null; index++)
+            {
+                if (collection[index] is not ISpecificationSectionStyle section)
+                {
+                    break;
+                }
+
+                sections.Add(((int)section.Number, section.Name ?? string.Empty));
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            Console.WriteLine("INFO sections: " + Describe(ex));
+        }
+
+        return sections;
+    }
+
     private void Save((ksDocument3D Doc5, IKompasDocument3D Doc7) document, string path)
     {
         var ok = document.Doc5.SaveAs(path);
@@ -231,6 +370,7 @@ internal sealed class BomProbe : IDisposable
     private JsonObject ReadAssembly(string label)
     {
         var doc5 = (ksDocument3D)_app5!.ActiveDocument3D();
+        ReadSpecification(label, doc5);
         var components = new JsonArray();
         var parts = Components(doc5);
         foreach (var part in parts)
@@ -327,6 +467,74 @@ internal sealed class BomProbe : IDisposable
         }
     }
 
+    /// <summary>Reads the specification back through the documented route and compares every field with
+    /// what the fixture wrote.</summary>
+    /// <remarks>DOC: <c>ikompasdocument_specificationdescriptions.html</c>,
+    /// <c>ispecificationdescriptions_active.html</c>, <c>ispecificationdescription_objects.html</c> (the
+    /// whole list in display order), <c>ispecificationobject_uniquenumber.html</c>,
+    /// <c>ksspecification_ksgetspcobject.html</c>, <c>ksspecification_ksgetspcobjectcolumntext.html</c>,
+    /// <c>ksspecification_ksgetspcsectionname.html</c>. The read is INDEPENDENT of the product: it goes
+    /// through the same documented calls and compares their values with the fixture's constants.
+    /// History: docs/decisions/bom.md#spec-read</remarks>
+    private void ReadSpecification(string label, ksDocument3D doc5)
+    {
+        var specification = doc5.GetSpecification() as ksSpecification;
+        var document7 = _app5!.TransferInterface(doc5, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IKompasDocument;
+        var objects = ObjectsOf(document7?.SpecificationDescriptions?.Active);
+        // The document also carries the objects КОМПАС builds for the components, so the number is a lower
+        // bound: "at least the three the fixture wrote" is the claim, not "exactly three".
+        Record($"{label}_specification_objects",
+            $"список объектов спецификации содержит не меньше {SpecObjects.Length} строк",
+            objects.Count.ToString(CultureInfo.InvariantCulture),
+            objects.Count >= SpecObjects.Length ? "PASS" : "FAIL");
+
+        var rows = new JsonArray();
+        foreach (var item in objects)
+        {
+            var unique = item.UniqueNumber;
+            var pointer = specification!.ksGetSpcObject(unique);
+            rows.Add(new JsonObject
+            {
+                ["section"] = Safe(() => specification.ksGetSpcSectionName(pointer)),
+                ["section_number"] = Safe(() => item.Section),
+                ["position"] = Safe(() => specification.ksGetSpcObjectColumnText(
+                    pointer, (int)ksSpecificationColumnTypeEnum.ksSColumnPosition, 1, 0)),
+                ["marking"] = Safe(() => specification.ksGetSpcObjectColumnText(
+                    pointer, (int)ksSpecificationColumnTypeEnum.ksSColumnMark, 1, 0)),
+                ["name"] = Safe(() => specification.ksGetSpcObjectColumnText(
+                    pointer, (int)ksSpecificationColumnTypeEnum.ksSColumnName, 1, 0)),
+                ["quantity"] = Safe(() => specification.ksGetSpcObjectColumnText(
+                    pointer, (int)ksSpecificationColumnTypeEnum.ksSColumnCount, 1, 0)),
+            });
+        }
+
+        _specReads.Add(new JsonObject { ["label"] = label, ["rows"] = rows.DeepClone() });
+
+        // Field by field: a count that matches while the values do not is exactly what a summary hides.
+        foreach (var expected in SpecObjects)
+        {
+            var match = rows.OfType<JsonObject>().FirstOrDefault(r =>
+                r["marking"]?.GetValue<string>() == expected.Marking);
+            var actual = match is null
+                ? "<строка не найдена>"
+                : $"section={match["section"]}, name={match["name"]}, quantity={match["quantity"]}, "
+                  + $"position={match["position"]}, section_number={match["section_number"]}";
+            var ok = match is not null
+                && match["name"]?.GetValue<string>() == expected.Name
+                && match["quantity"]?.GetValue<string>() == expected.Quantity
+                && !string.IsNullOrWhiteSpace(match["section"]?.GetValue<string>());
+            Record($"{label}_specification_{expected.Marking}", expected.Name, actual, ok ? "PASS" : "FAIL");
+        }
+    }
+
+    private static List<ISpecificationBaseObject> ObjectsOf(ISpecificationDescription? description) =>
+        description?.Objects switch
+        {
+            Array array => array.Cast<object?>().OfType<ISpecificationBaseObject>().ToList(),
+            ISpecificationBaseObject single => [single],
+            _ => [],
+        };
+
     private static List<ksPart> Components(ksDocument3D document) => Components(document.PartCollection(true));
 
     private static List<ksPart> Components(object? collection)
@@ -404,6 +612,7 @@ internal sealed class BomProbe : IDisposable
             ["fixture_dir"] = _fixtureDir,
             ["rows"] = _rows,
             ["reads"] = _reads,
+            ["specification_reads"] = _specReads,
             ["counts"] = new JsonObject
             {
                 ["pass"] = _rows.Count(r => r?["verdict"]?.GetValue<string>() == "PASS"),

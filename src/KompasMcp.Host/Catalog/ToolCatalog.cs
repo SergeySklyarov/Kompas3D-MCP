@@ -455,6 +455,27 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // BOM-04: level (b) — the native specification objects, read only. Level (a) stays in
+            // kompas_get_bom; the two are never mixed, and a difference between them is the answer.
+            // History: docs/decisions/bom.md#spec-read
+            ReadOnly("kompas_get_specification", "Спецификация модели",
+                "Объекты родной спецификации КОМПАС в открытой модели: {section, section_number, position, "
+                + "marking, name, quantity} — то, что занёс конструктор. Ничего не считает и с деревом "
+                + "сборки не смешивается: kompas_get_bom строит BOM по экземплярам, этот инструмент "
+                + "показывает объекты спецификации, и расхождение между ними — нормальный ответ. "
+                + "Список читается ISpecificationDescription.Objects (порядок — визуальный), тексты и "
+                + "название раздела — ksGetSpcObjectColumnText по ТИПУ колонки и ksGetSpcSectionName. "
+                + "В модели нет объектов спецификации — пустой список и заметка, а не отказ. Поле, "
+                + "которого не прочитано, возвращается null. ПРЕДЕЛ: документ-спецификация .spw не "
+                + "читается — его единственный документированный вход SpcDocument/SpcActiveDocument "
+                + "адресует активный документ сеанса, а не запрошенный document_id, и типа документа для "
+                + ".spw у инструментов открытия нет; запись объектов спецификации — отдельный наряд.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.GetSpecification,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
             // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.

@@ -61,6 +61,40 @@ public sealed record GetComponentPropertiesCommand
     public required string ComponentRef { get; init; }
 }
 
+/// <summary>Read the native specification objects of a model — block <c>BOM_SPEC_READ</c>, mode
+/// <c>BOM-04</c>.</summary>
+/// <remarks>INVARIANT: this is level (b) of the BOM — what the designer put into the specification. It
+/// counts nothing and is never mixed with the component tree of <c>kompas_get_bom</c>.
+/// History: docs/decisions/bom.md#spec-read</remarks>
+public sealed record GetSpecificationCommand
+{
+    public required string DocumentId { get; init; }
+}
+
+/// <summary>One specification object as the document answers it. A null field means "not read", never
+/// an empty string and never zero.</summary>
+/// <remarks>INVARIANT: every field rests on its own documented read call; a field without one does not
+/// enter the contract. <c>section_number</c> is the number the object sits in, <c>section</c> is the name
+/// the document gives for it — both are read, neither is derived from the other.
+/// History: docs/decisions/bom.md#spec-read</remarks>
+public sealed record SpecificationLineDto(
+    string? Section,
+    int? SectionNumber,
+    string? Position,
+    string? Marking,
+    string? Name,
+    string? Quantity);
+
+/// <summary>The specification rows, their number, the route and the notes.</summary>
+/// <remarks>INVARIANT: <c>count</c> is the number of rows in the answer, so a caller reads one number
+/// instead of recounting. An empty specification is an empty list with a note, not a refusal.
+/// History: docs/decisions/bom.md#spec-read</remarks>
+public sealed record GetSpecificationResult(
+    IReadOnlyList<SpecificationLineDto> Rows,
+    int Count,
+    string Route,
+    IReadOnlyList<string> Notes);
+
 /// <summary>The properties as <c>ksPart</c> answers them. A null value means "not read", never empty,
 /// zero or false.</summary>
 /// <remarks>INVARIANT: every field here rests on its own help page of <c>IPart</c>; a field with no page

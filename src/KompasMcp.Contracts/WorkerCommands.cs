@@ -246,6 +246,9 @@ public static class WorkerCommands
     public const string ExportBom = "bom.export";
     public const string GetComponentProperties = "bom.component_properties";
 
+    // Level (b) of the BOM (block BOM_SPEC_READ): the native specification objects of a model.
+    public const string GetSpecification = "bom.get_specification";
+
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
     // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common

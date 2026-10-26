@@ -205,6 +205,12 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.ListAuxGeometry, WorkerAction.Read, 240_000);
         Cad(WorkerCommands.UpdatePlane, WorkerAction.ModelMutation, 240_000);
 
+        // ---- BOM ----
+        // The read makes one COM call per component; recursion opens and closes every component file, so
+        // the budget covers the opens as well. The export writes a file and changes no model.
+        Cad(WorkerCommands.GetBom, WorkerAction.Read, 300_000);
+        Cad(WorkerCommands.ExportBom, WorkerAction.FileWrite, 300_000);
+
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure
         // enumeration makes one COM call per component.

@@ -240,6 +240,10 @@ public static class WorkerCommands
     public const string ExportStl = "export.stl";
     public const string UnitProbe = "probe.units";
 
+    // BOM domain (block BOM_MINIMAL, profile bom-minimal-v1): bom.get → BOM-01, bom.export → BOM-02.
+    public const string GetBom = "bom.get";
+    public const string ExportBom = "bom.export";
+
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
     // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common

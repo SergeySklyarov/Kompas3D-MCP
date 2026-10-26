@@ -412,6 +412,8 @@ public sealed class CommandDispatcher
             WorkerCommands.CreateSketchDimension => _sta.Run(() => CreateSketchDimension(request), "sketch.dimension.create", cancellationToken),
             WorkerCommands.ListSketchConstraints => _sta.Run(() => ListSketchConstraints(request), "sketch.constraint.list", cancellationToken),
             WorkerCommands.DeleteSketchConstraint => _sta.Run(() => DeleteSketchConstraint(request), "sketch.constraint.delete", cancellationToken),
+            WorkerCommands.GetBom => _sta.Run(() => GetBom(request), "bom.get", cancellationToken),
+            WorkerCommands.ExportBom => _sta.Run(() => ExportBom(request), "bom.export", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
             WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
@@ -1510,6 +1512,12 @@ public sealed class CommandDispatcher
 
     private object? SynchroniseCopy(IpcFrame request) =>
         _session.SynchroniseCopy(Argument<SynchroniseCopyCommand>(request));
+
+    private object? GetBom(IpcFrame request) =>
+        _session.GetBom(Argument<GetBomCommand>(request));
+
+    private object? ExportBom(IpcFrame request) =>
+        _session.ExportBom(Argument<ExportBomCommand>(request));
 
     private object? ListComponents(IpcFrame request) =>
         _session.ListComponents(Argument<ListComponentsCommand>(request));

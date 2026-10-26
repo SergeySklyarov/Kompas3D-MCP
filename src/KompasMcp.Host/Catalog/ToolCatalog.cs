@@ -371,6 +371,65 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // ===== BOM domain (block BOM_MINIMAL, profile bom-minimal-v1) =====
+            // The route is the one measured by the BOM probe: ksDocument3D.PartCollection(true) → ksPart,
+            // with the filters applied by the TOOL (an excluded/hidden instance stays in the collection).
+            // History: docs/decisions/bom.md#bom-tool
+            ReadOnly("kompas_get_bom", "Сводка BOM по сборке",
+                "Сводка состава сборки: строки {file, name, marking, material, instances} и итоги "
+                + "{instances, unique_files, skipped}. Группировка — по ПОЛНОМУ пути файла (никогда по "
+                + "имени файла: два разных part.m3d в разных папках — две детали) либо по полному пути с "
+                + "обозначением. ФИЛЬТРЫ — работа инструмента, а не КОМПАС: исключённый из расчёта и "
+                + "скрытый экземпляры остаются в коллекции и в числе экземпляров (измерено), поэтому "
+                + "пропуск делает код и считает его в skipped; инвариант ответа — сумма instances по "
+                + "строкам плюс сумма skipped равна числу экземпляров обхода (instances_walked). Флаг, "
+                + "который не прочитан, экземпляр НЕ отбрасывает. Рекурсия (recurse) — открытием файла "
+                + "компонента: у ksPart в API5 коллекции компонентов нет, поэтому признак «деталь или "
+                + "подсборка» без открытия не читается и recurse открывает файл каждого компонента. "
+                + "Флаги hidden/excluded родителя распространяются на его содержимое. Открытый для "
+                + "обхода документ закрывается и в списке документов сеанса не остаётся; подсборка, уже "
+                + "открытая клиентом, не закрывается. Цикл ссылок и ненаходимый файл — отказ с путём, а "
+                + "не молчаливый пропуск.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("include_hidden", Sch.Nullable(Sch.Bool(
+                        "Включить скрытые экземпляры вместо пропуска.", false))),
+                    ("include_excluded", Sch.Nullable(Sch.Bool(
+                        "Включить исключённые из расчёта экземпляры.", false))),
+                    ("include_standard", Sch.Nullable(Sch.Bool(
+                        "Включить стандартные изделия.", false))),
+                    ("recurse", Sch.Nullable(Sch.Bool(
+                        "Обходить вложенные подсборки, открывая их файлы.", false))),
+                    ("group_by", Sch.Nullable(Sch.Enum(
+                        "Ключ группировки строк.", "file", "file+designation")))),
+                WorkerCommands.GetBom,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            Mutation("kompas_export_bom", "Выгрузить BOM в файл",
+                "Пишет те же строки, что kompas_get_bom, в файл: формат выбирается расширением — .csv "
+                + "или .json (иное расширение отвергается). CSV — UTF-8 с BOM-меткой и разделителем «;», "
+                + "шапка file;name;marking;material;instances. Строки строит ОДИН код с kompas_get_bom, "
+                + "поэтому ответ и файл разойтись не могут. Путь проверяется политикой путей записи "
+                + "(поле output_path), существующий файл перезаписывается. Ответ — то, что лежит на "
+                + "диске: размер и SHA256, а не намерение записать.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("output_path", Sch.Ref("#/$defs/output_path")),
+                    ("include_hidden", Sch.Nullable(Sch.Bool(
+                        "Включить скрытые экземпляры вместо пропуска.", false))),
+                    ("include_excluded", Sch.Nullable(Sch.Bool(
+                        "Включить исключённые из расчёта экземпляры.", false))),
+                    ("include_standard", Sch.Nullable(Sch.Bool(
+                        "Включить стандартные изделия.", false))),
+                    ("recurse", Sch.Nullable(Sch.Bool(
+                        "Обходить вложенные подсборки, открывая их файлы.", false))),
+                    ("group_by", Sch.Nullable(Sch.Enum(
+                        "Ключ группировки строк.", "file", "file+designation")))),
+                WorkerCommands.ExportBom,
+                requiresDocument: true,
+                requiresOperationId: true),
+
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
             // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.

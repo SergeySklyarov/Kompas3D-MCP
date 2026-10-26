@@ -36,6 +36,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль bom-minimal-v1 — BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл
+
+- **обязательных_режимов:** 2
+- **режимов_закрыто:** 2
+- **общих_зависимостей:** 0
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** BOM_MINIMAL 2/2
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль dismantle-minimal-v1 — Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента
 
 - **обязательных_режимов:** 2
@@ -230,19 +242,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 375
-- **строк_полностью_закрыто:** 187
-- **строк_с_каким_либо_прогрессом:** 204
-- **семейств_в_каталоге:** 47
+- **строк_каталога:** 377
+- **строк_полностью_закрыто:** 189
+- **строк_с_каким_либо_прогрессом:** 206
+- **семейств_в_каталоге:** 48
 - **семейств_без_строк:** 12
-- **операций:** 148
-- **режимов_и_вариантов:** 229
-- **применимых_действий:** 3054
-- **действий_verified:** 1240
-- **покрытие_действий:** 40.6%
-- **распределение_статусов:** {'not_started': 1814, 'verified': 1240, 'not_applicable': 696}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 72, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 79, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 150
+- **режимов_и_вариантов:** 231
+- **применимых_действий:** 3061
+- **действий_verified:** 1247
+- **покрытие_действий:** 40.7%
+- **распределение_статусов:** {'not_started': 1814, 'verified': 1247, 'not_applicable': 709}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 74, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 81, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -286,6 +298,18 @@
 | `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout, dep.interference.api7_measurer.negative_tests |
 | `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit, dep.interference.distance_unit.negative_tests |
 | `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests, dep.interference.read_only.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `bom-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
+| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
+
+### Общие зависимости профиля `bom-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
 
 ## Метрика 1 — обязательные режимы профиля `dismantle-minimal-v1`
 
@@ -939,6 +963,8 @@
 | `SMB-07.unfold.set` | SMB | practical_required | SM | mcp_verified | OK | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | SMB.32.unfold_initial_read, SMB.33.unfold_without_face_refused, SMB.34.unfold, SMB.35.fold_back, SMB.36.unfold_again, SMB.37.reopen_unfold, SMB.39.unfold_foreign_face |
 | `SMB-08.unfold.read` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.32.unfold_initial_read, SMB.37.reopen_unfold |
 | `SMB-09.flat_dxf.export` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | SMB.40.flat_dxf_export, SMB.41.flat_dxf_overwrite, SMB.42.flat_dxf_refusals, SMB.43.temp_drawing_closed |
+| `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
+| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1667,6 +1693,15 @@
   - маршрут строит вид по СОХРАНЁННОМУ файлу: несохранённая деталь - отказ DOCUMENT_DIRTY, SaveAs детали инструмент не делает
   - успех - сравнение габарита контура с независимым габаритом развёрнутого тела; у согнутой модели независимого значения нет, уровень понижается и причина названа
   - число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят
+- `BOM-01.bom.summary` — закрыт целиком
+  - Признака «деталь или подсборка» у ksPart в документированном списке нет, поэтому recurse ОТКРЫВАЕТ файл каждого компонента: деталь даёт пустой список вложенных. Цена обхода - открытие файла на каждый компонент.
+  - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components (5 записей на 6 экземпляров ksPartCollection); скрытый появляется. Сверка BOM с kompas_list_components возможна только при пропуске исключённых.
+  - Материал компонента-подсборки читается как материал детали (измерено пробой), поэтому материал подсборки не доказывает материал изделия.
+  - Раздел спецификации и исполнения в профиль не входят: документированного COM-маршрута к IProperty нет (docs/decisions/bom.md#profile-scope).
+- `BOM-02.bom.export` — закрыт целиком
+  - Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.
+  - Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.
+  - Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

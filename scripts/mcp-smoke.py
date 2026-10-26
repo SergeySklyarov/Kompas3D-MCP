@@ -661,8 +661,9 @@ def file_sha256(path):
 # живёт здесь, а не в четырёх копиях.
 # История: 81 → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза) → 89 (управляющий размер)
 # → 90 (COMPONENT_DELETE) → 94 (SECTION_VIEWS) → 96 (SM-12) → 97 (SM-08) → 110 (SHEET_METAL_FEATURES)
-# → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента).
-EXPECTED_TOOL_COUNT = 114
+# → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
+# → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom).
+EXPECTED_TOOL_COUNT = 116
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -806,6 +807,10 @@ RUN_GROUPS = (
     ("copy_geometry", "copy-geometry", "copy-geometry-acceptance.json",
      "Приёмка CG: копия геометрии из файла другой детали - создание, чтение, ассоциативность, "
      "save -> reopen и названные отказы (наряд G8, профиль master-geometry-minimal-v1)"),
+    ("bom", "bom", "bom-acceptance.json",
+     "Приёмка BOM: сводка BOM по сборке и её выгрузка - группировка по полному пути, фильтры "
+     "hidden/excluded/standard, рекурсия открытием файла подсборки, save -> reopen и отказы "
+     "(наряд BOM_MINIMAL, профиль bom-minimal-v1)"),
     ("dismantle", "dismantle", "dismantle-acceptance.json",
      "Приёмка DSM: разнесённый вид сборки - режим, шаги, разнесение по матрице компонента, "
      "save -> reopen и отказы (наряд G9, профиль dismantle-minimal-v1)"),
@@ -862,6 +867,7 @@ ALL_GROUPS_EXTRA = (
     # ответы приёмки от следов общего сеанса. Свежий общий сеанс ей не нужен.
     ("catalog", ["--catalog-only"]),
     ("copy_geometry", ["--copy-geometry-only"]),
+    ("bom", ["--bom-only"]),
     ("dismantle", ["--dismantle-only"]),
     ("sections", ["--sections-only"]),
     # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
@@ -16245,6 +16251,10 @@ def main():
     # Домен РАЗНЕСЕНИЯ (наряд G9, профиль `dismantle-minimal-v1`): одна группа DSM на своём сеансе -
     # клетка матрицы обязана находиться по ИМЕНИ строки (`DSM.<NN>.<действие>`).
     dismantle_only = "--dismantle-only" in sys.argv
+    # Домен BOM (наряд BOM_MINIMAL, профиль `bom-minimal-v1`): одна группа BOM на своём сеансе -
+    # клетка матрицы находится по ИМЕНИ строки (`BOM.<NN>.<действие>`). Группа запускает прибор
+    # `scripts/probes/bom/`, потому что флаги `hidden`/`excluded` у MCP инструмента записи не имеют.
+    bom_only = "--bom-only" in sys.argv
     # Домен СЕЧЕНИЙ (наряд G11, профиль `sections-minimal-v1`): одна группа SEC на своём сеансе -
     # клетка матрицы обязана находиться по ИМЕНИ строки (`SEC.<NN>.<действие>`).
     sections_only = "--sections-only" in sys.argv
@@ -16396,6 +16406,7 @@ def main():
         "interference": interference_only,
         "threads": threads_only,
         "copy_geometry": copy_geometry_only,
+        "bom": bom_only,
         "dismantle": dismantle_only,
         "sections": sections_only,
         "sketch_bulk": sketch_bulk_only,
@@ -16985,6 +16996,14 @@ def main():
 
         if copy_geometry_only:
             copy_geometry_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if bom_only:
+            bom_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -50235,6 +50254,295 @@ def sections_checks(client, rep, app_id, workdir):
             f"код={stale_code} {why(stale_env)}")
 
 
+def bom_checks(client, rep, app_id, workdir):
+    """BOM-01…BOM-02 - сводка BOM по сборке и её выгрузка (наряд BOM_MINIMAL, профиль
+    `bom-minimal-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Числа против постановки, а не «status=succeeded»: 6 экземпляров и 3 файла
+    верхнего уровня, две РАЗНЫЕ детали с одинаковым именем файла (`a/part.m3d` 3 и `b/part.m3d` 1) не
+    склеиваются, скрытый и исключённый экземпляры пропускаются ФИЛЬТРОМ и считаются в `skipped`, а
+    сумма строк и пропущенных равна числу экземпляров обхода. Постановку строит ПРИБОР
+    `scripts/probes/bom/` документированными маршрутами (флаги `hidden`/`excluded` у MCP инструмента
+    записи не имеют), MCP открывает результат прибора и читает его своим инструментом.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Раздел спецификации и исполнения в профиль не входят (решение техлида
+    `docs/decisions/bom.md#profile-scope`): родная спецификация КОМПАС - наряд `BOM_SPEC_READ`.
+    """
+    import os
+    import subprocess
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def why(env):
+        err = (env or {}).get("error") or {}
+        return err.get("code") if isinstance(err, dict) else None
+
+    def rows(answer):
+        """Строки ответа: `answer` - уже внутренний `result` конверта, а не конверт."""
+        lines = answer.get("rows")
+        return lines if isinstance(lines, list) else []
+
+    def by_file(answer):
+        """Файл → число экземпляров, по ПОЛНОМУ пути: имя файла склеило бы две разные детали."""
+        counts = {}
+        for row in rows(answer):
+            name = os.path.basename(row.get("file") or "")
+            counts[name] = counts.get(name, 0) + int(row.get("instances") or 0)
+        return counts
+
+    def by_path(answer):
+        """Полный путь (нижним регистром) → число экземпляров: ключ сравнения с постановкой."""
+        counts = {}
+        for row in rows(answer):
+            key = str(row.get("file") or "").lower()
+            counts[key] = counts.get(key, 0) + int(row.get("instances") or 0)
+        return counts
+
+    def bom(doc, **flags):
+        payload = {"document_id": doc}
+        payload.update(flags)
+        env, code = call("kompas_get_bom", payload)
+        return result(env), code
+
+    # ===== BOM-01: обнаружение =====
+    registry = (client.catalog() or {}).get("registry") or []
+    missing = [n for n in ("kompas_get_bom", "kompas_export_bom") if n not in registry]
+    rep.add("BOM-01.discovery", "оба инструмента BOM есть в реестре каталога",
+            "PASS" if not missing else "FAIL",
+            f"в реестре={len(registry)}; нет={missing}")
+    entry = entry_of(client, "kompas_get_bom")
+    props = sorted(((entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    need = {"document_id", "include_hidden", "include_excluded", "include_standard", "recurse", "group_by"}
+    rep.add("BOM-01.schema", "схема чтения несёт три фильтра, рекурсию и ключ группировки",
+            "PASS" if entry is not None and not (need - set(props)) else "FAIL",
+            f"поля={props}")
+
+    # ===== BOM-02: обнаружение и схема выгрузки =====
+    export_entry = entry_of(client, "kompas_export_bom")
+    export_props = sorted(((export_entry or {}).get("inputSchema") or {}).get("properties", {}).keys())
+    export_required = sorted(((export_entry or {}).get("inputSchema") or {}).get("required") or [])
+    rep.add("BOM-02.discovery", "инструмент выгрузки BOM есть в реестре каталога",
+            "PASS" if "kompas_export_bom" in registry else "FAIL",
+            f"в реестре={len(registry)}")
+    rep.add("BOM-02.schema",
+            "схема выгрузки требует output_path и operation_id и несёт те же фильтры, что чтение",
+            "PASS" if (export_entry is not None
+                       and {"output_path", "operation_id", "document_id"} <= set(export_required)
+                       and not ({"include_hidden", "include_excluded", "include_standard", "recurse",
+                                 "group_by"} - set(export_props))) else "FAIL",
+            f"поля={export_props} обязательные={export_required}")
+
+    # ===== BOM-01: постановка прибором =====
+    probe = os.path.join(ROOT, "scripts", "probes", "bom", "bin", "x64", "Release",
+                         "net10.0-windows", "BomProbe.exe")
+    source = os.path.join(ROOT, "scripts", "probes", "bom", "BomProbe.cs")
+    # Прибор не старше своего исходника: сборка прежней попытки ставит ДРУГУЮ постановку (без
+    # флагов hidden/excluded) и молча даёт другие числа.
+    built = os.path.isfile(probe) and os.path.getmtime(probe) >= os.path.getmtime(source)
+    build_note = "прибор не старше исходника"
+    if not built:
+        build = subprocess.run(["dotnet", "build", os.path.join(ROOT, "scripts", "probes", "bom",
+                                                               "BomProbe.csproj"), "-c", "Release"],
+                               cwd=ROOT, capture_output=True, text=True, timeout=900)
+        built = build.returncode == 0 and os.path.isfile(probe)
+        build_note = "сборка прибора код " + str(build.returncode)
+    probe_report = os.path.join(workdir, "bom-probe-build.json")
+    run = subprocess.run([probe, probe_report], cwd=ROOT, capture_output=True, text=True, timeout=1800) \
+        if built else None
+    counts = {}
+    if run is not None and os.path.isfile(probe_report):
+        with open(probe_report, encoding="utf-8") as handle:
+            counts = (json.load(handle) or {}).get("counts") or {}
+    rep.add("BOM-01.probe",
+            "прибор строит постановку документированными маршрутами и не имеет ни одного FAIL",
+            "PASS" if run is not None and run.returncode == 0 and (counts.get("fail") or 0) == 0
+            and (counts.get("pass") or 0) > 0 else "FAIL",
+            f"{build_note}; код={None if run is None else run.returncode}; "
+            f"PASS={counts.get('pass')} FAIL={counts.get('fail')}")
+
+    fixture = os.path.join(ROOT, "scratch", "bom-probe", "fixture")
+    asm_path = os.path.join(fixture, "asm.m3d")
+    sub_path = os.path.join(fixture, "sub.m3d")
+    env, open_code = call("kompas_open_document",
+                          {"application_id": app_id, "path": asm_path, "access": "edit"})
+    asm = doc_id(env)
+    rep.add("BOM-01.open", "постановка прибора открывается через MCP как сборка",
+            "PASS" if asm and not open_code else "FAIL", f"код={open_code} файл={asm_path}")
+
+    # ===== BOM-01: числа верхнего уровня =====
+    full, full_code = bom(asm, include_hidden=True, include_excluded=True) if asm else ({}, "no_document")
+    counts_full = by_file(full)
+    rep.add("BOM-01.top_level",
+            "6 экземпляров и 3 уникальных файла верхнего уровня без фильтров",
+            "PASS" if (full.get("instances") == 6 and full.get("unique_files") == 3
+                       and full.get("instances_walked") == 6) else "FAIL",
+            f"экземпляров={full.get('instances')} файлов={full.get('unique_files')} "
+            f"обойдено={full.get('instances_walked')} код={full_code}")
+    rep.add("BOM-01.grouping",
+            "группировка по полному пути: a/part.m3d 3, sub.m3d 2, b/part.m3d 1 — две разные детали "
+            "с одним именем файла не склеены",
+            "PASS" if (counts_full.get("part.m3d") == 4 and counts_full.get("sub.m3d") == 2
+                       and len([r for r in rows(full)
+                                if os.path.basename(r.get("file") or "") == "part.m3d"]) == 2) else "FAIL",
+            f"по_имени={counts_full} строк={len(rows(full))}")
+
+    # ===== BOM-01: фильтры по умолчанию и их снятие =====
+    default, default_code = bom(asm) if asm else ({}, "no_document")
+    skipped = default.get("skipped") or {}
+    rep.add("BOM-01.filters",
+            "по умолчанию пропущены 1 скрытый и 1 исключённый, и сумма сходится: строки + skipped = "
+            "число экземпляров обхода",
+            "PASS" if (default.get("instances") == 4 and skipped.get("hidden") == 1
+                       and skipped.get("excluded") == 1
+                       and default.get("instances") + skipped.get("hidden", 0)
+                       + skipped.get("excluded", 0) + skipped.get("standard", 0)
+                       == default.get("instances_walked")) else "FAIL",
+            f"экземпляров={default.get('instances')} skipped={skipped} "
+            f"обойдено={default.get('instances_walked')} код={default_code}")
+    rep.add("BOM-01.include_filters",
+            "include_hidden и include_excluded возвращают пропущенные экземпляры",
+            "PASS" if (full.get("instances") == 6
+                       and (full.get("skipped") or {}).get("hidden") == 0
+                       and (full.get("skipped") or {}).get("excluded") == 0) else "FAIL",
+            f"экземпляров={full.get('instances')} skipped={full.get('skipped')}")
+
+    # ===== BOM-01: рекурсия =====
+    deep, deep_code = bom(asm, include_hidden=True, include_excluded=True, recurse=True) \
+        if asm else ({}, "no_document")
+    deep_paths = by_path(deep)
+    want_deep = {os.path.join(fixture, "a", "part.m3d").lower(): 7,
+                 os.path.join(fixture, "b", "part.m3d").lower(): 1,
+                 os.path.join(fixture, "sub.m3d").lower(): 2}
+    rep.add("BOM-01.recurse",
+            "рекурсия учитывает вложенные кратностью: a/part.m3d 3 + 2x2 = 7, b/part.m3d 1, "
+            "sub.m3d 2, всего 10 экземпляров",
+            "PASS" if (deep_paths == want_deep and deep.get("instances") == 10) else "FAIL",
+            f"по_путям={sorted((os.path.basename(k), v) for k, v in deep_paths.items())} "
+            f"экземпляров={deep.get('instances')} код={deep_code}")
+
+    # ===== BOM-01: сумма против kompas_list_components =====
+    # ИЗМЕРЕНО: исключённый из расчёта экземпляр НЕ появляется в API7-перечислении
+    # (kompas_list_components -> IPart7.PartsEx даёт 5 записей на 6 экземпляров ksPartCollection),
+    # поэтому сравнение идёт с BOM, где пропущен ТОЛЬКО исключённый: скрытый остаётся в обоих.
+    visible, visible_code = bom(asm, include_hidden=True) if asm else ({}, "no_document")
+    _e, listed, _r = client.tool("kompas_list_components", {"document_id": asm, "recursive": False}) \
+        if asm else ({}, {}, None)
+    components = (listed or {}).get("result") or {}
+    component_rows = components.get("components") or []
+    rep.add("BOM-01.sum_against_components",
+            "сумма экземпляров BOM равна числу записей kompas_list_components, когда пропущен только "
+            "исключённый: исключённый экземпляр в API7-перечисление не попадает (измерено), скрытый — "
+            "попадает",
+            "PASS" if (visible.get("instances") == len(component_rows) == 5
+                       and full.get("instances") == 6) else "FAIL",
+            f"bom_без_исключённого={visible.get('instances')} bom_со_всеми={full.get('instances')} "
+            f"list_components={len(component_rows)} код={visible_code}")
+
+    # ===== BOM-01: документ подсборки после рекурсии не остался открытым =====
+    _e, documents, _r = client.tool("kompas_list_documents", {"application_id": app_id}, timeout=120)
+    listed_documents = (documents or {}).get("result")
+    listed_documents = listed_documents if isinstance(listed_documents, list) else []
+    open_paths = [str(d.get("path") or "").lower() for d in listed_documents
+                  if isinstance(d, dict)]
+    left = [p for p in open_paths if p.endswith("sub.m3d")]
+    rep.add("BOM-01.walk_closed",
+            "документ подсборки, открытый для обхода, закрыт и в списке документов сеанса не остался",
+            "PASS" if not left else "FAIL",
+            f"подсборка_в_списке={left} документов={len(open_paths)}")
+
+    # ===== BOM-01: save -> reopen даёт те же числа =====
+    saved, save_code = call("kompas_save_document",
+                            {"document_id": asm, "expected_revision": revision(asm),
+                             "target_path": asm_path})
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "discard"})
+    env, reopen_code = call("kompas_open_document",
+                            {"application_id": app_id, "path": asm_path, "access": "edit"})
+    reopened = doc_id(env)
+    again, again_code = bom(reopened, include_hidden=True, include_excluded=True) \
+        if reopened else ({}, "no_document")
+    rep.add("BOM-01.save_reopen",
+            "после save -> close -> open те же числа: 6 экземпляров, 3 файла, те же строки",
+            "PASS" if (not save_code and not reopen_code and again.get("instances") == 6
+                       and again.get("unique_files") == 3 and by_file(again) == counts_full) else "FAIL",
+            f"код_сохранения={save_code} код_открытия={reopen_code} экземпляров={again.get('instances')} "
+            f"по_имени={by_file(again)}")
+
+    # ===== BOM-02: выгрузка CSV и JSON =====
+    def export(path):
+        return call("kompas_export_bom", {"document_id": reopened, "output_path": path,
+                                          "include_hidden": True, "include_excluded": True})
+
+    csv_path = os.path.join(workdir, "bom.csv")
+    env, csv_code = export(csv_path)
+    csv_rows = []
+    if not csv_code and os.path.isfile(csv_path):
+        with open(csv_path, encoding="utf-8-sig") as handle:
+            lines = handle.read().splitlines()
+        header = lines[0] if lines else ""
+        csv_rows = lines[1:]
+    expected_rows = len(rows(again))
+    rep.add("BOM-02.export_csv",
+            "CSV (UTF-8 с BOM-меткой, разделитель «;») читается обратно и даёт те же строки",
+            "PASS" if (not csv_code and os.path.isfile(csv_path)
+                       and header == "file;name;marking;material;instances"
+                       and len(csv_rows) == expected_rows
+                       and (result(env).get("rows") == expected_rows)) else "FAIL",
+            f"код={csv_code} шапка={header!r} строк_в_файле={len(csv_rows)} строк_ответа={expected_rows} "
+            f"sha={result(env).get('sha256')}")
+
+    json_path = os.path.join(workdir, "bom.json")
+    env, json_code = export(json_path)
+    json_rows = []
+    if not json_code and os.path.isfile(json_path):
+        with open(json_path, encoding="utf-8") as handle:
+            json_rows = json.load(handle) or []
+    same_instances = (sum(int(r.get("instances") or 0) for r in json_rows)
+                      == again.get("instances"))
+    rep.add("BOM-02.export_json",
+            "JSON читается обратно и даёт те же строки и то же число экземпляров, что ответ чтения",
+            "PASS" if (not json_code and len(json_rows) == expected_rows and same_instances) else "FAIL",
+            f"код={json_code} строк={len(json_rows)} экземпляров_в_файле="
+            f"{sum(int(r.get('instances') or 0) for r in json_rows)} в_ответе={again.get('instances')}")
+
+    # ===== отказы =====
+    env, part_env = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    part = doc_id(env)
+    _e, not_asm, _r = client.tool("kompas_get_bom", {"document_id": part}) \
+        if part else ({}, {}, None)
+    rep.add("BOM-01.negative_part",
+            "деталь вместо сборки отвергается WRONG_DOCUMENT_KIND",
+            "PASS" if why(not_asm) == "WRONG_DOCUMENT_KIND" else "FAIL",
+            f"код={why(not_asm)}")
+    outside = os.path.join("C:\\Windows", "Temp", "bom-outside.csv")
+    _e, denied, _r = client.tool("kompas_export_bom",
+                                 {"document_id": reopened, "output_path": outside,
+                                  "operation_id": str(uuid.uuid4())})
+    rep.add("BOM-02.path_denied",
+            "путь вне разрешённых корней отвергается PATH_NOT_ALLOWED и файла не создаёт",
+            "PASS" if why(denied) == "PATH_NOT_ALLOWED" and not os.path.isfile(outside) else "FAIL",
+            f"код={why(denied)} файл_создан={os.path.isfile(outside)}")
+
+    call("kompas_close_document", {"document_id": part, "dirty_policy": "discard"}) if part else None
+    call("kompas_close_document", {"document_id": reopened, "dirty_policy": "discard"}) \
+        if reopened else None
+
+
 def dismantle_checks(client, rep, app_id, workdir):
     """DSM-01…DSM-13 - разнесённый вид сборки (наряд G9, профиль `dismantle-minimal-v1`).
 
@@ -51812,6 +52120,7 @@ EXTRA_GROUP_CHECKS = {
     # и конфигурация, а не app_id.
     "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
     "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
+    "bom": lambda c, r, a, w, v, p: bom_checks(c, r, a, w),
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
     # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на

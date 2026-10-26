@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "profile_id": "bom-minimal-v1",
+    "title": "BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "26.10.2026",
+        "change": "профиль заведён нарядом BOM_MINIMAL по решению техлида `docs/decisions/bom.md#profile-scope`: сводка BOM (группировка по полному пути, фильтры hidden/excluded/standard, рекурсия открытием файла подсборки) и выгрузка в CSV/JSON; раздел спецификации и исполнения в профиль не входят"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "BOM_MINIMAL": "Блок BOM - первый наряд кода цикла 0.12.0, поправка плана тридцать четвёртая"
+    }
+  },
+  "modes": [
+    {
+      "ref": "BOM-01.bom.summary",
+      "title": "Сводка BOM по сборке: строки, итоги, фильтры и рекурсия",
+      "family": "BOM",
+      "queue": "BOM_MINIMAL",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Сводка строится документированным маршрутом ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart (fileName, name, marking, material, hidden, excluded, standardComponent). Строки группируются по ПОЛНОМУ пути файла (никогда по имени файла: два разных part.m3d в разных папках - две детали, измерено), по желанию - с обозначением. Фильтры - работа инструмента: исключённый и скрытый экземпляры остаются в коллекции и в числе экземпляров, поэтому пропуск считает код в skipped, а инвариант ответа требует равенства «сумма строк плюс skipped = число экземпляров обхода». Рекурсия - открытием файла компонента (у ksPart в API5 коллекции компонентов нет), с закрытием документа обхода в finally и отказом на цикл ссылок и ненаходимый файл."
+    },
+    {
+      "ref": "BOM-02.bom.export",
+      "title": "Выгрузка BOM в CSV или JSON из тех же строк",
+      "family": "BOM",
+      "queue": "BOM_MINIMAL",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "Файл пишется из тех же строк, что ответ kompas_get_bom (один код построения строк), формат выбирается расширением (.csv или .json), CSV - UTF-8 с BOM-меткой и разделителем «;». Путь проверяется существующей политикой путей записи, существующий файл перезаписывается. Ответ - размер и SHA256 файла, который лежит на диске; файл читается обратно и даёт те же строки."
+    }
+  ],
+  "common_dependencies": [],
+  "explicitly_out_of_scope": [
+    "Раздел спецификации компонента: IPropertyMng в COM-справке нет (только KsAPI), а IPropertyKeeper.GetPropertyValue требует объект IProperty; маршрут не документирован, поэтому раздел в профиль не входит (решение техлида `#profile-scope`, вопрос 2).",
+    "Исполнения (IEmbodiment, IEmbodimentsManager): точка входа страницей не подтверждена, отложены решением техлида (вопрос 3).",
+    "Родная спецификация КОМПАС (ksSpecification в модели и документ .spw): отдельный наряд BOM_SPEC_READ.",
+    "Признак использования в спецификации (IProductDataManager.ObjectSpcUsed): документирован, живьём не проверен, в профиль не входит.",
+    "Запись объектов спецификации: наряд BOM_SPEC_WRITE, в цикл 0.12.0 не входит.",
+    "Признак «деталь или подсборка» без открытия файла: документированных членов ksPart для него нет, поэтому recurse открывает файл каждого компонента - деталь даёт пустой список вложенных."
+  ]
+}

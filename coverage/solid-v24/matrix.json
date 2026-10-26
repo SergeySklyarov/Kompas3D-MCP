@@ -15724,6 +15724,114 @@
         "число окружностей считается по файлу в окне вида: отверстия других видов и рамки листа в контур не входят"
       ]
     }
+    ,
+    {
+      "operation_id": "BOM-01.bom.summary",
+      "context": "assembly.instances",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "bom-minimal-v1",
+      "queue": "BOM_MINIMAL",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "scripts/probes/bom/",
+        "docs/decisions/bom.md#bom-tool"
+      ],
+      "parameters_schema": "schemas/kompas_get_bom.json",
+      "adapter_route": "kompas_get_bom: ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent (kspartcollection_getcount.html, kspartcollection_getbyindex.html, kspart_props.html, kspart_hidden.html, kspart_excluded.html); рекурсия - открытием файла компонента тем же PartCollection и закрытием в finally",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "сводка ничего не создаёт в модели; постановку строит прибор scripts/probes/bom/",
+        "edit": "сводка только читает состав",
+        "rebuild": "перестроение не требуется: чтение не меняет модель",
+        "suppress_restore": "у сводки нет режима подавления; флаги hidden/excluded читаются и фильтруются, но не пишутся",
+        "delete_dependencies": "сводка ничего не удаляет",
+        "geometry_validation": "BOM не измеряет геометрию: сверка идёт числом экземпляров против kompas_list_components (BOM-01.sum_against_components)"
+      },
+      "tests": [
+        "BOM-01.discovery",
+        "BOM-01.schema",
+        "BOM-01.probe",
+        "BOM-01.open",
+        "BOM-01.top_level",
+        "BOM-01.grouping",
+        "BOM-01.filters",
+        "BOM-01.include_filters",
+        "BOM-01.recurse",
+        "BOM-01.sum_against_components",
+        "BOM-01.walk_closed",
+        "BOM-01.save_reopen",
+        "BOM-01.negative_part"
+      ],
+      "limitations": [
+        "Признака «деталь или подсборка» у ksPart в документированном списке нет, поэтому recurse ОТКРЫВАЕТ файл каждого компонента: деталь даёт пустой список вложенных. Цена обхода - открытие файла на каждый компонент.",
+        "Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components (5 записей на 6 экземпляров ksPartCollection); скрытый появляется. Сверка BOM с kompas_list_components возможна только при пропуске исключённых.",
+        "Материал компонента-подсборки читается как материал детали (измерено пробой), поэтому материал подсборки не доказывает материал изделия.",
+        "Раздел спецификации и исполнения в профиль не входят: документированного COM-маршрута к IProperty нет (docs/decisions/bom.md#profile-scope)."
+      ]
+    },
+    {
+      "operation_id": "BOM-02.bom.export",
+      "context": "assembly.instances",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "bom-minimal-v1",
+      "queue": "BOM_MINIMAL",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/bom.md#bom-tool"
+      ],
+      "parameters_schema": "schemas/kompas_export_bom.json",
+      "adapter_route": "kompas_export_bom: те же строки, что kompas_get_bom (один построитель), запись во временный файл рядом с целевым и публикация через AtomicPublish; CSV - UTF-8 с BOM-меткой и разделителем «;», JSON - массив объектов; ответ несёт размер и SHA256 файла на диске",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_applicable",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "модель не создаётся: выгрузка пишет файл по существующей сборке",
+        "edit": "выгрузка модель не меняет",
+        "rebuild": "перестроение не требуется",
+        "save_reopen": "документ не сохраняется и не переоткрывается: файл выгрузки читается обратно той же строкой (BOM-02.export_csv, BOM-02.export_json)",
+        "suppress_restore": "у выгрузки нет режима подавления",
+        "delete_dependencies": "выгрузка ничего не удаляет; временный файл публикуется переименованием",
+        "geometry_validation": "выгрузка не измеряет геометрию"
+      },
+      "tests": [
+        "BOM-02.discovery",
+        "BOM-02.schema",
+        "BOM-02.export_csv",
+        "BOM-02.export_json",
+        "BOM-02.path_denied"
+      ],
+      "limitations": [
+        "Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.",
+        "Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.",
+        "Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет."
+      ]
+    }
 
   ],
   "pending_families": [

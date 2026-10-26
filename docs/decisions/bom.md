@@ -121,10 +121,12 @@
 - **Требование v1 `docs/01_TECHNICAL_SPEC.md` §1.11 (BOM)** закрывается третьей строкой матрицы
   `BOM-03.component.properties`: свойства экземпляра читаются по той же ссылке, что выдают
   `kompas_list_components`, а не по имени и не по номеру в чужом перечислении.
-- **Адрес — существующий.** `component_ref` разрешается тем же реестром ссылок и тем же порядковым
-  адресом, что у `kompas_delete_component` (`ksDocument3D.PartCollection(true)` →
+- **Адрес — существующий, но найденный сопоставлением.** `component_ref` разрешается тем же реестром
+  ссылок и тем же адресом, что у `kompas_delete_component` (`ksDocument3D.PartCollection(true)` →
   `ksPartCollection.GetByIndex`), включая сверку источника: иначе ответ описал бы ЧУЖОЙ компонент
-  после сдвига номеров. Нового формата ссылки нет.
+  после сдвига номеров. Сам адрес — индекс в плоском `PartCollection(true)`, найденный сопоставлением
+  записи с экземпляром по полному пути файла и размещению (`assembly.md#identity-address`); счётчик по
+  `IPart7.PartsEx` сдвигался на исключённом экземпляре. Нового формата ссылки нет.
 - **Восемь полей — восемь страниц `IPart`.** `file` — `kspart_filename.html`, `name` —
   `kspart_name.html`, `marking` — `kspart_marking.html`, `material` — `kspart_material.html`,
   `hidden` — `kspart_hidden.html`, `excluded` — `kspart_excluded.html`, `standard` —

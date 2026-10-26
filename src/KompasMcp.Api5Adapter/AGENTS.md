@@ -7,10 +7,13 @@ API7. One `Api5Session` partial class, one file per domain.
 
 ### assembly (`Api5Session.Assembly.cs`)
 
-- INVARIANT: a component address is the ORDINAL in the flat `ksDocument3D.PartCollection(true)`, not
-  `IPart7.Reference` (MEASURED: 1073741857).
+- INVARIANT: a component address is the INDEX in the flat `ksDocument3D.PartCollection(true)`, not
+  `IPart7.Reference` (MEASURED: 1073741857), and it is FOUND by matching the record with the collection
+  element (PURE `ComponentAddress.Locate`: full source path + placement) - never counted, because
+  `IPart7.PartsEx` omits an excluded instance and a counter would shift every later address.
 - INVARIANT: identity is decided by the PURE `ComponentIdentity.Decide` (Domain); only the SOURCE FILE
-  decides the refusal - name and placement matrix are notes.
+  decides the refusal - compared as the FULL PATH, never as a file name; name and placement matrix are
+  notes.
 - INVARIANT: the placement matrix is NOT stored in the reference; it is read FRESH from the live parent.
 - INVARIANT: a failed mandatory check is not success - placement/fixing must be re-read and match.
 - LIMIT: a nested component has no API5 address; its placement/replacement is unsupported.

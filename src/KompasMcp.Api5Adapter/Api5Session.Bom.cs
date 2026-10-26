@@ -99,7 +99,7 @@ public partial class Api5Session
     /// <remarks>DOC: <c>kspart_props.html</c> lists the eight properties, each with its own page
     /// (<c>kspart_filename</c>, <c>_name</c>, <c>_marking</c>, <c>_material</c>, <c>_hidden</c>,
     /// <c>_excluded</c>, <c>_standardcomponent</c>, <c>_multibodyparts</c>).
-    /// INVARIANT: the reference is resolved by the SAME registry and the SAME ordinal route as
+    /// INVARIANT: the reference is resolved by the SAME registry and the SAME matched address as
     /// <c>kompas_delete_component</c>, so a stale reference is refused instead of reading a foreign
     /// component. A nested component has no address at all — refused, not guessed.
     /// History: docs/decisions/bom.md#component-properties</remarks>

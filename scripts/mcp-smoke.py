@@ -50551,6 +50551,112 @@ def bom_checks(client, rep, app_id, workdir):
             "PASS" if (len(hidden_true) == 1 and not excluded_true) else "FAIL",
             f"hidden_true={hidden_true} excluded_true={excluded_true} экземпляров={len(before)}")
 
+    # ===== BOM-03: адрес на постановке, где счётчик сдвигался =====
+    # Постановка прибора — ровно тот случай, из-за которого адрес перестал считаться: два РАЗНЫХ файла
+    # одного имени (a/part.m3d и b/part.m3d) и ИСКЛЮЧЁННЫЙ экземпляр ПЕРЕД ними. Адрес — индекс в
+    # плоском PartCollection(true), и счётчик по записям PartsEx дал бы b/part.m3d адрес исключённого
+    # a/part.m3d. Строки идут на КОПИЯХ постановки: удаление и замена меняют модель.
+    def copy_of_fixture(name):
+        target = os.path.join(ROOT, "scratch", "bom-address", name)
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        shutil.copytree(fixture, target)
+        return target
+
+    def entries_of(doc):
+        _e, listed, _r = client.tool("kompas_list_components",
+                                     {"document_id": doc, "recursive": False})
+        return ((listed or {}).get("result") or {}).get("components") or []
+
+    def ref_of_b(entries):
+        """Ссылка на b/part.m3d — экземпляр ЗА исключённым, чей адрес и сдвигался."""
+        for entry in entries:
+            path = str(entry.get("source_path") or "")
+            if (os.path.basename(path).lower() == "part.m3d"
+                    and os.path.basename(os.path.dirname(path)).lower() == "b"):
+                return entry.get("component_ref")
+        return None
+
+    def props_of(doc, ref):
+        env, code = call("kompas_get_component_properties",
+                         {"document_id": doc, "component_ref": ref})
+        return (result(env).get("properties") or {}), code
+
+    def path_gaps(doc):
+        """ПОЛНЫЙ путь после операции: у каждой записи прочитанный file равен её source_path."""
+        gaps = []
+        for entry in entries_of(doc):
+            props, code = props_of(doc, entry.get("component_ref"))
+            want = str(entry.get("source_path") or "").lower()
+            got = str(props.get("file") or "").lower()
+            if code or got != want:
+                gaps.append((os.path.basename(want), got, code))
+        return gaps
+
+    def is_b(path):
+        return str(path).lower().endswith(os.path.join("b", "part.m3d"))
+
+    def open_copy(name):
+        target = copy_of_fixture(name)
+        path = os.path.join(target, "asm.m3d")
+        env, code = call("kompas_open_document",
+                         {"application_id": app_id, "path": path, "access": "edit"})
+        return doc_id(env), code, path
+
+    def close_copy(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    address_doc, address_code, _p = open_copy("address")
+    address_entries = entries_of(address_doc) if address_doc else []
+    b_ref_address = ref_of_b(address_entries)
+    b_props, b_props_code = props_of(address_doc, b_ref_address) if b_ref_address else ({}, "NO_REF")
+    b_file = str(b_props.get("file") or "").lower()
+    rep.add("BOM-03.address_same_name",
+            "чтение свойств b/part.m3d возвращает b/part.m3d, а не одноимённый a/part.m3d: адрес "
+            "найден сопоставлением по полному пути, а не счётом записей",
+            "PASS" if (not address_code and b_ref_address and not b_props_code and is_b(b_file))
+            else "FAIL",
+            f"код_открытия={address_code} записей={len(address_entries)} "
+            f"ссылка={bool(b_ref_address)} file={b_props.get('file')} код_чтения={b_props_code}")
+
+    del_env, del_code = call("kompas_delete_component", {
+        "document_id": address_doc, "expected_revision": revision(address_doc),
+        "component_ref": b_ref_address}) if b_ref_address else ({}, "NO_REF")
+    after_delete = [str(e.get("source_path") or "") for e in entries_of(address_doc)] \
+        if address_doc else []
+    delete_gaps = path_gaps(address_doc) if address_doc else [("нет документа", "", None)]
+    rep.add("BOM-03.address_delete",
+            "удаление по адресу убирает ИМЕННО b/part.m3d: экземпляр ушёл, два a/part.m3d остались, "
+            "полный путь каждого оставшегося совпал после операции",
+            "PASS" if (not del_code and not any(is_b(p) for p in after_delete)
+                       and len(after_delete) == 4 and not delete_gaps) else "FAIL",
+            f"код_удаления={del_code} осталось={sorted(os.path.basename(p) for p in after_delete)} "
+            f"расхождений_пути={delete_gaps} msg={why(del_env)}")
+    close_copy(address_doc)
+
+    replace_doc, replace_code, _p = open_copy("replace")
+    replace_entries = entries_of(replace_doc) if replace_doc else []
+    b_ref_replace = ref_of_b(replace_entries)
+    a_source = os.path.join(fixture, "a", "part.m3d")
+    rep_env, rep_code = call("kompas_replace_component", {
+        "document_id": replace_doc, "expected_revision": revision(replace_doc),
+        "component_ref": b_ref_replace, "source_path": a_source}) \
+        if b_ref_replace else ({}, "NO_REF")
+    after_replace = [str(e.get("source_path") or "") for e in entries_of(replace_doc)] \
+        if replace_doc else []
+    replace_gaps = path_gaps(replace_doc) if replace_doc else [("нет документа", "", None)]
+    replaced_a = [p for p in after_replace if p.lower().endswith(os.path.join("a", "part.m3d"))]
+    rep.add("BOM-03.address_replace",
+            "замена по адресу заменяет ИМЕННО b/part.m3d: одноимённых файлов с источником b не "
+            "осталось, a/part.m3d стало три, полный путь каждого совпал после операции",
+            "PASS" if (not rep_code and not any(is_b(p) for p in after_replace)
+                       and len(replaced_a) == 3 and not replace_gaps) else "FAIL",
+            f"код_открытия={replace_code} код_замены={rep_code} "
+            f"a/part.m3d={len(replaced_a)} всего={len(after_replace)} "
+            f"расхождений_пути={replace_gaps} msg={why(rep_env)}")
+    close_copy(replace_doc)
+
     # ===== BOM-01: save -> reopen даёт те же числа =====
     saved, save_code = call("kompas_save_document",
                             {"document_id": asm, "expected_revision": revision(asm),

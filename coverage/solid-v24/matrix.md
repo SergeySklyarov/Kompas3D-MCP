@@ -305,7 +305,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
-| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
+| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 
 ### Общие зависимости профиля `bom-minimal-v1`
 
@@ -966,7 +966,7 @@
 | `SMB-09.flat_dxf.export` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | SMB.40.flat_dxf_export, SMB.41.flat_dxf_overwrite, SMB.42.flat_dxf_refusals, SMB.43.temp_drawing_closed |
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
-| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
+| `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1408,32 +1408,32 @@
   - приёмка image-блоков КЛИЕНТОМ (propagation коннектором WorkBuddy) — часть клиентской приёмки и этим нарядом не исполняется; штатный фолбэк — save_path и чтение файла средствами клиента
 - `ASM-01.document.create_open` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-02.component.insert` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-03.structure.read` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-04.placement.set_read` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
   - Отказ по адресу компонента решает ТОЛЬКО файл-источник; имя компонента и матрица размещения — примечания (решение 05.10.2026, регрессия п. 1). Раскладка IPart7.GetSummMatrix НЕ измерена — гипотеза, не основание отказа (п. 2). Строка ASM.04.repeat_after_mutation — живая проверка второй мутации по той же ссылке, требует прогона на бинарях поставки.
 - `ASM-05.component.replace` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-06.links.check` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-07.save_reopen` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `ASM-08.component.delete` — закрыт целиком
   - Живой прогон 12.10.2026 (группа ASM) на бинарях Debug; приёмка на бинарях ПОСТАВКИ - отдельный шаг.
@@ -1707,6 +1707,7 @@
 - `BOM-03.component.properties` — закрыт целиком
   - У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.
   - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).
+  - Два экземпляра одного файла в одном размещении документированными свойствами не различаются: такая запись адреса не получает и отвергается STALE_REFERENCE, а не адресуется по догадке.
   - Материал компонента-подсборки читается как материал детали: свойство ksPart.material у подсборки не доказывает материал изделия.
   - Раздел спецификации и исполнения в профиль не входят (docs/decisions/bom.md#profile-scope).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
@@ -1749,23 +1750,23 @@
   - Создание через API7 в том же адаптере и той же STA-очереди дополнительно проверено на условном обозначении резьбы (TH-02 внешняя по ребру, TH-04 внутренняя по грани): IBody7.Threads -> IThreads.Add идёт через Api7Bridge, второго сеанса КОМПАС не заводится.
 - `dep.assembly.document_lifecycle` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.source_file` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.component_address` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.revisions` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `dep.assembly.idempotency` — закрыт целиком
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
-  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Адрес компонента — индекс в плоском ksDocument3D.PartCollection(true), НАЙДЕННЫЙ сопоставлением записи с экземпляром по полному пути файла и размещению (docs/decisions/assembly.md#identity-address): порядок перечислений не предполагается, а запись без однозначного сопоставления адреса не получает.
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `MATE-07.mate.create_transmission` — закрыт целиком
   - Живой прогон 19.10.2026: группа --mech-mates-only на Release-сборке 2a041e0 - 13 строк, PASS 38 / FAIL 0; зачётный --all на 7a0dc15 - группа mech_mates PASS 15 / FAIL 0, всего PASS 1708 / NAMED 6 / FAIL 0, дерево чистое.

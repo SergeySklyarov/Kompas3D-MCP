@@ -11,13 +11,13 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Assemblies domain — order C1, profile <c>assemblies-minimal-v1</c>, modes <c>ASM-02…ASM-06</c>
-/// (ASM-01 and ASM-07 are served by the shared document lifecycle).</summary>
+/// <summary>Assemblies domain — order C1, profile <c>assemblies-minimal-v1</c>, modes <c>ASM-02…ASM-06</c>;
+/// ASM-01 and ASM-07 are served by the shared document lifecycle.</summary>
 /// <remarks>MEASURED: structure read via API7 (<c>IPart7.PartsEx</c>), placement written via API5
 /// (<c>ksPart.GetPlacement/SetPlacement/UpdatePlacement</c>) — API7 has no absolute placement write.
-/// INVARIANT: a component address is the ORDINAL in the flat <c>ksDocument3D.PartCollection(true)</c>,
-/// not <c>IPart7.Reference</c>. The ordinal addresses TOP-LEVEL components only; a nested component
-/// has no address and a mutation by a guessed ordinal is forbidden.
+/// INVARIANT: a component address is the INDEX in the flat <c>ksDocument3D.PartCollection(true)</c>, not
+/// <c>IPart7.Reference</c>, and it is FOUND by matching (<see cref="ComponentAddress"/>), never counted; a
+/// nested component has no address and a mutation by a guessed one is forbidden.
 /// History: docs/decisions/assembly.md#identity</remarks>
 public partial class Api5Session
 {
@@ -27,6 +27,11 @@ public partial class Api5Session
     /// <summary>Ordinal of a NESTED component: it has no address. It differs from any real ordinal in that real
     /// ones start at zero; "-1" means "the API5 address does not apply".</summary>
     private const int NestedComponentOrdinal = -1;
+
+    /// <summary>Ordinal of a TOP-LEVEL component whose address was NOT confirmed by matching: no documented
+    /// property told it apart from the other instances. "-2" keeps it distinct from a real index and from
+    /// the nested case, whose refusals differ.</summary>
+    private const int UnaddressedComponentOrdinal = -2;
 
     /// <summary>Depth limit of the structure walk. Exceeding it is NAMED, not silenced.</summary>
     private const int MaxStructureDepth = 64;
@@ -57,9 +62,8 @@ public partial class Api5Session
         }
 
         var enumerated = 0;
-        var topLevelOrdinal = 0;
         Walk(top, parentRef: null, depth: 0, command.Recursive, document, rows, uniqueParts,
-            ref enumerated, ref topLevelOrdinal, notes);
+            ref enumerated, notes);
 
         if (rows.Any(r => r.Depth > 0))
         {
@@ -71,7 +75,8 @@ public partial class Api5Session
         }
 
         return new ListComponentsResult(rows, uniqueParts.Count, enumerated,
-            "api7:IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); размещение — GetSummMatrix",
+            "api7:IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); адрес — сопоставление записи с "
+            + "ksDocument3D.PartCollection(true) по полному пути и размещению; размещение — GetSummMatrix",
             notes);
     }
 
@@ -84,7 +89,6 @@ public partial class Api5Session
         List<ComponentRowDto> rows,
         HashSet<string> uniqueParts,
         ref int enumerated,
-        ref int topLevelOrdinal,
         List<string> notes)
     {
         if (depth > MaxStructureDepth)
@@ -99,12 +103,10 @@ public partial class Api5Session
         {
             enumerated++;
 
-            // AN API5 ADDRESS EXISTS ONLY FOR A TOP-LEVEL COMPONENT:
-            // `ksDocument3D.PartCollection(true)` enumerates components FLATLY, so the ordinal is
-            // meaningful only at depth 0. A nested ordinal passed to PartCollection would hit a FOREIGN
-            // component — address substitution, not "nested support".
-            var ordinal = depth == 0 ? topLevelOrdinal++ : NestedComponentOrdinal;
-            var row = ReadComponent(document, node, child, parentRef, depth, ordinal, notes);
+            // THE ADDRESS IS MATCHED, NOT COUNTED: `IPart7.PartsEx` omits an excluded instance, so a
+            // counter would shift every later address onto a FOREIGN component. A record that cannot be
+            // matched gets NO address (see AddressOf), never a neighbour's.
+            var row = ReadComponent(document, node, child, parentRef, depth, notes);
             rows.Add(row);
             if (row.SourcePath is { Length: > 0 } path)
             {
@@ -122,7 +124,7 @@ public partial class Api5Session
             else if (recursive && row.IsDetail == false)
             {
                 Walk(child, row.ComponentRef, depth + 1, recursive: true, document, rows,
-                    uniqueParts, ref enumerated, ref topLevelOrdinal, notes);
+                    uniqueParts, ref enumerated, notes);
             }
         }
     }
@@ -169,24 +171,25 @@ public partial class Api5Session
 
     private ComponentRowDto ReadComponent(
         DocumentEntry document, IPart7 parent, IPart7 part, string? parentRef, int depth,
-        int ordinal, List<string> notes)
+        List<string> notes)
     {
         // Reference is a diagnostic number, NOT an address (see ComponentPayload). An unread value
         // stays null, not 0: "not read" and "0" are different claims.
         var reference = Int(() => part.Reference);
-        var addressable = ordinal != NestedComponentOrdinal;
 
         // THE API7 MATRIX FOR THE RESPONSE, via the documented IPart7.GetSummMatrix
         // (ipart7_getsummmatrix.html): «суммарная матрица преобразования координат», 16 elements, 4x4.
         // It is the placement AT READ TIME; it is NOT stored in the REFERENCE (see ComponentPayload),
-        // and is read only for an addressable (top-level) component — a nested one has no address.
-        var matrix7 = addressable ? SummMatrix7(parent, part) : null;
+        // and is read only for a top-level component — a nested one has no address.
+        var matrix7 = depth == 0 ? SummMatrix7(parent, part) : null;
+        var ordinal = depth == 0 ? AddressOf(document, part, matrix7, notes) : NestedComponentOrdinal;
+        var addressable = ordinal != NestedComponentOrdinal && ordinal != UnaddressedComponentOrdinal;
 
         var stored = References.Register(
             ComponentRefKind, document.Id, document.Revision,
             new ComponentPayload(part, parent, reference, ordinal));
 
-        if (!addressable)
+        if (depth != 0)
         {
             notes.Add($"nested_component_no_address — компонент «{Text(() => part.Name) ?? "?"}» " +
                       $"вложен (глубина {depth}): тело, грани и размещение НЕ читаются, потому что " +
@@ -218,8 +221,33 @@ public partial class Api5Session
             // was not read, the API5 matrix is named — an unread value is not replaced by zeros. The
             // matrix is NOT stored in the reference: identity comparison reads it fresh from the live
             // parent (see IdentityMatches and ComponentPayload).
-            Matrix = addressable ? matrix7 ?? PlacementMatrixByOrdinal(document, ordinal) : null,
+            Matrix = matrix7 ?? (addressable ? PlacementMatrixByOrdinal(document, ordinal) : null),
         };
+    }
+
+    /// <summary>The address of a TOP-LEVEL component: its index in the flat
+    /// <c>ksDocument3D.PartCollection(true)</c>, found by matching (see <see cref="ComponentAddress"/>).</summary>
+    /// <remarks>DOC: <c>kspart_filename.html</c> (ksPart.fileName), <c>ipart7_filename.html</c>
+    /// (IPart7.FileName), <c>kspart_getplacement.html</c> → <c>ksPlacement.GetMatrix3D</c>,
+    /// <c>ipart7_getsummmatrix.html</c>, <c>kspartcollection_getbyindex.html</c>.
+    /// INVARIANT: no unambiguous match → NO address and a named note; a neighbour's index is never used.
+    /// History: docs/decisions/assembly.md#identity</remarks>
+    private int AddressOf(DocumentEntry document, IPart7 part, double[]? matrix7, List<string> notes)
+    {
+        var instances = ComponentParts5(document)
+            .Select(part5 => new ComponentInstance(Ref(() => part5.fileName), ReadPlacementMatrix(part5)))
+            .ToList();
+        var verdict = ComponentAddress.Locate(
+            new ComponentInstance(Text(() => part.FileName), matrix7), instances);
+
+        if (verdict.Index is { } index)
+        {
+            return index;
+        }
+
+        notes.Add($"component_address_unconfirmed — у компонента «{Text(() => part.Name) ?? "?"}» "
+                  + $"{verdict.Detail}");
+        return UnaddressedComponentOrdinal;
     }
 
     /// <summary>The component's total coordinate-transform matrix from API7 — the documented
@@ -604,11 +632,11 @@ public partial class Api5Session
         var notes = new List<string>();
 
         // The component row is built FROM THE INSERTED INSTANCE (inserted7), not by a file-name search:
-        // with two instances of one part, a name search would return the wrong instance.
+        // with two instances of one part, a name search would return the wrong instance. Its address is
+        // found by matching (see AddressOf), so the row and the mutation route cannot disagree.
         var inserted = top7 is null
             ? null
-            : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0,
-                ordinal: beforeOrdinals, notes);
+            : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0, notes);
 
         if (inserted is null)
         {
@@ -1466,6 +1494,27 @@ public partial class Api5Session
                 });
         }
 
+        if (payload.Ordinal == UnaddressedComponentOrdinal)
+        {
+            // NO ADDRESS, NOT A NEIGHBOUR'S: the record matched no collection element unambiguously
+            // (see ComponentAddress), and any index would be a guess into a FOREIGN component.
+            note = "адрес не подтверждён сопоставлением с ksDocument3D.PartCollection(true)";
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                "Адрес компонента НЕ подтверждён: ни полный путь файла-источника, ни размещение не "
+                + "отличили эту запись от остальных экземпляров сборки, поэтому " + operation
+                + " по ней не выполняется — любой номер был бы догадкой и попал бы в ЧУЖОЙ компонент. "
+                + ComponentAddress.Rule
+                + " Перечитайте структуру сборки kompas_list_components и возьмите свежую ссылку.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?>
+                {
+                    ["api7_reference"] = payload.Reference,
+                    ["ordinal"] = payload.Ordinal,
+                    ["identity_confirmed"] = "не сопоставлено",
+                });
+        }
+
         var parts = ComponentParts5(document);
         if (payload.Ordinal >= 0 && payload.Ordinal < parts.Count)
         {
@@ -1531,17 +1580,16 @@ public partial class Api5Session
 
     /// <summary>Whether this is the same component: THREE signals compared, ONLY THE SOURCE DECIDES THE
     /// REFUSAL.</summary>
-    /// <returns><c>true</c> — the source matched on both sides; <c>false</c> — it differs (a FOREIGN
-    /// component); <c>null</c> — the source was not read on one side, so NOTHING to compare.</returns>
-    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types).
-    /// Only the SOURCE FILE decides; name and MUTABLE matrix are NOTES; FILE NAMES (not paths) are compared.
+    /// <returns><c>true</c> — the source matched; <c>false</c> — it differs; <c>null</c> — nothing to
+    /// compare.</returns>
+    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types);
+    /// name and MUTABLE matrix are NOTES. INVARIANT: the source is compared as the FULL PATH, normalised and
+    /// case-insensitive — two different files of one name are exactly the pair a name comparison confirms.
     /// History: docs/decisions/assembly.md#identity</remarks>
     private bool? IdentityMatches(ksPart part5, ComponentPayload payload, out string detail)
     {
         var from5 = Ref(() => part5.fileName);
         var from7 = Text(() => payload.Part7.FileName);
-        var name5 = string.IsNullOrWhiteSpace(from5) ? null : Path.GetFileName(from5);
-        var name7 = string.IsNullOrWhiteSpace(from7) ? null : Path.GetFileName(from7);
 
         var componentName5 = Ref(() => part5.name);
         var componentName7 = Text(() => payload.Part7.Name);
@@ -1551,9 +1599,9 @@ public partial class Api5Session
         var matrix5 = ReadPlacementMatrix(part5);
         var matrix7 = payload.Parent7 is null ? null : SummMatrix7(payload.Parent7, payload.Part7);
 
-        var sourceSignal = name5 is null || name7 is null
+        var sourceSignal = string.IsNullOrWhiteSpace(from5) || string.IsNullOrWhiteSpace(from7)
             ? ComponentIdentitySignal.NotRead
-            : string.Equals(name5, name7, StringComparison.OrdinalIgnoreCase)
+            : ComponentAddress.SameSource(from5, from7)
                 ? ComponentIdentitySignal.Matches
                 : ComponentIdentitySignal.Differs;
         var nameSignal = CompareRaw(componentName5, componentName7);
@@ -1568,7 +1616,7 @@ public partial class Api5Session
         // THE VALUES ARE NEXT TO THE RULE: the note explains the decision AND names what was actually
         // read. Silence about a mismatch is indistinguishable from "we did not look".
         detail = verdict.Detail
-            + $" [прочитано: источник по номеру «{name5 ?? "не читается"}», ссылка «{name7 ?? "не читается"}»; "
+            + $" [прочитано: источник по номеру «{from5 ?? "не читается"}», ссылка «{from7 ?? "не читается"}»; "
             + $"имя «{componentName5 ?? "не читается"}» / «{componentName7 ?? "не читается"}»; "
             + $"матрица по номеру {Describe(matrix5)}, ссылка {Describe(matrix7)}]";
         return verdict.Matches;
@@ -1678,23 +1726,7 @@ public partial class Api5Session
         return true;
     }
 
-    private static bool MatricesEqual(double[]? a, double[]? b)
-    {
-        if (a is null || b is null || a.Length < 16 || b.Length < 16)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < 16; i++)
-        {
-            if (Math.Abs(a[i] - b[i]) > Math.Max(0.01, Math.Abs(a[i]) * 1e-6))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool MatricesEqual(double[]? a, double[]? b) => ComponentAddress.SameMatrix(a, b);
 
     private static string Describe(double[]? matrix) =>
         matrix is null || matrix.Length < 16

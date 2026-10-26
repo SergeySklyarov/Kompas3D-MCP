@@ -50,8 +50,9 @@ public sealed record ExportBomCommand
 
 /// <summary>Read one component's properties — block <c>BOM_PROPERTIES</c>, mode <c>BOM-03</c>.</summary>
 /// <remarks>INVARIANT: the reference is the one <c>kompas_list_components</c> issued and is resolved by
-/// the SAME registry as <c>kompas_delete_component</c>; the address is the ordinal in the flat
-/// <c>ksDocument3D.PartCollection(true)</c>. History: docs/decisions/bom.md#component-properties</remarks>
+/// the SAME registry as <c>kompas_delete_component</c>; the address is the index in the flat
+/// <c>ksDocument3D.PartCollection(true)</c>, found by matching the record with the instance.
+/// History: docs/decisions/bom.md#component-properties</remarks>
 public sealed record GetComponentPropertiesCommand
 {
     public required string DocumentId { get; init; }

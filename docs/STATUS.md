@@ -20,8 +20,8 @@
   `material`, `hidden`, `excluded`, `standard`, `multi_body`), ссылка из `kompas_list_components`
   разрешается существующим кодом. Строка матрицы `BOM-03.component.properties`, режим `BOM-03`
   профиля `bom-minimal-v1`, каталог 116 -> 117, схема
-  `schemas/kompas_get_component_properties.json`. Группа `--bom-only` на `3011b33`: **PASS 41 /
-  FAIL 5** — три строки `BOM-03.*` красные, и причина не в инструменте, а в существующем
+  `schemas/kompas_get_component_properties.json`. Группа `--bom-only` на `ab3ff0b`: **PASS 43 /
+  FAIL 3** — три строки `BOM-03.*` красные, и причина не в инструменте, а в существующем
   порядковом адресе компонента: `kompas_list_components` присваивает адрес по номеру записи в
   `IPart7.PartsEx`, а адресом служит индекс в плоском `PartCollection(true)`, поэтому при
   исключённом из расчёта экземпляре адреса после него сдвигаются на единицу. Второе: сверка

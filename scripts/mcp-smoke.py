@@ -50351,7 +50351,7 @@ def bom_checks(client, rep, app_id, workdir):
     # ===== BOM-03: обнаружение и схема свойств компонента =====
     properties_entry = entry_of(client, "kompas_get_component_properties")
     properties_schema = (properties_entry or {}).get("inputSchema") or {}
-    properties_props = set(properties_schema.get("properties") or {})
+    properties_props = set(properties_schema.get("properties") or {}) - {"timeout_ms"}
     properties_required = set(properties_schema.get("required") or [])
     rep.add("BOM-03.discovery", "инструмент свойств компонента есть в реестре каталога",
             "PASS" if "kompas_get_component_properties" in registry else "FAIL",

@@ -14,6 +14,21 @@
 
 ## Текущее состояние
 
+- **Наряд `BOM_PROPERTIES` (26.10.2026, блок BOM, `0.12.0`) — ОСТАНОВЛЕН НА ВОПРОСЕ техлиду
+  (`blocked`).** Инструмент `kompas_get_component_properties` написан, закоммичен и проверен на
+  сборке и модульными тестами: восемь документированных свойств `IPart` (`file`, `name`, `marking`,
+  `material`, `hidden`, `excluded`, `standard`, `multi_body`), ссылка из `kompas_list_components`
+  разрешается существующим кодом. Строка матрицы `BOM-03.component.properties`, режим `BOM-03`
+  профиля `bom-minimal-v1`, каталог 116 -> 117, схема
+  `schemas/kompas_get_component_properties.json`. Группа `--bom-only` на `3011b33`: **PASS 41 /
+  FAIL 5** — три строки `BOM-03.*` красные, и причина не в инструменте, а в существующем
+  порядковом адресе компонента: `kompas_list_components` присваивает адрес по номеру записи в
+  `IPart7.PartsEx`, а адресом служит индекс в плоском `PartCollection(true)`, поэтому при
+  исключённом из расчёта экземпляре адреса после него сдвигаются на единицу. Второе: сверка
+  источника (`IdentityMatches`) сравнивает ИМЯ файла, а не полный путь, и сдвиг не поймала. Это
+  касается и `kompas_delete_component`/`kompas_replace_component` — вопрос техлиду, отчёт
+  `BOM_PROPERTIES_REPORT_20261026.md` §8. Зачётный `--all` не запускался: на красной группе он
+  смысла не имеет. Следующее по плану — `BOM_SPEC_READ`, но порядок зависит от ответа.
 - **Наряд `BOM_MINIMAL` (26.10.2026, блок BOM, поправка плана тридцать четвёртая, `0.12.0`).** Профиль
   `bom-minimal-v1` заведён: `kompas_get_bom` (сводка состава сборки) и `kompas_export_bom` (те же
   строки в CSV/JSON). Маршрут - измеренный пробой `ksDocument3D.PartCollection(true)` -> `ksPart`

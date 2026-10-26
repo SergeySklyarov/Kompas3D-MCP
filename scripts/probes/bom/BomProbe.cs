@@ -469,14 +469,13 @@ internal sealed class BomProbe : IDisposable
         }
     }
 
-    /// <summary>Reads the specification back through the documented route and compares every field with
-    /// what the fixture wrote.</summary>
+    /// <summary>Reads the specification back through the documented route, field by field, and compares
+    /// it with what the fixture wrote.</summary>
     /// <remarks>DOC: <c>ikompasdocument_specificationdescriptions.html</c>,
-    /// <c>ispecificationdescriptions_active.html</c>, <c>ispecificationdescription_objects.html</c> (the
-    /// whole list in display order), <c>ispecificationobject_uniquenumber.html</c>,
-    /// <c>ksspecification_ksgetspcobject.html</c>, <c>ksspecification_ksgetspcobjectcolumntext.html</c>,
-    /// <c>ksspecification_ksgetspcsectionname.html</c>. The read is INDEPENDENT of the product: it goes
-    /// through the same documented calls and compares their values with the fixture's constants.
+    /// <c>ispecificationdescriptions_active.html</c>, <c>ispecificationdescription_objects.html</c>,
+    /// <c>ispecificationobject_uniquenumber.html</c>, <c>ksspecification_ksgetspcobject.html</c>,
+    /// <c>ksspecification_ksgetspcobjectcolumntext.html</c>, <c>ksspecification_ksgetspcsectionname.html</c>.
+    /// The read is INDEPENDENT of the product: the same documented calls, compared with the fixture.
     /// History: docs/decisions/bom.md#spec-read</remarks>
     private void ReadSpecification(string label, ksDocument3D doc5)
     {

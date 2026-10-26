@@ -82,6 +82,13 @@
 
 ## #bom-tool — инструменты `kompas_get_bom` и `kompas_export_bom` (наряд `BOM_MINIMAL`)
 
+- **Требование v1 `docs/01_TECHNICAL_SPEC.md` §1.11 (BOM).** Закрыто строками матрицы
+  `BOM-01.bom.summary` и `BOM-02.bom.export`: BOM строится из ФАКТИЧЕСКИХ экземпляров сборки,
+  фильтры `hidden`/`excluded`/`standard` задаются явно, рекурсивность — явный флаг, группировка идёт
+  по нормализованному по регистру ПОЛНОМУ пути плюс `marking` (одинаковое имя разных файлов не
+  объединяется), число экземпляров и уникальных файлов выдаётся отдельно. Вне объёма по
+  `#profile-scope`: конфигурации/исполнения (`IEmbodiment`) и классификация покупных, изготовляемых
+  и справочных позиций метаданными проекта; раздел спецификации — наряд `BOM_SPEC_READ`.
 - **Маршрут чтения.** `ksDocument3D.PartCollection(true)` → `ksPartCollection.GetCount/GetByIndex` →
   `ksPart`: `fileName`, `name`, `marking`, `material`, `hidden`, `excluded`, `standardComponent`.
   Материал читается тем же свойством, что и у `kompas_get_material`.

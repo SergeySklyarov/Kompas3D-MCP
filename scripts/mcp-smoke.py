@@ -10971,10 +10971,29 @@ def drawing_checks(client, rep, app_id, workdir):
         "document_id": drw2, "output_path": os.path.join(work, "drw-01.pdf"), "format": "pdf"})
     msg = ((env or {}).get("error") or {}).get("message") if isinstance(
         (env or {}).get("error"), dict) else None
+    # The repeat into the same path is the live probe of the shared overwrite rule (debt 75): the
+    # refusal must name the SAME `field` key for every export, and the file must keep its bytes.
+    dxf_taken = os.path.join(work, "drw-01.dxf")
+
+    def digest_of(path):
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+
+    dxf_before = digest_of(dxf_taken)
+    env_re, code_re = call("kompas_export_drawing", {
+        "document_id": drw2, "output_path": dxf_taken, "format": "dxf"})
+    dxf_after = digest_of(dxf_taken)
+    field_re = (detail_of(env_re) or {}).get("field")
     rep.add("DRW-05.export.negative_tests",
-            "формат вне опубликованного перечня (PDF) отвергается, а не выгружается вслепую",
-            "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")) else "FAIL",
-            f"error={code} message={(msg or '')[:160]}")
+            "формат вне опубликованного перечня (PDF) отвергается, а повтор в тот же путь без "
+            "overwrite отвергается PATH_NOT_ALLOWED с field=output_path, файл не тронут",
+            "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")
+                       and code_re == "PATH_NOT_ALLOWED" and field_re == "output_path"
+                       and dxf_before is not None and dxf_before == dxf_after) else "FAIL",
+            f"error={code} message={(msg or '')[:160]} повтор={code_re} field={field_re} "
+            f"хеш_до={dxf_before} хеш_после={dxf_after}")
     rep.add("dep.drawing.export_file.negative_tests",
             "PDF отвергается НАЗВАННО (недокументированный программный формат)",
             "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")) else "FAIL",

@@ -70,14 +70,9 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = "output_path" });
         }
 
-        if (File.Exists(command.OutputPath) && !command.Overwrite)
-        {
-            throw new KompasContractException(
-                ErrorCodes.PathNotAllowed,
-                $"Файл '{command.OutputPath}' уже существует: перезапись без флага overwrite запрещена.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?> { ["field"] = "output_path" });
-        }
+        // INVARIANT: the overwrite rule is one call, not a copy — a second edition drifts in the
+        // `details` key the client sees. History: docs/decisions/drawings.md#export-formats
+        AtomicPublish.RequireWritableTarget(command.OutputPath, command.Overwrite);
 
         var body = ResolveFlatBody(document, command.BodyRef);
         var (_, sheet) = RequireSheetMetal(document, "Выгрузка не выполнялась");

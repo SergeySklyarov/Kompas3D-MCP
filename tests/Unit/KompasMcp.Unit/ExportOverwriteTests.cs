@@ -6,7 +6,8 @@ namespace KompasMcp.Unit;
 
 /// <summary>The overwrite rule of a file export (spec 1.12), without KOMPAS.</summary>
 /// <remarks>TEST: an existing file without an explicit <c>overwrite</c> is refused BEFORE anything is built
-/// or written, so the destination keeps its bytes; with the flag the new bytes are published.
+/// or written, so the destination keeps its bytes; the refusal names the field <c>output_path</c>, the
+/// single key every export now answers with; with the flag the new bytes are published.
 /// History: docs/decisions/bom.md#bom-tool</remarks>
 public class ExportOverwriteTests : IDisposable
 {
@@ -41,6 +42,7 @@ public class ExportOverwriteTests : IDisposable
 
         Assert.Equal(ErrorCodes.PathNotAllowed, refusal.Code);
         Assert.Contains("перезапись без флага overwrite запрещена", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal("output_path", (string?)refusal.Details?["field"]);
         Assert.Equal(before, FileHash.Sha256(path));
         Assert.Equal("file;name\nold;1\n", File.ReadAllText(path));
     }

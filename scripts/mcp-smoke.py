@@ -12974,8 +12974,9 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
 
 
-# Эталон группы CB27. Числа объявлены ЗДЕСЬ, ДО прогона: плита 100x80x10 = 80000 мм3 на XY,
-# приклеенный loft - два прямоугольных сечения на XY (0 и 10 мм), призма между ними 40x30x10 = 12000.
+# CB27 reference. Numbers are declared HERE, BEFORE the run: plate 100x80x10 = 80000 mm3 on XY.
+# The glued loft is two rectangular sections on XY at z=10 and z=20, so its 40x30x10 prism rests ON
+# the plate and adds 12000 mm3. A prism INSIDE the plate adds nothing and cannot prove gluing.
 CB27_REFERENCE = {
     "plate_width_mm": 100.0,
     "plate_height_mm": 80.0,
@@ -12983,8 +12984,10 @@ CB27_REFERENCE = {
     "plate_volume_mm3": 100.0 * 80.0 * 10.0,
     "loft_width_mm": 40.0,
     "loft_height_mm": 30.0,
+    "loft_base_mm": 10.0,
     "loft_gap_mm": 10.0,
     "loft_volume_mm3": 40.0 * 30.0 * 10.0,
+    "expected_volume_mm3": 100.0 * 80.0 * 10.0 + 40.0 * 30.0 * 10.0,
     "volume_tolerance_mm3": 1.0,
     "wrong_expected_volume_mm3": 1.0,
 }
@@ -13102,7 +13105,8 @@ def client_bugs_20261027_checks(client, rep, app_id, workdir):
     loft_error = None
     sections = []
     if doc and not build_error:
-        for index, offset in enumerate((0.0, ref["loft_gap_mm"])):
+        for index, offset in enumerate((ref["loft_base_mm"],
+                                        ref["loft_base_mm"] + ref["loft_gap_mm"])):
             env, code = call("kompas_create_sketch", {
                 "document_id": doc, "expected_revision": current_rev(doc),
                 "plane": {"base": "xy", "offset_mm": offset}, "name": "CB27-section%d" % index})
@@ -13161,14 +13165,14 @@ def client_bugs_20261027_checks(client, rep, app_id, workdir):
         volume = loft_res.get("volume_mm3")
         ok = (len(kept) == 1 and kept[0].get("passed") is True and not grew
               and bodies == 1
-              and isinstance(volume, (int, float))
-              and volume > ref["plate_volume_mm3"])
+              and near(volume, ref["expected_volume_mm3"], ref["volume_tolerance_mm3"]))
         rep.add("CB27.3",
                 "MCP-03: у приклеенного loft проверка числа тел - body_count_kept и она ПРОЙДЕНА: "
                 "тел 1 -> 1 при выросшем объёме; проверки body_count_grew больше нет",
                 "PASS" if ok else "FAIL",
-                "проверки=%s тел=%s объём=%s (плита %s)"
-                % (names(checks_of(loft_res)), bodies, volume, ref["plate_volume_mm3"]),
+                "проверки=%s тел=%s объём=%s (плита %s, с приклеенным loft %s)"
+                % (names(checks_of(loft_res)), bodies, volume, ref["plate_volume_mm3"],
+                   ref["expected_volume_mm3"]),
                 details={"checks": checks_of(loft_res), "body_count": bodies, "volume": volume})
     else:
         rep.add("CB27.3", "MCP-03: критерий числа тел у приклеенного loft", "FAIL",

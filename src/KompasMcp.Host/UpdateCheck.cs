@@ -8,8 +8,9 @@ namespace KompasMcp.Host;
 
 /// <summary>Whether a newer stable release exists — learned in the background, never in the way of a call.</summary>
 /// <remarks>INVARIANT: nothing here may delay <c>initialize</c>, <c>tools/list</c> or a tool call. The
-/// network answer lands in a file next to the Host log and is reused for a day; a call reads the
-/// in-memory snapshot only. The Host downloads and installs nothing.
+/// network answer lands in a file next to the Host log and is what a call reads, with its own
+/// <c>checked_utc</c>; every start and every read of a stale answer asks again in the background.
+/// The Host downloads and installs nothing.
 /// History: docs/decisions/host.md#update-notice</remarks>
 public sealed class UpdateCheck
 {
@@ -28,7 +29,16 @@ public sealed class UpdateCheck
     public const string Disabled = "disabled";
     public const string Pending = "pending";
 
-    private static readonly TimeSpan Fresh = TimeSpan.FromHours(24);
+    /// <summary>How long a cached answer is trusted before the Host asks again.</summary>
+    /// <remarks>MEASURED: a release published an hour after the cached answer left that answer naming the
+    /// previous release for the rest of the day. Six hours bounds the lag to a quarter of a day at four
+    /// requests a day; the start-up request and the re-check on a read bring the practical lag to seconds.
+    /// History: docs/decisions/host.md#update-notice-start</remarks>
+    private static readonly TimeSpan Fresh = TimeSpan.FromHours(6);
+
+    /// <summary>A feed that just failed is not asked again on every read: the stale answer stays visible.</summary>
+    private static readonly TimeSpan Retry = TimeSpan.FromMinutes(5);
+
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>A tag is compared as numbers, so only this shape is comparable at all.</summary>
@@ -41,6 +51,12 @@ public sealed class UpdateCheck
     /// <summary>The last known outcome. Written by the background task, read by tool calls: a plain
     /// reference swap, so a call never waits for a lock the network holds.</summary>
     private volatile UpdateRecord? _record;
+
+    /// <summary>1 while a request is in flight: one request at a time, whoever asked for it.</summary>
+    private int _refreshing;
+
+    /// <summary>When the last request started, in UTC ticks; read and written from both threads.</summary>
+    private long _lastAttemptTicks;
 
     private UpdateCheck(bool enabled, string path, HostLog? log)
     {
@@ -65,19 +81,59 @@ public sealed class UpdateCheck
     /// <summary>The file the outcome is cached in, next to the Host log's default directory.</summary>
     public string RecordPath => _path;
 
-    /// <summary>Start the one background request when the cached outcome is missing or older than a day.</summary>
+    /// <summary>Ask once on every start, whatever the cache says.</summary>
     public void StartBackground()
     {
-        if (!_enabled || IsFresh(_record))
+        // INVARIANT: a fresh cache does not cancel the start-up request. MEASURED: an answer taken an
+        // hour before the release was published named the previous release for the rest of the day,
+        // because only a stale cache asked, and a new Host version read the answer of the old one.
+        // History: docs/decisions/host.md#update-notice-start
+        if (_enabled)
+        {
+            StartRefresh();
+        }
+    }
+
+    /// <summary>Ask in the background when the answer is missing, stale or written by another Host version.</summary>
+    private void RefreshIfStale()
+    {
+        // INVARIANT: the call never waits for this — the snapshot is its answer either way.
+        // LIMIT: a Host nobody calls does not re-check; the next call or the next start does.
+        if (!_enabled || IsFresh(_record)
+            || DateTimeOffset.UtcNow.UtcTicks - Volatile.Read(ref _lastAttemptTicks) < Retry.Ticks)
         {
             return;
         }
 
-        _ = Task.Run(RefreshAsync);
+        StartRefresh();
     }
 
+    private void StartRefresh()
+    {
+        if (Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                Volatile.Write(ref _refreshing, 0);
+            }
+        });
+    }
+
+    /// <summary>A cached answer this Host may repeat as its own: written by this version and not a failure.</summary>
+    private static bool IsAnswer(UpdateRecord? record) =>
+        record is { Reason: null } && record.HostVersion == Program.ServerVersion;
+
     private static bool IsFresh(UpdateRecord? record) =>
-        record is not null && DateTimeOffset.UtcNow - record.CheckedUtc <= Fresh;
+        IsAnswer(record) && DateTimeOffset.UtcNow - record!.CheckedUtc <= Fresh;
 
     /// <summary>The state the client sees, from the snapshot only.</summary>
     public string State()
@@ -87,17 +143,27 @@ public sealed class UpdateCheck
             return Disabled;
         }
 
-        if (!IsFresh(_record))
+        RefreshIfStale();
+
+        if (_record is not { } record)
         {
             return Pending;
         }
 
-        return _record!.Reason is not null ? Unknown : Compared();
+        if (record.Reason is not null)
+        {
+            return Unknown;
+        }
+
+        // INVARIANT: a record of another Host version cannot say `up_to_date` — its answer predates the
+        // version now installed. A newer tag it names is still newer, so `available` survives.
+        var compared = Compared(record);
+        return record.HostVersion == Program.ServerVersion || compared == Available ? compared : Pending;
     }
 
-    private string Compared()
+    private static string Compared(UpdateRecord record)
     {
-        if (!TryVersion(Program.ServerVersion, out var current) || !TryTag(_record!.Tag, out var latest))
+        if (!TryVersion(Program.ServerVersion, out var current) || !TryTag(record.Tag, out var latest))
         {
             return Unknown;
         }
@@ -171,6 +237,8 @@ public sealed class UpdateCheck
             return;
         }
 
+        Volatile.Write(ref _lastAttemptTicks, DateTimeOffset.UtcNow.UtcTicks);
+        var previous = _record;
         UpdateRecord record;
         try
         {
@@ -183,6 +251,14 @@ public sealed class UpdateCheck
         {
             // A failed check is a named state, not a warning in other tools' answers.
             record = UpdateRecord.Failed(ex is TaskCanceledException ? "timeout" : ex.GetType().Name + ": " + ex.Message);
+        }
+
+        if (record.Reason is not null && IsAnswer(previous))
+        {
+            // INVARIANT: a failed check never replaces a good answer. MEASURED: asking on every start
+            // would otherwise turn a known `available` into `unknown` on a network hiccup at launch.
+            _log?.Write("warn", "update check failed", new { reason = record.Reason, kept = previous?.Tag });
+            return;
         }
 
         _record = record;
@@ -230,7 +306,7 @@ public sealed class UpdateCheck
             return UpdateRecord.Failed($"tag_is_not_vMAJOR.MINOR.PATCH: {tag ?? "нет поля tag_name"}");
         }
 
-        return new UpdateRecord(tag, release["html_url"]?.GetValue<string>(), release["name"]?.GetValue<string>(), null, DateTimeOffset.UtcNow);
+        return new UpdateRecord(tag, release["html_url"]?.GetValue<string>(), release["name"]?.GetValue<string>(), null, DateTimeOffset.UtcNow, Program.ServerVersion);
     }
 
     // ---- The cached outcome ----
@@ -250,7 +326,8 @@ public sealed class UpdateCheck
                 node["release_url"]?.GetValue<string>(),
                 node["release_title"]?.GetValue<string>(),
                 node["reason"]?.GetValue<string>(),
-                checkedUtc);
+                checkedUtc,
+                node["host_version"]?.GetValue<string>());
         }
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or FormatException)
         {
@@ -272,6 +349,7 @@ public sealed class UpdateCheck
             var node = new JsonObject
             {
                 ["checked_utc"] = record.CheckedUtc.ToString("O"),
+                ["host_version"] = record.HostVersion,
                 ["tag"] = record.Tag,
                 ["release_url"] = record.Url,
                 ["release_title"] = record.Title,
@@ -327,8 +405,8 @@ public sealed class UpdateCheck
         return true;
     }
 
-    private sealed record UpdateRecord(string? Tag, string? Url, string? Title, string? Reason, DateTimeOffset CheckedUtc)
+    private sealed record UpdateRecord(string? Tag, string? Url, string? Title, string? Reason, DateTimeOffset CheckedUtc, string? HostVersion)
     {
-        public static UpdateRecord Failed(string reason) => new(null, null, null, reason, DateTimeOffset.UtcNow);
+        public static UpdateRecord Failed(string reason) => new(null, null, null, reason, DateTimeOffset.UtcNow, Program.ServerVersion);
     }
 }

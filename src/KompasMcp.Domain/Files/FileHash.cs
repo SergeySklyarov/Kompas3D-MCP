@@ -32,6 +32,25 @@ public static class FileHash
 /// atomic on NTFS. A failure path deletes the temporary file but never touches the destination.</remarks>
 public static class AtomicPublish
 {
+    /// <summary>Spec 1.12: an export replaces a file only when the client asked for it.</summary>
+    /// <remarks>INVARIANT: this is called BEFORE the rows are built and before any temporary file exists, so
+    /// a refusal leaves the destination and the model untouched. <see cref="WriteFrom"/> also refuses, but
+    /// only after a temporary file is on disk — too late for a rule that must not touch anything.
+    /// History: docs/decisions/bom.md#bom-tool</remarks>
+    public static void RequireWritableTarget(string destinationPath, bool allowOverwrite)
+    {
+        if (!File.Exists(destinationPath) || allowOverwrite)
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.PathNotAllowed,
+            $"Файл '{destinationPath}' уже существует: перезапись без флага overwrite запрещена.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["field"] = "output_path" });
+    }
+
     public static void WriteFrom(string sourcePath, string destinationPath, bool allowOverwrite)
     {
         if (!File.Exists(sourcePath))

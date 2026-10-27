@@ -46,6 +46,10 @@ public sealed record ExportBomCommand
 
     /// <summary>Absolute path of the output file; the extension selects the format.</summary>
     public required string OutputPath { get; init; }
+
+    /// <summary>Overwrite an existing file. Default false: rewriting without an explicit flag is a silent
+    /// data loss (spec 1.12, the same rule the other exports follow).</summary>
+    public bool Overwrite { get; init; }
 }
 
 /// <summary>Read one component's properties — block <c>BOM_PROPERTIES</c>, mode <c>BOM-03</c>.</summary>

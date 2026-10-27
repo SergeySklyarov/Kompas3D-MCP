@@ -411,7 +411,9 @@ public static class ToolCatalog
                 + "или .json (иное расширение отвергается). CSV — UTF-8 с BOM-меткой и разделителем «;», "
                 + "шапка file;name;marking;material;instances. Строки строит ОДИН код с kompas_get_bom, "
                 + "поэтому ответ и файл разойтись не могут. Путь проверяется политикой путей записи "
-                + "(поле output_path), существующий файл перезаписывается. Ответ — то, что лежит на "
+                + "(поле output_path). Перезапись существующего файла — только с overwrite=true: без "
+                + "флага выгрузка отказывает PATH_NOT_ALLOWED до построения строк, файл и модель не "
+                + "тронуты. Ответ — то, что лежит на "
                 + "диске: размер и SHA256, а не намерение записать.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
@@ -425,7 +427,10 @@ public static class ToolCatalog
                     ("recurse", Sch.Nullable(Sch.Bool(
                         "Обходить вложенные подсборки, открывая их файлы.", false))),
                     ("group_by", Sch.Nullable(Sch.Enum(
-                        "Ключ группировки строк.", "file", "file+designation")))),
+                        "Ключ группировки строк.", "file", "file+designation"))),
+                    ("overwrite", Sch.Nullable(Sch.Bool(
+                        "Перезаписать существующий файл. По умолчанию false: перезапись без явного "
+                        + "согласия — молчаливая потеря данных.", false)))),
                 WorkerCommands.ExportBom,
                 requiresDocument: true,
                 requiresOperationId: true),

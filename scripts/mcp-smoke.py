@@ -50687,13 +50687,18 @@ def bom_checks(client, rep, app_id, workdir):
             f"экземпляров={len(after)} отказов={after_failures} совпало={same}")
 
     # ===== BOM-02: выгрузка CSV и JSON =====
-    def export(path):
-        return call("kompas_export_bom", {"document_id": reopened, "output_path": path,
-                                          "include_hidden": True, "include_excluded": True})
+    # overwrite=true назван явно: рабочий каталог прогона постоянный, и файл прошлого прогона лежит
+    # на месте. Отказ без флага - предмет отдельной строки BOM-02.export_overwrite, а не этой.
+    def export(path, **flags):
+        payload = {"document_id": reopened, "output_path": path,
+                   "include_hidden": True, "include_excluded": True}
+        payload.update(flags)
+        return call("kompas_export_bom", payload)
 
     csv_path = os.path.join(workdir, "bom.csv")
-    env, csv_code = export(csv_path)
+    env, csv_code = export(csv_path, overwrite=True)
     csv_rows = []
+    header = ""
     if not csv_code and os.path.isfile(csv_path):
         with open(csv_path, encoding="utf-8-sig") as handle:
             lines = handle.read().splitlines()
@@ -50710,7 +50715,7 @@ def bom_checks(client, rep, app_id, workdir):
             f"sha={result(env).get('sha256')}")
 
     json_path = os.path.join(workdir, "bom.json")
-    env, json_code = export(json_path)
+    env, json_code = export(json_path, overwrite=True)
     json_rows = []
     if not json_code and os.path.isfile(json_path):
         with open(json_path, encoding="utf-8") as handle:
@@ -50722,6 +50727,28 @@ def bom_checks(client, rep, app_id, workdir):
             "PASS" if (not json_code and len(json_rows) == expected_rows and same_instances) else "FAIL",
             f"код={json_code} строк={len(json_rows)} экземпляров_в_файле="
             f"{sum(int(r.get('instances') or 0) for r in json_rows)} в_ответе={again.get('instances')}")
+
+    # Перезапись: без флага - отказ, файл не тронут; с флагом - запись поверх (spec 1.12).
+    def digest(path):
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+
+    csv_before = digest(csv_path)
+    _env_nf, no_flag_code = export(csv_path)
+    csv_after_refusal = digest(csv_path)
+    env_ow, overwrite_code = export(csv_path, overwrite=True)
+    csv_after_overwrite = digest(csv_path)
+    rep.add("BOM-02.export_overwrite",
+            "повтор в тот же путь без overwrite отвергнут PATH_NOT_ALLOWED и файл не тронут (хеш до и "
+            "после равен), а с overwrite=true выгрузка прошла: правило перезаписи то же, что у "
+            "kompas_export_sheet_metal_flat_dxf",
+            "PASS" if (no_flag_code == "PATH_NOT_ALLOWED" and csv_before == csv_after_refusal
+                       and not overwrite_code and result(env_ow).get("rows") == expected_rows) else "FAIL",
+            f"без_флага={no_flag_code} хеш_до={csv_before} хеш_после_отказа={csv_after_refusal} "
+            f"с_флагом={overwrite_code} хеш_после_записи={csv_after_overwrite} "
+            f"строк_ответа={result(env_ow).get('rows')}")
 
     # ===== BOM-04: родная спецификация (уровень «б») =====
     spec_entry = entry_of(client, "kompas_get_specification")

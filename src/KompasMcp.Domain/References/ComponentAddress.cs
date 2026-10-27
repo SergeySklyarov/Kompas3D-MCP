@@ -17,9 +17,9 @@ public sealed record ComponentAddressVerdict(int? Index, string Detail);
 /// by matching the API7 record with a collection element, never counted — MEASURED: an excluded instance is
 /// in the collection but not in <c>IPart7.PartsEx</c>, so a counter shifts every later address onto a
 /// FOREIGN component. DOC: <c>kspart_filename.html</c>, <c>ipart7_filename.html</c>,
-/// <c>kspart_getplacement.html</c> → <c>ksPlacement.GetMatrix3D</c>, <c>ipart7_getsummmatrix.html</c>,
-/// <c>kspartcollection_getbyindex.html</c>. LIMIT: two instances of one file at one placement are
-/// indistinguishable; they get NO address, not a guessed one. History: docs/decisions/assembly.md#identity</remarks>
+/// <c>kspart_getplacement.html</c>, <c>ipart7_getsummmatrix.html</c>, <c>kspartcollection_getbyindex.html</c>.
+/// LIMIT: two instances of one file at one placement are indistinguishable by any documented property;
+/// their relative order decides, so both get an address. History: docs/decisions/assembly.md#identity</remarks>
 public static class ComponentAddress
 {
     /// <summary>The rule, in the words a refusal quotes.</summary>

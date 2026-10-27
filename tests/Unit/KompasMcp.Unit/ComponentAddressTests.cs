@@ -99,6 +99,33 @@ public class ComponentAddressTests
     }
 
     [Fact]
+    public void TwoInstancesOfOneFileAtOnePlacement_GetDistinctAddressesInTheRecordOrder()
+    {
+        // INVARIANT: such a pair is NOT refused. Both instances are interchangeable, so refusing would take
+        // away the client's ability to delete one of them; the k-th record of the file resolves to the k-th
+        // instance of that file, which is the order the enumeration itself emits.
+        List<ComponentInstance> collection =
+        [
+            Instance(Path.Combine(DirA, "part.m3d"), 0),
+            Instance(Path.Combine(DirA, "part.m3d"), 0),
+            Instance(Path.Combine(DirB, "part.m3d"), 200),
+        ];
+
+        var addresses = Enumerable.Range(0, 2)
+            .Select(rank => ComponentAddress.Locate(Instance(Path.Combine(DirA, "part.m3d"), 0), collection, rank))
+            .ToList();
+
+        Assert.All(addresses, verdict => Assert.NotNull(verdict.Index));
+        Assert.Equal(new[] { 0, 1 }, addresses.Select(verdict => verdict.Index!.Value));
+        // Both elements are the same file at the same placement — that is exactly why no documented property
+        // tells them apart, and why the address still resolves each record to its own element.
+        var resolved = addresses.Select(verdict => collection[verdict.Index!.Value]).ToList();
+        Assert.All(resolved, element => Assert.True(ComponentAddress.SameSource(
+            Path.Combine(DirA, "part.m3d"), element.SourcePath)));
+        Assert.True(ComponentAddress.SameMatrix(resolved[0].Matrix, resolved[1].Matrix));
+    }
+
+    [Fact]
     public void InsertedInstance_IsTheLastRecordOfItsFile()
     {
         // INVARIANT: the insert appends, so the new instance is the LAST record of its file. The rank must

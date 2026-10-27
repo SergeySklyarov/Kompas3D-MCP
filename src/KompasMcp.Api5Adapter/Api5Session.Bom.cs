@@ -43,7 +43,8 @@ public partial class Api5Session
 
     /// <summary>Write the same rows to CSV or JSON; the extension selects the format.</summary>
     /// <remarks>INVARIANT: the file carries the rows of the SAME builder as <see cref="GetBom"/>, and the
-    /// answer reports the bytes on disk (size, SHA256), not the intent to write them.
+    /// answer reports the bytes on disk (size, SHA256), not the intent to write them. An existing file is
+    /// refused before the rows are built, so a refusal leaves both the file and the model untouched.
     /// History: docs/decisions/bom.md#bom-tool</remarks>
     public ExportBomResult ExportBom(ExportBomCommand command)
     {
@@ -56,6 +57,8 @@ public partial class Api5Session
                 + "Допустимы .csv и .json.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["output_path"] = command.OutputPath });
+
+        AtomicPublish.RequireWritableTarget(command.OutputPath, command.Overwrite);
 
         var options = new BomOptions(command.IncludeHidden, command.IncludeExcluded, command.IncludeStandard,
             command.GroupBy);
@@ -72,7 +75,7 @@ public partial class Api5Session
             File.WriteAllText(temporary, ToJson(summary.Rows), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
-        AtomicPublish.WriteFrom(temporary, command.OutputPath, allowOverwrite: true);
+        AtomicPublish.WriteFrom(temporary, command.OutputPath, allowOverwrite: command.Overwrite);
 
         var info = new FileInfo(command.OutputPath);
         if (!info.Exists || info.Length == 0)

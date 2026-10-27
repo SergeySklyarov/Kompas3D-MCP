@@ -50,6 +50,8 @@ PUBLIC_TEXT = [
     "scripts/Install-KompasMcp.ps1",
     "docs/distribution",
     "docs/operator-guide",
+    "docs/how-it-works.md",
+    "docs/project-status.md",
 ]
 
 TEXT_SUFFIXES = (".md", ".txt", ".json", ".ps1", "")

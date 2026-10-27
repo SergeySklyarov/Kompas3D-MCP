@@ -27,13 +27,16 @@
   чаще раза в 5 минут. Контракт поля `update` не менялся: те же пять состояний и поля, `host_version`
   живёт только в файле кеша (`contract-diff` - 0 структурных ломок, описание `kompas_health`
   440 -> 518 символов, `tools/list` 23 097 при потолке 23 821). Приёмка: Release-сборка 0 предупреждений,
-  тесты **1610/1610** (26 проверок `UpdateCheckTests`, из них новые `Start_AsksEvenWithAFreshCache`,
+  тесты **1610/1610** (28 случаев `UpdateCheckTests` в 18 методах, из них новые `Start_AsksEvenWithAFreshCache`,
   `Call_DoesNotWaitForTheRequest`, `Ageing_FollowsTheSixHourTerm`,
   `CacheOfAnotherHostVersion_IsNotUpToDate`, `StaleOutcome_IsStillWhatTheCallSeesWithItsOwnTime`),
   ручная проба `scratch/probe-update-freshness.py` на живом Host: кеш `up_to_date` с тегом `v0.11.0`
   -> первый же ответ `available` с новым `checked_utc`; кеш от другой версии Host `up_to_date` не
   даёт, тот же кеш от этой версии даёт; семичасовой итог при недоступном фиде остаётся `available`
-  со своим временем, а не `unknown`. Решение - `docs/decisions/host.md#update-notice-start`
+  со своим временем, а не `unknown`. Зачётный `python scripts/mcp-smoke.py --all` на Release чистого
+  дерева (`18e6c26`, каталог `scratch/mcp-smoke/runs/20261027-175752-all-18e6c26`): PASS 1916,
+  NAMED 6, UNKNOWN 3, FAIL 0 - состав строк совпадает с прошлым зачётом (`compare-run-rows.py`,
+  `identical: true`). Решение - `docs/decisions/host.md#update-notice-start`
   (заменяет пункты «не чаще раза в сутки» и «просроченный не используется вовсе»). Отчёт -
   `UPDATE_CHECK_FRESHNESS_REPORT_20261027.md`. Новых строк долга нет.
 - **Наряд `CLIENT_BUGS_20261027` (27.10.2026, `0.12.0`) - ВЫПОЛНЕН, кроме зачётного прогона с новыми

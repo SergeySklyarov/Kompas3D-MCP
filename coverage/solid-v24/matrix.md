@@ -304,7 +304,7 @@
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
-| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
+| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.export_overwrite, BOM-02.path_denied |
 | `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
 
@@ -966,7 +966,7 @@
 | `SMB-08.unfold.read` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SMB.32.unfold_initial_read, SMB.37.reopen_unfold |
 | `SMB-09.flat_dxf.export` | SMB | practical_required | SM | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | SMB.40.flat_dxf_export, SMB.41.flat_dxf_overwrite, SMB.42.flat_dxf_refusals, SMB.43.temp_drawing_closed |
 | `BOM-01.bom.summary` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-01.discovery, BOM-01.schema, BOM-01.probe, BOM-01.open, BOM-01.top_level, BOM-01.grouping, BOM-01.filters, BOM-01.include_filters, BOM-01.recurse, BOM-01.sum_against_components, BOM-01.walk_closed, BOM-01.save_reopen, BOM-01.negative_part |
-| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.path_denied |
+| `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.export_overwrite, BOM-02.path_denied |
 | `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
@@ -1705,7 +1705,7 @@
 - `BOM-02.bom.export` — закрыт целиком
   - Поле пути - output_path, а не file_path наряда: политика путей Host судит поля по имени, и новое имя обошло бы её.
   - Формат выбирается расширением; иное расширение отвергается INVALID_ARGUMENT до записи.
-  - Существующий файл перезаписывается - как у прочих выгрузок; отдельного флага перезаписи у инструмента нет.
+  - Существующий файл без overwrite=true отвергается PATH_NOT_ALLOWED до построения строк - файл и модель не тронуты (spec 1.12, то же правило, что у kompas_export_sheet_metal_flat_dxf).
 - `BOM-03.component.properties` — закрыт целиком
   - У вложенного компонента адреса API5 нет (PartCollection перечисляет компоненты плоско), поэтому его свойства отвергаются CAPABILITY_UNAVAILABLE, а не читаются по догадке.
   - Исключённый из расчёта экземпляр не появляется в API7-перечислении kompas_list_components, значит ссылки на него нет: поле excluded у доступных ссылок всегда false (измерено).

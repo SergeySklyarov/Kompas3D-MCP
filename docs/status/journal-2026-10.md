@@ -6597,3 +6597,7 @@ docs/STATUS.md.
   тесты 1606/1606, `--self-test` 87/0 FAIL.
   `docs/decisions/adapter-features.md#feature-reference-points-at-the-tree`,
   `docs/decisions/adapter-core.md#declared-expectation-rule`.
+  Прогон `--all` с группой вскрыл неверную геометрию самой постановки `CB27.3`: призма лежала внутри
+  плиты и материала не добавляла, поэтому `body_count_kept` честно сообщал «объём не вырос». Сечения
+  перенесены на верхнюю грань, эталон объёма 92000 объявлен до прогона (`4a22da6`); группа отдельным
+  прогоном - PASS 32 / FAIL 0, зачётный `--all` на `4a22da6` идёт.

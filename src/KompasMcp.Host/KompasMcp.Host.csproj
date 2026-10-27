@@ -23,6 +23,12 @@
     <ProjectReference Include="..\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
   </ItemGroup>
 
+  <!-- The command-line parse is tested directly instead of through a started process: a Host that
+       starts on a wrong call is the defect the test has to keep out. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="KompasMcp.Unit" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- The Worker is a sibling process, not a library: it is not referenced as an assembly, but
          a local build must place its output next to the Host so kompas_health can start it. The

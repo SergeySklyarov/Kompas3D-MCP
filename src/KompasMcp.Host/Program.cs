@@ -32,9 +32,20 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
-        var configPath = Argument(args, "--config");
+        string? configPath;
+        string? schemaOnlyDirectory;
+        try
+        {
+            configPath = Argument(args, "--config");
+            schemaOnlyDirectory = Argument(args, "--emit-schemas");
+        }
+        catch (ArgumentException ex)
+        {
+            StderrWriter.WriteLine(ex.Message);
+            return 64;
+        }
+
         var showSchemas = args.Contains("--print-schemas");
-        var schemaOnlyDirectory = Argument(args, "--emit-schemas");
         var toolListing = args.Contains("--print-tool-listing");
 
         // The tool listing is pure catalog output: it needs neither config nor a Worker, so it is
@@ -378,14 +389,28 @@ public static class Program
         }
     }
 
-    private static string? Argument(string[] args, string name)
+    /// <summary>Value of <paramref name="name"/>, or <c>null</c> when the flag is not present.</summary>
+    /// <remarks>INVARIANT: a flag that needs a value never degrades to "not present". MEASURED: a bare
+    /// <c>--emit-schemas</c> started the server, wrote no schema and answered 0, so a wrong call looked
+    /// successful. History: docs/decisions/host.md#cli-args</remarks>
+    /// <exception cref="ArgumentException">The flag is present without a value: it is the last argument,
+    /// or the next argument is itself a flag.</exception>
+    internal static string? Argument(string[] args, string name)
     {
-        for (var i = 0; i < args.Length - 1; i++)
+        for (var i = 0; i < args.Length; i++)
         {
-            if (string.Equals(args[i], name, StringComparison.Ordinal))
+            if (!string.Equals(args[i], name, StringComparison.Ordinal))
             {
-                return args[i + 1];
+                continue;
             }
+
+            if (i + 1 == args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Аргумент {name} требует значения: он последний или следующий аргумент начинается с «--».");
+            }
+
+            return args[i + 1];
         }
 
         return null;

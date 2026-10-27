@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import io
 import json
 import os
 import re
@@ -43,6 +44,26 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+
+def utf8_stream(stream):
+    """Make a stream speak UTF-8 before the first print.
+
+    MEASURED: on a cp1252 console the Cyrillic lines of this instrument raised `UnicodeEncodeError`,
+    so a sound publish set read as a crashed instrument. `errors="replace"` keeps a stream that
+    cannot be reconfigured from taking the report down with it.
+    History: docs/decisions/tests.md#session-end-instrument
+    """
+    try:
+        stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+    return stream
+
+
+for _stream in (sys.stdout, sys.stderr):
+    utf8_stream(_stream)
+
 
 # ── Пороги вывода ────────────────────────────────────────────────────────────
 MAX_SHOWN = 12
@@ -434,6 +455,18 @@ def self_test() -> int:
     """
     failures: list[str] = []
 
+    # Arm one prints Cyrillic into a stream whose encoding is cp1252 - the console that raised.
+    raw = io.BytesIO()
+    narrow = io.TextIOWrapper(raw, encoding="cp1252", newline="\n")
+    try:
+        utf8_stream(narrow).write("набор годен отказов нет\n")
+        narrow.flush()
+        printed = raw.getvalue()
+    except Exception as exc:  # noqa: BLE001 — the refusal to print IS the subject here
+        printed, failures = b"", failures + [f"{type(exc).__name__}: {exc}"]
+    if printed != "набор годен отказов нет\n".encode("utf-8"):
+        failures.append(f"кириллица в поток cp1252: {printed[:40]!r}")
+
     def schema(description: str) -> dict:
         return {"type": "object",
                 "properties": {"x": {"type": "number", "description": description}}}
@@ -469,9 +502,9 @@ def self_test() -> int:
         for line in failures:
             print("  -", line)
         return 1
-    print("самопроверка пройдена: схемы — совпадение чисто, изменённое описание, лишний и "
-          "недостающий файл названы; 5f — встроенное имя пропущено, личное и кириллическая "
-          "форма найдены")
+    print("самопроверка пройдена: кириллица в поток cp1252 печатается; схемы — совпадение чисто, "
+          "изменённое описание, лишний и недостающий файл названы; 5f — встроенное имя пропущено, "
+          "личное и кириллическая форма найдены")
     return 0
 
 

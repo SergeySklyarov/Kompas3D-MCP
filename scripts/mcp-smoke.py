@@ -1875,9 +1875,12 @@ def instrument_self_test():
                   again["foreign_found"] == 0 and other.poll() is None,
                   f"найдено={again['foreign_found']} poll={other.poll()}")
         finally:
+            # MEASURED: without the wait the temporary directory was deleted while the killed decoy
+            # still held its own image, and the whole self-test died with PermissionError on cleanup.
             for proc in (stub, other):
                 if proc.poll() is None:
                     proc.kill()
+                proc.wait(timeout=30)
 
     # The run environment is a FIELD of run.json, not prose (debt 9). Both halves are checked on a
     # substituted context: a closed foreign process must appear with its path and counts, and an
@@ -1911,6 +1914,26 @@ def instrument_self_test():
           blind_environment["process_snapshot"] == "unavailable"
           and blind_environment["foreign"] == [] and blind_environment["foreign_before_run"] == 0,
           json.dumps(blind_environment, ensure_ascii=False))
+
+    # Аргументы (долг 74). Перечень флагов сверяется с САМИМ ИСХОДНИКОМ прибора, поэтому проверка не
+    # тавтологична: флаг, разобранный в коде и забытый в `FLAGS`, даёт FAIL, и наоборот.
+    with open(__file__, encoding="utf-8") as source_file:
+        parsed = declared_flag_uses(source_file.read())
+    check("справка перечисляет все флаги перечня",
+          all(name in help_text() for name in FLAG_NAMES), f"флагов={len(FLAG_NAMES)}")
+    check("каждый флаг, который прибор разбирает, объявлен в перечне",
+          parsed <= FLAG_NAMES, f"не объявлены: {sorted(parsed - FLAG_NAMES)}")
+    check("в перечне нет флага, который прибор не разбирает",
+          FLAG_NAMES <= parsed, f"лишние: {sorted(FLAG_NAMES - parsed)}")
+    check("незнакомый аргумент отвергается", argument_error(["--no-such-flag"]) == "--no-such-flag")
+    check("незнакомый аргумент назван и в конце строки",
+          argument_error(["--all", "--no-such-flag"]) == "--no-such-flag")
+    check("известные аргументы принимаются",
+          argument_error(["--all", "--keep", "--self-test"]) is None)
+    check("значение флага не считается флагом",
+          argument_error(["--host", "C:/build/KompasMcp.Host.exe"]) is None)
+    check("опечатка после значения поймана",
+          argument_error(["--host", "x.exe", "--no-such"]) == "--no-such")
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -1954,6 +1977,133 @@ def list_documents_check(client, rep, app_id, row_id="S02c", expect_nonempty=Fal
             f"требуется_непустой={expect_nonempty} записей_без_полей={bare} "
             f"err={error_code(env)} isError={is_err} "
             + clip(json.dumps(docs, ensure_ascii=False), 240))
+
+
+# ── Флаги прибора: ОДИН перечень ─────────────────────────────────────────────────────────────────
+# INVARIANT: справка, отказ на незнакомом аргументе и самопроверка берут перечень отсюда. Второй
+# список разошёлся бы с первым, и флаг, который прибор разбирает, читатель узнал бы только из отказа.
+# Поле `takes_value` не украшение: без него `--host <путь>` считался бы парой флагов, а значение,
+# похожее на флаг, отвергалось бы как незнакомое.
+# MEASURED: до этого перечня опечатка в имени флага поднимала КОМПАС и завершала посторонние
+# `KompasMcp.*`: разбор аргументов был разбросан по `main()` и не отвергал ничего.
+FLAGS = (
+    ("-h", False, "эта справка"),
+    ("--help", False, "эта справка"),
+    ("--self-test", False, "самопроверка прибора: без Хоста, конфигурации и КОМПАСа"),
+    ("--all", False, "полный прогон: вертикальный сценарий плюс все группы вне него"),
+    ("--keep", False, "не убирать каталог прогона после прогона"),
+    ("--host", True, "исполняемый файл Хоста (по умолчанию сборка x64 Debug)"),
+    ("--worker", True, "исполняемый файл Воркера рядом с Хостом поставки"),
+    ("--config", True, "конфигурация Хоста (по умолчанию локальная)"),
+    ("--report", True, "путь отчёта приёмки; занятый файл не перезаписывается"),
+    ("--report-overwrite", False, "разрешить перезапись занятого пути из --report"),
+    ("--vm-reference-doc", True, "файл-эталон группы VM для сверки переменных"),
+    # Группы вертикального сценария: каждая - свой сеанс и свой отчёт.
+    ("--contract-only", False, "группа контракта: схемы, отказы до COM, политика путей"),
+    ("--chamfer-only", False, "группа SM-11: фаска"),
+    ("--fillet-only", False, "группа SM-09: скругление"),
+    ("--extrusion-only", False, "группа SM-02: выдавливания"),
+    ("--hole-only", False, "группа SM-07: родное отверстие"),
+    ("--rotation-only", False, "группа SM-03: вращение"),
+    ("--sketch-status-only", False, "группа определённости эскиза"),
+    ("--b3-only", False, "группа B3: булевы операции, разделение, отсечение, перенос"),
+    ("--b3l-only", False, "группа B3L: жизненный цикл признаков B3"),
+    ("--b3m-only", False, "группа B3M: десять действий по каждому режиму B3"),
+    ("--b3c-only", False, "группа B3C: последовательные преобразования одного имени"),
+    ("--dirty-only", False, "группа DL: сохранённость документа и политика закрытия"),
+    ("--b4-only", False, "группа B4: массивы по сетке, круговой и зеркальный"),
+    ("--b5-only", False, "группа B5: кинематика, сечения, оболочка"),
+    ("--f08-only", False, "группа F08: десять действий по режимам B1/B2 и эскизу"),
+    ("--mania-only", False, "группа MANIA: сценарий «Скоба Model Mania 2021»"),
+    ("--dep-only", False, "группа DEP: объём общих зависимостей профиля"),
+    ("--image-only", False, "группа IMG: растровый снимок модели"),
+    ("--nested-only", False, "группа NEST: вложенные и несколько замкнутых контуров"),
+    ("--sketch-bulk-only", False, "группа SB: массовая геометрия эскиза"),
+    ("--sketch-constraints-only", False, "группа SKC: ограничения и управляющие размеры"),
+    ("--material-toward-only", False, "группа MT: сторона материала выдавливания"),
+    ("--delete-sketch-only", False, "группа DSC: удаление эскиза и судьба зависимых"),
+    ("--sketch-vertex-only", False, "группа SV: координаты вершин и свободные концы"),
+    ("--pattern-orientation", False, "группа PO: ориентация экземпляров кругового массива"),
+    ("--release-040", False, "группа R40: ссылки на эскиз и вспомогательную геометрию"),
+    ("--e08-only", False, "группа E08: находки клиента после 0.4.0"),
+    ("--client-bugs-20261009", False, "группа CB9: находки клиента в CP05/CP05b"),
+    ("--entity-create-20261009", False, "группа EC9: нерегулярный Entity.Create()=false"),
+    ("--sketch-profile", False, "группа SPD: причина непригодности профиля"),
+    # Группы вне вертикали: их проверки вызываются только в своей ветке.
+    ("--assembly-only", False, "группа ASM: минимальные сборки"),
+    ("--mate-only", False, "группа MATE: сопряжения сборки"),
+    ("--mech-mates-only", False, "группа MM: механическая передача"),
+    ("--sheet-metal-only", False, "группа SMB: листовое тело"),
+    ("--drafts-only", False, "группа DR: уклоны граней"),
+    ("--threads-only", False, "группа TH: условное изображение резьбы"),
+    ("--interference-only", False, "группа INT: пересечения и зазоры в сборке"),
+    ("--drawing-only", False, "группа DRW: чертежи, виды, размеры, экспорт"),
+    ("--section-only", False, "группа DRW-07: разрезы и сечения на чертеже"),
+    ("--variables-material-only", False, "группа VM: внешние переменные и материал"),
+    ("--variables-bind-only", False, "группа VB: переменные детали и привязка параметров"),
+    ("--export-inertia-only", False, "группа EI: экспорт STL и моменты инерции"),
+    ("--client-bugs-20261010", False, "группа CB10: дефекты клиента на 0.6.0"),
+    ("--client-bugs-20261027", False, "группа CB27: дефекты клиента на 0.11.0"),
+    ("--disconnect-only", False, "группа DC: чтение при потерянной связи с КОМПАС"),
+    ("--shutdown-only", False, "группа SD: завершение сеанса без висящего КОМПАСа"),
+    ("--catalog-only", False, "группа CT: механизм каталога инструментов"),
+    ("--copy-geometry-only", False, "группа CG: копия геометрии из другой детали"),
+    ("--bom-only", False, "группа BOM: сводка BOM по сборке и её выгрузка"),
+    ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
+    ("--sections-only", False, "группа SEC: динамическое сечение модели"),
+    ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
+    # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
+    ("--nested-repeat", True, "K повторов постановки NEST в одном сеансе"),
+    ("--suppress-repeat", True, "K повторов «подавить → снять»; сам по себе даёт группу SR"),
+    ("--second-instance-repeat", True, "K циклов опыта «второй экземпляр КОМПАС»"),
+    ("--second-instance-control", True, "K циклов контрольного плеча без второго экземпляра"),
+    ("--second-instance-pause", True, "пауза плеча B в секундах, когда плечо A не запускалось"),
+    ("--second-instance-visible", True, "видимость второго экземпляра: true или false"),
+    ("--second-instance-document", True, "заводить ли документ во втором экземпляре"),
+    ("--second-instance-close-owned", True, "закрывать ли владельца после отключения"),
+    ("--second-instance-delay", True, "пауза после отключения, секунды"),
+)
+
+FLAG_NAMES = {name for name, _value, _purpose in FLAGS}
+
+
+def help_text():
+    """Справка прибора: каждый флаг из `FLAGS` с одной строкой назначения."""
+    lines = ["Прибор приёмки KompasMCP: строки матрицы через настоящий MCP-сеанс.", "",
+             "Запуск: python scripts/mcp-smoke.py [флаги]", ""]
+    for name, takes_value, purpose in FLAGS:
+        head = f"  {name}" + (" <значение>" if takes_value else "")
+        lines.append(f"{head:<46}{purpose}")
+    return "\n".join(lines)
+
+
+def argument_error(argv):
+    """Первый незнакомый аргумент или `None`. Значение флага флагом не считается."""
+    takes_value = {name for name, needs_value, _purpose in FLAGS if needs_value}
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token in takes_value:
+            index += 2
+        elif token.startswith("-") and token not in FLAG_NAMES:
+            return token
+        else:
+            index += 1
+    return None
+
+
+def declared_flag_uses(source):
+    """Флаги, которые прибор РАЗБИРАЕТ по тексту исходника — для сверки с `FLAGS`."""
+    patterns = (r'"(-{1,2}[A-Za-z0-9_-]+)"\s+in\s+sys\.argv',
+                r'argument\(\s*"(-{1,2}[A-Za-z0-9_-]+)"',
+                r'positive_int_argument\([^,]+,\s*"(-{1,2}[A-Za-z0-9_-]+)"',
+                r'boolean_argument\([^,]+,\s*"(-{1,2}[A-Za-z0-9_-]+)"',
+                r'number_argument\([^,]+,\s*"(-{1,2}[A-Za-z0-9_-]+)"',
+                r'^[A-Z_]+\s*=\s*"(-{1,2}[A-Za-z0-9_-]+)"')
+    found = set()
+    for pattern in patterns:
+        found.update(re.findall(pattern, source, re.MULTILINE))
+    return found
 
 
 def argument(name, default=None):
@@ -16361,6 +16511,16 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
 
 
 def main():
+    # Аргументы разбираются ПЕРВЫМИ: опечатка в имени флага не должна ни поднимать КОМПАС, ни
+    # завершать посторонние процессы, ни заводить каталог прогона.
+    unknown = argument_error(sys.argv[1:])
+    if unknown is not None:
+        print(f"Незнакомый аргумент: {unknown}. Справка: python scripts/mcp-smoke.py --help",
+              file=sys.stderr)
+        return 2
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+        print(help_text())
+        return 0
     if "--self-test" in sys.argv[1:]:
         # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
         # иначе она требовала бы собранного Хоста и конфигурации, то есть проверяла бы среду, а не

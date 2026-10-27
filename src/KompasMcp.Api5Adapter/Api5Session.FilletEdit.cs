@@ -274,7 +274,7 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -298,11 +298,9 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
-        else if (!geometryConfirmed)
+        else if (!api7RadiusStored)
         {
-            unverified.Insert(0, api7RadiusStored
-                ? "volume_not_as_expected — радиус записан и перечитан, но измерение объёма не совпало с ожиданием"
-                : "radius_not_read_back — радиус не перечитался из IFillet");
+            unverified.Insert(0, "radius_not_read_back — радиус не перечитался из IFillet");
         }
 
         if (!declared.IsDeclared)
@@ -669,8 +667,8 @@ public partial class Api5Session
             new("same_feature", sameFeature,
                 Observed: $"признаков {featuresBefore}→{featuresAfter}, имя «{stateAfter.Name}»",
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
-            DeclaredExpectation.Check("volume_after_update", declared),
         };
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var unverified = new List<string>
         {
@@ -687,11 +685,6 @@ public partial class Api5Session
         else if (declared.IsNotConfirmed)
         {
             unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
-        }
-        else if (!volumeMatched)
-        {
-            unverified.Add(
-                "volume_not_as_expected — набор записан и перечитан, но объём не совпал с ожиданием");
         }
 
         if (!declared.IsDeclared)
@@ -1113,7 +1106,7 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -1129,11 +1122,9 @@ public partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
-        else if (!volumeMatched)
+        else if (!edgesSet)
         {
-            unverified.Add(edgesSet
-                ? "volume_not_as_expected — набор записан и перечитан, но измерение объёма не совпало с ожиданием"
-                : "edges_not_read_back — набор не перечитался в ожидаемом составе");
+            unverified.Add("edges_not_read_back — набор не перечитался в ожидаемом составе");
         }
 
         if (!declared.IsDeclared)

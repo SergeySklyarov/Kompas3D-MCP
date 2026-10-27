@@ -626,8 +626,8 @@ public sealed partial class Api5Session
                 Observed: expressionAfter, Expected: command.Expression),
             new("value_computed", valueAfter is not null, Observed: Num(valueAfter)),
             new("rebuild_succeeded", rebuildSucceeded, Observed: rebuildResult?.ToString()),
-            DeclaredExpectation.Check("volume_after_bind", declared),
         };
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_bind", declared);
 
         return new BindParameterResult(
             command.FeatureRef,

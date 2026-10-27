@@ -269,7 +269,7 @@ public partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declared);
         }
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
@@ -673,7 +673,7 @@ public partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declared);
         }
 
         var unverified = new List<string>();

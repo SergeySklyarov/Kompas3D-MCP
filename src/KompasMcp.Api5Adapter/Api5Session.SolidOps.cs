@@ -150,7 +150,7 @@ public sealed partial class Api5Session
 
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declared);
         }
 
         if (declared.IsUnverifiable)
@@ -512,7 +512,7 @@ public sealed partial class Api5Session
             command.ExpectedVolumeMm3, remaining.VolumeMm3, () => ReReadBodyVolumeAt(document, rows.IndexOf(remaining)));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declared);
 
             if (declared.IsUnverifiable)
             {
@@ -1758,7 +1758,7 @@ public sealed partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declaredVolume.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declaredVolume);
         }
 
         var unverified = new List<string>();
@@ -2638,7 +2638,7 @@ public sealed partial class Api5Session
                 declaredVolume, remaining.VolumeMm3, () => ReReadBodyVolumeAt(document, rows.IndexOf(remaining)));
             if (declaredRemaining.IsDeclared)
             {
-                checks.Add(DeclaredExpectation.Check("volume_expected", declaredRemaining));
+                DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declaredRemaining);
                 if (declaredRemaining.IsUnverifiable)
                 {
                     unverified.Add(DeclaredExpectation.UnverifiableReason("объём остатка", declaredRemaining));
@@ -2907,7 +2907,7 @@ public sealed partial class Api5Session
             // mixed. Here the document-volume expectation is declared (that is how the caller declares it
             // for a boolean operation), so the document volume is what is observed; the result volume is
             // published by a separate check, not substituted into the same row.
-            checks.Add(DeclaredExpectation.Check("volume_expected", declaredDocument));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declaredDocument);
 
             if (resultBody is not null)
             {

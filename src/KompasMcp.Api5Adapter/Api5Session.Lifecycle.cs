@@ -120,7 +120,7 @@ public partial class Api5Session
         // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
-        checks.Add(DeclaredExpectation.Check("volume_after_suppression", declaredVolume));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_suppression", declaredVolume);
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после изменения подавления", declaredVolume));
@@ -521,7 +521,7 @@ public partial class Api5Session
         // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
-        checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_delete", declaredVolume);
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после удаления", declaredVolume));
@@ -723,7 +723,7 @@ public partial class Api5Session
 
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
-        checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_delete", declaredVolume);
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после удаления", declaredVolume));
@@ -1039,6 +1039,49 @@ public partial class Api5Session
         }
 
         return elements;
+    }
+
+    /// <summary>The ONE tree element carrying <paramref name="name"/> (and <paramref name="type"/>, when
+    /// given); <c>null</c> for no match or several.</summary>
+    /// <remarks>INVARIANT: a feature reference points at the TREE element — an object created through API7
+    /// (<c>ILoft</c>, <c>IFeaturePattern</c>) does not resolve back into a feature, and every later call
+    /// answers STALE_REFERENCE. A name carried by several elements is not resolved by guesswork.
+    /// History: docs/decisions/adapter-features.md#feature-reference-points-at-the-tree</remarks>
+    private static ksEntity? FindUniqueTreeEntity(DocumentEntry document, string? name, int? type = null)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (document.PartNow().EntityCollection(
+                    KompasObjectTypes.Of(KompasObjectTypes.OperationElement)) is not ksEntityCollection collection)
+            {
+                return null;
+            }
+
+            ksEntity? found = null;
+            var matches = 0;
+            for (var i = 0; i < collection.GetCount(); i++)
+            {
+                if (collection.GetByIndex(i) is ksEntity entity
+                    && (type is null || entity.type == type)
+                    && string.Equals(entity.name, name, StringComparison.Ordinal))
+                {
+                    found = entity;
+                    matches++;
+                }
+            }
+
+            return matches == 1 ? found : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            // A tree that cannot be walked is reported by the caller as "not found".
+            return null;
+        }
     }
 
     /// <summary>A feature's position in the tree — BY COM OBJECT IDENTITY (<c>ksEntityCollection.FindIt</c>),

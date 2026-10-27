@@ -386,7 +386,14 @@ public partial class Api5Session
         var holesAfter = ReadHoleAxes(part, holeRadius, holeHeight);
         var bounds = SafeBounds(part);
 
-        var reference = References.Register("feature", document.Id, document.Revision, pattern);
+        // INVARIANT: the reference points at the TREE element when the tree carries exactly one with the
+        // feature's name — an API7 IFeaturePattern does not resolve back into a feature. LIMIT: the tree
+        // number of a pattern is NOT measured, so an unfound element keeps the previous payload instead of
+        // refusing a body that was built; such a reference is unusable by the feature tools.
+        // History: docs/decisions/adapter-features.md#feature-reference-points-at-the-tree
+        var patternEntity = FindUniqueTreeEntity(document, SafeModelName(pattern));
+        var reference = References.Register("feature", document.Id, document.Revision,
+            patternEntity ?? (object?)pattern);
 
         // The feature's OWN state decides, not "the factory returned an object": a pattern can stay in the
         // tree carrying a kernel error. The reference is registered above, so the refusal names it.
@@ -426,7 +433,7 @@ public partial class Api5Session
             expectedVolume, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("document_volume", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "document_volume", declared);
         }
 
         // NAMED per-instance check: the set of cylindrical-face axes. Volume does not tell four holes

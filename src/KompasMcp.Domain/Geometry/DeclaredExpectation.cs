@@ -184,6 +184,20 @@ public static class DeclaredExpectation
             ? VerificationLevel.StructureChecked
             : level;
 
+    /// <summary>Add the comparison check ONLY when an expectation was declared.</summary>
+    /// <remarks>INVARIANT: no <c>checks[].passed=false</c> may mean "not checked" — an undeclared
+    /// expectation adds no comparison check at all and is named in <c>unverified_aspects</c> by
+    /// <c>expected_volume_not_supplied</c> instead. A check with <c>passed=false</c> claims a failed
+    /// comparison, and without an expectation there was nothing to compare.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
+    public static void AddIfDeclared(List<NamedCheck> checks, string name, DeclaredExpectationOutcome outcome)
+    {
+        if (outcome.IsDeclared)
+        {
+            checks.Add(Check(name, outcome));
+        }
+    }
+
     /// <summary>The short check name a tool adds for the comparison, so the response reads the same way
     /// whatever the tool. A mismatch carries the difference and the tolerance in <c>observed</c>.</summary>
     public static NamedCheck Check(string name, DeclaredExpectationOutcome outcome) =>

@@ -1489,7 +1489,7 @@ public sealed partial class Api5Session
             command.ExpectedVolumeDeltaMm3, measuredDelta, ReReadMeasuredDelta);
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("expected_volume_delta", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "expected_volume_delta", declared);
             geometryConfirmed |= declared.IsConfirmed;
         }
 
@@ -3358,7 +3358,7 @@ public sealed partial class Api5Session
             command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_delta", declared);
         }
         else if (volumePairRead)
         {
@@ -3681,7 +3681,7 @@ public sealed partial class Api5Session
             command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_delta", declared);
         }
         else if (volumePairRead)
         {

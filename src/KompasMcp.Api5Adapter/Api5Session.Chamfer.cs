@@ -184,7 +184,7 @@ public partial class Api5Session
             command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_delta", declared);
         }
         else if (volumePairRead)
         {
@@ -522,7 +522,7 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -719,7 +719,7 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -736,11 +736,10 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
-        else if (!geometryConfirmed)
+        else if (!valueStored)
         {
-            unverified.Insert(0, valueStored
-                ? "volume_not_as_expected — значение записано и перечитано, но измерение объёма не совпало с ожиданием"
-                : "value_not_read_back — параметр не перечитался с нового объекта определения");
+            unverified.Insert(0,
+                "value_not_read_back — параметр не перечитался с нового объекта определения");
         }
 
         BumpRevision(document, "chamfer.update");

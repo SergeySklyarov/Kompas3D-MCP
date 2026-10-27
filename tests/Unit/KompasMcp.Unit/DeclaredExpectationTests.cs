@@ -1,4 +1,4 @@
-using KompasMcp.Contracts;
+﻿using KompasMcp.Contracts;
 using KompasMcp.Domain.Geometry;
 using Xunit;
 
@@ -196,6 +196,34 @@ public class DeclaredExpectationTests
         Assert.Equal(DeclaredExpectationVerdict.Unverifiable, outcome.Verdict);
         Assert.False(outcome.IsNotConfirmed);
         Assert.Contains("declared_expectation_reads_diverged", outcome.Reason!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithoutAnExpectation_NoComparisonCheckIsAdded()
+    {
+        // MEASURED (client report MCP-02): a check with passed=false and expected="не задано" read as a
+        // failed comparison although nothing was declared. The rule: the comparison check exists only
+        // when an expectation was declared, so no passed=false ever means "not checked".
+        var checks = new List<NamedCheck>();
+
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", DeclaredExpectation.Evaluate(null, 73509.61d));
+
+        Assert.Empty(checks);
+    }
+
+    [Fact]
+    public void WithAnExpectation_TheComparisonCheckIsAddedAndItsVerdictIsTheVerdict()
+    {
+        var matching = new List<NamedCheck>();
+        DeclaredExpectation.AddIfDeclared(matching, "volume_after_update", DeclaredExpectation.Evaluate(80000d, 80000d));
+        var mismatched = new List<NamedCheck>();
+        DeclaredExpectation.AddIfDeclared(mismatched, "volume_after_update", DeclaredExpectation.Evaluate(80000d, 81000d));
+
+        Assert.Single(matching);
+        Assert.True(matching[0].Passed);
+        Assert.Single(mismatched);
+        Assert.False(mismatched[0].Passed);
+        Assert.Equal("80000", mismatched[0].Expected);
     }
 
     [Fact]

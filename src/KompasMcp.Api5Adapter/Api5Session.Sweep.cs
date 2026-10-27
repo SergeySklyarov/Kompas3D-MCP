@@ -131,8 +131,11 @@ public partial class Api5Session
         // product fact.
         var pathLength = SafeDouble(() => definition.GetPathLength(PathLengthMillimetres));
 
-        var reference = References.Register("feature", document.Id, document.Revision, entity);
+        // INVARIANT: the reference carries the revision AFTER creation - minted before the bump, the
+        // published revision is one behind the result.
+        // History: docs/decisions/adapter-features.md#feature-reference-points-at-the-tree
         BumpRevision(document, "sweep.create");
+        var reference = References.Register("feature", document.Id, document.Revision, entity);
 
         // The feature's OWN state decides, not Create()=true: a sweep can stay in the tree carrying a
         // kernel error. The reference is registered above, so the refusal names the feature to remove.
@@ -146,8 +149,11 @@ public partial class Api5Session
         {
             new("operation_created", created == true, "Create() вернул true"),
             new("path_attached", pathParts > 0, "элементов траектории: " + pathParts),
-            new("body_count_grew", bodiesAfter > bodiesBefore,
-                "тел " + bodiesBefore + " → " + bodiesAfter),
+            // MEASURED (MCP-03): this route glues to an existing body — one body before and after is the
+            // normal result, so the check is that no body was LOST, not that the count grew.
+            new("body_count_kept", bodiesAfter >= bodiesBefore,
+                Observed: "тел " + bodiesBefore + " → " + bodiesAfter,
+                Expected: "приклеивание: тело не потеряно"),
             new("path_length_read", pathLength is not null, "длина траектории: " + Num(pathLength) + " мм"),
         };
 
@@ -189,7 +195,7 @@ public partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "expected_volume", declared);
 
             if (declared.IsUnverifiable)
             {

@@ -221,9 +221,26 @@ public partial class Api5Session
         }
 
         RebuildApi7AndSettle(container, document);
-
-        var reference = References.Register("feature", document.Id, document.Revision, loft);
         BumpRevision(document, "loft.create");
+
+        // INVARIANT: the reference points at the TREE element and carries the revision AFTER creation.
+        // An API7 ILoft registered as a feature does not resolve back into one, and a reference minted
+        // before the bump publishes a revision one behind the result.
+        // History: docs/decisions/adapter-features.md#feature-reference-points-at-the-tree
+        var treeEntity = FindUniqueTreeEntity(document, SafeModelName(loft), BossLoft);
+        if (treeEntity is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Признак построен, но в дереве не найден ровно один элемент с его именем и типом: "
+                + "ссылка на объект API7 не разрешается в признак, поэтому ссылка не выдаётся. "
+                + "Признак остался в документе.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["model_name"] = SafeModelName(loft) });
+        }
+
+        var reference = References.Register("feature", document.Id, document.Revision, treeEntity);
 
         // The feature's OWN state decides, not Update()=true: a loft can stay in the tree carrying a
         // kernel error. The reference is registered above, so the refusal names the feature to remove.
@@ -237,13 +254,20 @@ public partial class Api5Session
         // Chains are read FROM THE MODEL and in full; a bare chain count would prove only existence.
         var couplingsInModel = ReadCouplingContent(loft);
 
+        var volumeGrew = volumeBefore is double volumeBeforeValue
+            && volumeAfter is double volumeAfterValue && volumeAfterValue > volumeBeforeValue;
+
         var checks = new List<NamedCheck>
         {
             new("operation_created", updated == true, "ILoft.Update() вернул true"),
             new("sections_transferred", transferred.Count == sections.Count,
                 "перенесено сечений: " + transferred.Count + " из " + sections.Count),
-            new("body_count_grew", bodiesAfter > bodiesBefore,
-                "тел " + bodiesBefore + " → " + bodiesAfter),
+            // MEASURED (MCP-03): this route glues to an existing body, so one body before and after is
+            // the normal result. A grown count is the criterion of a NEW body, not of a glued one.
+            new("body_count_kept", bodiesAfter >= bodiesBefore && (bodiesAfter > bodiesBefore || volumeGrew),
+                Observed: "тел " + bodiesBefore + " → " + bodiesAfter + ", объём " +
+                          Num(volumeBefore) + " → " + Num(volumeAfter) + " мм³",
+                Expected: "приклеивание: тело сохранено, материал добавлен"),
         };
 
         if (command.Couplings.Count > 0)
@@ -307,7 +331,7 @@ public partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "expected_volume", declared);
 
             if (declared.IsUnverifiable)
             {

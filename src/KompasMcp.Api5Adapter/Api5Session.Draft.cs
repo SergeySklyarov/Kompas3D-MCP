@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -623,7 +623,7 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(expectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "expected_volume", declared);
 
             if (declared.IsUnverifiable)
             {

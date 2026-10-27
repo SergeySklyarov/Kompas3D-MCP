@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -209,7 +209,7 @@ public partial class Api5Session
             command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_delta", declared);
         }
         else if (volumePairRead)
         {
@@ -1014,14 +1014,14 @@ public partial class Api5Session
             command.ExpectedVolumeDeltaMm3, removedDelta, () => ReReadDelta(volumeBefore, document));
         if (declaredDelta.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_delta", declaredDelta));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_delta", declaredDelta);
         }
 
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declaredVolume.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
+            DeclaredExpectation.AddIfDeclared(checks, "volume_expected", declaredVolume);
         }
 
         // INVARIANT: a declared expectation that did not hold is NOT a refusal — the call succeeded, and

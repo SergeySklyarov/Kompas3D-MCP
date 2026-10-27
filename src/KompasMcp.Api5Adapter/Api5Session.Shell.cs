@@ -206,7 +206,7 @@ public partial class Api5Session
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
-            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            DeclaredExpectation.AddIfDeclared(checks, "expected_volume", declared);
 
             if (declared.IsUnverifiable)
             {

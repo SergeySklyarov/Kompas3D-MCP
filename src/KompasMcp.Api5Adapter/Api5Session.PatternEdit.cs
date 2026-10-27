@@ -105,7 +105,7 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.Pattern!.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
 

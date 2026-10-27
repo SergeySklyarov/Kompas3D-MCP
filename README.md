@@ -9,6 +9,8 @@
 ![.NET](https://img.shields.io/badge/.NET-10-512bd4)
 ![MCP](https://img.shields.io/badge/MCP-stdio-black)
 
+![Kompas3D MCP: чертёж бутылки, построение агентом в КОМПАС-3D и готовая модель](docs/assets/kompas3d-mcp-readme-1440.jpg)
+
 > *English summary.* A Model Context Protocol server that lets an AI agent drive a real, licensed
 > KOMPAS-3D v24 (x64) over COM: parts, sketches (including bulk geometry: native polyline and
 > spline), features, patterns, booleans, assemblies and mates, assembly interference and clearance
@@ -76,16 +78,11 @@ Claude проверит зависимости, скачает готовый п
 Агенту дают чертёж и задачу, и он строит деталь сам, вызовами инструментов этого сервера. Каждый
 шаг сервер подтверждает измерением.
 
-![Чертёж задания Model Mania 2021](docs/assets/model-mania-2021-drawing.jpg)
+![Model Mania 2021: чертёж задания, дерево построения в КОМПАС-3D и два ракурса модели](docs/assets/model-mania-2021-readme-collage.jpg)
 
-*Задание конкурса **Model Mania 2021** (SOLIDWORKS). Права на чертёж принадлежат SOLIDWORKS.*
-
-![Корпус, построенный агентом через MCP: изометрия со стороны бобышки](docs/assets/model-mania-2021-kompas-view-1.png)
-
-![Тот же корпус с обратной стороны](docs/assets/model-mania-2021-kompas-view-2.png)
-
-*Деталь, построенная агентом (**ChatGPT 6.0 Astra, режим размышлений Low**) по этому чертежу:
-два вида одного тела. Слева дерево построения, которое агент собрал сам.*
+*Слева чертёж задания конкурса **Model Mania 2021** (SOLIDWORKS; права на чертёж принадлежат
+SOLIDWORKS). В центре дерево построения в КОМПАС-3D, которое агент (**ChatGPT 6.0 Astra, режим
+размышлений Low**) собрал сам, и модель; справа та же деталь с обратной стороны.*
 
 ## Что умеет
 

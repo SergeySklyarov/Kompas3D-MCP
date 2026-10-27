@@ -6778,3 +6778,20 @@ docs/STATUS.md.
   `verify-mcp-approval.py` PASS 5 / 0. Сборка Release - 0 предупреждений, тесты 1606/1606.
   Журнал цикла перенесён в `docs/status/journal-2026-10.md`, открыт цикл «с публикации 0.12.0».
   Следующий наряд по плану - `DEBT_REVIEW_0_12_0`.
+
+27.10.2026 - дефект заказчика MCP-05 закрыт нарядом `UPDATE_CHECK_FRESHNESS`: сообщение о выпуске больше
+  не опаздывает на сутки. На Host 0.11.0 `kompas_health` отвечал `update.status = up_to_date` уже
+  после публикации `v0.12.0` - итог проверки считался свежим 24 ч и ОТМЕНЯЛ запрос, а файл итога
+  общий для всех процессов и версий, поэтому ответ, снятый за час до публикации, сутки называл
+  прежний выпуск. Изменено: запрос уходит на каждом старте Host; срок свежести 24 ч -> 6 ч;
+  долгая сессия перепроверяет фоном при чтении `State()`/`ToJson()` (вызов сети не ждёт, повтор
+  после отказа не чаще раза в 5 минут); запись кеша называет `host_version`, запись другой версии
+  свежей не считается и `up_to_date` по ней не публикуется; просроченный итог не скрывается - он и
+  есть ответ вызова, время называет `checked_utc`; отказ сети не затирает годный итог.
+  Контракт поля `update` не менялся (`contract-diff` 0 структурных ломок; `tools/list` 23 097 при
+  потолке 23 821). Приёмка: Release 0 предупреждений, тесты **1610/1610** (новые
+  `Start_AsksEvenWithAFreshCache`, `Call_DoesNotWaitForTheRequest`, `Ageing_FollowsTheSixHourTerm`,
+  `CacheOfAnotherHostVersion_IsNotUpToDate`, `StaleOutcome_IsStillWhatTheCallSeesWithItsOwnTime`),
+  ручная проба на живом Host (`scratch/probe-update-freshness.py`) и зачётный `--all` на Release
+  чистого дерева. Решение - `docs/decisions/host.md#update-notice-start`; отчёт -
+  `UPDATE_CHECK_FRESHNESS_REPORT_20261027.md`.

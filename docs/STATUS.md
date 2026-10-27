@@ -36,8 +36,9 @@
   синтетической геометрии) добавлена после запуска `--all` на `2d13c28`; прогон `--all` на `c7bec71`
   её прогнал и вскрыл неверную геометрию СВОЕЙ постановки `CB27.3` (призма лежала внутри плиты и не
   могла добавить материал): сечения перенесены на верхнюю грань, эталон объёма 92000 объявлен числом
-  до прогона (`4a22da6`), группа отдельным прогоном - PASS 32 / FAIL 0, зачётный `--all` на `4a22da6`
-  идёт. Решения - `docs/decisions/adapter-features.md#feature-reference-points-at-the-tree`,
+  до прогона (`4a22da6`), группа отдельным прогоном - PASS 32 / FAIL 0, зачётный `--all` на `4a22da6` -
+  **PASS 1916 / NAMED 6 / UNKNOWN 3 / FAIL 0**, дерево чистое. Решения -
+  `docs/decisions/adapter-features.md#feature-reference-points-at-the-tree`,
   `docs/decisions/adapter-core.md#declared-expectation-rule`. Отчёт -
   `CLIENT_BUGS_20261027_REPORT_20261027.md`.
 - **Наряд `BOM_EXPORT_FIXES` (27.10.2026, `0.12.0`) - ВЫПОЛНЕН.** Закрыты два расхождения клиентской

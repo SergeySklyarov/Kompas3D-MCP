@@ -775,6 +775,10 @@ RUN_GROUPS = (
      "Приёмка CB10: дефекты клиента на 0.6.0 — смена опоры эскиза как мутация (OBS-030), отказ не "
      "перезаписывает файл открытого документа (OBS-019), признак, оставшийся в дереве, attach при "
      "нуле кандидатов (наряд CLIENT_BUGS_20261010)"),
+    ("client_bugs_20261027", "client-bugs-20261027", "client-bugs-20261027-acceptance.json",
+     "Приёмка CB27: дефекты клиента на 0.11.0 - ссылка создания пригодна сразу (MCP-01), ложное "
+     "«не совпало» без ожидания (MCP-02), критерий числа тел у приклеенного loft (MCP-03), "
+     "условная обязательность target_body_ref (MCP-04)"),
     ("pattern_orientation", "pattern-orientation", "pattern-orientation-acceptance.json",
      "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)"),
     ("release_040", "release-040", "release-040-acceptance.json",
@@ -857,6 +861,7 @@ ALL_GROUPS_EXTRA = (
     ("variables_bind", ["--variables-bind-only"]),
     ("export_inertia", ["--export-inertia-only"]),
     ("client_bugs_20261010", ["--client-bugs-20261010"]),
+    ("client_bugs_20261027", ["--client-bugs-20261027"]),
     ("suppress", ["--suppress-repeat", "3"]),
     # Группа DC ЗАВЕРШАЕТ процесс своего КОМПАС: общий сеанс после неё недействителен, поэтому идёт
     # в своём свежем сеансе, как `client_bugs_20261010` (см. run_extra_group_fresh).
@@ -12969,6 +12974,294 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
 
 
+# Эталон группы CB27. Числа объявлены ЗДЕСЬ, ДО прогона: плита 100x80x10 = 80000 мм3 на XY,
+# приклеенный loft - два прямоугольных сечения на XY (0 и 10 мм), призма между ними 40x30x10 = 12000.
+CB27_REFERENCE = {
+    "plate_width_mm": 100.0,
+    "plate_height_mm": 80.0,
+    "plate_depth_mm": 10.0,
+    "plate_volume_mm3": 100.0 * 80.0 * 10.0,
+    "loft_width_mm": 40.0,
+    "loft_height_mm": 30.0,
+    "loft_gap_mm": 10.0,
+    "loft_volume_mm3": 40.0 * 30.0 * 10.0,
+    "volume_tolerance_mm3": 1.0,
+    "wrong_expected_volume_mm3": 1.0,
+}
+
+
+def client_bugs_20261027_checks(client, rep, app_id, workdir):
+    """CB27.* - дефекты клиента на выпуске 0.11.0 (наряд CLIENT_BUGS_20261027, MCP-01..04).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Четыре утверждения о ПРОДУКТЕ, каждое на СВОЕЙ синтетической
+    геометрии (данные клиента не используются, наряд §5):
+
+    MCP-01 - ссылка, которую вернуло создание признака, пригодна СРАЗУ и несёт ревизию после
+    создания: чтение ровно возвращённой ссылкой проходит, ревизия ссылки равна ревизии документа.
+    Строки CB27.1-CB27.2.
+    MCP-03 - у ПРИКЛЕЕННОГО loft критерий числа тел - сохранение тела, а не рост: 1 -> 1 при росте
+    объёма проходит. Строка CB27.3.
+    MCP-04 - условная обязательность target_body_ref ОПУБЛИКОВАНА и отказ сохранён: без ссылки
+    отвергаются и cut, и boss, а описание поля называет оба вида. Строки CB27.4-CB27.6.
+    MCP-02 - без заявленного ожидания проверка сравнения НЕ публикуется и «не совпало» не
+    утверждается; с расходящимся ожиданием проверка есть и провалена. Строки CB27.7-CB27.8.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Отдельной строки для kompas_sweep нет: регрессия MCP-01 проверена на loft, а
+    кинематическая операция требует своей траектории; порядок выдачи ссылки там тот же и назван в
+    отчёте наряда, а не выдан за проверенный строкой.
+    """
+    import uuid as _uuid
+
+    ref = dict(CB27_REFERENCE)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(_uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def ctx(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env)
+
+    def current_rev(doc):
+        return ctx(doc).get("revision") or 1
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def first_body(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows[0] if isinstance(rows, list) and rows else None
+
+    def checks_of(res):
+        return ((res.get("verification") or {}).get("checks") or [])
+
+    def unverified_of(res):
+        return ((res.get("verification") or {}).get("unverified_aspects") or [])
+
+    def names(checks):
+        return [c.get("name") for c in checks if isinstance(c, dict)]
+
+    # ── CB27.00.setup: эталон через MCP ────────────────────────────────────────────────────────
+    doc = None
+    extrusion_ref = None
+    build_error = None
+    env, code = call("kompas_create_document",
+                     {"application_id": app_id, "kind": "part", "name": "CB27"})
+    doc = result(env).get("id")
+    if not doc:
+        build_error = "create_document: %s" % code
+    else:
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "CB27-plate"})
+        plate_sketch = result(env).get("id")
+        if not plate_sketch:
+            build_error = "create_sketch: %s %s" % (code, emsg(env))
+        else:
+            call("kompas_edit_sketch", {
+                "sketch_ref": plate_sketch, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                              "width_mm": ref["plate_width_mm"],
+                              "height_mm": ref["plate_height_mm"]}]})
+            call("kompas_finish_sketch", {"sketch_ref": plate_sketch,
+                                          "require_closed_profile": False})
+            env, code = call("kompas_extrude", {
+                "sketch_ref": plate_sketch, "expected_revision": current_rev(doc),
+                "operation": "base", "depth_mm": ref["plate_depth_mm"], "direction": "positive"})
+            extrusion_ref = (result(env).get("feature_ref") or {}).get("id")
+            if code or not extrusion_ref:
+                build_error = "extrude base: %s %s" % (code, emsg(env))
+    body = first_body(doc) if doc and not build_error else None
+    plate_volume = None
+    if body:
+        _e, env, _r = client.tool("kompas_measure",
+                                  {"target_ref": body.get("body_ref"), "properties": ["volume"]})
+        plate_volume = result(env).get("volume_mm3")
+    rep.add("CB27.00.setup",
+            "эталон собран через MCP: плита 100x80x10 = 80000 мм3 на XY (эскиз → прямоугольник → "
+            "выдавливание base), ссылка на признак выдавливания запомнена",
+            "PASS" if (doc and not build_error and near(plate_volume, ref["plate_volume_mm3"],
+                                                        ref["volume_tolerance_mm3"])) else "FAIL",
+            "document_id=%s volume=%s extrusion_ref=%r error=%s"
+            % (doc, plate_volume, extrusion_ref, build_error))
+
+    # ── CB27.1-CB27.2: ссылка loft пригодна сразу и несёт ревизию после создания (MCP-01) ─────
+    loft_ref = None
+    loft_res = {}
+    loft_error = None
+    sections = []
+    if doc and not build_error:
+        for index, offset in enumerate((0.0, ref["loft_gap_mm"])):
+            env, code = call("kompas_create_sketch", {
+                "document_id": doc, "expected_revision": current_rev(doc),
+                "plane": {"base": "xy", "offset_mm": offset}, "name": "CB27-section%d" % index})
+            section = result(env).get("id")
+            if not section:
+                loft_error = "create_sketch %d: %s %s" % (index, code, emsg(env))
+                break
+            call("kompas_edit_sketch", {
+                "sketch_ref": section, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [10.0, 10.0],
+                              "width_mm": ref["loft_width_mm"],
+                              "height_mm": ref["loft_height_mm"]}]})
+            call("kompas_finish_sketch", {"sketch_ref": section,
+                                          "require_closed_profile": False})
+            sections.append(section)
+        if not loft_error:
+            env, code = call("kompas_loft", {
+                "document_id": doc, "expected_revision": current_rev(doc),
+                "section_refs": sections})
+            loft_res = result(env)
+            loft_ref = (loft_res.get("feature_ref") or {}).get("id")
+            if code or not loft_ref:
+                loft_error = "loft: %s %s" % (code, emsg(env))
+
+    if loft_ref:
+        rev_after = current_rev(doc)
+        env, code = call("kompas_get_feature", {"feature_ref": loft_ref})
+        read_res = result(env)
+        ok = code is None and (read_res.get("family") == "loft")
+        rep.add("CB27.1",
+                "MCP-01: ссылка из результата создания loft пригодна СРАЗУ - kompas_get_feature с "
+                "ровно возвращённой ссылкой читает признак (без промежуточного перечисления)",
+                "PASS" if ok else "FAIL",
+                "ref=%s code=%s family=%r is_valid=%r msg=%s"
+                % (loft_ref, code, read_res.get("family"), read_res.get("is_valid"), emsg(env)),
+                details={"ref": loft_ref, "read": read_res})
+        published_rev = (loft_res.get("feature_ref") or {}).get("revision")
+        ok = published_rev == rev_after
+        rep.add("CB27.2",
+                "MCP-01: ревизия ВОЗВРАЩЁННОЙ ссылки равна ревизии документа после создания "
+                "(у клиента была на единицу меньше)",
+                "PASS" if ok else "FAIL",
+                "ревизия ссылки=%s ревизия документа=%s" % (published_rev, rev_after),
+                details={"reference_revision": published_rev, "document_revision": rev_after})
+    else:
+        rep.add("CB27.1", "MCP-01: ссылка loft пригодна сразу", "FAIL",
+                "loft не построен: %s" % loft_error)
+        rep.add("CB27.2", "MCP-01: ревизия ссылки равна ревизии результата", "FAIL",
+                "loft не построен: %s" % loft_error)
+
+    # ── CB27.3: приклеенный loft - критерий сохранения тела, а не роста (MCP-03) ──────────────
+    if loft_ref:
+        kept = [c for c in checks_of(loft_res) if c.get("name") == "body_count_kept"]
+        grew = [c for c in checks_of(loft_res) if c.get("name") == "body_count_grew"]
+        bodies = loft_res.get("body_count")
+        volume = loft_res.get("volume_mm3")
+        ok = (len(kept) == 1 and kept[0].get("passed") is True and not grew
+              and bodies == 1
+              and isinstance(volume, (int, float))
+              and volume > ref["plate_volume_mm3"])
+        rep.add("CB27.3",
+                "MCP-03: у приклеенного loft проверка числа тел - body_count_kept и она ПРОЙДЕНА: "
+                "тел 1 -> 1 при выросшем объёме; проверки body_count_grew больше нет",
+                "PASS" if ok else "FAIL",
+                "проверки=%s тел=%s объём=%s (плита %s)"
+                % (names(checks_of(loft_res)), bodies, volume, ref["plate_volume_mm3"]),
+                details={"checks": checks_of(loft_res), "body_count": bodies, "volume": volume})
+    else:
+        rep.add("CB27.3", "MCP-03: критерий числа тел у приклеенного loft", "FAIL",
+                "loft не построен: %s" % loft_error)
+
+    # ── CB27.4-CB27.5: условная обязательность target_body_ref (MCP-04) ──────────────────────
+    if doc and not build_error and sections:
+        for cid, operation in (("CB27.4", "cut"), ("CB27.5", "boss")):
+            env, code = call("kompas_extrude", {
+                "sketch_ref": sections[0], "expected_revision": current_rev(doc),
+                "operation": operation, "depth_mm": 2.0})
+            ok = code == "INVALID_ARGUMENT"
+            rep.add(cid,
+                    "MCP-04: kompas_extrude operation=%s без target_body_ref отвергается "
+                    "INVALID_ARGUMENT до обращения к КОМПАС (отказ сохранён)" % operation,
+                    "PASS" if ok else "FAIL",
+                    "code=%s msg=%s" % (code, emsg(env)))
+    else:
+        for cid in ("CB27.4", "CB27.5"):
+            rep.add(cid, "MCP-04: отказ без target_body_ref", "FAIL",
+                    "эталон не построен: %s" % build_error)
+
+    schema = client.schema_of("kompas_extrude") or {}
+    prop = ((schema.get("properties") or {}).get("target_body_ref")) or {}
+    text = prop.get("description") or ""
+    required = schema.get("required") or []
+    ok = ("boss" in text and "cut" in text and "target_body_ref" not in required)
+    rep.add("CB27.6",
+            "MCP-04: описание поля target_body_ref называет условную обязательность для boss и "
+            "cut, а required его по-прежнему не содержит (условие не выражается схемой)",
+            "PASS" if ok else "FAIL",
+            "required=%s описание=%r" % (required, text[:160]),
+            details={"description": text, "required": required})
+
+    # ── CB27.7-CB27.8: сравнение объёма только при заявленном ожидании (MCP-02) ──────────────
+    if doc and extrusion_ref and not build_error:
+        env, code = call("kompas_update_feature", {
+            "feature_ref": extrusion_ref, "expected_revision": current_rev(doc),
+            "depth_mm": 12.0, "end_condition": "blind"})
+        res = result(env)
+        comparison = [n for n in names(checks_of(res)) if "volume" in (n or "")]
+        unverified = unverified_of(res)
+        ok = (code is None and not comparison
+              and any("expected_volume_not_supplied" in u for u in unverified)
+              and not any("volume_not_as_expected" in u for u in unverified))
+        rep.add("CB27.7",
+                "MCP-02: правка БЕЗ expected_volume_mm3 не публикует проверку сравнения и не "
+                "утверждает «не совпало»: проверок объёма нет, назван expected_volume_not_supplied, "
+                "volume_not_as_expected отсутствует",
+                "PASS" if ok else "FAIL",
+                "code=%s проверки=%s unverified=%s"
+                % (code, names(checks_of(res)), [u[:48] for u in unverified]),
+                details={"checks": checks_of(res), "unverified": unverified})
+        env, code = call("kompas_update_feature", {
+            "feature_ref": extrusion_ref, "expected_revision": current_rev(doc),
+            "depth_mm": 14.0, "end_condition": "blind",
+            "expected_volume_mm3": ref["wrong_expected_volume_mm3"]})
+        res = result(env)
+        failed = [c for c in checks_of(res)
+                  if isinstance(c, dict) and c.get("passed") is False
+                  and c.get("expected") not in (None, "", "не задано")]
+        unverified = unverified_of(res)
+        ok = (code is None and bool(failed)
+              and any("volume_not_as_expected" in u or "declared_expectation_not_confirmed" in u
+                      for u in unverified))
+        rep.add("CB27.8",
+                "MCP-02: правка С расходящимся ожиданием публикует проваленную проверку сравнения с "
+                "заданным expected и называет расхождение; вызов при этом не отвергнут",
+                "PASS" if ok else "FAIL",
+                "code=%s проваленные_с_ожиданием=%s unverified=%s"
+                % (code, [(c.get("name"), c.get("expected")) for c in failed],
+                   [u[:48] for u in unverified]),
+                details={"checks": checks_of(res), "unverified": unverified})
+    else:
+        for cid in ("CB27.7", "CB27.8"):
+            rep.add(cid, "MCP-02: сравнение только при заявленном ожидании", "FAIL",
+                    "эталон не построен: %s" % (build_error or "нет ссылки на выдавливание"))
+
+    for cid, desc in (
+        ("CB27.00.setup", "эталон CB27"),
+        ("CB27.1", "MCP-01: ссылка loft пригодна сразу"),
+        ("CB27.2", "MCP-01: ревизия ссылки равна ревизии результата"),
+        ("CB27.3", "MCP-03: критерий числа тел у приклеенного loft"),
+        ("CB27.4", "MCP-04: отказ cut без target_body_ref"),
+        ("CB27.5", "MCP-04: отказ boss без target_body_ref"),
+        ("CB27.6", "MCP-04: условие опубликовано в описании поля"),
+        ("CB27.7", "MCP-02: без ожидания сравнения нет"),
+        ("CB27.8", "MCP-02: с ожиданием сравнение есть и провалено"),
+    ):
+        if not any(row.get("id") == cid for row in rep.rows):
+            rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
+
+
 # Эталон группы DC. Числа объявлены ЗДЕСЬ, ДО прогона: плита 100x80x10 = 80000 мм³ на XY.
 DC_REFERENCE = {
     "plate_width_mm": 100.0,
@@ -16359,6 +16652,10 @@ def main():
     # Своя группа, свой сеанс, своя синтетическая геометрия; данные клиента не используются (§5).
     client_bugs_20261010_only = "--client-bugs-20261010" in sys.argv
 
+    # Наряд CLIENT_BUGS_20261027: дефекты клиента на выпуске 0.11.0 (MCP-01..04). Своя группа, свой
+    # сеанс, своя синтетическая геометрия; данные клиента не используются (наряд §5).
+    client_bugs_20261027_only = "--client-bugs-20261027" in sys.argv
+
     # Наряд READ_DISCONNECT: чтение при потерянной связи с КОМПАС отвечает APPLICATION_DISCONNECTED,
     # а не ложным успехом с пустыми данными. Группа завершает СВОЙ экземпляр КОМПАС по PID, поэтому
     # идёт своим свежим сеансом и последней среди групп вне вертикали.
@@ -16420,6 +16717,7 @@ def main():
         "variables_bind": variables_bind_only,
         "export_inertia": export_inertia_only,
         "client_bugs_20261010": client_bugs_20261010_only,
+        "client_bugs_20261027": client_bugs_20261027_only,
         "pattern_orientation": pattern_orientation_only,
         "release_040": release_040_only,
         "client_bugs_20261008": client_bugs_only,
@@ -17117,6 +17415,14 @@ def main():
 
         if export_inertia_only:
             export_inertia_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if client_bugs_20261027_only:
+            client_bugs_20261027_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -52423,6 +52729,7 @@ EXTRA_GROUP_CHECKS = {
     "variables_bind": lambda c, r, a, w, v, p: variables_bind_checks(c, r, a, w),
     "export_inertia": lambda c, r, a, w, v, p: export_inertia_checks(c, r, a, w),
     "client_bugs_20261010": lambda c, r, a, w, v, p: client_bugs_20261010_checks(c, r, a, w),
+    "client_bugs_20261027": lambda c, r, a, w, v, p: client_bugs_20261027_checks(c, r, a, w),
     "suppress": lambda c, r, a, w, v, p: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
     # `p` — PID экземпляра, поднятого общим запуском группы: только группа DC его использует, чтобы
     # завершить СВОЙ процесс КОМПАС и воспроизвести обрыв связи.

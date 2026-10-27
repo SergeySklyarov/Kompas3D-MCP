@@ -1877,6 +1877,7 @@ def instrument_self_test():
         finally:
             # MEASURED: without the wait the temporary directory was deleted while the killed decoy
             # still held its own image, and the whole self-test died with PermissionError on cleanup.
+            # History: docs/decisions/tests.md#selftest-cleanup
             for proc in (stub, other):
                 if proc.poll() is None:
                     proc.kill()
@@ -1915,8 +1916,9 @@ def instrument_self_test():
           and blind_environment["foreign"] == [] and blind_environment["foreign_before_run"] == 0,
           json.dumps(blind_environment, ensure_ascii=False))
 
-    # Аргументы (долг 74). Перечень флагов сверяется с САМИМ ИСХОДНИКОМ прибора, поэтому проверка не
-    # тавтологична: флаг, разобранный в коде и забытый в `FLAGS`, даёт FAIL, и наоборот.
+    # Arguments (debt 74). The flag table is checked against the instrument's OWN SOURCE, so the check
+    # is not tautological: a flag parsed in code but forgotten in `FLAGS` fails, and so does the
+    # reverse.
     with open(__file__, encoding="utf-8") as source_file:
         parsed = declared_flag_uses(source_file.read())
     check("справка перечисляет все флаги перечня",
@@ -1980,12 +1982,13 @@ def list_documents_check(client, rep, app_id, row_id="S02c", expect_nonempty=Fal
 
 
 # ── Флаги прибора: ОДИН перечень ─────────────────────────────────────────────────────────────────
-# INVARIANT: справка, отказ на незнакомом аргументе и самопроверка берут перечень отсюда. Второй
-# список разошёлся бы с первым, и флаг, который прибор разбирает, читатель узнал бы только из отказа.
-# Поле `takes_value` не украшение: без него `--host <путь>` считался бы парой флагов, а значение,
-# похожее на флаг, отвергалось бы как незнакомое.
-# MEASURED: до этого перечня опечатка в имени флага поднимала КОМПАС и завершала посторонние
-# `KompasMcp.*`: разбор аргументов был разбросан по `main()` и не отвергал ничего.
+# INVARIANT: help, the unknown-argument refusal and the self-test all read this one table; a second
+# list would drift, and a flag the instrument parses would be known only from a refusal.
+# `takes_value` is not decoration: without it `--host <path>` would read as two flags and a value
+# that looks like a flag would be refused as unknown.
+# MEASURED: before this table a typo in a flag name raised KOMPAS and killed foreign `KompasMcp.*`
+# processes - argv was read all over `main()` and nothing was refused at all.
+# History: docs/decisions/tests.md#smoke-flags
 FLAGS = (
     ("-h", False, "эта справка"),
     ("--help", False, "эта справка"),
@@ -2068,7 +2071,7 @@ FLAG_NAMES = {name for name, _value, _purpose in FLAGS}
 
 
 def help_text():
-    """Справка прибора: каждый флаг из `FLAGS` с одной строкой назначения."""
+    """The instrument's own help: every flag of `FLAGS` with one line of purpose."""
     lines = ["Прибор приёмки KompasMCP: строки матрицы через настоящий MCP-сеанс.", "",
              "Запуск: python scripts/mcp-smoke.py [флаги]", ""]
     for name, takes_value, purpose in FLAGS:
@@ -2078,7 +2081,7 @@ def help_text():
 
 
 def argument_error(argv):
-    """Первый незнакомый аргумент или `None`. Значение флага флагом не считается."""
+    """The first argument the instrument does not know, or `None`. A flag's value is not a flag."""
     takes_value = {name for name, needs_value, _purpose in FLAGS if needs_value}
     index = 0
     while index < len(argv):
@@ -2093,7 +2096,7 @@ def argument_error(argv):
 
 
 def declared_flag_uses(source):
-    """Флаги, которые прибор РАЗБИРАЕТ по тексту исходника — для сверки с `FLAGS`."""
+    """Flags the instrument PARSES, read from its own source - the other side of the `FLAGS` check."""
     patterns = (r'"(-{1,2}[A-Za-z0-9_-]+)"\s+in\s+sys\.argv',
                 r'argument\(\s*"(-{1,2}[A-Za-z0-9_-]+)"',
                 r'positive_int_argument\([^,]+,\s*"(-{1,2}[A-Za-z0-9_-]+)"',
@@ -16511,8 +16514,8 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
 
 
 def main():
-    # Аргументы разбираются ПЕРВЫМИ: опечатка в имени флага не должна ни поднимать КОМПАС, ни
-    # завершать посторонние процессы, ни заводить каталог прогона.
+    # Arguments are read FIRST: a typo in a flag name must neither raise KOMPAS, nor close foreign
+    # processes, nor create a run directory.
     unknown = argument_error(sys.argv[1:])
     if unknown is not None:
         print(f"Незнакомый аргумент: {unknown}. Справка: python scripts/mcp-smoke.py --help",

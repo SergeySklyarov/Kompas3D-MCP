@@ -6836,6 +6836,7 @@ docs/STATUS.md.
 stdout пуст, ни одного файла схем; `--config config/kompas-mcp.example.json --emit-schemas <временная
 папка>` - код 0, 118 схем; `--emit-schemas schemas` - код 0, `git diff --exit-code schemas/` пуст.
 Тесты **1614/1614** (новые `HostCliArgumentTests` - 4 случая), `verify-publish-set.py --self-test` 0,
-стражи 0/0/0; зачётный `--all` на Release-сборке чистого дерева. Строка 76 закрыта, новых нет:
-открыто **9**. Решение - `docs/decisions/host.md#cli-args`; отчёт -
+стражи 0/0/0; зачётный `--all` на `a6a7911` (Release, дерево чистое) - 1916 PASS, 6 NAMED, 3 UNKNOWN,
+FAIL 0, 48 минут, сверка строк с зачётом `18e6c26` дала `identical: true`. Строка 76 закрыта, новых
+нет: открыто **9**. Решение - `docs/decisions/host.md#cli-args`; отчёт -
 `DEBT_HOST_CLI_0_13_REPORT_20261027.md`; коммит `4f32acf`.

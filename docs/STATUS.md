@@ -29,7 +29,9 @@
   пуст, ни одного файла схем; `--config config/kompas-mcp.example.json --emit-schemas <временная
   папка>` - код 0, 118 схем; `--emit-schemas schemas` - код 0, `git diff --exit-code schemas/` пуст;
   `verify-publish-set.py --self-test` - 0; стражи `lint-dashes.py` 0, `check-evidence-links.py` 0,
-  `long-comment-blocks.py` 0. Зачётный `--all` запущен на Release-сборке `4f32acf`, итог - в отчёте.
+  `long-comment-blocks.py` 0. Зачётный `--all` на `a6a7911` (Release, дерево чистое): **1916 PASS,
+  6 NAMED, 3 UNKNOWN, FAIL 0**, 48 минут, каталог `20261027-220207-all-a6a7911`; `compare-run-rows.py`
+  с прошлым зачётом `18e6c26` - `identical: true`.
   Долг: строка 76 закрыта, новых нет; строк 78, закрыто 69, открыто **9** (1, 3, 4, 10, 38, 53, 54,
   65, 75) - бюджет 0.13 не превышен, остаток этапа 2 (строка 75) даёт 8. Решение -
   `docs/decisions/host.md#cli-args`. Отчёт - `DEBT_HOST_CLI_0_13_REPORT_20261027.md`. Коммит `4f32acf`.

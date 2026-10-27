@@ -17,10 +17,11 @@
 подтверждено измерением.
 
 > *English summary.* An MCP server that lets an AI agent drive a real, licensed KOMPAS-3D v24 (x64):
-> parts, sketches, features, assemblies and mates, drawings, sheet metal, STEP/DXF export. Every
-> mutating call reports a measured verification level, is journaled for safe retries and is confined
-> to configured disk roots. No arbitrary code execution. Dual-licensed MIT / Apache-2.0.
-> Documentation is in Russian.
+> parts, sketches, features, assemblies and mates, a bill of materials with CSV/JSON export, component
+> properties and native specification reading, drawings, sheet metal, STEP/DXF export. Every mutating
+> call reports a measured verification level, is journaled for safe retries and is confined to
+> configured disk roots. No arbitrary code execution. Dual-licensed MIT / Apache-2.0. Documentation is
+> in Russian.
 
 ## Быстрая установка
 
@@ -76,6 +77,8 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
   признак можно подавить, восстановить или удалить.
 - **Сборки.** Вставка, замена и размещение компонентов, сопряжения, разнесённый вид, сечения,
   проверка пересечений и зазоров.
+- **Состав изделия (BOM) и спецификация.** Сводная ведомость сборки с деревом и количествами, её
+  выгрузка в CSV и JSON, свойства компонента по ссылке и чтение родной спецификации модели.
 - **Листовой металл.** Листовое тело, сгибы, отверстия и вырезы, развёртка и её выгрузка в DXF.
 - **Чертежи.** Ассоциативные виды, разрезы, размеры, основная надпись, технические требования,
   экспорт в DXF/DWG.

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Research probe for the E5 block (direct face editing), run by hand and never by the solution build.
+    INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
+    the shipping graph could not be used to argue about what the product does.
+    DOC: E5_RESEARCH_DEVELOPER_PROMPT.md §1.5; reference/kompas-sdk-v24/docs-wire-20261028-e5/
+    History: docs/decisions/direct-faces.md#probe
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>E5Probe</RootNamespace>
+    <AssemblyName>E5Probe</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Vendor interop is referenced, never copied (build/KompasInterop.props convention). -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KompasAPI7">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasInteropDir" Value="$(KompasInteropDir)" />
+  </ItemGroup>
+
+  <Target Name="ThrowWhenInteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.KompasAPI7.dll')"
+           Text="Не найден Interop.KompasAPI7.dll в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=..." />
+  </Target>
+
+</Project>

@@ -165,6 +165,15 @@ public static class WorkerCommands
     /// History: docs/decisions/contracts.md#reposition-route</remarks>
     public const string SolidReposition = "solid.reposition";
 
+    /// <summary>Direct face move without the feature tree (docs/05 SM-24.move_faces).</summary> <remarks>DOC: the
+    /// documented API7 route — <c>ISurfaceContainer.FaceMovers</c> (obtained from <c>IPart7</c>) →
+    /// <c>IFaceMovers.Add</c> → <c>IFaceMover.SetFaces(Faces, TangentFaces)</c> with <c>Offset</c> and
+    /// <c>Direction</c> → <c>IModelObject.Update</c>. MEASURED: an API5 face answers as <c>IFace</c> only through
+    /// <c>TransferInterface(face, ksAPI7Dual, 0)</c>; <c>Update() = true</c> alone does not prove the move, so the
+    /// volume and the area are read back.
+    /// History: docs/decisions/direct-faces.md#implementation</remarks>
+    public const string MoveFaces = "solid.move_faces";
+
     /// <summary>Parametric definiteness of an existing sketch — the status KOMPAS shows with the «+», «−», «!»
     /// signs.</summary> <remarks>DOC: route is documented API7: <c>TransferInterface(sketchEntity, ksAPI7Dual, 0)</c> →
     /// <c>ISketch.ConstraintsState</c> of type <c>ksConstraintsStateEnum</c>. MEASURED: five repeated reads changed

@@ -98,6 +98,11 @@
         "artifact": "coverage/solid-v24/release-profiles/drafts-minimal-v1.json",
         "title": "Уклоны граней v24: от основания и от базовой линии",
         "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
+      },
+      "direct-faces-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/direct-faces-v1.json",
+        "title": "Прямое моделирование v24: перемещение граней тела без дерева построения",
+        "plan": "coverage/solid-v24/implementation-plan.md (блок E5)"
       }
     },
     "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -15941,6 +15946,137 @@
         "Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.",
         "Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd."
       ]
+    },
+    {
+      "operation_id": "SM-24.move_faces",
+      "kind": "profile_mode",
+      "context": "part.single_body",
+      "catalog_ref": "SM-24",
+      "parameters_schema": "schemas/kompas_move_faces.json",
+      "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → FaceMovers.Add() → IFaceMover.SetFaces(Faces, TangentFaces=false) + Offset + Direction → IModelObject.Update(); грань переносится KompasObject.TransferInterface(грань, ksAPI7Dual, 0) → IFace",
+      "actions": {
+        "discover": "implemented",
+        "create": "implemented",
+        "read": "implemented",
+        "edit": "implemented",
+        "rebuild": "implemented",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "implemented",
+        "geometry_validation": "implemented"
+      },
+      "tests": [
+        "FaceMoveEffectTests"
+      ],
+      "evidence": [
+        "docs/decisions/direct-faces.md",
+        "docs/acceptance/evidence/20261028-e5-probe-c4cbcc0/probe.json",
+        "scripts/mcp-smoke.py"
+      ],
+      "limitations": [
+        "Код и модульные тесты есть, приёмочная группа mcp-smoke E5 не заведена: ни одно действие не поднято до verified, пока группа не пройдёт на целевом build. save_reopen не измерялся.",
+        "Сторона перемещения НЕ назначается: IFaceMover.Direction - логический признак «Сменить направление», и измерением установлено только значение true (объём вырос). Контракт называет сторону полем reverse и сообщает фактическое смещение со знаком в observed_offset_mm; утверждать «false - внутрь» было бы утверждением неправды.",
+        "Касательные грани (SM-24.move_faces.tangent_group) не выполняются: SetFaces вызывается с TangentFaces = false, а true отвергается именованным отказом. Режим - отдельный наряд DIRECT_FACES_TANGENT.",
+        "not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.",
+        "Границы измеренного: одно тело, брусок 40x30x20 с историей построения, плоская грань. Многотельный контекст отвергается до COM (все грани одного вызова обязаны принадлежать одному телу), тело без истории построения - отдельный наряд DIRECT_FACES_NO_HISTORY."
+      ],
+      "profile": "direct-faces-v1",
+      "priority": "practical_required",
+      "queue": "E5",
+      "depends_on": [
+        "dep.api7.surface_container",
+        "dep.refs.faces_body"
+      ],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "suppress_restore": "Операция прямого моделирования не создаёт признак в дереве построения: справка isurfacecontainer.html описывает операции над ГРАНЯМИ и ТЕЛОМ, поэтому подавлять и восстанавливать нечего.",
+        "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции перемещения граней тоже нет, удалять с зависимостями нечего."
+      }
+    },
+    {
+      "operation_id": "dep.api7.surface_container",
+      "kind": "common_dependency",
+      "profile": "direct-faces-v1",
+      "priority": "dependency_of",
+      "queue": null,
+      "context": "part",
+      "catalog_ref": "SM-24",
+      "catalog_refs": [
+        "SM-24.move_faces",
+        "SM-24.delete_faces",
+        "SM-24.restore_faces"
+      ],
+      "title": "ISurfaceContainer как дополнительный интерфейс IPart7",
+      "parameters_schema": null,
+      "adapter_route": "ISurfaceContainer получается приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную IUnknown::QueryInterface в .NET не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом.",
+      "actions": {
+        "discover": "implemented",
+        "read": "implemented",
+        "negative_tests": "implemented",
+        "create": "not_applicable",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "geometry_validation": "not_applicable"
+      },
+      "tests": [],
+      "evidence": [
+        "docs/decisions/direct-faces.md"
+      ],
+      "limitations": [],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "create": "Зависимость - условие входа (интерфейс и способ адресации), а не операция: собственного создания у неё нет.",
+        "edit": "Зависимость не редактируется: она либо отвечает, либо отказ называется по имени.",
+        "rebuild": "Перестроение относится к операции, а не к зависимости.",
+        "suppress_restore": "У зависимости нет признака в дереве, подавлять нечего.",
+        "delete_dependencies": "У зависимости нет признака и зависимых признаков.",
+        "geometry_validation": "Геометрию проверяет операция, а не условие входа."
+      }
+    },
+    {
+      "operation_id": "dep.refs.faces_body",
+      "kind": "common_dependency",
+      "profile": "direct-faces-v1",
+      "priority": "dependency_of",
+      "queue": null,
+      "context": "part",
+      "catalog_ref": "SM-24",
+      "catalog_refs": [
+        "SM-24.move_faces"
+      ],
+      "title": "Ссылка на грань и на тело: чтение до и после операции",
+      "parameters_schema": null,
+      "adapter_route": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь - CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани в ссылке не хранится: принадлежность телу проверяется по COM-указателю, грань чужого тела отвергается с details.body_index.",
+      "actions": {
+        "discover": "implemented",
+        "read": "implemented",
+        "negative_tests": "implemented",
+        "create": "not_applicable",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "geometry_validation": "not_applicable"
+      },
+      "tests": [],
+      "evidence": [
+        "docs/decisions/direct-faces.md"
+      ],
+      "limitations": [],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "create": "Зависимость - условие входа (интерфейс и способ адресации), а не операция: собственного создания у неё нет.",
+        "edit": "Зависимость не редактируется: она либо отвечает, либо отказ называется по имени.",
+        "rebuild": "Перестроение относится к операции, а не к зависимости.",
+        "suppress_restore": "У зависимости нет признака в дереве, подавлять нечего.",
+        "delete_dependencies": "У зависимости нет признака и зависимых признаков.",
+        "geometry_validation": "Геометрию проверяет операция, а не условие входа."
+      }
     }
   ],
   "pending_families": [
@@ -15950,7 +16086,6 @@
     "SM-20",
     "SM-21",
     "SM-22",
-    "SM-24",
     "SM-25",
     "SM-26",
     "SM-27",

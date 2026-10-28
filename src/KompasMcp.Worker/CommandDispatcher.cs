@@ -390,6 +390,7 @@ public sealed class CommandDispatcher
             WorkerCommands.SolidSplit => _sta.Run(() => SolidSplit(request), "solid.split", cancellationToken),
             WorkerCommands.SolidCutByPlane => _sta.Run(() => SolidCutByPlane(request), "solid.cut_by_plane", cancellationToken),
             WorkerCommands.SolidReposition => _sta.Run(() => SolidReposition(request), "solid.reposition", cancellationToken),
+            WorkerCommands.MoveFaces => _sta.Run(() => MoveFaces(request), "solid.move_faces", cancellationToken),
             WorkerCommands.GetFeature => _sta.Run(() => Feature(request), "feat.get", cancellationToken),            WorkerCommands.UpdateFeature => _sta.Run(() => UpdateFeature(request), "feat.update", cancellationToken),
             WorkerCommands.PatternGrid => _sta.Run(() => PatternGrid(request), "pattern.grid", cancellationToken),
             WorkerCommands.PatternCircular => _sta.Run(() => PatternCircular(request), "pattern.circular", cancellationToken),
@@ -1113,6 +1114,16 @@ public sealed class CommandDispatcher
         var document = _session.RequireDocument(command.DocumentId);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Shell(command), document);
+    }
+
+    /// <summary>Direct face move (SM-24.move_faces). The document comes from <c>document_id</c> for the same
+    /// reason as at shell: several faces are named, and the adapter checks each against that document.</summary>
+    private object? MoveFaces(IpcFrame request)
+    {
+        var command = Argument<MoveFacesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.MoveFaces(command), document);
     }
 
     /// <summary>Draft (SM-12). The document comes from <c>document_id</c>, as at shell: there may be several

@@ -198,6 +198,10 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.SolidCutByPlane, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.SolidReposition, WorkerAction.ModelMutation, 240_000);
 
+        // The direct face move goes through the same API7 bridge and reads the body back twice (before
+        // and after), so the budget equals the other body operations.
+        Cad(WorkerCommands.MoveFaces, WorkerAction.ModelMutation, 240_000);
+
         // ---- auxiliary geometry ----
         // The API7 route (bridge + QI(IAuxiliaryGeomContainer) + Rebuild); the enumeration reads the
         // collection with one COM call per element.

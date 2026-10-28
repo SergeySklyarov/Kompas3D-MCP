@@ -1,0 +1,67 @@
+using KompasMcp.Domain.Geometry;
+using Xunit;
+
+namespace KompasMcp.Unit;
+
+/// <summary>The two numbers a moved face must produce, and the tolerance they are compared with.</summary>
+/// <remarks>WHY. <c>Update() = true</c> is «accepted», not «applied»: the same route answered true for a
+/// removal that changed nothing. The move is therefore confirmed by the swept volume <c>d·A</c> and the
+/// lateral band <c>d·P</c>, and the sign of <c>d</c> is the displacement the volume shows — which side
+/// <c>Direction = false</c> means is not established by measurement.
+/// History: docs/decisions/direct-faces.md#implementation</remarks>
+public class FaceMoveEffectTests
+{
+    // The measured fixture: a 40 x 30 x 20 box, its 40 x 30 top face moved by 5 mm along the normal.
+    private const double Box = 24000d;
+    private const double BoxArea = 5200d;
+    private const double TopArea = 1200d;
+    private const double TopPerimeter = 140d;
+
+    [Fact]
+    public void Volume_GrowsByTheSweptPrism()
+    {
+        Assert.Equal(30000d, FaceMoveEffect.ExpectedVolume(Box, TopArea, 5d), 6);
+    }
+
+    [Fact]
+    public void Area_GrowsByOneBandOfThePerimeter()
+    {
+        Assert.Equal(5900d, FaceMoveEffect.ExpectedArea(BoxArea, TopPerimeter, 5d), 6);
+    }
+
+    [Fact]
+    public void InwardMove_ShrinksBothNumbers()
+    {
+        Assert.Equal(18000d, FaceMoveEffect.ExpectedVolume(Box, TopArea, -5d), 6);
+        Assert.Equal(4500d, FaceMoveEffect.ExpectedArea(BoxArea, TopPerimeter, -5d), 6);
+    }
+
+    [Fact]
+    public void ObservedDisplacement_IsTheVolumeDeltaOverTheFaceArea()
+    {
+        Assert.Equal(5d, FaceMoveEffect.ObservedDisplacement(Box, 30000d, TopArea));
+        Assert.Equal(-5d, FaceMoveEffect.ObservedDisplacement(Box, 18000d, TopArea));
+    }
+
+    /// <summary>A zero or unread face area divides by zero: "not computed" must not look like "moved by
+    /// zero", or a no-op would pass as a completed move.</summary>
+    [Fact]
+    public void ObservedDisplacement_IsNullWhenItCannotBeComputed()
+    {
+        Assert.Null(FaceMoveEffect.ObservedDisplacement(Box, 30000d, 0d));
+        Assert.Null(FaceMoveEffect.ObservedDisplacement(Box, 30000d, null));
+        Assert.Null(FaceMoveEffect.ObservedDisplacement(null, 30000d, TopArea));
+        Assert.Null(FaceMoveEffect.ObservedDisplacement(Box, null, TopArea));
+    }
+
+    [Fact]
+    public void Matches_KeepsTheProfileTolerance()
+    {
+        Assert.True(FaceMoveEffect.Matches(30000.005d, 30000d));
+        Assert.True(FaceMoveEffect.Matches(30000d * (1d + 1e-7d), 30000d));
+        Assert.False(FaceMoveEffect.Matches(30001d, 30000d));
+        Assert.False(FaceMoveEffect.Matches(null, 30000d));
+        Assert.False(FaceMoveEffect.Matches(30000d, null));
+        Assert.False(FaceMoveEffect.Matches(double.NaN, 30000d));
+    }
+}

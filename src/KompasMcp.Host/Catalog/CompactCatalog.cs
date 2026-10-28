@@ -57,6 +57,7 @@ public static class CompactCatalog
         ["kompas_list_features"] = "feature", ["kompas_get_feature"] = "feature",
         ["kompas_list_feature_parameters"] = "feature", ["kompas_set_feature_suppressed"] = "feature",
         ["kompas_boolean"] = "boolean", ["kompas_split"] = "boolean", ["kompas_cut_by_plane"] = "boolean",
+        ["kompas_move_faces"] = "boolean",
         ["kompas_create_sheet_metal_body"] = "sheet_metal", ["kompas_get_sheet_metal"] = "sheet_metal",
         ["kompas_edit_sheet_metal_body"] = "sheet_metal",
         ["kompas_create_sheet_metal_bend"] = "sheet_metal",

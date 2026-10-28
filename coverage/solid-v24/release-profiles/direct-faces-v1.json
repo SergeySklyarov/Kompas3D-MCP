@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "profile_id": "direct-faces-v1",
+    "title": "Прямое моделирование v24: перемещение граней тела без дерева построения",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "28.10.2026",
+        "change": "профиль заведён нарядом DIRECT_FACES_CORE: перемещение граней документированным маршрутом ISurfaceContainer.FaceMovers -> IFaceMover. Остальные четыре инструмента блока (удаление, восстановление, касательные грани, тело без истории) - отдельные наряды этого же выпуска, режимы добавляются их профилями"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "E5": "Прямое изменение тела (SM-24) - блок E5 плана реализации"
+    }
+  },
+  "modes": [
+    {
+      "ref": "SM-24.move_faces",
+      "title": "Переместить грани тела на расстояние вдоль нормали",
+      "family": "SM-24",
+      "queue": "E5",
+      "priority": "practical_required",
+      "current_level": "not_started",
+      "required_actions": [
+        "discover",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Маршрут документирован: ISurfaceContainer (получается у IPart7) -> FaceMovers.Add() -> IFaceMover.SetFaces(Faces, TangentFaces) + Offset + Direction -> IModelObject.Update(). Грань API5 отвечает как IFace только через TransferInterface(грань, ksAPI7Dual, 0) - измерено. Направление задаётся логическим признаком «Сменить направление», а не вектором, поэтому сторона называется полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm. Успех подтверждается числами: объём против V + d·A и площадь против F + P·d, где A и P - площадь и периметр названных граней. Отказы: пустой список граней, нулевое смещение, грань чужого тела, tangent_group = true, Update() = false, отсутствие изменения объёма при Update() = true."
+    }
+  ],
+  "common_dependencies": [
+    {
+      "id": "dep.api7.surface_container",
+      "title": "ISurfaceContainer как дополнительный интерфейс IPart7",
+      "catalog_refs": [
+        "SM-24.move_faces",
+        "SM-24.delete_faces",
+        "SM-24.restore_faces"
+      ],
+      "required_actions": [
+        "discover",
+        "read"
+      ],
+      "gap": "Справка: «Данный интерфейс можно получить у компонента IPart7 посредством вызова метода IUnknown::QueryInterface». В .NET работает приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную QueryInterface не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом."
+    },
+    {
+      "id": "dep.refs.faces_body",
+      "title": "Ссылка на грань и на тело: чтение до и после операции",
+      "catalog_refs": [
+        "SM-24.move_faces"
+      ],
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ],
+      "gap": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь читаются CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани (тело) в ссылке не хранится, поэтому принадлежность проверяется по COM-указателю: грань чужого тела отвергается с details.body_index."
+    }
+  ],
+  "explicitly_out_of_scope": [
+    "Удаление граней (SM-24.delete_faces, режимы keep_body и open_shell) - наряд DIRECT_FACES_DELETE_RESTORE. Измерено, что SaveBody = true принимается и ничего не делает, поэтому режим keep_body не проектируется как рабочий до отдельного замера.",
+    "Восстановление граней (SM-24.restore_faces.by_face) - тот же наряд. Измерено: IRestoredSurface создаёт отдельную поверхность и оболочку не вылечивает.",
+    "Касательные грани (SM-24.move_faces.tangent_group) - наряд DIRECT_FACES_TANGENT. Параметр tangent_group объявлен в контракте, но true отвергается именованным отказом: успех за невыполненную работу не выдаётся.",
+    "Тело без истории построения (импорт STEP) - наряд DIRECT_FACES_NO_HISTORY. Маршрут от дерева построения не зависит (измерено на импортированном теле), но приёмка на теле без истории в этот профиль не входит.",
+    "Изменение положения грани отдельным признаком (SM-24.change_face_position): документированного программного маршрута нет - страницы нет, а номер типа o3d_FaceResizer = 660 маршрутом не является. Решение о снятии требования - за заказчиком.",
+    "Замена граней (SM-24.replace_faces.offset) и изменение размера грани (SM-24.resize_face): документированного маршрута нет по той же причине.",
+    "Изменение скругления на теле без истории (SM-24.change_fillet): прямое изменение не документировано; для тела с историей радиус правится признаком дерева через kompas_update_feature.",
+    "Разрезание тела ссылкой (SM-24.split_solid_ref) закрывается строкой SM-16 существующим инструментом, отдельного инструмента блока не заводится."
+  ]
+}

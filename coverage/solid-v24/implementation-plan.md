@@ -1081,3 +1081,11 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 
 Очередь: `E2_RESEARCH` (`E2_RESEARCH_DEVELOPER_PROMPT.md`, выдан) -> наряды реализации E2 по его отчёту -> E4 -> IGES ->
 `RELEASE_0_13_0`. Долг 81 закрыт; открыто 10 пунктов.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 28.10.2026, сорок пятая (`E2_RESEARCH` принят).**
+
+Все четыре строки `SM-14.*` имеют документированный программный маршрут. Профиль `rib-v1`: один инструмент `kompas_rib`,
+чтение и правка расширением `kompas_get_feature`/`kompas_update_feature`. Очередь: `RIB_CORE` (`RIB_CORE_DEVELOPER_PROMPT.md`,
+выдан) -> `RIB_MODES` (симметричная толщина, правка, `save_reopen`, `body`) -> `RIB_POSITIONS` (`Side` 2 и 3 на второй
+геометрии) -> E4 -> IGES -> `RELEASE_0_13_0`. `Side` 2/3 отказали на одной геометрии: закрытие `mode_side_positions`
+решает второй замер.

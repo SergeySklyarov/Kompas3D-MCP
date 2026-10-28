@@ -41,11 +41,17 @@ internal sealed class E5Probe : IDisposable
 
     public E5Probe(string outPath) => _outPath = Path.GetFullPath(outPath);
 
-    public int Run(bool keepOpen)
+    public int Run(bool keepOpen, string? stepPath = null)
     {
         try
         {
             Launch();
+            if (stepPath is not null)
+            {
+                RunStepBody(stepPath);
+                return Finish(keepOpen);
+            }
+
             BuildBox();
             State("построен");
             EntryPoint();
@@ -58,16 +64,120 @@ internal sealed class E5Probe : IDisposable
         {
             Record("probe", "проба дошла до конца", Describe(ex), "FAIL");
         }
-        finally
+
+        return Finish(keepOpen);
+    }
+
+    private int Finish(bool keepOpen)
+    {
+        Write();
+        if (!keepOpen)
         {
-            Write();
-            if (!keepOpen)
-            {
-                CloseApp();
-            }
+            CloseApp();
         }
 
         return _rows.Any(row => row?["verdict"]?.GetValue<string>() == "FAIL") ? 1 : 0;
+    }
+
+    /// <summary>§3 and §5.6 of the order: the same operations on a body that has no feature tree.
+    /// The STEP file goes in through the route the product already ships
+    /// (<c>ksDocument3D.LoadFromAdditionFormat</c> with <c>format = -3</c>), so the body under test is
+    /// the body a client would get from <c>kompas_import_step</c>.</summary>
+    private void RunStepBody(string stepPath)
+    {
+        _doc5 = (ksDocument3D)_app5!.Document3D();
+        _doc5.Create(true, true);
+        var parameter = (ksAdditionFormatParam)_doc5.AdditionFormatParam();
+        parameter.Init();
+        parameter.format = -3;
+        var loaded = _doc5.LoadFromAdditionFormat(Path.GetFullPath(stepPath), parameter);
+        _doc5.RebuildDocument();
+        Record("step_import", "STEP импортирован маршрутом продукта", loaded ? "true" : "false",
+            loaded ? "PASS" : "FAIL");
+        if (!loaded)
+        {
+            return;
+        }
+
+        _doc7 = _app5.TransferInterface(_doc5, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IKompasDocument3D;
+        var before = State("STEP-тело импортировано");
+        Record("step_bodies", "импорт дал тело", $"{before["bodies"]} тел, {before["faces"]} граней",
+            (before["bodies"]?.GetValue<int>() ?? 0) > 0 ? "PASS" : "FAIL");
+
+        // Which face moves is not known in advance on an imported body: the probe tries the first
+        // three and records every answer, so "no change" is attributed to the FACE, not to the body.
+        var moved = new List<string>();
+        for (var index = 0; index < 3; index++)
+        {
+            var face = FaceAt(index);
+            if (face is null)
+            {
+                break;
+            }
+
+            var beforeMove = State($"STEP: грань {index}");
+            try
+            {
+                var mover = (_doc7?.TopPart as ISurfaceContainer)?.FaceMovers?.Add();
+                if (mover is null)
+                {
+                    Record("step_move_add", "IFaceMover получен на теле без истории", "null", "FAIL");
+                    break;
+                }
+
+                var set = mover.SetFaces(new object[] { face }, false);
+                mover.Offset = MoveOffset;
+                mover.Direction = true;
+                var updated = ((IModelObject)mover).Update();
+                _doc5.RebuildDocument();
+                var after = State($"STEP: грань {index} после перемещения");
+                var delta = Volume(after) - Volume(beforeMove);
+                if (Math.Abs(delta) > 1e-6)
+                {
+                    moved.Add($"грань {index}: dV={delta:0.###} (SetFaces={set}, Update={updated})");
+                }
+                else
+                {
+                    Record($"step_move_face_{index}", $"перемещение грани {index} на теле без истории",
+                        $"объём не изменился (SetFaces={set}, Update={updated})", "FAIL");
+                }
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException or TargetInvocationException)
+            {
+                Record($"step_move_face_{index}", $"перемещение грани {index} на теле без истории",
+                    Describe(ex), "FAIL");
+            }
+        }
+
+        Record("step_move_volume", "хотя бы одна грань тела без истории перемещается",
+            moved.Count == 0 ? "ни одна из первых трёх" : string.Join("; ", moved),
+            moved.Count > 0 ? "PASS" : "FAIL");
+
+        try
+        {
+            var remover = (_doc7?.TopPart as ISurfaceContainer)?.FaceRemovers?.Add();
+            var top = FaceAt(0);
+            if (remover is null || top is null)
+            {
+                Record("step_delete", "IFaceRemover на теле без истории", "null", "FAIL");
+                return;
+            }
+
+            remover.Faces = new object[] { top };
+            remover.SaveBody = false;
+            ((IModelObject)remover).Update();
+            _doc5.RebuildDocument();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or TargetInvocationException)
+        {
+            Record("step_delete", "удаление грани на теле без истории", Describe(ex), "FAIL");
+            return;
+        }
+
+        var shell = State("после удаления на STEP-теле");
+        Record("step_delete_shell", "тело без истории стало оболочкой (объём 0)",
+            $"{Volume(shell):0.###}, граней {Faces(shell)}",
+            Math.Abs(Volume(shell)) < 1e-6 ? "PASS" : "FAIL");
     }
 
     // ── environment ─────────────────────────────────────────────────────────────────────────────

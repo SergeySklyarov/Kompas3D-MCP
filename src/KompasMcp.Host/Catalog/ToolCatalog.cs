@@ -2340,8 +2340,9 @@ public static class ToolCatalog
                         "observed_offset_mm.", -1e6d, 1e6d)),
                     ("reverse", Sch.Nullable(Sch.Bool(
                         "Сторона перемещения — IFaceMover.Direction, признак «Сменить направление». " +
-                        "Передаётся как есть; какую сторону означает false, измерением не установлено, " +
-                        "поэтому результат сообщает фактическое смещение со знаком. Без поля — false.",
+                        "ИЗМЕРЕНО на одной грани бруска обеими сторонами: false уводит грань ПРОТИВ " +
+                        "внешней нормали (объём падает), true — по нормали. Фактическое смещение со " +
+                        "знаком всё равно сообщается в observed_offset_mm. Без поля — false.",
                         false))),
                     ("tangent_group", Sch.Nullable(Sch.Bool(
                         "Касательные грани — IFaceMover.SetFaces(Faces, TangentFaces). Параметр объявлен, " +

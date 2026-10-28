@@ -265,9 +265,9 @@
 - **операций:** 152
 - **режимов_и_вариантов:** 233
 - **применимых_действий:** 3085
-- **действий_verified:** 1255
-- **покрытие_действий:** 40.7%
-- **распределение_статусов:** {'not_started': 1817, 'verified': 1255, 'not_applicable': 735, 'implemented': 13}
+- **действий_verified:** 1262
+- **покрытие_действий:** 40.9%
+- **распределение_статусов:** {'not_started': 1817, 'verified': 1262, 'not_applicable': 735, 'implemented': 6}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 83, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -332,7 +332,7 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `SM-24.move_faces` | SM-24 | practical_required | E5 | metadata_found | код | код | код | код | код | — | н/п | н/п | код | код | FaceMoveEffectTests |
+| `SM-24.move_faces` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | — | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_group, E5.NEG.foreign_face, FaceMoveEffectTests |
 
 ### Общие зависимости профиля `direct-faces-v1`
 
@@ -1063,7 +1063,7 @@
 | `dep.sketch_constraints.no_silent_rewrite` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | SKC.10.geometry_validation, SKC.16.no_silent_rewrite, CB22.1.refused_constraint_leaves_no_record, CB22.2.open_document_not_rewritten, CB22.3.polyline_vertex_refused_before_kernel |
 | `dep.api7.sections_interface` *(вне каталога)* | G11 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
 | `dep.api7.dismantle_interface` *(вне каталога)* | G9 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | DSM-01.discovery, DSM-08.read_back, DSM-11.save_reopen |
-| `SM-24.move_faces` *(вне каталога)* | SM-24 | practical_required | E5 | metadata_found | код | код | код | код | код | — | н/п | н/п | код | код | FaceMoveEffectTests |
+| `SM-24.move_faces` *(вне каталога)* | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | — | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_group, E5.NEG.foreign_face, FaceMoveEffectTests |
 | `dep.api7.surface_container` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
 | `dep.refs.faces_body` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
 
@@ -1926,7 +1926,7 @@
   - Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
   - Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly.
 - `SM-24.move_faces` — не закрыт
-  - Код и модульные тесты есть, приёмочная группа mcp-smoke E5 не заведена: ни одно действие не поднято до verified, пока группа не пройдёт на целевом build. save_reopen не измерялся.
+  - Группа mcp-smoke E5 пройдена: 10 строк PASS, 1 NAMED. save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.
   - Сторона перемещения НЕ назначается: IFaceMover.Direction - логический признак «Сменить направление», и измерением установлено только значение true (объём вырос). Контракт называет сторону полем reverse и сообщает фактическое смещение со знаком в observed_offset_mm; утверждать «false - внутрь» было бы утверждением неправды.
   - Касательные грани (SM-24.move_faces.tangent_group) не выполняются: SetFaces вызывается с TangentFaces = false, а true отвергается именованным отказом. Режим - отдельный наряд DIRECT_FACES_TANGENT.
   - not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.

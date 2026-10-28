@@ -15955,27 +15955,38 @@
       "parameters_schema": "schemas/kompas_move_faces.json",
       "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → FaceMovers.Add() → IFaceMover.SetFaces(Faces, TangentFaces=false) + Offset + Direction → IModelObject.Update(); грань переносится KompasObject.TransferInterface(грань, ksAPI7Dual, 0) → IFace",
       "actions": {
-        "discover": "implemented",
-        "create": "implemented",
-        "read": "implemented",
-        "edit": "implemented",
-        "rebuild": "implemented",
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
         "save_reopen": "not_started",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
-        "negative_tests": "implemented",
-        "geometry_validation": "implemented"
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
       },
       "tests": [
+        "E5.PREP.volume",
+        "E5.PREP.face",
+        "E5.MOVE.inward_volume",
+        "E5.MOVE.inward_area",
+        "E5.MOVE.inward_offset",
+        "E5.MOVE.verified",
+        "E5.MOVE.outward",
+        "E5.NEG.empty_faces",
+        "E5.NEG.zero_offset",
+        "E5.NEG.tangent_group",
+        "E5.NEG.foreign_face",
         "FaceMoveEffectTests"
       ],
       "evidence": [
+        "scripts/mcp-smoke.py",
         "docs/decisions/direct-faces.md",
-        "docs/acceptance/evidence/20261028-e5-probe-c4cbcc0/probe.json",
-        "scripts/mcp-smoke.py"
+        "docs/acceptance/evidence/20261028-e5-probe-c4cbcc0/probe.json"
       ],
       "limitations": [
-        "Код и модульные тесты есть, приёмочная группа mcp-smoke E5 не заведена: ни одно действие не поднято до verified, пока группа не пройдёт на целевом build. save_reopen не измерялся.",
+        "Группа mcp-smoke E5 пройдена: 10 строк PASS, 1 NAMED. save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.",
         "Сторона перемещения НЕ назначается: IFaceMover.Direction - логический признак «Сменить направление», и измерением установлено только значение true (объём вырос). Контракт называет сторону полем reverse и сообщает фактическое смещение со знаком в observed_offset_mm; утверждать «false - внутрь» было бы утверждением неправды.",
         "Касательные грани (SM-24.move_faces.tangent_group) не выполняются: SetFaces вызывается с TangentFaces = false, а true отвергается именованным отказом. Режим - отдельный наряд DIRECT_FACES_TANGENT.",
         "not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.",

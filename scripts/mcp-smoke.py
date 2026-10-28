@@ -664,7 +664,7 @@ def file_sha256(path):
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties).
-EXPECTED_TOOL_COUNT = 118
+EXPECTED_TOOL_COUNT = 119
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -822,6 +822,9 @@ RUN_GROUPS = (
     ("sections", "sections", "sections-acceptance.json",
      "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
      "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
+    ("e5", "e5", "e5-acceptance.json",
+     "Приёмка E5: прямое перемещение граней тела - объём V + d*A, площадь F + P*d и отказы "
+     "(наряд DIRECT_FACES_CORE, профиль direct-faces-v1)"),
     ("update", "update", "update-acceptance.json",
      "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
      "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
@@ -876,6 +879,8 @@ ALL_GROUPS_EXTRA = (
     ("bom", ["--bom-only"]),
     ("dismantle", ["--dismantle-only"]),
     ("sections", ["--sections-only"]),
+    # Группа E5 строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
+    ("e5", ["--e5-only"]),
     # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
     # `initialize.instructions` можно увидеть только в процессе, поднятом ПОСЛЕ записи итога.
     ("update", ["--update-only"]),
@@ -2054,6 +2059,7 @@ FLAGS = (
     ("--bom-only", False, "группа BOM: сводка BOM по сборке и её выгрузка"),
     ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
+    ("--e5-only", False, "группа E5: прямое перемещение граней тела"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
     ("--nested-repeat", True, "K повторов постановки NEST в одном сеансе"),
@@ -16738,6 +16744,8 @@ def main():
     # Домен СЕЧЕНИЙ (наряд G11, профиль `sections-minimal-v1`): одна группа SEC на своём сеансе -
     # клетка матрицы обязана находиться по ИМЕНИ строки (`SEC.<NN>.<действие>`).
     sections_only = "--sections-only" in sys.argv
+    # Блок E5 (прямое изменение тела): группа E5 на своём сеансе, строки `E5.<NN>.<действие>`.
+    e5_only = "--e5-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16893,6 +16901,7 @@ def main():
         "bom": bom_only,
         "dismantle": dismantle_only,
         "sections": sections_only,
+        "e5": e5_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -17499,6 +17508,14 @@ def main():
             dismantle_checks(client, rep, app_id, workdir)
         if sections_only:
             sections_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if e5_only:
+            e5_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -52900,6 +52917,222 @@ def sheet_metal_checks(client, rep, app_id, workdir):
     flat_dxf_rows()
 
 
+def e5_checks(client, rep, app_id, workdir):
+    """E5.* - прямое перемещение граней через MCP (наряд DIRECT_FACES_CORE, профиль direct-faces-v1).
+
+    ЧТО ДОКАЗЫВАЕТСЯ. Инструмент `kompas_move_faces` сдвигает верхнюю грань бруска 40x30x20 на
+    5 мм, и прочитанное сверяется с аналитикой: объём `V + d*A` = 30000 мм3 при A = 1200, площадь
+    `F + P*d` = 5900 мм2 при P = 140. Объём читается независимо (`kompas_measure`), площадь -
+    из ответа инструмента, который читает её с модели; в строке названо, что чем измерено. Отказы
+    проверяются ПО КОДУ: пустой список граней, нулевое смещение, касательные грани, грань другого
+    документа.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Тело без истории построения, касательные грани как режим и save -> reopen -
+    отдельные наряды блока E5. Грань ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно
+    многотельное тело): страж - сравнение COM-указателя владельца - строкой не покрыт, и это
+    названо, а не выдано за проверенное.
+    """
+    V0, F0, A_TOP, P_TOP, D = 24000.0, 5200.0, 1200.0, 140.0, 5.0
+    TOL_V, TOL_F = 0.05, 1.0
+    W, H, DEPTH = 40.0, 30.0, 20.0
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def body_ref(doc, index=0):
+        rows = bodies(doc)
+        return rows[index].get("body_ref") if len(rows) > index else None
+
+    def measure(doc, index=0):
+        rows = bodies(doc)
+        if len(rows) <= index:
+            return {}
+        _e, env, _r = client.tool("kompas_measure", {
+            "target_ref": rows[index].get("body_ref"), "properties": ["volume", "bbox"]})
+        res = result(env)
+        return res if isinstance(res, dict) else {}
+
+    def volume(doc, index=0):
+        return measure(doc, index).get("volume_mm3")
+
+    def top_face(doc, index=0):
+        env, code = call("kompas_resolve_selection", {
+            "body_ref": body_ref(doc, index),
+            "predicate": {"surface_type": "plane", "normal_direction": [0, 0, 1]},
+            "require_unique": True, "limit": 10})
+        found = result(env)
+        if isinstance(found, dict):
+            found = found.get("matches") or found.get("items") or []
+        ids = [row.get("id") for row in (found or []) if row.get("id")]
+        return ids, code
+
+    def near(value, expected, tol):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tol
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def new_box(name, width, height, depth, x0=0.0, y0=0.0):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"документ не создан: {code}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "box"})
+        sketch = result(env).get("id")
+        if code or not sketch:
+            return None, f"эскиз не создан: {code}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [x0, y0], "width_mm": width,
+                          "height_mm": height}]})
+        if code:
+            return None, f"прямоугольник: {code}"
+        env, code = call("kompas_finish_sketch", {
+            "sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return None, f"эскиз не завершён: {code}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "base",
+            "depth_mm": depth, "direction": "positive",
+            "expected_volume_delta_mm3": width * height * depth})
+        if code:
+            return None, f"выдавливание: {code}"
+        return doc, None
+
+    box, problem = new_box("e5-box", W, H, DEPTH)
+    if problem:
+        rep.add("E5.PREP.box", "e5: брусок 40x30x20 построен через MCP", "FAIL", problem)
+        close(box)
+        return
+
+    measured = volume(box)
+    rep.add("E5.PREP.volume", "e5: объём построенного бруска равен 24000 мм3",
+            "PASS" if near(measured, V0, TOL_V) else "FAIL",
+            "измерено=%s ожидание=%s (kompas_measure)" % (measured, V0))
+
+    face_refs, code = top_face(box)
+    if not face_refs:
+        rep.add("E5.PREP.face", "e5: верхняя грань найдена по нормали +Z", "FAIL",
+                "код=%s" % (code,))
+        close(box)
+        return
+    rep.add("E5.PREP.face", "e5: верхняя грань найдена по нормали +Z, она одна",
+            "PASS" if len(face_refs) == 1 else "FAIL", "граней=%d" % len(face_refs))
+
+    # MEASURED HERE: reverse=false уводит грань ПРОТИВ внешней нормали (объём падает), reverse=true -
+    # по нормали. Обе стороны проверяются на одной и той же грани с одним и тем же смещением, поэтому
+    # строка доказывает не «что-то изменилось», а знак и величину.
+    env, code = call("kompas_move_faces", {
+        "document_id": box, "expected_revision": current_rev(box),
+        "face_refs": [face_refs[0]], "offset_mm": D})
+    moved = result(env)
+    after = volume(box)
+    observed = moved.get("observed_offset_mm")
+    rep.add("E5.MOVE.inward_volume",
+            "e5: reverse=false - грань уходит внутрь, объём равен V - d*A = 18000",
+            "PASS" if code is None and near(after, V0 - D * A_TOP, TOL_V) else "FAIL",
+            "код=%s объём=%s ожидание=%s (kompas_measure) observed_offset_mm=%s"
+            % (code, after, V0 - D * A_TOP, observed))
+    reported_area = moved.get("area_after_mm2")
+    rep.add("E5.MOVE.inward_area", "e5: площадь после хода внутрь равна F - P*d = 4500",
+            "PASS" if code is None and near(reported_area, F0 - P_TOP * D, TOL_F) else "FAIL",
+            "площадь=%s ожидание=%s (читает инструмент с модели)" % (reported_area, F0 - P_TOP * D))
+    rep.add("E5.MOVE.inward_offset", "e5: измеренное смещение внутрь равно -5 мм",
+            "PASS" if near(observed, -D, 1e-6) else "FAIL", "observed_offset_mm=%s" % (observed,))
+    checks = {row.get("name"): row.get("passed") for row in (moved.get("verification") or {})
+              .get("checks") or []} if isinstance(moved.get("verification"), dict) else {}
+    rep.add("E5.MOVE.verified",
+            "e5: уровень проверки geometry_checked, все именованные сверки пройдены",
+            "PASS" if (moved.get("verification") or {}).get("level") == "geometry_checked"
+            and checks and all(checks.values()) else "FAIL",
+            "level=%s сверки=%s" % ((moved.get("verification") or {}).get("level"),
+                                    json.dumps(checks, ensure_ascii=False)))
+
+    # Вторая сторона: тот же offset с reverse=true возвращает тело к 24000 и 5200.
+    back_refs, back_code = top_face(box)
+    if not back_refs:
+        rep.add("E5.MOVE.outward",
+                "e5: reverse=true - грань идёт по нормали, объём возвращается к 24000", "NAMED",
+                "грань после мутации не найдена по нормали: %s" % (back_code,))
+    else:
+        env2, code2 = call("kompas_move_faces", {
+            "document_id": box, "expected_revision": current_rev(box),
+            "face_refs": [back_refs[0]], "offset_mm": D, "reverse": True})
+        back = result(env2)
+        volume_back = volume(box)
+        rep.add("E5.MOVE.outward",
+                "e5: reverse=true - грань идёт по нормали, объём возвращается к 24000",
+                "PASS" if code2 is None and near(volume_back, V0, TOL_V) else "FAIL",
+                "код=%s объём=%s ожидание=%s observed_offset_mm=%s"
+                % (code2, volume_back, V0, back.get("observed_offset_mm")))
+
+    rev = current_rev(box)
+    _e, empty_env, _r = client.tool("kompas_move_faces", {
+        "document_id": box, "expected_revision": rev, "face_refs": [], "offset_mm": D,
+        "operation_id": str(uuid.uuid4())})
+    empty_code = error_code(empty_env)
+    rep.add("E5.NEG.empty_faces", "e5: пустой список граней отвергнут INVALID_ARGUMENT",
+            "PASS" if empty_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (empty_code,))
+
+    _e, zero_env, _r = client.tool("kompas_move_faces", {
+        "document_id": box, "expected_revision": rev, "face_refs": [face_refs[0]],
+        "offset_mm": 0, "operation_id": str(uuid.uuid4())})
+    zero_code = error_code(zero_env)
+    rep.add("E5.NEG.zero_offset", "e5: нулевое смещение отвергнуто INVALID_ARGUMENT",
+            "PASS" if zero_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (zero_code,))
+
+    _e, tan_env, _r = client.tool("kompas_move_faces", {
+        "document_id": box, "expected_revision": rev, "face_refs": [face_refs[0]],
+        "offset_mm": D, "tangent_group": True, "operation_id": str(uuid.uuid4())})
+    tan_code = error_code(tan_env)
+    rep.add("E5.NEG.tangent_group", "e5: tangent_group=true отвергнут CAPABILITY_UNAVAILABLE",
+            "PASS" if tan_code == "CAPABILITY_UNAVAILABLE" else "FAIL", "error=%s" % (tan_code,))
+
+    other, problem = new_box("e5-other", W, H, DEPTH)
+    foreign, foreign_code = (top_face(other) if other else ([], None))
+    if problem or not foreign:
+        rep.add("E5.NEG.foreign_face", "e5: грань другого документа отвергнута INVALID_ARGUMENT",
+                "NAMED", problem or "грань второго документа не найдена")
+    else:
+        _e, foreign_env, _r = client.tool("kompas_move_faces", {
+            "document_id": box, "expected_revision": rev, "face_refs": [foreign[0]],
+            "offset_mm": D, "operation_id": str(uuid.uuid4())})
+        got = error_code(foreign_env)
+        rep.add("E5.NEG.foreign_face",
+                "e5: грань другого документа отвергнута INVALID_ARGUMENT",
+                "PASS" if got == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (got,))
+
+    rep.add("E5.GAP.save_reopen",
+            "e5: сохранение и переоткрытие перемещённой грани", "NAMED",
+            "не измерялось этим нарядом: шаг save -> close -> reopen остаётся за следующим запуском")
+    close(other)
+    close(box)
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -52930,6 +53163,7 @@ EXTRA_GROUP_CHECKS = {
     "bom": lambda c, r, a, w, v, p: bom_checks(c, r, a, w),
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
+    "e5": lambda c, r, a, w, v, p: e5_checks(c, r, a, w),
     # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),

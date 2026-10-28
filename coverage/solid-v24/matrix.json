@@ -101,7 +101,7 @@
       },
       "direct-faces-v1": {
         "artifact": "coverage/solid-v24/release-profiles/direct-faces-v1.json",
-        "title": "Прямое моделирование v24: перемещение граней тела без дерева построения",
+        "title": "Прямое моделирование v24: грани тела без дерева построения",
         "plan": "coverage/solid-v24/implementation-plan.md (блок E5)"
       }
     },
@@ -16003,6 +16003,152 @@
       "not_applicable_reasons": {
         "suppress_restore": "Операция прямого моделирования не создаёт признак в дереве построения: справка isurfacecontainer.html описывает операции над ГРАНЯМИ и ТЕЛОМ, поэтому подавлять и восстанавливать нечего.",
         "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции перемещения граней тоже нет, удалять с зависимостями нечего."
+      }
+    },
+        {
+      "operation_id": "SM-24.delete_faces.open_shell",
+      "kind": "profile_mode",
+      "context": "part.single_body",
+      "catalog_ref": "SM-24",
+      "parameters_schema": "schemas/kompas_delete_faces.json",
+      "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → FaceRemovers.Add() → IFaceRemover.Faces (один объект как VT_DISPATCH, несколько как VT_ARRAY | VT_DISPATCH) + SaveBody=false → IModelObject.Update()",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "E5.DEL.open_shell",
+        "E5.DEL.open_shell_verified",
+        "E5.NEG.delete_refusals",
+        "FaceRemovalEffectTests"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/direct-faces.md",
+        "scratch/probe-e5-savebody.json"
+      ],
+      "limitations": [
+        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие оболочки относятся к наряду DIRECT_FACES_NO_HISTORY.",
+        "not_applicable у create: операция удаления не создаёт объект в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому создавать нечего.",
+        "not_applicable у suppress_restore и delete_dependencies: признака в дереве нет, зависимых признаков у операции удаления граней тоже нет.",
+        "Границы измеренного: одно тело, брусок 40x30x20 с историей построения, плоские грани. Отказ «удалить все грани тела» и грань другого документа проверяются до COM; грань чужого ТЕЛА в одном документе строкой не покрыта (нужно многотельное тело)."
+      ],
+      "profile": "direct-faces-v1",
+      "priority": "practical_required",
+      "queue": "E5",
+      "depends_on": [
+        "dep.api7.surface_container",
+        "dep.refs.faces_body"
+      ],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "create": "Операция удаления граней ничего не создаёт: справка isurfacecontainer.html описывает её как операцию над ГРАНЯМИ и ТЕЛОМ, а не признак дерева построения.",
+        "suppress_restore": "Подавлять и восстанавливать нечего: признака в дереве построения у операции нет.",
+        "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции удаления граней тоже нет."
+      }
+    },
+        {
+      "operation_id": "SM-24.delete_faces.keep_body",
+      "kind": "profile_mode",
+      "context": "part.single_body",
+      "catalog_ref": "SM-24",
+      "parameters_schema": "schemas/kompas_delete_faces.json",
+      "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → FaceRemovers.Add() → IFaceRemover.Faces + SaveBody=true → IModelObject.Update()",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_started",
+        "rebuild": "not_started",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_started"
+      },
+      "tests": [
+        "E5.DEL.keep_body_refused"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/direct-faces.md",
+        "scratch/probe-e5-savebody.json"
+      ],
+      "limitations": [
+        "Режим НЕ закрыт: MEASURED на бруске 40x30x20 - все шесть граней дают Update() = false при SaveBody = true, то есть целостность тела из снятой грани не восстанавливается. Инструмент выполняет документированный маршрут и отвечает отказом GEOMETRY_FAILED с details.mode, а не успехом.",
+        "Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента (одиночный VT_DISPATCH против массива), порядок свойств и второй Update, тип грани - на исход не влияют; контроль с тем же одиночным объектом и SaveBody=false срабатывает (6 -> 5 граней, объём 0).",
+        "Расхождение с записью E5_RESEARCH: там Update() возвращал true при неизменной модели, здесь - false. Запись исследования больше не воспроизводится, и это названо, а не сглажено.",
+        "LIMIT: геометрия, из которой целостность восстанавливается, не измерялась, поэтому успех режима нигде не обещан."
+      ],
+      "profile": "direct-faces-v1",
+      "priority": "practical_required",
+      "queue": "E5",
+      "depends_on": [
+        "dep.api7.surface_container",
+        "dep.refs.faces_body"
+      ],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "create": "Операция удаления граней ничего не создаёт: справка isurfacecontainer.html описывает её как операцию над ГРАНЯМИ и ТЕЛОМ, а не признак дерева построения.",
+        "suppress_restore": "Подавлять и восстанавливать нечего: признака в дереве построения у операции нет.",
+        "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции удаления граней тоже нет."
+      }
+    },
+        {
+      "operation_id": "SM-24.restore_faces.by_face",
+      "kind": "profile_mode",
+      "context": "part.single_body",
+      "catalog_ref": "SM-24",
+      "parameters_schema": "schemas/kompas_restore_faces.json",
+      "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → RestoredSurfaces.Add() → IRestoredSurface.Face (исходная грань) → IModelObject.Update()",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "verified",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "E5.RES.by_face",
+        "E5.RES.shell_not_healed",
+        "E5.RES.verified",
+        "E5.NEG.restore_mode"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/direct-faces.md",
+        "scratch/probe-e5-savebody.json"
+      ],
+      "limitations": [
+        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.",
+        "MEASURED: восстановленная поверхность - ОТДЕЛЬНЫЙ объект (тел 1 -> 2), оболочку она не вылечивает, объём тела остаётся нулевым. Поэтому успех подтверждается числом тел, а объём сообщается как прочитанный, но не обещанный.",
+        "not_applicable у edit: операция создаёт поверхность, а не правит существующий признак; not_applicable у suppress_restore и delete_dependencies - у операции нет признака в дереве построения.",
+        "Восстановленная поверхность не адресуется ссылкой: реестр ссылок граней и тел её не описывает, поэтому проверка идёт по числу тел."
+      ],
+      "profile": "direct-faces-v1",
+      "priority": "practical_required",
+      "queue": "E5",
+      "depends_on": [
+        "dep.api7.surface_container"
+      ],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "edit": "Операция создаёт отдельную поверхность из названной грани, а не правит существующий объект: править нечего.",
+        "suppress_restore": "Признака в дереве построения у операции нет, поэтому подавлять и восстанавливать нечего.",
+        "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции восстановления поверхности тоже нет."
       }
     },
     {

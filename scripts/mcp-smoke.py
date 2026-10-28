@@ -663,8 +663,9 @@ def file_sha256(path):
 # → 90 (COMPONENT_DELETE) → 94 (SECTION_VIEWS) → 96 (SM-12) → 97 (SM-08) → 110 (SHEET_METAL_FEATURES)
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
-# → 117 (BOM_PROPERTIES: kompas_get_component_properties).
-EXPECTED_TOOL_COUNT = 119
+# → 117 (BOM_PROPERTIES: kompas_get_component_properties) → 119 (DIRECT_FACES_CORE: kompas_move_faces)
+# → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces).
+EXPECTED_TOOL_COUNT = 121
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -53140,7 +53141,7 @@ def e5_checks(client, rep, app_id, workdir):
         _e, env, _r = client.tool("kompas_read_topology", {
             "document_id": doc, "body_ref": body_ref(doc, index), "include": "faces"})
         rows = result(env).get("faces")
-        return [row.get("id") for row in (rows or []) if row.get("id")]
+        return [row.get("face_ref") for row in (rows or []) if row.get("face_ref")]
 
     def level(env_result):
         return (env_result.get("verification") or {}).get("level")

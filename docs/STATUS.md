@@ -14,6 +14,28 @@
 
 ## Текущее состояние
 
+- **Наряд `DIRECT_FACES_DELETE_RESTORE` (28.10.2026, реализация E5: удаление и восстановление
+  граней) - ВЫПОЛНЕН.** Заведены `kompas_delete_faces` (120-й в каталоге, режимы `open_shell` и
+  `keep_body`) и `kompas_restore_faces` (121-й, `by_face`), профиль `direct-faces-v1` расширен до
+  четырёх режимов. Маршруты: `IPart7` → `ISurfaceContainer` → `FaceRemovers.Add()` →
+  `IFaceRemover.Faces` + `SaveBody` → `Update()`; `RestoredSurfaces.Add()` → `IRestoredSurface.Face` →
+  `Update()`. Форма `Faces` взята из справки: один объект как `VT_DISPATCH`, несколько как
+  `VT_ARRAY | VT_DISPATCH`. Успех подтверждается числами: `open_shell` - граней меньше ровно на
+  названное, объём 0, площадь уменьшилась; `keep_body` - объём не нулевой; восстановление - тел стало
+  на одно больше (отдельный объект), объём НЕ возвращается (`LIMIT`, названо в ответе).
+  **`SaveBody=true` разобран:** гипотезы исследовательского отчёта (форма массива, порядок свойств и
+  второй `Update`, тип грани) проверены пробой `--save-body` на свежих брусках и отвергнуты - на всех
+  шести гранях `Update()` возвращает **false**, тогда как контроль с тем же одиночным объектом и
+  `SaveBody=false` срабатывает. Прежняя запись «`Update()` = true и ничего не меняется» больше не
+  воспроизводится. Поэтому `keep_body` выполняет документированный маршрут и отвечает названным
+  отказом `GEOMETRY_FAILED` с `details.mode`; успех за невыполненную работу не выдаётся.
+  Приёмка: группа `mcp-smoke` E5 расширена строками `E5.DEL.*`, `E5.RES.*`, `E5.NEG.delete_refusals`,
+  `E5.NEG.restore_mode`; `--self-test` 95/0; тесты **1628/1628** (+7 `FaceRemovalEffectTests`).
+  Стражи: `lint-dashes.py` 0, `long-comment-blocks.py` 0, `check-evidence-links.py` 0,
+  `emit-coverage-matrix.py` - целостность OK. Строки матрицы: `SM-24.delete_faces.open_shell` и
+  `SM-24.restore_faces.by_face` - `save_reopen = not_started`, `SM-24.delete_faces.keep_body` -
+  `edit = not_started`; ни одна не закрыта. Решение - `docs/decisions/direct-faces.md#savebody` и
+  `#delete-restore`. Отчёт - `DIRECT_FACES_DELETE_RESTORE_REPORT_20261028.md`.
 - **Наряд `DIRECT_FACES_CORE` (28.10.2026, реализация E5: перемещение граней) - ВЫПОЛНЕН.** Заведён
   инструмент `kompas_move_faces` (119-й в каталоге, профиль `direct-faces-v1`): маршрут `IPart7` →
   `ISurfaceContainer` → `FaceMovers.Add()` → `IFaceMover.SetFaces(Faces, false)` + `Offset` +
@@ -68,7 +90,10 @@
   удаление с `SaveBody=false` даёт оболочку (граней 5, объём 0); `IRestoredSurface` создаёт отдельную
   поверхность и оболочку не вылечивает; пустой `Faces` отвергнут. **`IFaceRemover.SaveBody=true` не
   делает ничего и не отказывает** (`Update()` вернул true, 6 граней, 24 000 мм³) - причина не
-  установлена, режим `keep_body` нельзя проектировать как рабочий. Тело БЕЗ истории (импорт STEP, 11
+  установлена, режим `keep_body` нельзя проектировать как рабочий. **Поправка 28.10.2026 (наряд
+  `DIRECT_FACES_DELETE_RESTORE`):** повторный замер на свежих брусках дал `Update() = false` на всех
+  шести гранях, то есть прежняя запись о `true` не воспроизводится; причина разобрана, см. пункт
+  наряда выше и `docs/decisions/direct-faces.md#savebody`. Тело БЕЗ истории (импорт STEP, 11
   граней): грани 1 и 2 перемещаются (`Update()=true`, +6 000 и +42 068,673 мм³), грань 0 отказывает
   честно (`Update()=false`), удаление с `SaveBody=false` даёт оболочку - от дерева построения маршрут
   не зависит. Не измерены: `TangentFaces=true`, грань из другого тела. В interop v24 у `IFace` нет `GetNormal`, у `IBody7` нет

@@ -1,13 +1,18 @@
 {
   "meta": {
     "profile_id": "direct-faces-v1",
-    "title": "Прямое моделирование v24: перемещение граней тела без дерева построения",
-    "revision": "1.0",
+    "title": "Прямое моделирование v24: грани тела без дерева построения",
+    "revision": "1.1",
     "revision_history": [
       {
         "revision": "1.0",
         "date": "28.10.2026",
         "change": "профиль заведён нарядом DIRECT_FACES_CORE: перемещение граней документированным маршрутом ISurfaceContainer.FaceMovers -> IFaceMover. Остальные четыре инструмента блока (удаление, восстановление, касательные грани, тело без истории) - отдельные наряды этого же выпуска, режимы добавляются их профилями"
+      },
+      {
+        "revision": "1.1",
+        "date": "28.10.2026",
+        "change": "наряд DIRECT_FACES_DELETE_RESTORE добавил два режима: удаление граней в двух режимах (open_shell - проверен, keep_body - маршрут документирован, но ядро отказывает на бруске, поэтому режим не закрыт) и восстановление поверхности по грани (создаёт отдельный объект, объём не возвращает)"
       }
     ],
     "target_build": "24.0.0.2799",
@@ -32,6 +37,58 @@
         "geometry_validation"
       ],
       "gap": "Маршрут документирован: ISurfaceContainer (получается у IPart7) -> FaceMovers.Add() -> IFaceMover.SetFaces(Faces, TangentFaces) + Offset + Direction -> IModelObject.Update(). Грань API5 отвечает как IFace только через TransferInterface(грань, ksAPI7Dual, 0) - измерено. Направление задаётся логическим признаком «Сменить направление», а не вектором, поэтому сторона называется полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm. Успех подтверждается числами: объём против V + d·A и площадь против F + P·d, где A и P - площадь и периметр названных граней. Отказы: пустой список граней, нулевое смещение, грань чужого тела, tangent_group = true, Update() = false, отсутствие изменения объёма при Update() = true."
+    },
+    {
+      "ref": "SM-24.delete_faces.open_shell",
+      "title": "Удалить грани тела, оставив оболочку (SaveBody = false)",
+      "family": "SM-24",
+      "queue": "E5",
+      "priority": "practical_required",
+      "current_level": "not_started",
+      "required_actions": [
+        "discover",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Маршрут документирован: ISurfaceContainer.FaceRemovers.Add() -> IFaceRemover.Faces + SaveBody = false -> IModelObject.Update(). Форма массива берётся из справки ifaceremover_faces.html: один объект как VT_DISPATCH, несколько как VT_ARRAY | VT_DISPATCH. Успех подтверждается числами: граней стало меньше ровно на число названных, объём нулевой, площадь уменьшилась. Отказы: пустой список, повторы, список, покрывающий ВСЕ грани тела, грани разных тел, недокументированный режим, Update() = false, ненулевой объём после операции. save_reopen не измерялся - наряд DIRECT_FACES_NO_HISTORY."
+    },
+    {
+      "ref": "SM-24.delete_faces.keep_body",
+      "title": "Удалить грани тела, сохранив целостность тела (SaveBody = true)",
+      "family": "SM-24",
+      "queue": "E5",
+      "priority": "practical_required",
+      "current_level": "not_started",
+      "required_actions": [
+        "discover",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Маршрут документирован (IFaceRemover.SaveBody = true), но на бруске 40x30x20 все шесть граней дают Update() = false, то есть целостность тела из снятой грани не восстанавливается. Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента, порядок свойств и второй Update, тип грани на исход не влияют; контроль с тем же одиночным объектом и SaveBody = false срабатывает. Инструмент выполняет маршрут и отвечает отказом GEOMETRY_FAILED с details.mode, а не успехом. Режим не закрыт: успешный исход нигде не обещан, вылечиваемая геометрия не измерялась (LIMIT)."
+    },
+    {
+      "ref": "SM-24.restore_faces.by_face",
+      "title": "Восстановить поверхность по грани",
+      "family": "SM-24",
+      "queue": "E5",
+      "priority": "practical_required",
+      "current_level": "not_started",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Маршрут документирован: ISurfaceContainer.RestoredSurfaces.Add() -> IRestoredSurface.Face (исходная грань) -> IModelObject.Update(). Измерено: результат - ОТДЕЛЬНЫЙ объект (тел 1 -> 2), оболочку он не вылечивает, объём не возвращает. Поэтому успех подтверждается появлением нового объекта, а объём сообщается как прочитанный, но не обещанный (LIMIT). Отказы: пустая ссылка на грань, недокументированный режим, грань не из этого документа, Update() = false, Update() = true без нового объекта."
     }
   ],
   "common_dependencies": [
@@ -40,8 +97,9 @@
       "title": "ISurfaceContainer как дополнительный интерфейс IPart7",
       "catalog_refs": [
         "SM-24.move_faces",
-        "SM-24.delete_faces",
-        "SM-24.restore_faces"
+        "SM-24.delete_faces.open_shell",
+        "SM-24.delete_faces.keep_body",
+        "SM-24.restore_faces.by_face"
       ],
       "required_actions": [
         "discover",
@@ -53,7 +111,9 @@
       "id": "dep.refs.faces_body",
       "title": "Ссылка на грань и на тело: чтение до и после операции",
       "catalog_refs": [
-        "SM-24.move_faces"
+        "SM-24.move_faces",
+        "SM-24.delete_faces.open_shell",
+        "SM-24.delete_faces.keep_body"
       ],
       "required_actions": [
         "discover",
@@ -64,10 +124,9 @@
     }
   ],
   "explicitly_out_of_scope": [
-    "Удаление граней (SM-24.delete_faces, режимы keep_body и open_shell) - наряд DIRECT_FACES_DELETE_RESTORE. Измерено, что SaveBody = true принимается и ничего не делает, поэтому режим keep_body не проектируется как рабочий до отдельного замера.",
-    "Восстановление граней (SM-24.restore_faces.by_face) - тот же наряд. Измерено: IRestoredSurface создаёт отдельную поверхность и оболочку не вылечивает.",
     "Касательные грани (SM-24.move_faces.tangent_group) - наряд DIRECT_FACES_TANGENT. Параметр tangent_group объявлен в контракте, но true отвергается именованным отказом: успех за невыполненную работу не выдаётся.",
-    "Тело без истории построения (импорт STEP) - наряд DIRECT_FACES_NO_HISTORY. Маршрут от дерева построения не зависит (измерено на импортированном теле), но приёмка на теле без истории в этот профиль не входит.",
+    "Тело без истории построения (импорт STEP) - наряд DIRECT_FACES_NO_HISTORY. Маршрут от дерева построения не зависит (измерено на импортированном теле), но приёмка на теле без истории в этот профиль не входит; туда же отнесён save_reopen всех четырёх режимов.",
+    "Успешный исход режима keep_body: документированный маршрут есть, но ядро отказывает на измеренной геометрии. Режим остаётся в профиле с названным отказом, а не закрывается подбором недокументированных членов.",
     "Изменение положения грани отдельным признаком (SM-24.change_face_position): документированного программного маршрута нет - страницы нет, а номер типа o3d_FaceResizer = 660 маршрутом не является. Решение о снятии требования - за заказчиком.",
     "Замена граней (SM-24.replace_faces.offset) и изменение размера грани (SM-24.resize_face): документированного маршрута нет по той же причине.",
     "Изменение скругления на теле без истории (SM-24.change_fillet): прямое изменение не документировано; для тела с историей радиус правится признаком дерева через kompas_update_feature.",

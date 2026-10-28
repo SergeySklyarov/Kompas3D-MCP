@@ -31,6 +31,9 @@
   отказом `GEOMETRY_FAILED` с `details.mode`; успех за невыполненную работу не выдаётся.
   Приёмка: группа `mcp-smoke` E5 расширена строками `E5.DEL.*`, `E5.RES.*`, `E5.NEG.delete_refusals`,
   `E5.NEG.restore_mode`; `--self-test` 95/0; тесты **1628/1628** (+7 `FaceRemovalEffectTests`).
+  Зачётный `--all` на `95451e5` (Release, дерево чистое): **1935 PASS, 7 NAMED, 3 UNKNOWN, FAIL 0**,
+  31 минута, каталог `20261028-034029-all-95451e5`; по группам отличие от зачёта `13e522c` ровно одно -
+  восемь новых строк `e5`, ни одна прежняя строка не разошлась.
   Стражи: `lint-dashes.py` 0, `long-comment-blocks.py` 0, `check-evidence-links.py` 0,
   `emit-coverage-matrix.py` - целостность OK. Строки матрицы: `SM-24.delete_faces.open_shell` и
   `SM-24.restore_faces.by_face` - `save_reopen = not_started`, `SM-24.delete_faces.keep_body` -

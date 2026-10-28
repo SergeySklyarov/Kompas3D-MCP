@@ -664,8 +664,9 @@ def file_sha256(path):
 # → 111 (SHEET_METAL_CUT) → 113 (SHEET_METAL_UNFOLD: развёртка тела, два инструмента)
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties) → 119 (DIRECT_FACES_CORE: kompas_move_faces)
-# → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces).
-EXPECTED_TOOL_COUNT = 121
+# → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
+# → 122 (RIB_CORE: kompas_rib).
+EXPECTED_TOOL_COUNT = 122
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -53858,8 +53859,11 @@ def r1_checks(client, rep, app_id, workdir):
         sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
         if code or not sketch:
             return None, f"эскиз цепочки не создан: {code}"
-        entities = [{"kind": "line", "start_mm": [float(a[0]), float(a[1])],
-                     "end_mm": [float(b[0]), float(b[1])]}
+        # MEASURED: on XOZ the sketch v axis points DOWN in world z, so a chain written as
+        # v = 20..40 lands at z = -20..-40, below the plate, and the kernel refuses it with a bare
+        # false. The caller passes world z and the sign is flipped here.
+        entities = [{"kind": "line", "start_mm": [float(a[0]), -float(a[1])],
+                     "end_mm": [float(b[0]), -float(b[1])]}
                     for a, b in zip(points, points[1:])]
         env, code = call("kompas_edit_sketch", {
             "sketch_ref": sketch, "expected_revision": revision(doc), "mode": "append",
@@ -53875,7 +53879,7 @@ def r1_checks(client, rep, app_id, workdir):
             "PASS" if "kompas_rib" in registry else "FAIL",
             "в реестре=%d; kompas_rib=%s" % (len(registry), "kompas_rib" in registry))
     entry = entry_of(client, "kompas_rib")
-    fields = ((entry or {}).get("input_schema") or {}).get("properties") or {}
+    fields = ((entry or {}).get("inputSchema") or {}).get("properties") or {}
     wanted = ["sketch_ref", "side", "thickness_mm", "draft_angle_deg", "segment_index", "body_ref"]
     absent = [name for name in wanted if name not in fields]
     rep.add("R1-02.discover.fields", "поля контракта ребра опубликованы схемой",
@@ -53949,6 +53953,16 @@ def r1_checks(client, rep, app_id, workdir):
             "PASS" if near(rebuilt, PLATE_VOLUME + EXPECTED_ADDED, 1.0) else "FAIL",
             "до=%s после=%s код=%s" % (after, rebuilt, code))
 
+    # INVARIANT: a mutation invalidates every ref minted before it, so the refusal rows take a chain
+    # sketched AFTER the rebuild — a stale ref answers STALE_REFERENCE instead of the refusal under
+    # test.
+    chain, problem = chain_sketch(doc, [(0, 20), (20, 40), (40, 20)], name="r1-chain-negative")
+    if problem:
+        for row, text in (("R1-14.negative.side_range", "side = 4 отвергнут"),
+                          ("R1-15.negative.thickness", "нулевая толщина отвергнута"),
+                          ("R1-16.negative.body", "body отвергнут именованным отказом")):
+            rep.add(row, text, "FAIL", problem)
+
     # ===== R1-13: отказы =====
     closed, problem = chain_sketch(doc, [(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)],
                                    name="r1-closed")
@@ -54011,12 +54025,20 @@ def r1_checks(client, rep, app_id, workdir):
             "PASS" if not code and near(rib.get("volume_added_mm3"), EXPECTED_ADDED,
                                         EXPECTED_ADDED * TOL) else "FAIL",
             "код=%s прирост=%s ожидание=%s" % (code, rib.get("volume_added_mm3"), EXPECTED_ADDED))
-    env, code = call("kompas_rib", {"sketch_ref": reverse, "expected_revision": revision(doc),
-                                    "side": 0, "thickness_mm": THICKNESS})
-    rep.add("R1-19.negative.reverse_side0",
-            "на обратной цепочке side = 0 отвергает ядро: положение считается от кривой",
-            "PASS" if code == "GEOMETRY_FAILED" else "FAIL",
-            "код=%s текст=%s" % (code, why(env)))
+    # The successful rib above invalidated the refs minted before it, so the refusal row builds its
+    # own reversed chain instead of reusing a stale one.
+    reverse, problem = chain_sketch(doc, [(40, 20), (20, 40), (0, 20)], name="r1-chain-reverse-2")
+    if problem:
+        rep.add("R1-19.negative.reverse_side0",
+                "на обратной цепочке side = 0 отвергает ядро: положение считается от кривой",
+                "FAIL", problem)
+    else:
+        env, code = call("kompas_rib", {"sketch_ref": reverse, "expected_revision": revision(doc),
+                                        "side": 0, "thickness_mm": THICKNESS})
+        rep.add("R1-19.negative.reverse_side0",
+                "на обратной цепочке side = 0 отвергает ядро: положение считается от кривой",
+                "PASS" if code == "GEOMETRY_FAILED" else "FAIL",
+                "код=%s текст=%s" % (code, why(env)))
     close(doc)
 
 

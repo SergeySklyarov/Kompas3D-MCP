@@ -174,6 +174,21 @@ public static class WorkerCommands
     /// History: docs/decisions/direct-faces.md#implementation</remarks>
     public const string MoveFaces = "solid.move_faces";
 
+    /// <summary>Direct face deletion in two documented modes (docs/05 SM-24.delete_faces).</summary> <remarks>DOC:
+    /// the documented API7 route — <c>ISurfaceContainer.FaceRemovers</c> (obtained from <c>IPart7</c>) →
+    /// <c>IFaceRemovers.Add</c> → <c>IFaceRemover.Faces</c> + <c>SaveBody</c> → <c>IModelObject.Update</c>.
+    /// MEASURED: on a box all six faces answer <c>Update() = false</c> with <c>SaveBody = true</c> and <c>true</c>
+    /// with <c>SaveBody = false</c>, so the mode is judged by the numbers read back, never by <c>Update()</c>.
+    /// History: docs/decisions/direct-faces.md#delete-restore</remarks>
+    public const string DeleteFaces = "solid.delete_faces";
+
+    /// <summary>Restore a surface from a face (docs/05 SM-24.restore_faces.by_face).</summary> <remarks>DOC: the
+    /// documented API7 route — <c>ISurfaceContainer.RestoredSurfaces</c> → <c>IRestoredSurfaces.Add</c> →
+    /// <c>IRestoredSurface.Face</c> → <c>IModelObject.Update</c>. MEASURED: the result is a separate surface
+    /// object, not a healed body, so the check is «one more body», not «volume back».
+    /// History: docs/decisions/direct-faces.md#delete-restore</remarks>
+    public const string RestoreFaces = "solid.restore_faces";
+
     /// <summary>Parametric definiteness of an existing sketch — the status KOMPAS shows with the «+», «−», «!»
     /// signs.</summary> <remarks>DOC: route is documented API7: <c>TransferInterface(sketchEntity, ksAPI7Dual, 0)</c> →
     /// <c>ISketch.ConstraintsState</c> of type <c>ksConstraintsStateEnum</c>. MEASURED: five repeated reads changed

@@ -2358,6 +2358,62 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_delete_faces", "Удалить грани тела",
+                "Прямое моделирование: грани тела удаляются без правки дерева построения (SM-24, профиль " +
+                "direct-faces-v1). Маршрут документирован - ISurfaceContainer (получается у IPart7) → " +
+                "FaceRemovers.Add() → IFaceRemover.Faces + SaveBody → IModelObject.Update(). ДВА РЕЖИМА: " +
+                "open_shell (SaveBody = false) оставляет оболочку - объём 0, граней меньше на число названных; " +
+                "keep_body (SaveBody = true) обязан сохранить тело твёрдым. ИЗМЕРЕНО НА БРУСКЕ 40x30x20: при " +
+                "SaveBody = true все шесть граней дают Update() = false и тело не меняется, поэтому keep_body " +
+                "отвечает отказом GEOMETRY_FAILED с details, а не успехом; вылечиваемость другой геометрии не " +
+                "измерялась, и обещаний про неё инструмент не даёт. УСПЕХ ПОДТВЕРЖДАЕТСЯ ЧИСЛАМИ: число граней " +
+                "уменьшилось ровно на число названных, в режиме open_shell объём стал нулевым и площадь " +
+                "уменьшилась, в режиме keep_body объём не нулевой. Update() = true без изменения и Update() = " +
+                "false - отказы с details. ОТКАЗЫ ДО COM: пустой список граней, повторы, недокументированный " +
+                "режим, список, покрывающий ВСЕ грани тела, и грани разных тел. Тело без истории построения " +
+                "проверяется отдельным нарядом DIRECT_FACES_NO_HISTORY, сохранение-переоткрытие в этот " +
+                "инструмент не входит.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("face_refs", Sch.Arr(
+                        Sch.Ref("#/$defs/reference"),
+                        "Удаляемые грани ОДНОГО тела — ссылки face: из kompas_read_topology. Список обязан " +
+                        "быть НЕПУСТЫМ, без повторов и НЕ покрывать все грани тела: удаление всех граней " +
+                        "оставляет пустоту, а не тело и не оболочку.",
+                        1, 64)),
+                    ("mode", Sch.Nullable(Sch.Enum(
+                        "Режим удаления — IFaceRemover.SaveBody. open_shell: false, тело становится оболочкой " +
+                        "(объём 0). keep_body: true, тело обязано остаться твёрдым; ИЗМЕРЕНО, что на бруске " +
+                        "все шесть граней дают Update() = false, поэтому режим отвечает отказом " +
+                        "GEOMETRY_FAILED с details. Без поля — open_shell.",
+                        "open_shell", "keep_body"))),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
+                WorkerCommands.DeleteFaces,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_restore_faces", "Восстановить поверхность по грани",
+                "Прямое моделирование: из названной грани создаётся поверхность (SM-24.restore_faces.by_face, " +
+                "профиль direct-faces-v1). Маршрут документирован - ISurfaceContainer (получается у IPart7) → " +
+                "RestoredSurfaces.Add() → IRestoredSurface.Face («исходная грань поверхности») → " +
+                "IModelObject.Update(). ЧТО ИМЕННО ДЕЛАЕТСЯ: восстановленная поверхность - ОТДЕЛЬНЫЙ объект, " +
+                "поэтому успех подтверждается появлением нового объекта (тел стало на одно больше), а НЕ " +
+                "возвратом объёма. ИЗМЕРЕНО: оболочка после восстановления поверхности остаётся оболочкой, " +
+                "объём не возвращается - это ограничение маршрута (LIMIT), а не отказ вызова, и в ответе оно " +
+                "названо. Отказы до COM: пустая ссылка на грань, недокументированный режим, грань не из этого " +
+                "документа. Update() = false и Update() = true без нового объекта - отказы с details.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("face_ref", Sch.Ref("#/$defs/reference")),
+                    ("mode", Sch.Nullable(Sch.Enum(
+                        "Способ восстановления. Документирован единственный — by_face (IRestoredSurface.Face). " +
+                        "Без поля — by_face.",
+                        "by_face"))),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
+                WorkerCommands.RestoreFaces,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_get_feature", "Параметры признака",                            "Что сервер видит в определении существующего признака: семейство, имя, стороны выдавливания с условием " +
             "конца и глубиной, тонкая стенка, параметры фаски (катеты, transfer, а когда доступен маршрут чтения " +
             "угла - угол и способ построения), скругление и родное отверстие, параметры ВРАЩЕНИЯ (угол, " +

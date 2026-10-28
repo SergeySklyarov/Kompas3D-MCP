@@ -391,6 +391,8 @@ public sealed class CommandDispatcher
             WorkerCommands.SolidCutByPlane => _sta.Run(() => SolidCutByPlane(request), "solid.cut_by_plane", cancellationToken),
             WorkerCommands.SolidReposition => _sta.Run(() => SolidReposition(request), "solid.reposition", cancellationToken),
             WorkerCommands.MoveFaces => _sta.Run(() => MoveFaces(request), "solid.move_faces", cancellationToken),
+            WorkerCommands.DeleteFaces => _sta.Run(() => DeleteFaces(request), "solid.delete_faces", cancellationToken),
+            WorkerCommands.RestoreFaces => _sta.Run(() => RestoreFaces(request), "solid.restore_faces", cancellationToken),
             WorkerCommands.GetFeature => _sta.Run(() => Feature(request), "feat.get", cancellationToken),            WorkerCommands.UpdateFeature => _sta.Run(() => UpdateFeature(request), "feat.update", cancellationToken),
             WorkerCommands.PatternGrid => _sta.Run(() => PatternGrid(request), "pattern.grid", cancellationToken),
             WorkerCommands.PatternCircular => _sta.Run(() => PatternCircular(request), "pattern.circular", cancellationToken),
@@ -1124,6 +1126,25 @@ public sealed class CommandDispatcher
         var document = _session.RequireDocument(command.DocumentId);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.MoveFaces(command), document);
+    }
+
+    /// <summary>Direct face deletion (SM-24.delete_faces). The document comes from <c>document_id</c> for
+    /// the same reason as at move: several faces are named, and the adapter checks each owner.</summary>
+    private object? DeleteFaces(IpcFrame request)
+    {
+        var command = Argument<DeleteFacesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.DeleteFaces(command), document);
+    }
+
+    /// <summary>Restore a surface from a face (SM-24.restore_faces.by_face) — the same document rule.</summary>
+    private object? RestoreFaces(IpcFrame request)
+    {
+        var command = Argument<RestoreFacesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.RestoreFaces(command), document);
     }
 
     /// <summary>Draft (SM-12). The document comes from <c>document_id</c>, as at shell: there may be several

@@ -202,6 +202,10 @@ public static class WorkerCommandTable
         // and after), so the budget equals the other body operations.
         Cad(WorkerCommands.MoveFaces, WorkerAction.ModelMutation, 240_000);
 
+        // Deletion and restore go through the same bridge and read the body back before and after.
+        Cad(WorkerCommands.DeleteFaces, WorkerAction.ModelMutation, 240_000);
+        Cad(WorkerCommands.RestoreFaces, WorkerAction.ModelMutation, 240_000);
+
         // ---- auxiliary geometry ----
         // The API7 route (bridge + QI(IAuxiliaryGeomContainer) + Rebuild); the enumeration reads the
         // collection with one COM call per element.

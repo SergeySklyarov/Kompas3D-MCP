@@ -823,8 +823,9 @@ RUN_GROUPS = (
      "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
      "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
     ("e5", "e5", "e5-acceptance.json",
-     "Приёмка E5: прямое перемещение граней тела - объём V + d*A, площадь F + P*d и отказы "
-     "(наряд DIRECT_FACES_CORE, профиль direct-faces-v1)"),
+     "Приёмка E5: прямое редактирование граней тела - перемещение (V + d*A, F + P*d), удаление "
+     "(оболочка, названный отказ keep_body), восстановление поверхности и отказы "
+     "(наряды DIRECT_FACES_CORE и DIRECT_FACES_DELETE_RESTORE, профиль direct-faces-v1)"),
     ("update", "update", "update-acceptance.json",
      "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
      "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
@@ -2059,7 +2060,7 @@ FLAGS = (
     ("--bom-only", False, "группа BOM: сводка BOM по сборке и её выгрузка"),
     ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
-    ("--e5-only", False, "группа E5: прямое перемещение граней тела"),
+    ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
     ("--nested-repeat", True, "K повторов постановки NEST в одном сеансе"),
@@ -52918,19 +52919,24 @@ def sheet_metal_checks(client, rep, app_id, workdir):
 
 
 def e5_checks(client, rep, app_id, workdir):
-    """E5.* - прямое перемещение граней через MCP (наряд DIRECT_FACES_CORE, профиль direct-faces-v1).
+    """E5.* - прямое редактирование граней через MCP (наряды DIRECT_FACES_CORE и
+    DIRECT_FACES_DELETE_RESTORE, профиль direct-faces-v1).
 
     ЧТО ДОКАЗЫВАЕТСЯ. Инструмент `kompas_move_faces` сдвигает верхнюю грань бруска 40x30x20 на
     5 мм, и прочитанное сверяется с аналитикой: объём `V + d*A` = 30000 мм3 при A = 1200, площадь
     `F + P*d` = 5900 мм2 при P = 140. Объём читается независимо (`kompas_measure`), площадь -
-    из ответа инструмента, который читает её с модели; в строке названо, что чем измерено. Отказы
-    проверяются ПО КОДУ: пустой список граней, нулевое смещение, касательные грани, грань другого
-    документа.
+    из ответа инструмента, который читает её с модели; в строке названо, что чем измерено.
+    `kompas_delete_faces` в режиме open_shell оставляет оболочку (объём 0, граней на одну меньше),
+    `kompas_restore_faces` создаёт ОТДЕЛЬНЫЙ объект (тел +1) и оболочку не вылечивает, а режим
+    keep_body назван отказом GEOMETRY_FAILED с `details.mode` на свежем бруске. Отказы проверяются
+    ПО КОДУ: пустой список граней, все грани тела, недокументированные режимы, нулевое смещение,
+    касательные грани, грань другого документа.
 
     ЧЕГО ЗДЕСЬ НЕТ. Тело без истории построения, касательные грани как режим и save -> reopen -
     отдельные наряды блока E5. Грань ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно
     многотельное тело): страж - сравнение COM-указателя владельца - строкой не покрыт, и это
-    названо, а не выдано за проверенное.
+    названо, а не выдано за проверенное. Вылечиваемость тела при keep_body не измерена: на бруске
+    все шесть граней отказывают, и обещаний про другую геометрию инструмент не даёт.
     """
     V0, F0, A_TOP, P_TOP, D = 24000.0, 5200.0, 1200.0, 140.0, 5.0
     TOL_V, TOL_F = 0.05, 1.0
@@ -53125,6 +53131,133 @@ def e5_checks(client, rep, app_id, workdir):
         rep.add("E5.NEG.foreign_face",
                 "e5: грань другого документа отвергнута INVALID_ARGUMENT",
                 "PASS" if got == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (got,))
+
+    # ── E5.DEL / E5.RES: удаление и восстановление граней (наряд DIRECT_FACES_DELETE_RESTORE) ──
+    # Брусок сейчас 24000 мм3 и 6 граней: ходы внутрь и обратно компенсировали друг друга.
+    def all_face_refs(doc, index=0):
+        """Грани тела документированным чтением топологии: нужен полный список для отказа
+        «удалить все грани»."""
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body_ref(doc, index), "include": "faces"})
+        rows = result(env).get("faces")
+        return [row.get("id") for row in (rows or []) if row.get("id")]
+
+    def level(env_result):
+        return (env_result.get("verification") or {}).get("level")
+
+    def named_checks(env_result):
+        rows = (env_result.get("verification") or {}).get("checks") or []
+        return {row.get("name"): row.get("passed") for row in rows}
+
+    faces_before_del = len(all_face_refs(box))
+    del_refs, del_lookup = top_face(box)
+    if not del_refs:
+        rep.add("E5.DEL.open_shell", "e5: open_shell оставил оболочку", "NAMED",
+                "грань для удаления не найдена: %s" % (del_lookup,))
+    else:
+        _e, del_env, _r = client.tool("kompas_delete_faces", {
+            "document_id": box, "expected_revision": current_rev(box),
+            "face_refs": [del_refs[0]], "mode": "open_shell",
+            "operation_id": str(uuid.uuid4())})
+        deleted = result(del_env)
+        del_code = error_code(del_env)
+        shell_volume = volume(box)
+        shell_faces = len(all_face_refs(box))
+        rep.add("E5.DEL.open_shell",
+                "e5: open_shell оставил оболочку - объём 0, граней стало на одну меньше",
+                "PASS" if del_code is None and near(shell_volume, 0.0, 1e-6)
+                and shell_faces == faces_before_del - 1 else "FAIL",
+                "код=%s объём=%s ожидание=0 граней=%s→%s (kompas_measure, kompas_read_topology)"
+                % (del_code, shell_volume, faces_before_del, shell_faces))
+        del_checks = named_checks(deleted)
+        rep.add("E5.DEL.open_shell_verified",
+                "e5: уровень geometry_checked и все именованные сверки удаления пройдены",
+                "PASS" if level(deleted) == "geometry_checked" and del_checks
+                and all(del_checks.values()) else "FAIL",
+                "level=%s сверки=%s" % (level(deleted), json.dumps(del_checks, ensure_ascii=False)))
+
+        bodies_before_res = len(bodies(box))
+        res_refs = all_face_refs(box)
+        if not res_refs:
+            rep.add("E5.RES.by_face", "e5: восстановление по грани создало отдельный объект", "NAMED",
+                    "граней у оболочки не прочитано")
+        else:
+            _e, res_env, _r = client.tool("kompas_restore_faces", {
+                "document_id": box, "expected_revision": current_rev(box),
+                "face_ref": res_refs[0], "operation_id": str(uuid.uuid4())})
+            restored = result(res_env)
+            res_code = error_code(res_env)
+            bodies_after_res = len(bodies(box))
+            rep.add("E5.RES.by_face",
+                    "e5: восстановление по грани создало отдельный объект - тел стало на одно больше",
+                    "PASS" if res_code is None and bodies_after_res == bodies_before_res + 1 else "FAIL",
+                    "код=%s тел=%s→%s (kompas_list_bodies)" % (res_code, bodies_before_res, bodies_after_res))
+            rep.add("E5.RES.shell_not_healed",
+                    "e5: восстановленная поверхность оболочку НЕ вылечивает - объём тела остался нулевым",
+                    "PASS" if near(volume(box), 0.0, 1e-6) else "FAIL",
+                    "объём=%s ожидание=0 (kompas_measure)" % (volume(box),))
+            rep.add("E5.RES.verified",
+                    "e5: уровень geometry_checked и все именованные сверки восстановления пройдены",
+                    "PASS" if level(restored) == "geometry_checked" and named_checks(restored)
+                    and all(named_checks(restored).values()) else "FAIL",
+                    "level=%s сверки=%s" % (level(restored),
+                                            json.dumps(named_checks(restored), ensure_ascii=False)))
+
+    # keep_body на СВЕЖЕМ бруске: оболочка уже испорчена, а режим проверяется на целом теле.
+    keep, keep_problem = new_box("e5-keep", W, H, DEPTH)
+    if keep_problem:
+        rep.add("E5.DEL.keep_body_refused", "e5: keep_body назван отказом, тело не изменилось", "NAMED",
+                keep_problem)
+    else:
+        keep_refs, keep_lookup = top_face(keep)
+        if not keep_refs:
+            rep.add("E5.DEL.keep_body_refused", "e5: keep_body назван отказом, тело не изменилось",
+                    "NAMED", "верхняя грань не найдена: %s" % (keep_lookup,))
+        else:
+            _e, keep_env, _r = client.tool("kompas_delete_faces", {
+                "document_id": keep, "expected_revision": current_rev(keep),
+                "face_refs": [keep_refs[0]], "mode": "keep_body",
+                "operation_id": str(uuid.uuid4())})
+            keep_code = error_code(keep_env)
+            keep_volume = volume(keep)
+            keep_faces = len(all_face_refs(keep))
+            keep_mode = ((keep_env or {}).get("error") or {}).get("details") or {}
+            rep.add("E5.DEL.keep_body_refused",
+                    "e5: keep_body назван отказом GEOMETRY_FAILED с details.mode, тело не изменилось",
+                    "PASS" if keep_code == "GEOMETRY_FAILED" and keep_mode.get("mode") == "keep_body"
+                    and near(keep_volume, V0, TOL_V) and keep_faces == 6 else "FAIL",
+                    "код=%s mode=%s объём=%s ожидание=%s граней=%s"
+                    % (keep_code, keep_mode.get("mode"), keep_volume, V0, keep_faces))
+        close(keep)
+
+    # Отказы удаления и восстановления, названные до COM.
+    _e, d_empty, _r = client.tool("kompas_delete_faces", {
+        "document_id": box, "expected_revision": current_rev(box), "face_refs": [],
+        "operation_id": str(uuid.uuid4())})
+    d_empty_code = error_code(d_empty)
+    all_refs = all_face_refs(box)
+    _e, d_all, _r = client.tool("kompas_delete_faces", {
+        "document_id": box, "expected_revision": current_rev(box), "face_refs": all_refs,
+        "operation_id": str(uuid.uuid4())})
+    d_all_code = error_code(d_all)
+    _e, d_mode, _r = client.tool("kompas_delete_faces", {
+        "document_id": box, "expected_revision": current_rev(box), "face_refs": all_refs[:1],
+        "mode": "cut_half", "operation_id": str(uuid.uuid4())})
+    d_mode_code = error_code(d_mode)
+    _e, r_mode, _r = client.tool("kompas_restore_faces", {
+        "document_id": box, "expected_revision": current_rev(box),
+        "face_ref": all_refs[0] if all_refs else "face:1", "mode": "by_edges",
+        "operation_id": str(uuid.uuid4())})
+    r_mode_code = error_code(r_mode)
+    rep.add("E5.NEG.delete_refusals",
+            "e5: пустой список граней, все грани тела и недокументированный режим удаления "
+            "отвергнуты INVALID_ARGUMENT",
+            "PASS" if (d_empty_code == "INVALID_ARGUMENT" and d_all_code == "INVALID_ARGUMENT"
+                       and d_mode_code == "INVALID_ARGUMENT") else "FAIL",
+            "пустой=%s все_грани(%d)=%s режим=%s" % (d_empty_code, len(all_refs), d_all_code, d_mode_code))
+    rep.add("E5.NEG.restore_mode",
+            "e5: недокументированный режим восстановления отвергнут INVALID_ARGUMENT",
+            "PASS" if r_mode_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (r_mode_code,))
 
     rep.add("E5.GAP.save_reopen",
             "e5: сохранение и переоткрытие перемещённой грани", "NAMED",

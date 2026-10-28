@@ -41,7 +41,7 @@ internal sealed class E5Probe : IDisposable
 
     public E5Probe(string outPath) => _outPath = Path.GetFullPath(outPath);
 
-    public int Run(bool keepOpen, string? stepPath = null)
+    public int Run(bool keepOpen, string? stepPath = null, bool saveBodyOnly = false)
     {
         try
         {
@@ -49,6 +49,12 @@ internal sealed class E5Probe : IDisposable
             if (stepPath is not null)
             {
                 RunStepBody(stepPath);
+                return Finish(keepOpen);
+            }
+
+            if (saveBodyOnly)
+            {
+                SaveBodyInvestigation();
                 return Finish(keepOpen);
             }
 
@@ -77,6 +83,132 @@ internal sealed class E5Probe : IDisposable
         }
 
         return _rows.Any(row => row?["verdict"]?.GetValue<string>() == "FAIL") ? 1 : 0;
+    }
+
+    /// <summary>DIRECT_FACES_DELETE_RESTORE §1.1: why does <c>SaveBody = true</c> answer
+    /// <c>Update() = true</c> and change nothing? Three hypotheses are tried on fresh boxes.</summary>
+    /// <remarks>DOC: <c>ifaceremover_faces.html</c> — «Если возвращается один объект, то тип VARIANT-а
+    /// будет VT_DISPATCH, если возвращается несколько объектов, то тип VARIANT-а будет VT_ARRAY |
+    /// VT_DISPATCH». The research probe always passed an ARRAY, so H1 is that a one-element array is
+    /// accepted and ignored where a bare <c>VT_DISPATCH</c> is expected.
+    /// DOC: <c>ifaceremover_savebody.html</c> — BOOL «Сохранять целостность тела», no conditions stated.
+    /// History: docs/decisions/direct-faces.md#savebody</remarks>
+    private void SaveBodyInvestigation()
+    {
+        // H1: the shape of Faces. The control matters more than the probe: with SaveBody = false the
+        // same bare object must remove the face, otherwise «nothing happened» would be blamed on the
+        // form of the argument instead of on SaveBody.
+        Variant("h1_control_bare_open_shell", bare: true, saveBody: false, saveFirst: false,
+            secondUpdate: false, faceIndex: 0);
+        Variant("h1_bare_keep_body", bare: true, saveBody: true, saveFirst: false,
+            secondUpdate: false, faceIndex: 0);
+        Variant("h1_array_keep_body", bare: false, saveBody: true, saveFirst: false,
+            secondUpdate: false, faceIndex: 0);
+
+        // H2: the order of the two properties, and a second Update after the rebuild.
+        Variant("h2_keep_body_save_first", bare: true, saveBody: true, saveFirst: true,
+            secondUpdate: false, faceIndex: 0);
+        Variant("h2_keep_body_second_update", bare: true, saveBody: true, saveFirst: false,
+            secondUpdate: true, faceIndex: 0);
+
+        // H3: the face itself. A box has six faces of three kinds; if the body cannot be healed, the
+        // refusal may depend on the face, not on the argument.
+        for (var index = 0; index < 6; index++)
+        {
+            Variant($"h3_keep_body_face_{index}", bare: true, saveBody: true, saveFirst: false,
+                secondUpdate: false, faceIndex: index);
+        }
+    }
+
+    /// <summary>One attempt on a fresh box, so the numbers of one variant are not the leftovers of
+    /// another.</summary>
+    private void Variant(string id, bool bare, bool saveBody, bool saveFirst, bool secondUpdate, int faceIndex)
+    {
+        try
+        {
+            BuildBox();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)
+        {
+            Record(id, "свежий брусок построен", Describe(ex), "FAIL");
+            return;
+        }
+
+        var before = State(id + ": до");
+        var face = FaceAt(faceIndex);
+        if (face is null)
+        {
+            Record(id, "грань " + faceIndex + " найдена", "не найдена", "FAIL");
+            CloseCurrent();
+            return;
+        }
+
+        bool? updated = null;
+        string? failure = null;
+        try
+        {
+            var remover = (_doc7?.TopPart as ISurfaceContainer)?.FaceRemovers?.Add();
+            if (remover is null)
+            {
+                failure = "FaceRemovers.Add() вернул null";
+            }
+            else
+            {
+                // VT_DISPATCH for one face, VT_ARRAY | VT_DISPATCH for several (ifaceremover_faces.html).
+                var value = bare ? (object)face : new object[] { face };
+                if (saveFirst)
+                {
+                    remover.SaveBody = saveBody;
+                    remover.Faces = value;
+                }
+                else
+                {
+                    remover.Faces = value;
+                    remover.SaveBody = saveBody;
+                }
+
+                updated = ((IModelObject)remover).Update();
+                _doc5!.RebuildDocument();
+                if (secondUpdate)
+                {
+                    updated = ((IModelObject)remover).Update();
+                    _doc5.RebuildDocument();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or TargetInvocationException)
+        {
+            failure = Describe(ex);
+        }
+
+        var after = State(id + ": после");
+        var facesGone = Faces(before) - Faces(after);
+        var volumeKept = Math.Abs(Volume(after)) > 1e-6;
+
+        Record(id,
+            "грань " + faceIndex + ", Faces=" + (bare ? "VT_DISPATCH" : "массив") + ", SaveBody=" +
+            (saveBody ? "true" : "false"),
+            failure ?? $"Update={updated}, граней {Faces(before)}→{Faces(after)} (-{facesGone}), " +
+            $"объём {Volume(before):0.###}→{Volume(after):0.###}",
+            "MEASURED");
+        CloseCurrent();
+    }
+
+    /// <summary>Closes the document of the last variant: nine open parts would make every later read
+    /// slower and the state of the wrong document easier to read.</summary>
+    private void CloseCurrent()
+    {
+        try
+        {
+            _doc7?.Close(DocumentCloseOptions.kdDoNotSaveChanges);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)
+        {
+            // Housekeeping only: a part left open must not turn a measured run into a failed one.
+        }
+
+        _doc7 = null;
+        _doc5 = null;
     }
 
     /// <summary>§3 and §5.6 of the order: the same operations on a body that has no feature tree.

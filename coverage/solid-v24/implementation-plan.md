@@ -1059,3 +1059,9 @@ FAIL 0). По решению заказчика 23.10.2026 на предложе
 инструментом не делается; `split_solid_ref` закрывается строкой SM-16; тело без истории - тот же профиль.
 Строки без документированного маршрута (`change_face_position`, `change_fillet` без истории,
 `replace_faces.offset`, `resize_face`) - к докладу заказчику при выпуске.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 28.10.2026, сорок первая (`DIRECT_FACES_CORE` принят).**
+
+Очередь: `DIRECT_FACES_DELETE_RESTORE` (выдан) -> `DIRECT_FACES_TANGENT` -> `DIRECT_FACES_NO_HISTORY` -> E2 -> E4 ->
+IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк перемещения - в `DIRECT_FACES_NO_HISTORY`; ограничение
+перемещения по типу грани - в `DIRECT_FACES_TANGENT`.

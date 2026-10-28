@@ -14,6 +14,32 @@
 
 ## Текущее состояние
 
+- **Наряд `E5_RESEARCH` (28.10.2026, исследование блока E5) - ИССЛЕДОВАНИЕ СДАНО, ПРОБЫ НЕ СДЕЛАНЫ.**
+  Снято 354 страницы справки SDK v24 (набор `reference/kompas-sdk-v24/docs-wire-20261028-e5/`, 300
+  страниц набора + 54 по ссылкам, все HTTP 200; отрицательный контроль - 404 на `ifaceresizer`,
+  `ifacereplacer`, `ifilletchanger`, `ifaceoffsetter`, `ifacepositionchanger`). Документированный
+  программный маршрут есть у пяти строк `SM-24.*`: `move_faces` и `move_faces.tangent_group`
+  (`ISurfaceContainer.FaceMovers` → `IFaceMovers.Add` → `IFaceMover.Offset`/`Direction`,
+  `SetFaces(Faces, TangentFaces)`), `delete_faces.keep_body`/`open_shell` (`IFaceRemover.SaveBody`),
+  `restore_faces.by_face` (`IRestoredSurface.Face`), `split_solid_ref` (`IModelContainer.SplitSolids`
+  → `ISplitSolid.CutObjects`). Вход во все - `ISurfaceContainer` через `IUnknown::QueryInterface` от
+  `IPart7`, запись - `Add` + `IModelObject::Update`. У четырёх строк маршрута НЕТ: `change_face_position`,
+  `change_fillet` (для тела без истории), `replace_faces.offset`, `resize_face` - страницы нет, а
+  `o3d_FaceResizer=660`, `o3d_FaceReplacer=659`, `prFilletChanger=20246` остаются номерами типа и
+  команды, не маршрутом. Для тела с историей радиус скругления меняется правкой признака дерева -
+  маршрут в продукте уже есть (`Api5Session.FilletEdit.cs`). Тела без истории: импорт уже в продукте
+  (`kompas_import_step`), операции контейнера адресуют грани и тело, а не признаки, поэтому
+  применимы, но это вывод из документации - замером не подтверждён. Проект профиля
+  `direct-faces-v1` - пять инструментов (`kompas_move_faces`, `kompas_delete_faces`,
+  `kompas_restore_faces`, `kompas_split_solid`, `kompas_remove_body_surface`), каждая проверка
+  сравнивает прочитанное с ожидаемым (объём против `V + d·A`, `IBody7.IsSolid`, сумма объёмов после
+  разреза); новых читателей не завожу - переиспользуются `kompas_read_topology` и
+  `kompas_get_mass_properties`. Порядок реализации - четыре наряда блока MINOR
+  (`DIRECT_FACES_CORE`, `_DELETE_RESTORE`, `_TANGENT`, `_NO_HISTORY`), каждому нужен `--all`.
+  **Не сделано: пробы живьём (п. 5 наряда)** - сценарий и замеры остались следующему запуску, план
+  замеров - §5 отчёта. Код продукта, каталог, схемы, матрица и тесты не менялись, `--all` не нужен.
+  Стражи: `lint-dashes.py` 0, `check-evidence-links.py` 0, `long-comment-blocks.py` 0. Решение -
+  `docs/decisions/direct-faces.md`. Отчёт - `E5_RESEARCH_REPORT_20261028.md`.
 - **Наряд `DEBT_ATOMIC_PUBLISH_0_13` (28.10.2026, `0.13`, этап 2 долга) - ВЫПОЛНЕН.** Правило
   «перезапись без `overwrite` запрещена» держалось тремя копиями, и ключ `details` у них расходился.
   Обе свои копии - выгрузка DXF (`Api5Session.Drawings.cs`) и выгрузка плоского чертежа

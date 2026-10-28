@@ -1095,3 +1095,9 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `kompas_rib` (одна толщина) и чтение семейства `rib` реализованы, зачётный `--all` на `30fc57e` - FAIL 0. Очередь:
 `RIB_MODES` (`RIB_MODES_DEVELOPER_PROMPT.md`, выдан; симметричная толщина, правка, `save_reopen`, `body` - реализовать
 по документированной странице или удалить из контракта) -> `RIB_POSITIONS` -> E4 -> IGES -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, сорок седьмая (`RIB_MODES` принят).**
+
+`symmetric`, правка ребра, `save_reopen` и `body` (API7 `IRib.Body` до `Create()`) реализованы, зачётный `--all` на
+`80a4afc` - FAIL 0. Очередь: `RIB_POSITIONS` (`RIB_POSITIONS_DEVELOPER_PROMPT.md`, выдан; второй замер `Side` 2/3 и
+закрытие `mode_side_positions` по одной из двух заранее утверждённых веток) -> E4 -> IGES -> `RELEASE_0_13_0`.

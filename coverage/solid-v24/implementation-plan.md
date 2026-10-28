@@ -1065,3 +1065,9 @@ FAIL 0). По решению заказчика 23.10.2026 на предложе
 Очередь: `DIRECT_FACES_DELETE_RESTORE` (выдан) -> `DIRECT_FACES_TANGENT` -> `DIRECT_FACES_NO_HISTORY` -> E2 -> E4 ->
 IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк перемещения - в `DIRECT_FACES_NO_HISTORY`; ограничение
 перемещения по типу грани - в `DIRECT_FACES_TANGENT`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 28.10.2026, сорок вторая (`DIRECT_FACES_DELETE_RESTORE` принят).**
+
+Очередь: `DIRECT_FACES_TANGENT` (выдан) -> `DIRECT_FACES_NO_HISTORY` -> E2 -> E4 -> IGES -> `RELEASE_0_13_0`.
+`delete_faces keep_body` исполняет маршрут с числовым судом и отказывает именованно; `restore_faces` не возвращает объём.
+`save_reopen` строк delete/restore - в `DIRECT_FACES_NO_HISTORY`.

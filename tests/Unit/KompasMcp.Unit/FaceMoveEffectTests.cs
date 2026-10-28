@@ -87,4 +87,19 @@ public class FaceMoveEffectTests
         Assert.False(FaceMoveEffect.GroupWider(null, 1));
         Assert.False(FaceMoveEffect.GroupWider(0, 1));
     }
+
+    /// <summary>MEASURED: a single-mode move on a face with tangent neighbours reads back 6.25 mm for
+    /// a requested 5, because the kernel moved the chain too. A shorter sweep is never excused.</summary>
+    /// <remarks>History: docs/decisions/direct-faces.md#implicit-tangent</remarks>
+    [Fact]
+    public void SweptFurther_ExcusesOnlyTheLongerSweep()
+    {
+        Assert.True(FaceMoveEffect.SweptFurther(6.25d, 5d));
+        Assert.True(FaceMoveEffect.SweptFurther(-6.25d, 5d));
+        Assert.False(FaceMoveEffect.SweptFurther(5d, 5d));
+        Assert.False(FaceMoveEffect.SweptFurther(3.75d, 5d));
+        Assert.False(FaceMoveEffect.SweptFurther(5.01d, 5d));
+        Assert.False(FaceMoveEffect.SweptFurther(null, 5d));
+        Assert.False(FaceMoveEffect.SweptFurther(double.NaN, 5d));
+    }
 }

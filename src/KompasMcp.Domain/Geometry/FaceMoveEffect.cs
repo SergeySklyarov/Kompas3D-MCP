@@ -46,6 +46,17 @@ public static class FaceMoveEffect
     public static bool GroupWider(int? groupSize, int namedCount) =>
         groupSize is int size && size > namedCount;
 
+    /// <summary>Whether the read-back shows a LONGER sweep than the requested one, beyond tolerance: the
+    /// kernel moved faces the caller did not name, so the volume is no witness against the move.</summary>
+    /// <remarks>MEASURED: a single-mode move on a face with tangent neighbours grows the volume by more
+    /// than <c>d·A</c> of the named face. A SHORTER sweep is never excused by this: nothing implicit
+    /// makes the named face travel less than asked.
+    /// History: docs/decisions/direct-faces.md#implicit-tangent</remarks>
+    public static bool SweptFurther(double? observedMm, double requestedMm) =>
+        observedMm is double observed && double.IsFinite(observed) && double.IsFinite(requestedMm)
+        && Math.Abs(observed) > Math.Abs(requestedMm)
+        && !Matches(Math.Abs(observed), Math.Abs(requestedMm));
+
     /// <summary>Comparison within the profile tolerance: 0.01 absolute or 1e-6 relative, the same rule the
     /// other geometry checks of the product use.</summary>
     public static bool Matches(double? actual, double? expected)

@@ -824,9 +824,11 @@ RUN_GROUPS = (
      "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
      "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
     ("e5", "e5", "e5-acceptance.json",
-     "Приёмка E5: прямое редактирование граней тела - перемещение (V + d*A, F + P*d), удаление "
-     "(оболочка, названный отказ keep_body), восстановление поверхности и отказы "
-     "(наряды DIRECT_FACES_CORE и DIRECT_FACES_DELETE_RESTORE, профиль direct-faces-v1)"),
+     "Приёмка E5: прямое редактирование граней тела - перемещение (V + d*A, F + P*d), касательные "
+     "грани, удаление (оболочка, названный отказ keep_body), восстановление поверхности, отказы, "
+     "save -> reopen и тело без истории построения (наряды DIRECT_FACES_CORE, "
+     "DIRECT_FACES_DELETE_RESTORE, DIRECT_FACES_TANGENT, DIRECT_FACES_NO_HISTORY, "
+     "профиль direct-faces-v1)"),
     ("update", "update", "update-acceptance.json",
      "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
      "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
@@ -52933,14 +52935,16 @@ def e5_checks(client, rep, app_id, workdir):
     ПО КОДУ: пустой список граней (в том числе с `tangent_group`), все грани тела,
     недокументированные режимы, нулевое смещение, грань другого документа.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Тело без истории построения и save -> reopen - отдельные наряды блока E5. Грань
-    ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно многотельное тело): страж - сравнение
-    COM-указателя владельца - строкой не покрыт, и это названо, а не выдано за проверенное.
-    Вылечиваемость тела при keep_body не измерена: на бруске все шесть граней отказывают, и обещаний
-    про другую геометрию инструмент не даёт. Режим касательных проверен на бруске со скруглением
-    (E5.TAN.*): набор операции шире названной грани, поэтому объём не предсказывается формулой, а
-    подтверждается признаками, и уровень ответа - call_returned. Одиночный режим на такой грани
-    отказывает по арифметике (ход при этом выполнен) - это названо строкой, а не засчитано успехом.
+    ЧЕГО ЗДЕСЬ НЕТ. Грань ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно многотельное тело):
+    страж - сравнение COM-указателя владельца - строкой не покрыт, и это названо, а не выдано за
+    проверенное. Вылечиваемость тела при keep_body не измерена: на бруске все шесть граней отказывают,
+    и обещаний про другую геометрию инструмент не даёт. Режим касательных проверен на бруске со
+    скруглением (E5.TAN.*): набор операции шире названной грани, поэтому объём не предсказывается
+    формулой, а подтверждается признаками, и уровень ответа - call_returned. Одиночный режим на такой
+    грани отвечает УСПЕХОМ с предупреждением `implicit_tangent_faces_moved` (ход выполнен, касательные
+    ушли неявно) - отказ был бы ложным. Строки `save_reopen` (E5.MOVE/E5.TAN/E5.DEL/E5.RES) проходят
+    цикл сохранения-закрытия-открытия КАЖДАЯ сама, а тело без истории построения проверяется строками
+    E5.STEP.* на импортированном STEP.
     """
     V0, F0, A_TOP, P_TOP, D = 24000.0, 5200.0, 1200.0, 140.0, 5.0
     TOL_V, TOL_F = 0.05, 1.0
@@ -53402,14 +53406,26 @@ def e5_checks(client, rep, app_id, workdir):
                 "face_refs": [s_refs[0]], "offset_mm": D, "reverse": True,
                 "operation_id": str(uuid.uuid4())})
             s_err = error_code(s_env)
-            s_message = str(((s_env or {}).get("error") or {}).get("message") or "")
+            s_res = result(s_env)
+            s_warn = s_res.get("warnings") or []
+            s_checks = named_checks(s_res)
+            s_volume = volume(single_doc)
             rep.add("E5.TAN.single_on_tangent",
-                    "e5: одиночный режим на грани с касательными: ход выполнен, но V + d*A названной "
-                    "грани не сходится (измерено 6000 против 4800)",
-                    "NAMED",
-                    "код=%s объём=%s (ожидание при ходе наружу 29690.97): %s - отказ назван, а не выдан за "
-                    "успех; долг наряда: касательные двигаются неявно, а признака для этого в API нет"
-                    % (s_err, volume(single_doc), s_message[:160]))
+                    "e5: одиночный режим на грани с касательными - успех с предупреждением "
+                    "implicit_tangent_faces_moved: объём 29690.97 (касательные сдвинулись неявно: 6000 "
+                    "вместо 4800), уровень call_returned, объём не предсказывается",
+                    "PASS" if s_err is None
+                    and any("implicit_tangent_faces_moved" in str(w) for w in s_warn)
+                    and near(s_volume, 29690.9734, 1.0)
+                    and s_checks.get("offset_matches") is False
+                    and s_checks.get("operation_updated") is True
+                    and "area_matches" not in s_checks
+                    and s_res.get("expected_volume_mm3") is None
+                    and level(s_res) == "call_returned" else "FAIL",
+                    "код=%s объём=%s площадь=%s level=%s сверки=%s warnings=%s"
+                    % (s_err, s_volume, s_res.get("area_after_mm2"), level(s_res),
+                       json.dumps(s_checks, ensure_ascii=False),
+                       json.dumps(s_warn, ensure_ascii=False)[:220]))
         close(single_doc)
 
     _e, t_empty, _r = client.tool("kompas_move_faces", {
@@ -53420,9 +53436,297 @@ def e5_checks(client, rep, app_id, workdir):
             "PASS" if error_code(t_empty) == "INVALID_ARGUMENT" else "FAIL",
             "error=%s" % (error_code(t_empty),))
 
-    rep.add("E5.GAP.save_reopen",
-            "e5: сохранение и переоткрытие перемещённой грани", "NAMED",
-            "не измерялось этим нарядом: шаг save -> close -> reopen остаётся за следующим запуском")
+    # ── E5.*.save_reopen: сохранение -> закрытие -> открытие (наряд DIRECT_FACES_NO_HISTORY) ──
+    def reopen(doc, name):
+        """Сохранить документ, закрыть его и открыть заново; вернуть НОВЫЙ идентификатор.
+
+        ЗАЧЕМ ЦИКЛ В САМОЙ СТРОКЕ. Сторож `scripts/api-audit-claims.py` связывает действие
+        `save_reopen` с ОКНОМ ВЫЗОВОВ строки, названной этим действием: сохранение в одной строке, а
+        переоткрытие в соседней читало бы чужое доказательство.
+        """
+        path = os.path.join(workdir, name + ".m3d")
+        env, code = call("kompas_save_document", {"document_id": doc,
+                                                  "expected_revision": current_rev(doc),
+                                                  "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        return doc_id(env), saved, code
+
+    def numbers(doc, index=0):
+        """Числа, которыми судят переоткрытие: объём, площадь, число граней, твёрдость, число тел.
+
+        Твёрдость отдельным признаком не читается: у `IBody7` в interop v24 члена `IsSolid` нет,
+        поэтому тело считается твёрдым по ненулевому объёму (`docs/decisions/direct-faces.md`).
+        """
+        rows = bodies(doc)
+        if len(rows) <= index:
+            return {"bodies": len(rows)}
+        _e, env, _r = client.tool("kompas_measure", {
+            "target_ref": rows[index].get("body_ref"), "properties": ["volume", "surface_area"]})
+        measured = result(env)
+        volume_mm3 = measured.get("volume_mm3")
+        return {"volume": volume_mm3, "area": measured.get("surface_area_mm2"),
+                "faces": len(all_face_refs(doc, index)), "bodies": len(rows),
+                "solid": isinstance(volume_mm3, (int, float)) and abs(volume_mm3) > 1e-6}
+
+    def save_reopen_row(cid, what, doc, expect, name):
+        """Одна строка `save_reopen`: цикл делает сама строка, числа после сверяются с ожиданием."""
+        reopened, saved, code = reopen(doc, name)
+        got = numbers(reopened) if reopened else {}
+        ok = bool(saved and not code and got) and all(
+            key in got and near(got.get(key), value, tol) for key, (value, tol) in expect.items())
+        rep.add(cid, what, "PASS" if ok else "FAIL",
+                "сохранён=%s код_открытия=%s после_переоткрытия=%s ожидание=%s"
+                % (saved, code, json.dumps(got, ensure_ascii=False),
+                   json.dumps({k: v[0] for k, v in expect.items()}, ensure_ascii=False)))
+        close(reopened)
+
+    move_reopen, move_reopen_problem = new_box("e5-reopen-move", W, H, DEPTH)
+    if move_reopen_problem:
+        rep.add("E5.MOVE.save_reopen", "e5: перемещённая грань переживает save->close->reopen",
+                "NAMED", move_reopen_problem)
+    else:
+        mr_refs, mr_code = top_face(move_reopen)
+        if not mr_refs:
+            rep.add("E5.MOVE.save_reopen", "e5: перемещённая грань переживает save->close->reopen",
+                    "NAMED", "верхняя грань не найдена: %s" % (mr_code,))
+        else:
+            env, mr_move_code = call("kompas_move_faces", {
+                "document_id": move_reopen, "expected_revision": current_rev(move_reopen),
+                "face_refs": [mr_refs[0]], "offset_mm": D})
+            if mr_move_code:
+                rep.add("E5.MOVE.save_reopen",
+                        "e5: перемещённая грань переживает save->close->reopen", "NAMED",
+                        "перемещение не выполнено: %s" % (mr_move_code,))
+            else:
+                save_reopen_row(
+                    "E5.MOVE.save_reopen",
+                    "e5: грань, сдвинутая на 5 мм внутрь, переживает save->close->reopen: объём 18000, "
+                    "площадь 4500, граней 6",
+                    move_reopen,
+                    {"volume": (V0 - D * A_TOP, TOL_V), "area": (F0 - D * P_TOP, TOL_F),
+                     "faces": (6, 0), "bodies": (1, 0), "solid": (True, 0)},
+                    "e5-reopen-move")
+
+    tan_reopen, tan_reopen_problem = filleted_bar("e5-reopen-tangent")
+    if tan_reopen_problem:
+        rep.add("E5.TAN.save_reopen",
+                "e5: перемещение цепочки касательных переживает save->close->reopen", "NAMED",
+                tan_reopen_problem)
+    else:
+        tr_refs, tr_code = top_face(tan_reopen)
+        if not tr_refs:
+            rep.add("E5.TAN.save_reopen",
+                    "e5: перемещение цепочки касательных переживает save->close->reopen", "NAMED",
+                    "верхняя грань не найдена: %s" % (tr_code,))
+        else:
+            env, tr_move_code = call("kompas_move_faces", {
+                "document_id": tan_reopen, "expected_revision": current_rev(tan_reopen),
+                "face_refs": [tr_refs[0]], "offset_mm": D, "reverse": True, "tangent_group": True})
+            if tr_move_code:
+                rep.add("E5.TAN.save_reopen",
+                        "e5: перемещение цепочки касательных переживает save->close->reopen", "NAMED",
+                        "перемещение цепочки не выполнено: %s" % (tr_move_code,))
+            else:
+                save_reopen_row(
+                    "E5.TAN.save_reopen",
+                    "e5: набор из восьми граней, сдвинутый на 5 мм, переживает save->close->reopen: "
+                    "объём 45802.48, площадь 7340.74, граней 10",
+                    tan_reopen,
+                    {"volume": (45802.4772, 1.0), "area": (7340.74, 1.0), "faces": (10, 0),
+                     "bodies": (1, 0)},
+                    "e5-reopen-tangent")
+
+    del_reopen, del_reopen_problem = new_box("e5-reopen-delete", W, H, DEPTH)
+    if del_reopen_problem:
+        rep.add("E5.DEL.save_reopen",
+                "e5: оболочка после open_shell переживает save->close->reopen", "NAMED",
+                del_reopen_problem)
+    else:
+        dr_refs, dr_code = top_face(del_reopen)
+        if not dr_refs:
+            rep.add("E5.DEL.save_reopen",
+                    "e5: оболочка после open_shell переживает save->close->reopen", "NAMED",
+                    "верхняя грань не найдена: %s" % (dr_code,))
+        else:
+            env, dr_del_code = call("kompas_delete_faces", {
+                "document_id": del_reopen, "expected_revision": current_rev(del_reopen),
+                "face_refs": [dr_refs[0]], "mode": "open_shell"})
+            if dr_del_code:
+                rep.add("E5.DEL.save_reopen",
+                        "e5: оболочка после open_shell переживает save->close->reopen", "NAMED",
+                        "удаление не выполнено: %s" % (dr_del_code,))
+            else:
+                save_reopen_row(
+                    "E5.DEL.save_reopen",
+                    "e5: оболочка переживает save->close->reopen: объём 0, граней 5, тело не твёрдое",
+                    del_reopen,
+                    {"volume": (0.0, 1e-6), "faces": (5, 0), "bodies": (1, 0),
+                     "solid": (False, 0)},
+                    "e5-reopen-delete")
+
+    res_reopen, res_reopen_problem = new_box("e5-reopen-restore", W, H, DEPTH)
+    if res_reopen_problem:
+        rep.add("E5.RES.save_reopen",
+                "e5: восстановленная поверхность переживает save->close->reopen", "NAMED",
+                res_reopen_problem)
+    else:
+        rr_refs, rr_code = top_face(res_reopen)
+        if not rr_refs:
+            rep.add("E5.RES.save_reopen",
+                    "e5: восстановленная поверхность переживает save->close->reopen", "NAMED",
+                    "верхняя грань не найдена: %s" % (rr_code,))
+        else:
+            env, rr_del_code = call("kompas_delete_faces", {
+                "document_id": res_reopen, "expected_revision": current_rev(res_reopen),
+                "face_refs": [rr_refs[0]], "mode": "open_shell"})
+            shell_refs = all_face_refs(res_reopen)
+            env, rr_res_code = (call("kompas_restore_faces", {
+                "document_id": res_reopen, "expected_revision": current_rev(res_reopen),
+                "face_ref": shell_refs[0]}) if shell_refs else (None, "no_shell_faces"))
+            if rr_del_code or rr_res_code:
+                rep.add("E5.RES.save_reopen",
+                        "e5: восстановленная поверхность переживает save->close->reopen", "NAMED",
+                        "удаление=%s восстановление=%s" % (rr_del_code, rr_res_code))
+            else:
+                save_reopen_row(
+                    "E5.RES.save_reopen",
+                    "e5: отдельная поверхность переживает save->close->reopen: тел 2, объём тела "
+                    "по-прежнему 0 (оболочка не вылечена)",
+                    res_reopen,
+                    {"volume": (0.0, 1e-6), "bodies": (2, 0), "faces": (5, 0)},
+                    "e5-reopen-restore")
+
+    # ── E5.STEP: тело без истории построения (наряд DIRECT_FACES_NO_HISTORY) ──
+    # Тело берётся маршрутом продукта: брусок экспортируется в STEP и импортируется обратно, поэтому
+    # дерева построения у него нет, а грани адресуются так же, как у тела с историей.
+    step_rows = (
+        ("E5.STEP.fixture", "e5: импортированное тело без истории - 6 граней, объём 24000"),
+        ("E5.STEP.move", "e5: грань тела без истории перемещена и подтверждена числом"),
+        ("E5.STEP.refusal", "e5: грань, которую ядро не двигает, названа отказом, а не успехом"),
+        ("E5.STEP.delete_shell", "e5: open_shell на теле без истории оставил оболочку"),
+        ("E5.STEP.save_reopen", "e5: оболочка тела без истории переживает save->close->reopen"),
+    )
+    step_src, step_src_problem = new_box("e5-step-src", W, H, DEPTH)
+    step_path = os.path.join(workdir, "e5-step-body.step")
+    step_doc = None
+    if step_src_problem:
+        for cid, what in step_rows:
+            rep.add(cid, what, "NAMED", step_src_problem)
+    else:
+        env, step_exp_code = call("kompas_export_step", {
+            "document_id": step_src, "expected_revision": current_rev(step_src),
+            "output_path": step_path})
+        close(step_src)
+        env, step_imp_code = call("kompas_import_step", {
+            "application_id": app_id, "input_path": step_path, "desired_kind": "part",
+            "target_path": os.path.join(workdir, "e5-step-body.m3d")}, timeout=300)
+        step_ids = result(env).get("created_document_ids") or []
+        step_doc = step_ids[0] if step_ids else None
+        if step_exp_code or step_imp_code or not step_doc:
+            reason = "экспорт=%s импорт=%s документ=%s" % (step_exp_code, step_imp_code, step_doc)
+            for cid, what in step_rows:
+                rep.add(cid, what, "NAMED", reason)
+            step_doc = None
+        else:
+            step_before = numbers(step_doc)
+            rep.add("E5.STEP.fixture", step_rows[0][1],
+                    "PASS" if step_before.get("faces") == 6
+                    and near(step_before.get("volume"), V0, TOL_V)
+                    and step_before.get("bodies") == 1 else "FAIL",
+                    "граней=%s объём=%s тел=%s ожидание=6 / %s / 1 (kompas_read_topology, kompas_measure)"
+                    % (step_before.get("faces"), step_before.get("volume"),
+                       step_before.get("bodies"), V0))
+
+            # Какая грань у импортированного тела двигается, заранее не известно: перебираются все
+            # шесть по нормали, и каждый ответ записывается - «не двигается» относится к ГРАНИ.
+            successes, refusals = [], []
+            for direction in ([0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]):
+                refs, _code = face_by_normal(step_doc, direction)
+                if not refs:
+                    continue
+                before = numbers(step_doc)
+                env, move_code = call("kompas_move_faces", {
+                    "document_id": step_doc, "expected_revision": current_rev(step_doc),
+                    "face_refs": [refs[0]], "offset_mm": D, "reverse": True})
+                after = numbers(step_doc)
+                if move_code:
+                    refusals.append((direction, move_code, before, after))
+                else:
+                    successes.append((direction, result(env), before, after))
+
+            # Именованный отказ: смещение, снимающее тело с себя, ядро отвергает (`Update() = false`), и
+            # инструмент обязан назвать это отказом, а не успехом. Толщина бруска 20 мм, ход внутрь 30.
+            ref_refs, ref_lookup = face_by_normal(step_doc, [0, 0, 1])
+            if not ref_refs:
+                rep.add("E5.STEP.refusal", step_rows[2][1], "NAMED",
+                        "верхняя грань не найдена: %s" % (ref_lookup,))
+            else:
+                before_ref = numbers(step_doc)
+                env, deg_code = call("kompas_move_faces", {
+                    "document_id": step_doc, "expected_revision": current_rev(step_doc),
+                    "face_refs": [ref_refs[0]], "offset_mm": DEPTH + D + D})
+                after_ref = numbers(step_doc)
+                deg_error = (env or {}).get("error") or {}
+                deg_details = deg_error.get("details") or {}
+                unchanged = near(after_ref.get("volume"), before_ref.get("volume"), TOL_V)
+                rep.add("E5.STEP.refusal", step_rows[2][1],
+                        "PASS" if deg_code == "GEOMETRY_FAILED"
+                        and (unchanged or deg_error.get("partial_effects") is True) else "NAMED",
+                        "код=%s объём %s→%s частичный_эффект_назван=%s (ожидание: отказ, а не успех; "
+                        "изменённое тело обязано быть названо)"
+                        % (deg_code, before_ref.get("volume"), after_ref.get("volume"),
+                           deg_error.get("partial_effects")))
+
+            if successes:
+                first_dir, first_res, first_before, first_after = successes[0]
+                first_checks = named_checks(first_res)
+                expected_volume = (first_before.get("volume") or 0) + D * (
+                    first_res.get("face_area_mm2") or 0)
+                rep.add("E5.STEP.move", step_rows[1][1],
+                        "PASS" if near(first_res.get("observed_offset_mm"), D, 1e-6)
+                        and level(first_res) == "geometry_checked" and first_checks
+                        and all(first_checks.values())
+                        and near(first_after.get("volume"), expected_volume, TOL_V) else "FAIL",
+                        "направление=%s observed_offset_mm=%s level=%s объём %s→%s ожидание=%s "
+                        "сверки=%s" % (first_dir, first_res.get("observed_offset_mm"),
+                                       level(first_res), first_before.get("volume"),
+                                       first_after.get("volume"), expected_volume,
+                                       json.dumps(first_checks, ensure_ascii=False)))
+            else:
+                rep.add("E5.STEP.move", step_rows[1][1], "FAIL",
+                        "ни одна из шести граней тела без истории не переместилась: отказы=%s"
+                        % (json.dumps([(r[0], r[1]) for r in refusals], ensure_ascii=False),))
+
+            top_refs, top_code = face_by_normal(step_doc, [0, 0, 1])
+            if not top_refs:
+                rep.add("E5.STEP.delete_shell", step_rows[3][1], "NAMED",
+                        "верхняя грань не найдена: %s" % (top_code,))
+                rep.add("E5.STEP.save_reopen", step_rows[4][1], "NAMED",
+                        "верхняя грань не найдена: %s" % (top_code,))
+            else:
+                before_del = numbers(step_doc)
+                env, step_del_code = call("kompas_delete_faces", {
+                    "document_id": step_doc, "expected_revision": current_rev(step_doc),
+                    "face_refs": [top_refs[0]], "mode": "open_shell"})
+                after_del = numbers(step_doc)
+                rep.add("E5.STEP.delete_shell", step_rows[3][1],
+                        "PASS" if not step_del_code and near(after_del.get("volume"), 0.0, 1e-6)
+                        and after_del.get("faces") == (before_del.get("faces") or 0) - 1 else "FAIL",
+                        "код=%s объём=%s граней=%s→%s ожидание=0 и на одну меньше"
+                        % (step_del_code, after_del.get("volume"), before_del.get("faces"),
+                           after_del.get("faces")))
+                if step_del_code:
+                    rep.add("E5.STEP.save_reopen", step_rows[4][1], "NAMED",
+                            "удаление не выполнено: %s" % (step_del_code,))
+                else:
+                    save_reopen_row(step_rows[4][0], step_rows[4][1], step_doc,
+                                    {"volume": (0.0, 1e-6), "faces": (after_del.get("faces"), 0),
+                                     "bodies": (after_del.get("bodies"), 0), "solid": (False, 0)},
+                                    "e5-step-shell")
+            close(step_doc)
     close(other)
     close(box)
 

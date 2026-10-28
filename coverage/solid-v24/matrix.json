@@ -15960,7 +15960,7 @@
         "read": "verified",
         "edit": "verified",
         "rebuild": "verified",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
@@ -15974,6 +15974,10 @@
         "E5.MOVE.inward_offset",
         "E5.MOVE.verified",
         "E5.MOVE.outward",
+        "E5.MOVE.save_reopen",
+        "E5.STEP.fixture",
+        "E5.STEP.move",
+        "E5.STEP.refusal",
         "E5.NEG.empty_faces",
         "E5.NEG.zero_offset",
         "E5.NEG.tangent_empty",
@@ -15986,7 +15990,7 @@
         "docs/acceptance/evidence/20261028-e5-probe-c4cbcc0/probe.json"
       ],
       "limitations": [
-        "Группа mcp-smoke E5 пройдена: 11 строк PASS, 1 NAMED. save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.",
+        "Группа mcp-smoke E5 пройдена целиком: 56 строк PASS, FAIL 0. save_reopen измерен (E5.MOVE.save_reopen), тело без истории построения тоже (E5.STEP.fixture / .move / .refusal).",
         "Сторона перемещения измерена обеими сторонами на одной грани бруска: reverse=false уводит грань ПРОТИВ внешней нормали (объём 24000 -> 18000 мм3), reverse=true - по нормали (обратный вызов вернул 24000). IFaceMover.Direction - логический признак, поэтому контракт называет сторону полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm.",
         "Касательные грани (SM-24.move_faces.tangent_group) выполняются отдельной строкой профиля: в этой строке SetFaces вызывается с TangentFaces = false, поэтому касательные соседи в набор не входят и их судьба здесь не читается.",
         "not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.",
@@ -16018,7 +16022,7 @@
         "read": "verified",
         "edit": "verified",
         "rebuild": "verified",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
@@ -16030,6 +16034,7 @@
         "E5.TAN.group_verified",
         "E5.TAN.no_tangents",
         "E5.TAN.single_on_tangent",
+        "E5.TAN.save_reopen",
         "E5.NEG.tangent_empty",
         "FaceMoveEffectTests"
       ],
@@ -16040,7 +16045,7 @@
       ],
       "limitations": [
         "geometry_validation оставлено implemented, а не verified: в этом режиме набор шире названных граней, поэтому объём НЕ предсказывается формулой V + d·A, ответ идёт уровнем call_returned, а успех подтверждается признаками (объём изменился, число граней и тел прежнее, набор вырос). Численного предсказания объёма для группы нет ни в справке, ни в измерении.",
-        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие группы относится к наряду DIRECT_FACES_NO_HISTORY.",
+        "save_reopen измерен (E5.TAN.save_reopen): набор из восьми граней переживает save -> close -> reopen, числа те же (объём 45802.48, площадь 7340.74, граней 10).",
         "MEASURED (проба --tangent): брусок 40x30x20 со скруглением R3 по четырём рёбрам длиной 40 - набор операции 8 граней против 1 без режима, объём 23690.97 → 45802.48 при смещении 5 мм, число граней прежнее (10). У грани 30x20 касательных соседей нет: набор остаётся из одной грани, ответ успешен с предупреждением tangent_faces_none.",
         "Одиночный режим на грани с касательными соседями отказывает по арифметике V + d·A (измерено 6000 против 4800), хотя ход выполнен: касательные двигаются неявно, а признака для этого в API нет. Это долг, а не заслуга - строка E5.TAN.single_on_tangent названа, а не засчитана успехом.",
         "Границы измеренного: одно тело с историей построения, плоская грань бруска со скруглением; цилиндрическая грань скругления в режиме касательных ведёт себя как плоская (измерено), но отдельной строкой не проверялась."
@@ -16071,7 +16076,7 @@
         "read": "verified",
         "edit": "verified",
         "rebuild": "verified",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
@@ -16080,6 +16085,9 @@
       "tests": [
         "E5.DEL.open_shell",
         "E5.DEL.open_shell_verified",
+        "E5.DEL.save_reopen",
+        "E5.STEP.delete_shell",
+        "E5.STEP.save_reopen",
         "E5.NEG.delete_refusals",
         "FaceRemovalEffectTests"
       ],
@@ -16089,7 +16097,7 @@
         "scratch/probe-e5-savebody.json"
       ],
       "limitations": [
-        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие оболочки относятся к наряду DIRECT_FACES_NO_HISTORY.",
+        "save_reopen измерен (E5.DEL.save_reopen, E5.STEP.save_reopen): оболочка переживает save -> close -> reopen и с историей построения, и на теле без истории; объём 0, граней 5.",
         "not_applicable у create: операция удаления не создаёт объект в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому создавать нечего.",
         "not_applicable у suppress_restore и delete_dependencies: признака в дереве нет, зависимых признаков у операции удаления граней тоже нет.",
         "Границы измеренного: одно тело, брусок 40x30x20 с историей построения, плоские грани. Отказ «удалить все грани тела» и грань другого документа проверяются до COM; грань чужого ТЕЛА в одном документе строкой не покрыта (нужно многотельное тело)."
@@ -16168,7 +16176,7 @@
         "read": "verified",
         "edit": "not_applicable",
         "rebuild": "verified",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
@@ -16178,6 +16186,7 @@
         "E5.RES.by_face",
         "E5.RES.shell_not_healed",
         "E5.RES.verified",
+        "E5.RES.save_reopen",
         "E5.NEG.restore_mode"
       ],
       "evidence": [
@@ -16186,7 +16195,7 @@
         "scratch/probe-e5-savebody.json"
       ],
       "limitations": [
-        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.",
+        "save_reopen измерен (E5.RES.save_reopen): после save -> close -> reopen тел по-прежнему 2, объём тела остаётся нулевым - отдельная поверхность переоткрытие переживает.",
         "MEASURED: восстановленная поверхность - ОТДЕЛЬНЫЙ объект (тел 1 -> 2), оболочку она не вылечивает, объём тела остаётся нулевым. Поэтому успех подтверждается числом тел, а объём сообщается как прочитанный, но не обещанный.",
         "not_applicable у edit: операция создаёт поверхность, а не правит существующий признак; not_applicable у suppress_restore и delete_dependencies - у операции нет признака в дереве построения.",
         "Восстановленная поверхность не адресуется ссылкой: реестр ссылок граней и тел её не описывает, поэтому проверка идёт по числу тел."

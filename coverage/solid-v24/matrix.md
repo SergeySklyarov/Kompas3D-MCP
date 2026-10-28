@@ -51,17 +51,14 @@
 ### профиль direct-faces-v1 — Прямое моделирование v24: грани тела без дерева построения
 
 - **обязательных_режимов:** 4
-- **режимов_закрыто:** 0
+- **режимов_закрыто:** 3
 - **общих_зависимостей:** 2
 - **зависимостей_закрыто:** 0
 - **профиль_закрыт:** нет
-- **готовность_процента:** 0.0%
-- **по_очередям:** E5 0/4
+- **готовность_процента:** 50.0%
+- **по_очередям:** E5 3/4
 - **открытые_режимы:**
-  - `SM-24.move_faces`
-  - `SM-24.delete_faces.open_shell`
   - `SM-24.delete_faces.keep_body`
-  - `SM-24.restore_faces.by_face`
 - **открытые_зависимости:**
   - `dep.api7.surface_container`
   - `dep.refs.faces_body`
@@ -261,16 +258,16 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 382
-- **строк_полностью_закрыто:** 191
+- **строк_полностью_закрыто:** 194
 - **строк_с_каким_либо_прогрессом:** 215
 - **семейств_в_каталоге:** 48
 - **семейств_без_строк:** 11
 - **операций:** 152
 - **режимов_и_вариантов:** 233
 - **применимых_действий:** 3074
-- **действий_verified:** 1283
-- **покрытие_действий:** 41.7%
-- **распределение_статусов:** {'not_started': 1784, 'verified': 1283, 'not_applicable': 746, 'implemented': 7}
+- **действий_verified:** 1287
+- **покрытие_действий:** 41.9%
+- **распределение_статусов:** {'not_started': 1780, 'verified': 1287, 'not_applicable': 746, 'implemented': 7}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 83, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -335,10 +332,10 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `SM-24.move_faces` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | — | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
-| `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | — | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.NEG.delete_refusals, FaceRemovalEffectTests |
+| `SM-24.move_faces` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.MOVE.save_reopen, E5.STEP.fixture, E5.STEP.move, E5.STEP.refusal, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
+| `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.DEL.save_reopen, E5.STEP.delete_shell, E5.STEP.save_reopen, E5.NEG.delete_refusals, FaceRemovalEffectTests |
 | `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | — | — | — | н/п | н/п | OK | — | E5.DEL.keep_body_refused |
-| `SM-24.restore_faces.by_face` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | н/п | OK | — | н/п | н/п | OK | OK | E5.RES.by_face, E5.RES.shell_not_healed, E5.RES.verified, E5.NEG.restore_mode |
+| `SM-24.restore_faces.by_face` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | E5.RES.by_face, E5.RES.shell_not_healed, E5.RES.verified, E5.RES.save_reopen, E5.NEG.restore_mode |
 
 ### Общие зависимости профиля `direct-faces-v1`
 
@@ -885,11 +882,11 @@
 | `SM-24.change_face_position` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-24.change_fillet` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | — | — | — | н/п | н/п | OK | — | E5.DEL.keep_body_refused |
-| `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | — | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.NEG.delete_refusals, FaceRemovalEffectTests |
-| `SM-24.move_faces.tangent_group` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | — | н/п | н/п | OK | код | E5.TAN.fixture, E5.TAN.group_wider, E5.TAN.group_verified, E5.TAN.no_tangents, E5.TAN.single_on_tangent, E5.NEG.tangent_empty, FaceMoveEffectTests |
+| `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.DEL.save_reopen, E5.STEP.delete_shell, E5.STEP.save_reopen, E5.NEG.delete_refusals, FaceRemovalEffectTests |
+| `SM-24.move_faces.tangent_group` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | код | E5.TAN.fixture, E5.TAN.group_wider, E5.TAN.group_verified, E5.TAN.no_tangents, E5.TAN.single_on_tangent, E5.TAN.save_reopen, E5.NEG.tangent_empty, FaceMoveEffectTests |
 | `SM-24.replace_faces.offset` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-24.resize_face` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-24.restore_faces.by_face` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | н/п | OK | — | н/п | н/п | OK | OK | E5.RES.by_face, E5.RES.shell_not_healed, E5.RES.verified, E5.NEG.restore_mode |
+| `SM-24.restore_faces.by_face` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | E5.RES.by_face, E5.RES.shell_not_healed, E5.RES.verified, E5.RES.save_reopen, E5.NEG.restore_mode |
 | `SM-24.split_solid_ref` | SM-24 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-25.decompose_array` | SM-25 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-25.delete_object_generic.cascade` | SM-25 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1069,7 +1066,7 @@
 | `dep.sketch_constraints.no_silent_rewrite` *(вне каталога)* | G6 | dependency_of | G6 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | SKC.10.geometry_validation, SKC.16.no_silent_rewrite, CB22.1.refused_constraint_leaves_no_record, CB22.2.open_document_not_rewritten, CB22.3.polyline_vertex_refused_before_kernel |
 | `dep.api7.sections_interface` *(вне каталога)* | G11 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
 | `dep.api7.dismantle_interface` *(вне каталога)* | G9 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | DSM-01.discovery, DSM-08.read_back, DSM-11.save_reopen |
-| `SM-24.move_faces` *(вне каталога)* | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | — | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
+| `SM-24.move_faces` *(вне каталога)* | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.MOVE.save_reopen, E5.STEP.fixture, E5.STEP.move, E5.STEP.refusal, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
 | `dep.api7.surface_container` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
 | `dep.refs.faces_body` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
 
@@ -1442,19 +1439,19 @@
   - Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента (одиночный VT_DISPATCH против массива), порядок свойств и второй Update, тип грани - на исход не влияют; контроль с тем же одиночным объектом и SaveBody=false срабатывает (6 -> 5 граней, объём 0).
   - Расхождение с записью E5_RESEARCH: там Update() возвращал true при неизменной модели, здесь - false. Запись исследования больше не воспроизводится, и это названо, а не сглажено.
   - LIMIT: геометрия, из которой целостность восстанавливается, не измерялась, поэтому успех режима нигде не обещан.
-- `SM-24.delete_faces.open_shell` — не закрыт
-  - save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие оболочки относятся к наряду DIRECT_FACES_NO_HISTORY.
+- `SM-24.delete_faces.open_shell` — закрыт целиком
+  - save_reopen измерен (E5.DEL.save_reopen, E5.STEP.save_reopen): оболочка переживает save -> close -> reopen и с историей построения, и на теле без истории; объём 0, граней 5.
   - not_applicable у create: операция удаления не создаёт объект в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому создавать нечего.
   - not_applicable у suppress_restore и delete_dependencies: признака в дереве нет, зависимых признаков у операции удаления граней тоже нет.
   - Границы измеренного: одно тело, брусок 40x30x20 с историей построения, плоские грани. Отказ «удалить все грани тела» и грань другого документа проверяются до COM; грань чужого ТЕЛА в одном документе строкой не покрыта (нужно многотельное тело).
 - `SM-24.move_faces.tangent_group` — не закрыт
   - geometry_validation оставлено implemented, а не verified: в этом режиме набор шире названных граней, поэтому объём НЕ предсказывается формулой V + d·A, ответ идёт уровнем call_returned, а успех подтверждается признаками (объём изменился, число граней и тел прежнее, набор вырос). Численного предсказания объёма для группы нет ни в справке, ни в измерении.
-  - save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие группы относится к наряду DIRECT_FACES_NO_HISTORY.
+  - save_reopen измерен (E5.TAN.save_reopen): набор из восьми граней переживает save -> close -> reopen, числа те же (объём 45802.48, площадь 7340.74, граней 10).
   - MEASURED (проба --tangent): брусок 40x30x20 со скруглением R3 по четырём рёбрам длиной 40 - набор операции 8 граней против 1 без режима, объём 23690.97 → 45802.48 при смещении 5 мм, число граней прежнее (10). У грани 30x20 касательных соседей нет: набор остаётся из одной грани, ответ успешен с предупреждением tangent_faces_none.
   - Одиночный режим на грани с касательными соседями отказывает по арифметике V + d·A (измерено 6000 против 4800), хотя ход выполнен: касательные двигаются неявно, а признака для этого в API нет. Это долг, а не заслуга - строка E5.TAN.single_on_tangent названа, а не засчитана успехом.
   - Границы измеренного: одно тело с историей построения, плоская грань бруска со скруглением; цилиндрическая грань скругления в режиме касательных ведёт себя как плоская (измерено), но отдельной строкой не проверялась.
-- `SM-24.restore_faces.by_face` — не закрыт
-  - save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.
+- `SM-24.restore_faces.by_face` — закрыт целиком
+  - save_reopen измерен (E5.RES.save_reopen): после save -> close -> reopen тел по-прежнему 2, объём тела остаётся нулевым - отдельная поверхность переоткрытие переживает.
   - MEASURED: восстановленная поверхность - ОТДЕЛЬНЫЙ объект (тел 1 -> 2), оболочку она не вылечивает, объём тела остаётся нулевым. Поэтому успех подтверждается числом тел, а объём сообщается как прочитанный, но не обещанный.
   - not_applicable у edit: операция создаёт поверхность, а не правит существующий признак; not_applicable у suppress_restore и delete_dependencies - у операции нет признака в дереве построения.
   - Восстановленная поверхность не адресуется ссылкой: реестр ссылок граней и тел её не описывает, поэтому проверка идёт по числу тел.
@@ -1952,8 +1949,8 @@
 - `dep.api7.dismantle_interface` — не закрыт
   - Интерфейс дополнительный: его нет в объявлении IAssemblyDocument, поэтому QI - единственный маршрут, и отказ обязан называть интерфейс.
   - Работает только на документе сборки: деталь вместо сборки отвергается, это ожидаемый отказ строки DSM-12.not_assembly.
-- `SM-24.move_faces` — не закрыт
-  - Группа mcp-smoke E5 пройдена: 11 строк PASS, 1 NAMED. save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.
+- `SM-24.move_faces` — закрыт целиком
+  - Группа mcp-smoke E5 пройдена целиком: 56 строк PASS, FAIL 0. save_reopen измерен (E5.MOVE.save_reopen), тело без истории построения тоже (E5.STEP.fixture / .move / .refusal).
   - Сторона перемещения измерена обеими сторонами на одной грани бруска: reverse=false уводит грань ПРОТИВ внешней нормали (объём 24000 -> 18000 мм3), reverse=true - по нормали (обратный вызов вернул 24000). IFaceMover.Direction - логический признак, поэтому контракт называет сторону полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm.
   - Касательные грани (SM-24.move_faces.tangent_group) выполняются отдельной строкой профиля: в этой строке SetFaces вызывается с TangentFaces = false, поэтому касательные соседи в набор не входят и их судьба здесь не читается.
   - not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.

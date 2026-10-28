@@ -214,6 +214,28 @@ public partial class Api5Session
         var areaAfter = bodyAfter is null ? null : MassProperties(bodyAfter, (uint)KompasUnits.MassMmKg)?.F;
         var facesAfter = CountFaces(document);
 
+        // INVARIANT: a body whose volume became zero was not moved, it was destroyed. MEASURED: a 30 mm
+        // inward move on a 20 mm body answers Update() = true and leaves volume 0, which the distance
+        // arithmetic would otherwise read as a long sweep.
+        if (volumeBefore is double intact && Math.Abs(intact) > 1e-6d
+            && volumeAfter is double collapsed && Math.Abs(collapsed) <= 1e-6d)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Объём тела стал нулевым (" + Num(volumeBefore) + " → " + Num(volumeAfter) +
+                " мм³): смещение сняло тело с себя, и это отказ, а не перемещение. Тело осталось в "
+                + "изменённом состоянии — см. partial_effects.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["volume_after_mm3"] = volumeAfter,
+                    ["face_area_mm2"] = faceArea,
+                    ["offset_mm"] = command.OffsetMm,
+                });
+        }
+
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
 
@@ -329,17 +351,18 @@ public partial class Api5Session
         }
 
         var observed = FaceMoveEffect.ObservedDisplacement(volumeBefore, volumeAfter, faceArea);
-        var expectedVolume = observed is double displacement && faceArea is double area
-            ? FaceMoveEffect.ExpectedVolume(volumeBefore ?? 0d, area, displacement)
-            : (double?)null;
-        var expectedArea = observed is double shift && perimeter is double band && areaBefore is double surface
-            ? FaceMoveEffect.ExpectedArea(surface, band, shift)
-            : (double?)null;
+        var requested = Math.Abs(command.OffsetMm);
 
         // The requested distance is the prediction: the face must have swept |offset|, and a face of a
         // different area would give a different volume for the same distance.
-        var distanceMatches = FaceMoveEffect.Matches(Math.Abs(observed ?? double.NaN), Math.Abs(command.OffsetMm));
-        if (!distanceMatches)
+        var distanceMatches = FaceMoveEffect.Matches(Math.Abs(observed ?? double.NaN), requested);
+
+        // MEASURED: the kernel moves tangent neighbours even with TangentFaces = false, so the volume
+        // grows past d·A of the named faces and no arithmetic separates the named face from the chain.
+        // A LONGER sweep is therefore success with a warning; a shorter one stays a refusal.
+        var implicitTangent = !distanceMatches && FaceMoveEffect.SweptFurther(observed, requested);
+
+        if (!distanceMatches && !implicitTangent)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
@@ -360,6 +383,16 @@ public partial class Api5Session
                 });
         }
 
+        // INVARIANT: an overshot volume is NOT predicted: the extra came from faces nobody named, and
+        // the body area grows by more than the named perimeter's band, so neither is a prediction.
+        var expectedVolume = !implicitTangent && observed is double displacement && faceArea is double area
+            ? FaceMoveEffect.ExpectedVolume(volumeBefore ?? 0d, area, displacement)
+            : (double?)null;
+        var expectedArea = !implicitTangent && observed is double shift
+            && perimeter is double band && areaBefore is double surface
+            ? FaceMoveEffect.ExpectedArea(surface, band, shift)
+            : (double?)null;
+
         var checks = new List<NamedCheck>
         {
             new("operation_updated", updated == true, "Update() вернул true"),
@@ -371,16 +404,23 @@ public partial class Api5Session
                 Expected: "перемещение грани не меняет число граней"),
             new("offset_matches", distanceMatches,
                 Observed: Num(observed) + " мм по объёму", Expected: Num(command.OffsetMm) + " мм"),
-            new("volume_matches", FaceMoveEffect.Matches(volumeAfter, expectedVolume),
-                Observed: Num(volumeAfter) + " мм³", Expected: Num(expectedVolume) + " мм³ (V + d·A)"),
         };
+
+        if (expectedVolume is not null)
+        {
+            checks.Add(new NamedCheck("volume_matches", FaceMoveEffect.Matches(volumeAfter, expectedVolume),
+                Observed: Num(volumeAfter) + " мм³", Expected: Num(expectedVolume) + " мм³ (V + d·A)"));
+        }
 
         // The area is a SECOND, independent signal: the band belongs to the perimeter of the faces that
         // were named, so a face the kernel re-resolved to a neighbour of another size is caught here
-        // even when the volume happens to match.
-        var areaMatches = FaceMoveEffect.Matches(areaAfter, expectedArea);
-        checks.Add(new NamedCheck("area_matches", areaMatches,
-            Observed: Num(areaAfter) + " мм²", Expected: Num(expectedArea) + " мм² (F + P·d)"));
+        // even when the volume happens to match. It is compared only when the sweep is the requested one.
+        var areaMatches = expectedArea is null || FaceMoveEffect.Matches(areaAfter, expectedArea);
+        if (expectedArea is not null)
+        {
+            checks.Add(new NamedCheck("area_matches", areaMatches,
+                Observed: Num(areaAfter) + " мм²", Expected: Num(expectedArea) + " мм² (F + P·d)"));
+        }
 
         if (!areaMatches && expectedArea is not null)
         {
@@ -412,9 +452,25 @@ public partial class Api5Session
             // of claiming a direction.
             "direction_reported_by_measurement — сторона перемещения не назначается: observed_offset_mm "
             + "показывает фактическое смещение со знаком (положительное — объём вырос)",
-            "no_history_independence_proved — операция адресует грани и тело, а не признаки, поэтому "
-            + "тело без истории проверяется отдельным нарядом DIRECT_FACES_NO_HISTORY",
+            "no_history_requirement — операция адресует грани и тело, а не признаки дерева, поэтому тело "
+            + "без истории построения (импорт STEP) ею обрабатывается так же; приёмка - строки E5.STEP.*",
         };
+
+        var warnings = new List<string>();
+        if (implicitTangent)
+        {
+            // MEASURED: with TangentFaces = false the kernel still moved the tangent neighbours, so the
+            // volume grew past d·A of the named face. Refusing here would report a move that happened as
+            // not done; nothing in the API says which faces moved implicitly, so neither volume nor area
+            // is predicted and the level stays call_returned.
+            warnings.Add("implicit_tangent_faces_moved — объём вырос больше, чем d·A названных граней: "
+                + "ядро сдвинуло и касательные соседи, хотя tangent_group не запрашивался; измеренное "
+                + "смещение " + Num(observed) + " мм против запрошенных " + Num(requested) + " мм. "
+                + "Объём в этом режиме не предсказывается, ответ - успех с этим предупреждением");
+            unverified.Add("named_face_band_not_checked — площадь тела выросла больше полосы периметра "
+                           + "названных граней (касательные дают свою добавку), поэтому полоса не "
+                           + "отличает названную грань от цепочки");
+        }
 
         unverified.Add("implicit_tangent_faces_not_named — SetFaces вызывается с TangentFaces = false, "
                        + "поэтому касательные соседи в набор не входят и их судьба здесь не читается");
@@ -442,7 +498,8 @@ public partial class Api5Session
                 checks,
                 unverified),
             notes,
-            Warnings: DeclaredExpectation.Warnings(declared));
+            Warnings: (warnings.Count == 0 ? null : warnings.Concat(
+                DeclaredExpectation.Warnings(declared) ?? Array.Empty<string>()).ToList()));
     }
 
     /// <summary>"Field ↔ capability" rules that reject the call BEFORE COM, for the same reason as at

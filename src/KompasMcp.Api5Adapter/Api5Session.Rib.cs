@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -61,6 +62,10 @@ public partial class Api5Session
 
         var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
+        var bodySnapshots = ReadBodySnapshots(part);
+        var bodyTarget = command.BodyRef is null
+            ? null
+            : ResolveBodyTarget(document, part, command.BodyRef, bodySnapshots);
         var facesBefore = CountFaces(document);
         var boxBefore = part.GetMainBody() is ksBody bodyBefore ? ReadBodyBox(bodyBefore) : null;
 
@@ -114,6 +119,12 @@ public partial class Api5Session
 
         // The documented reason route is cleared BEFORE the call, so a code read after a refusal is this
         // call's own and not a stale one from an earlier operation.
+        // The target body is written BEFORE Create(), through API7: the API5 definition has no body member,
+        // while IRib.Body does (irib_body.html, ksapi_irib_setbody.html). MEASURED: with the body written
+        // after Create() the kernel refuses the creation itself on a two-body part, so the order matters.
+        string? bodyNote = null;
+        var bodyWritten = bodyTarget is null || ApplyRibBody(document, entity, bodyTarget, out bodyNote);
+
         ClearKompasResult(document);
         var created = SafeBool(entity.Create);
         if (created != true)
@@ -157,6 +168,22 @@ public partial class Api5Session
         var bodiesAfter = CountBodies(document);
         var facesAfter = CountFaces(document);
         var boxAfter = part.GetMainBody() is ksBody bodyAfter ? ReadBodyBox(bodyAfter) : null;
+
+        if (bodyTarget is not null && !bodyWritten)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Тело ребра не задано: " + (bodyNote ?? "перенос признака в API7 не дал IRib")
+                + ". Признак построен, но приклеен не к тому телу, которое просил вызывающий.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["named_code"] = "GEOMETRY_FAILED",
+                    ["body_ref"] = command.BodyRef,
+                    ["body_index"] = bodyTarget.Index,
+                });
+        }
 
         double? added = volumeBefore is double before && volumeAfter is double after ? after - before : null;
         var expected = RibChain.ExpectedVolumeMm3(chain?.AreaMm2, command.ThicknessMm, command.Symmetric);
@@ -269,6 +296,7 @@ public partial class Api5Session
 
         AddBoundsChecks(boxBefore, boxAfter, checks, unverified);
         AddReadBackChecks(parameters, command, checks, unverified);
+        AddBodyChecks(part, bodySnapshots, bodyTarget, checks, unverified);
 
         return new RibResult(
             ToDto(reference, entity.name),
@@ -289,6 +317,83 @@ public partial class Api5Session
                 checks,
                 unverified),
             new List<string>());
+    }
+
+    /// <summary>Write the target body of a rib through API7 — the only documented member for it.</summary>
+    /// <remarks>DOC: <c>irib_body.html</c> — <c>Body</c>, «Тело для операции», get/put, type
+    /// <c>IKompasAPIObject</c>; <c>ksapi_irib_setbody.html</c> — «SetBody - Установить тело для добавления
+    /// ребра жёсткости». The interop exposes the property, not <c>SetBody</c>. INVARIANT: <c>false</c> means
+    /// the body was NOT written and the caller refuses; the per-body volumes decide whether it was applied.
+    /// History: docs/decisions/ribs.md#body</remarks>
+    private bool ApplyRibBody(DocumentEntry document, ksEntity entity, BodyTarget target, out string? note)
+    {
+        note = null;
+        try
+        {
+            var bridge = BridgeFor(document);
+            var rib = AsInterface<IRib>(bridge.TransferTo7(entity));
+            if (rib is null)
+            {
+                note = "перенос признака в API7 (ksAPI7Dual) не дал IRib";
+                return false;
+            }
+
+            var bodyObject = AsInterface<IKompasAPIObject>(bridge.TransferTo7(target.RawElement));
+            if (bodyObject is null)
+            {
+                note = "перенесённое тело не отвечает IKompasAPIObject";
+                return false;
+            }
+
+            rib.Body = bodyObject;
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or MissingMethodException)
+        {
+            note = ex.GetType().Name + ": " + ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>The body actually used: the TARGET one grew, every other body stayed as it was.</summary>
+    /// <remarks>MEASURED: <c>Update() = true</c> does not say which body took the material, so the answer comes
+    /// from the per-body volumes read before and after. Without a target body the check is not added at all:
+    /// the kernel chooses, and a "grew somewhere" claim would be the server's guess, not the model's.
+    /// History: docs/decisions/ribs.md#body</remarks>
+    private void AddBodyChecks(
+        ksPart part,
+        List<BodySnapshot> before,
+        BodyTarget? target,
+        List<NamedCheck> checks,
+        List<string> unverified)
+    {
+        if (target is null)
+        {
+            unverified.Add("body_not_requested — тело не задано: какое тело получило материал, решает ядро, "
+                + "и это не проверяется");
+            return;
+        }
+
+        var after = ReadBodySnapshots(part);
+        var targetAfter = after.FirstOrDefault(snapshot => snapshot.Index == target.Index);
+        var grew = target.Snapshot.Volume is double from
+                   && targetAfter?.Volume is double to
+                   && to - from > 0d;
+        checks.Add(new NamedCheck("body_target_grew", grew,
+            Observed: Num(target.Snapshot.Volume) + " → " + Num(targetAfter?.Volume) + " мм³ (тело "
+                      + target.Index + ")",
+            Expected: "объём ЦЕЛЕВОГО тела вырос: ребро приклеено к нему"));
+
+        var others = before.Where(snapshot => snapshot.Index != target.Index).ToList();
+        var unchanged = others.All(snapshot =>
+            after.FirstOrDefault(row => row.Index == snapshot.Index)?.Volume is double now
+            && snapshot.Volume is double was
+            && Math.Abs(now - was) <= 1e-6);
+        checks.Add(new NamedCheck("other_bodies_unchanged", unchanged,
+            Observed: string.Join("; ", others.Select(snapshot =>
+                "тело " + snapshot.Index + " " + Num(snapshot.Volume) + " → "
+                + Num(after.FirstOrDefault(row => row.Index == snapshot.Index)?.Volume))),
+            Expected: "остальные тела не изменились: материал добавлен только целевому"));
     }
 
     /// <summary>The box must GROW and never shrink: a rib adds material outside the body, so a box that
@@ -537,22 +642,14 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["segment_index"] = command.SegmentIndex });
         }
 
-        if (command.BodyRef is not null)
+        if (command.BodyRef is not null && string.IsNullOrWhiteSpace(command.BodyRef))
         {
-            // The parameter IS declared in the schema (otherwise it would be invisible to the product)
-            // but is NOT executed here: API5 ksRibDefinition has no body member at all, and accepting
-            // it silently would return success for work that never happened.
+            // The body IS executed now - through the API7 IRib.Body write - so only an empty reference is
+            // refused. DOC: irib_body.html, ksapi_irib_setbody.html. History: docs/decisions/ribs.md#body
             throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                "body не задаётся: у API5 ksRibDefinition члена «тело» нет вовсе (маршрут этого "
-                + "инструмента — API5 o3d_ribOperation=44), а многотельная адресация ребра в "
-                + "обязательный объём этого наряда не входит. Не передавайте поле.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["body_ref"] = command.BodyRef,
-                    ["api5_member_present"] = false,
-                });
+                ErrorCodes.InvalidArgument,
+                "body_ref передан пустой строкой: тело задаётся ссылкой body:<hex> из kompas_list_bodies.",
+                RetryPolicy.Never);
         }
     }
 }

@@ -5043,9 +5043,9 @@
         "discover": "verified",
         "create": "verified",
         "read": "verified",
-        "edit": "not_started",
+        "edit": "verified",
         "rebuild": "verified",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_started",
         "delete_dependencies": "not_started",
         "negative_tests": "verified",
@@ -5067,6 +5067,7 @@
         "R1-15.negative.thickness",
         "R1-16.negative.body",
         "R1-17.negative.outside_body",
+        "R1-28.create.body_target",
         "R1-18.create.reverse_side1",
         "R1-19.negative.reverse_side0"
       ],
@@ -5078,8 +5079,8 @@
       "limitations": [
         "Side считается ОТ НАПРАВЛЕНИЯ КРИВОЙ, а не от осей мира: на цепочке слева направо строит 0, на той же цепочке справа налево строит 1, а 0 отказывает. Значение передаётся как есть, подбирать его под геометрию сервер не будет",
         "Значения 2 (up) и 3 (down) на измеренной геометрии не строят ни при каком направлении цепочки (Update() = false, объём не меняется). Разбор на второй геометрии - наряд RIB_POSITIONS; здесь они принимаются контрактом, но успеха за них не выдаётся",
-        "Правка параметров построенного ребра, сохранение-переоткрытие и многотельная адресация в эту строку не входят - наряд RIB_MODES",
-        "body объявлен в контракте и ОТВЕРГАЕТСЯ именованным отказом: у API5 ksRibDefinition члена «тело» нет вовсе"
+        "Правка параметров построенного ребра и сохранение-переоткрытие закрыты нарядом RIB_MODES (строки R1-22…R1-27)",
+        "body задаётся через API7 (IRib.Body, irib_body.html) ДО Create(): после Create() ядро уже отказывает на двутельной детали. Подтверждение - по телам (целевое выросло, остальные нет), строка R1-28"
       ],
       "depends_on": [
         "dep.sketch.entities",

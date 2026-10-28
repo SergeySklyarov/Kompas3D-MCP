@@ -280,9 +280,9 @@
 - **операций:** 152
 - **режимов_и_вариантов:** 233
 - **применимых_действий:** 3074
-- **действий_verified:** 1302
+- **действий_verified:** 1304
 - **покрытие_действий:** 42.4%
-- **распределение_статусов:** {'not_started': 1762, 'verified': 1302, 'not_applicable': 746, 'implemented': 10}
+- **распределение_статусов:** {'not_started': 1760, 'verified': 1304, 'not_applicable': 746, 'implemented': 10}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 83, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -580,7 +580,7 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | — | OK | — | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-18.create.reverse_side1, R1-19.negative.reverse_side0 |
+| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0 |
 | `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | код | код | OK | — | OK | — | — | OK | — | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen |
 | `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | код | OK | OK | OK | — | OK | — | — | — | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen |
 
@@ -823,7 +823,7 @@
 | `SM-13.shell.mode_direction` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.02.discover, B5O.02.create, B5O.02.read, B5O.02.edit, B5O.02.rebuild, B5O.02.save_reopen, B5O.02.suppress_restore, B5O.02.delete_dependencies, B5O.02.negative_tests, B5O.02.geometry_validation, B5.04, B5.05, B5.06 |
 | `SM-13.shell.mode_variable_thickness` | SM-13 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-13.shell.uniform_thickness` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.03.discover, B5O.03.create, B5O.03.read, B5O.03.edit, B5O.03.rebuild, B5O.03.save_reopen, B5O.03.suppress_restore, B5O.03.delete_dependencies, B5O.03.negative_tests, B5O.03.geometry_validation, B5.04, B5.05 |
-| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | — | OK | — | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-18.create.reverse_side1, R1-19.negative.reverse_side0 |
+| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0 |
 | `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | код | OK | OK | OK | — | OK | — | — | — | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen |
 | `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | код | код | OK | — | OK | — | — | OK | — | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen |
 | `SM-14.rib.mode_extend_to_face` | SM-14 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
@@ -1403,8 +1403,8 @@
 - `SM-14.rib.mode_side_positions` — не закрыт
   - Side считается ОТ НАПРАВЛЕНИЯ КРИВОЙ, а не от осей мира: на цепочке слева направо строит 0, на той же цепочке справа налево строит 1, а 0 отказывает. Значение передаётся как есть, подбирать его под геометрию сервер не будет
   - Значения 2 (up) и 3 (down) на измеренной геометрии не строят ни при каком направлении цепочки (Update() = false, объём не меняется). Разбор на второй геометрии - наряд RIB_POSITIONS; здесь они принимаются контрактом, но успеха за них не выдаётся
-  - Правка параметров построенного ребра, сохранение-переоткрытие и многотельная адресация в эту строку не входят - наряд RIB_MODES
-  - body объявлен в контракте и ОТВЕРГАЕТСЯ именованным отказом: у API5 ksRibDefinition члена «тело» нет вовсе
+  - Правка параметров построенного ребра и сохранение-переоткрытие закрыты нарядом RIB_MODES (строки R1-22…R1-27)
+  - body задаётся через API7 (IRib.Body, irib_body.html) ДО Create(): после Create() ядро уже отказывает на двутельной детали. Подтверждение - по телам (целевое выросло, остальные нет), строка R1-28
 - `SM-14.rib.mode_symmetric_thickness` — не закрыт
   - Режим проверен на одной геометрии (плита 40×30×20, цепочка 400 мм²) и одной толщине 6 мм; на других толщинах отношение приростов не измерялось
   - Отказ на НЕприменённый режим (чтение thin_type не совпало с запрошенным) реализован, но отрицательной строкой не вызывался: получить его можно только сломанным ядром

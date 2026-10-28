@@ -53989,10 +53989,10 @@ def r1_checks(client, rep, app_id, workdir):
     rows = bodies(doc)
     env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
                                     "side": 0, "thickness_mm": THICKNESS,
-                                    "body_ref": rows[0].get("body_ref") if rows else None})
+                                    "body_ref": chain})
     rep.add("R1-16.negative.body",
-            "body отвергнут именованным отказом: у ksRibDefinition члена «тело» нет",
-            "PASS" if code == "CAPABILITY_UNAVAILABLE" else "FAIL",
+            "body_ref, указывающий не на тело, отвергнут по виду ссылки",
+            "PASS" if code == "INVALID_ARGUMENT" and "не на тело" in why(env) else "FAIL",
             "код=%s текст=%s" % (code, why(env)))
 
     outside, problem = chain_sketch(doc, [(0, 60), (20, 80), (40, 60)], name="r1-outside")
@@ -54250,6 +54250,72 @@ def r1_checks(client, rep, app_id, workdir):
             "saved=%s до=%s после=%s ребер в дереве=%s прочитано=%s"
             % (saved, edit_volume, reopened_volume, len(rib_rows), read_back))
     close(reopened)
+
+    # --- R1-28: тело ребра задаётся ссылкой — запись через API7 IRib.Body ---
+    #
+    # Двутельная деталь: две разнесённые плиты 40×30×20. Ребро строится над ВТОРОЙ и адресуется её
+    # ссылкой. Подтверждение по телам, а не по общему объёму: Update() = true не говорит, какое тело
+    # получило материал, а «объём вырос где-то» прошло бы и при приклейке к первой плите.
+    two_doc, problem = plate("r1-modes-two-bodies")
+    if problem:
+        rep.add("R1-28.create.body_target", "тело ребра задаётся ссылкой", "FAIL", problem)
+    else:
+        env, code = call("kompas_create_sketch", {
+            "document_id": two_doc, "expected_revision": revision(two_doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "second-body"})
+        second_sketch = result(env).get("sketch_ref") or result(env).get("id")
+        second_sketch = second_sketch.get("id") if isinstance(second_sketch, dict) else second_sketch
+        if not second_sketch:
+            rep.add("R1-28.create.body_target", "тело ребра задаётся ссылкой", "FAIL",
+                    "эскиз второго тела не создан: %s" % (code,))
+            close(two_doc)
+            return
+        call("kompas_edit_sketch", {
+            "sketch_ref": second_sketch, "expected_revision": revision(two_doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [60.0, -15.0],
+                          "width_mm": 40.0, "height_mm": 30.0}]})
+        call("kompas_finish_sketch", {"sketch_ref": second_sketch, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            "sketch_ref": second_sketch, "expected_revision": revision(two_doc), "operation": "base",
+            "depth_mm": 20.0, "direction": "positive",
+            "expected_volume_delta_mm3": PLATE_VOLUME})
+        two_rows = bodies(two_doc)
+
+        def body_volumes():
+            measured = {}
+            for row in bodies(two_doc):
+                _e, env_m, _r = client.tool("kompas_measure", {
+                    "target_ref": row.get("body_ref"), "properties": ["volume"]})
+                measured[row.get("body_ref")] = result(env_m).get("volume_mm3")
+            return measured
+
+        before_by_body = body_volumes()
+        target_ref = two_rows[-1].get("body_ref") if len(two_rows) >= 2 else None
+        two_chain, problem = chain_sketch(two_doc, [(60, 20), (80, 40), (100, 20)],
+                                          name="r1-chain-second-body")
+        if problem or target_ref is None:
+            rep.add("R1-28.create.body_target", "тело ребра задаётся ссылкой", "FAIL",
+                    problem or "в детали не два тела: %d" % (len(two_rows),))
+        else:
+            env, code = call("kompas_rib", {"sketch_ref": two_chain,
+                                            "expected_revision": revision(two_doc),
+                                            "side": 0, "thickness_mm": THICKNESS,
+                                            "body_ref": target_ref})
+            after_by_body = body_volumes()
+            grew = (before_by_body.get(target_ref) is not None
+                    and after_by_body.get(target_ref) is not None
+                    and near(after_by_body[target_ref] - before_by_body[target_ref],
+                             EXPECTED_ADDED, EXPECTED_ADDED * TOL))
+            others = [key for key in before_by_body if key != target_ref]
+            others_kept = all(near(after_by_body.get(key), before_by_body[key], 1e-6) for key in others)
+            rep.add("R1-28.create.body_target",
+                    "тело ребра задаётся ссылкой: материал получило ЦЕЛЕВОЕ тело, остальные не изменились",
+                    "PASS" if (not code and len(after_by_body) == 2 and grew and others_kept) else "FAIL",
+                    "код=%s целевое=%s→%s (ожидание +%s) остальные=%s текст=%s"
+                    % (code, before_by_body.get(target_ref), after_by_body.get(target_ref),
+                       EXPECTED_ADDED,
+                       {key: (before_by_body[key], after_by_body.get(key)) for key in others}, why(env)))
+        close(two_doc)
 
 
 EXTRA_GROUP_CHECKS = {

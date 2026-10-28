@@ -31,13 +31,16 @@
   ход отказом остаётся. Арифметика - `FaceMoveEffect.SweptFurther` с тестом. **Попутно найдено и
   закрыто:** смещение внутрь на 30 мм на теле толщиной 20 мм отвечало `Update() = true` и оставляло
   объём 0, то есть читалось как длинный ход, - теперь нулевой объём после перемещения это отказ
-  `GEOMETRY_FAILED` с `partial_effects`. Приёмка: группа E5 - **56 строк PASS, 0 NAMED, FAIL 0**
-  (было 25 строк; добавлены `E5.MOVE.save_reopen`, `E5.TAN.save_reopen`, `E5.DEL.save_reopen`,
-  `E5.RES.save_reopen`, `E5.STEP.fixture/.move/.refusal/.delete_shell/.save_reopen`, снята
-  `E5.GAP.save_reopen`); `--self-test` 95/0; тесты **1631/1631** (+1 на `SweptFurther`). Матрица:
+  `GEOMETRY_FAILED` с `partial_effects`. Приёмка: группа E5 - **33 строки PASS, 0 NAMED, FAIL 0** в
+  зачётном `--all` (было 25 строк; добавлены `E5.MOVE.save_reopen`, `E5.TAN.save_reopen`,
+  `E5.DEL.save_reopen`, `E5.RES.save_reopen`, `E5.STEP.fixture/.move/.refusal/.delete_shell/.save_reopen`,
+  снята `E5.GAP.save_reopen`; отчёт отдельного прогона `--e5-only` - 56 PASS, из них 23 строки общей
+  части); `--self-test` 95/0; тесты **1631/1631** (+1 на `SweptFurther`). Матрица:
   `save_reopen` поднят до `verified` в четырёх строках `SM-24.*`, `matrix.md` перегенерирован,
   целостность OK; `delete_faces.keep_body` остаётся `not_started` (режим на бруске отказывает).
-  Зачётный `--all` на Release чистого коммита - итог вносит следующий запуск. Долг: открыто **10**
+  Зачётный `--all` на Release чистого коммита `9cefd32` (дерево чистое, 32 минуты) - **1949 PASS,
+  6 NAMED, 3 UNKNOWN, FAIL 0**; строки сверены с прошлым зачётом `c2d9498`, расхождения только
+  заявленные. Долг: открыто **10**
   строк (1, 3, 4, 10, 38, 53, 54, 65, 79, 80) - бюджет 0.13 не превышен, строка 81 закрыта. Решение -
   `docs/decisions/direct-faces.md#implicit-tangent`, `#save-reopen`, `#no-history`; отчёт -
   `DIRECT_FACES_NO_HISTORY_REPORT_20261028.md`.

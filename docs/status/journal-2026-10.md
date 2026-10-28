@@ -6890,11 +6890,15 @@ Release 0 предупреждений, тесты **1614/1614** (в `ExportOver
   меньший ход остаётся отказом. Строка `E5.TAN.single_on_tangent` переведена из NAMED в PASS, долг 81
   снят. Арифметика - `KompasMcp.Domain.Geometry.FaceMoveEffect.SweptFurther`, покрыта тестом.
 - **Проверки.** Сборка Debug 0 предупреждений, тесты **1631/1631**, `--self-test` 95/0, группа E5 -
-  **56 строк PASS, 0 NAMED, FAIL 0** (было 25; добавлены четыре `save_reopen` и пять `E5.STEP.*`,
-  снята заглушка `E5.GAP.save_reopen`), стражи `lint-dashes.py` 0, `long-comment-blocks.py` 0,
+  **33 строки PASS, 0 NAMED, FAIL 0** в зачётном `--all` (было 25; добавлены четыре `save_reopen` и
+  пять `E5.STEP.*`, снята заглушка `E5.GAP.save_reopen`; отчёт отдельного прогона `--e5-only` -
+  56 PASS, из них 23 строки общей части), стражи `lint-dashes.py` 0, `long-comment-blocks.py` 0,
   `check-evidence-links.py` 0, `emit-coverage-matrix.py` - целостность OK. Матрица: `save_reopen`
   поднят до `verified` в четырёх строках `SM-24.*`, `matrix.md` перегенерирован;
   `delete_faces.keep_body` остаётся `not_started` (режим на бруске отказывает). Зачётный `--all` на
-  Release чистого коммита - итог вносит следующий запуск. Долг: открыто **10** (1, 3, 4, 10, 38, 53,
+  Release чистого коммита `9cefd32` (дерево чистое, 32 минуты) - **1949 PASS, 6 NAMED, 3 UNKNOWN,
+  FAIL 0**, 1958 строк; сверка строк с прошлым зачётом `c2d9498` (`compare-run-rows.py`) дала
+  расхождения только заявленные: снятая заглушка, девять новых строк E5 и `E5.TAN.single_on_tangent`
+  из NAMED в PASS, прочие 24 группы совпали. Долг: открыто **10** (1, 3, 4, 10, 38, 53,
   54, 65, 79, 80), бюджет 0.13 не превышен. Решения - `docs/decisions/direct-faces.md#implicit-tangent`,
   `#save-reopen`, `#no-history`; отчёт - `DIRECT_FACES_NO_HISTORY_REPORT_20261028.md`.

@@ -52,6 +52,7 @@ public static class CompactCatalog
         ["kompas_extrude"] = "feature", ["kompas_rotated"] = "feature", ["kompas_loft"] = "feature",
         ["kompas_sweep"] = "feature", ["kompas_hole"] = "feature", ["kompas_fillet"] = "feature",
         ["kompas_chamfer"] = "feature", ["kompas_shell"] = "feature", ["kompas_draft"] = "feature",
+        ["kompas_rib"] = "feature",
         ["kompas_draft_from_edges"] = "feature", ["kompas_create_thread"] = "feature",
         ["kompas_update_feature"] = "feature", ["kompas_delete_feature"] = "feature",
         ["kompas_list_features"] = "feature", ["kompas_get_feature"] = "feature",

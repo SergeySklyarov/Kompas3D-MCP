@@ -823,6 +823,10 @@ RUN_GROUPS = (
     ("sections", "sections", "sections-acceptance.json",
      "Приёмка SEC: динамическое сечение модели - создание, чтение обратно, направление, режим, "
      "снимок в режиме и без, save -> reopen и отказы (наряд G11, профиль sections-minimal-v1)"),
+    ("r1", "r1", "r1-acceptance.json",
+     "Приёмка R1: ребро жёсткости - обнаружение, создание по цепочке (side 0 и 1 на одном контуре), "
+     "чтение семейства rib, перестроение, названные отказы и подтверждение объёмом по площади "
+     "контура (наряд RIB_CORE, профиль rib-v1)"),
     ("e5", "e5", "e5-acceptance.json",
      "Приёмка E5: прямое редактирование граней тела - перемещение (V + d*A, F + P*d), касательные "
      "грани, удаление (оболочка, названный отказ keep_body), восстановление поверхности, отказы, "
@@ -885,6 +889,8 @@ ALL_GROUPS_EXTRA = (
     ("sections", ["--sections-only"]),
     # Группа E5 строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("e5", ["--e5-only"]),
+    # Группа R1 строит свою деталь и не зависит от общего сеанса.
+    ("r1", ["--r1-only"]),
     # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
     # `initialize.instructions` можно увидеть только в процессе, поднятом ПОСЛЕ записи итога.
     ("update", ["--update-only"]),
@@ -2064,6 +2070,7 @@ FLAGS = (
     ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
+    ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
     ("--nested-repeat", True, "K повторов постановки NEST в одном сеансе"),
@@ -16750,6 +16757,8 @@ def main():
     sections_only = "--sections-only" in sys.argv
     # Блок E5 (прямое изменение тела): группа E5 на своём сеансе, строки `E5.<NN>.<действие>`.
     e5_only = "--e5-only" in sys.argv
+    # Блок E2 (рёбра жёсткости): группа R1 на своём сеансе, строки `R1-<NN>.<действие>`.
+    r1_only = "--r1-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16906,6 +16915,7 @@ def main():
         "dismantle": dismantle_only,
         "sections": sections_only,
         "e5": e5_only,
+        "r1": r1_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -17512,6 +17522,14 @@ def main():
             dismantle_checks(client, rep, app_id, workdir)
         if sections_only:
             sections_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if r1_only:
+            r1_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -53731,6 +53749,277 @@ def e5_checks(client, rep, app_id, workdir):
     close(box)
 
 
+def r1_checks(client, rep, app_id, workdir):
+    """R1.* - ребро жёсткости через MCP (наряд RIB_CORE, профиль `rib-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Плита 40x30x20 строится через MCP, в её СРЕДИННОЙ плоскости XOZ
+    рисуется разомкнутая цепочка (0,20) → (20,40) → (40,20), и `kompas_rib` строит по ней ребро
+    толщиной 6 мм. Прирост объёма сверяется с АНАЛИТИКОЙ, посчитанной в самой строке: площадь
+    цепочки с замыкающей хордой 400 мм2 × 6 мм = 2400 мм3, допуск 1 %. Положение `side`
+    проверяется на ДВУХ направлениях одной и той же цепочки: слева направо строит `side = 0`, та же
+    цепочка справа налево строит `side = 1` и даёт тот же прирост — измерено, что `Side` считается
+    от направления кривой, а не от осей мира. Чтение `kompas_get_feature` даёт семейство `rib` и
+    прочитанные параметры (side, угол, сегмент, вид тонкой стенки, толщина), перестроение не теряет
+    ребро.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Положения `side` 2 и 3 на этой геометрии не строят ни при каком направлении
+    цепочки (измерено в исследовании блока) - их разбор отдельным нарядом, поэтому строки на них
+    нет. Уклон проверяется не объёмом по площади, а тем, что он ДОБАВЛЯЕТ материал: ожидание по
+    площади при уклоне неверно, и это названо в ответе инструмента. Симметричная толщина,
+    правка параметров и сохранение-переоткрытие - следующий наряд блока (`RIB_MODES`).
+    """
+    AREA = 400.0            # площадь цепочки (0,20) → (20,40) → (40,20) с замыкающей хордой, мм2
+    THICKNESS = 6.0
+    EXPECTED_ADDED = AREA * THICKNESS
+    TOL = 0.01              # допуск на прирост объёма, названный нарядом
+    PLATE_VOLUME = 40.0 * 30.0 * 20.0
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def measure(doc):
+        rows = bodies(doc)
+        if not rows:
+            return {}
+        _e, env, _r = client.tool("kompas_measure", {
+            "target_ref": rows[0].get("body_ref"), "properties": ["volume", "bbox"]})
+        res = result(env)
+        return res if isinstance(res, dict) else {}
+
+    def volume(doc):
+        return measure(doc).get("volume_mm3")
+
+    def near(value, expected, tol):
+        return isinstance(value, (int, float)) and abs(value - expected) <= tol
+
+    def why(env):
+        error = (env or {}).get("error") or {}
+        return str(error.get("message") or error)[:220]
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def plate(name):
+        """Плита 40x30x20 и её срединная плоскость XOZ: эскиз ребра живёт в ней."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                   "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"документ не создан: {code}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": revision(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "plate"})
+        sketch = result(env).get("sketch_ref") or result(env).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        if code or not sketch:
+            return None, f"эскиз плиты не создан: {code}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": revision(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, -15.0],
+                          "width_mm": 40.0, "height_mm": 30.0}]})
+        if code:
+            return None, f"прямоугольник плиты: {code}"
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": revision(doc), "operation": "base",
+            "depth_mm": 20.0, "direction": "positive",
+            "expected_volume_delta_mm3": PLATE_VOLUME})
+        if code:
+            return None, f"выдавливание плиты: {code}"
+        return doc, None
+
+    def chain_sketch(doc, points, name="rib-chain"):
+        """Разомкнутая цепочка отрезков в плоскости XOZ (u = x, v = z)."""
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": revision(doc),
+            "plane": {"base": "xz", "offset_mm": 0}, "name": name})
+        sketch = result(env).get("sketch_ref") or result(env).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        if code or not sketch:
+            return None, f"эскиз цепочки не создан: {code}"
+        entities = [{"kind": "line", "start_mm": [float(a[0]), float(a[1])],
+                     "end_mm": [float(b[0]), float(b[1])]}
+                    for a, b in zip(points, points[1:])]
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": revision(doc), "mode": "append",
+            "entities": entities})
+        if code:
+            return None, f"отрезки цепочки: {code}"
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        return sketch, None
+
+    # ===== R1-01: обнаружение =====
+    registry = (client.catalog() or {}).get("registry") or []
+    rep.add("R1-01.discover.tool", "инструмент kompas_rib есть в реестре каталога",
+            "PASS" if "kompas_rib" in registry else "FAIL",
+            "в реестре=%d; kompas_rib=%s" % (len(registry), "kompas_rib" in registry))
+    entry = entry_of(client, "kompas_rib")
+    fields = ((entry or {}).get("input_schema") or {}).get("properties") or {}
+    wanted = ["sketch_ref", "side", "thickness_mm", "draft_angle_deg", "segment_index", "body_ref"]
+    absent = [name for name in wanted if name not in fields]
+    rep.add("R1-02.discover.fields", "поля контракта ребра опубликованы схемой",
+            "PASS" if not absent else "FAIL", "нет полей: %s" % (absent,))
+
+    # ===== R1-03: создание на цепочке слева направо, side = 0 =====
+    doc, problem = plate("r1-plate")
+    if problem:
+        rep.add("R1-03.create.side0", "ребро построено по цепочке, side = 0", "FAIL", problem)
+        close(doc)
+        return
+    before = volume(doc)
+    rep.add("R1-04.prep.volume", "плита 40x30x20 построена через MCP",
+            "PASS" if near(before, PLATE_VOLUME, 0.05) else "FAIL",
+            "измерено=%s ожидание=%s" % (before, PLATE_VOLUME))
+
+    chain, problem = chain_sketch(doc, [(0, 20), (20, 40), (40, 20)])
+    if problem:
+        rep.add("R1-03.create.side0", "ребро построено по цепочке, side = 0", "FAIL", problem)
+        close(doc)
+        return
+
+    env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                    "side": 0, "thickness_mm": THICKNESS})
+    rib = result(env)
+    added = rib.get("volume_added_mm3")
+    after = volume(doc)
+    rep.add("R1-03.create.side0", "ребро построено: side = 0 на цепочке слева направо",
+            "PASS" if not code and rib.get("feature_ref") else "FAIL",
+            "код=%s; признак=%s" % (code, (rib.get("feature_ref") or {}).get("id")))
+    rep.add("R1-05.geometry.volume", "прирост объёма равен площади цепочки × толщину (допуск 1 %)",
+            "PASS" if near(added, EXPECTED_ADDED, EXPECTED_ADDED * TOL) else "FAIL",
+            "прирост=%s ожидание=%s (площадь=%s × %s)" %
+            (added, EXPECTED_ADDED, rib.get("contour_area_mm2"), THICKNESS))
+    rep.add("R1-06.geometry.contour_area", "площадь цепочки посчитана сервером и равна 400 мм2",
+            "PASS" if near(rib.get("contour_area_mm2"), AREA, 0.001) else "FAIL",
+            "площадь=%s ожидание=%s" % (rib.get("contour_area_mm2"), AREA))
+    checks = {row.get("name"): row.get("passed") for row in
+              ((rib.get("verification") or {}).get("checks") or [])}
+    rep.add("R1-07.geometry.checks", "проверки инструмента пройдены: объём, габарит, грани, тело",
+            "PASS" if all(checks.get(name) is True for name in
+                          ("volume_matches_contour", "bounds_grew", "face_count_grew",
+                           "body_count_kept")) else "FAIL",
+            "проверки=%s" % (checks,))
+    rep.add("R1-08.geometry.level", "уровень ответа geometry_checked при совпавшем объёме",
+            "PASS" if (rib.get("verification") or {}).get("level") == "geometry_checked" else "FAIL",
+            "уровень=%s" % ((rib.get("verification") or {}).get("level"),))
+    rep.add("R1-09.geometry.body_volume", "объём тела равен плите плюс ребро",
+            "PASS" if near(after, PLATE_VOLUME + EXPECTED_ADDED, 1.0) else "FAIL",
+            "измерено=%s ожидание=%s (kompas_measure)" % (after, PLATE_VOLUME + EXPECTED_ADDED))
+
+    # ===== R1-10: чтение семейства rib =====
+    feature_ref = (rib.get("feature_ref") or {}).get("id")
+    env, code = call("kompas_get_feature", {"feature_ref": feature_ref})
+    read = result(env)
+    params = read.get("rib") or {}
+    rep.add("R1-10.read.family", "kompas_get_feature распознаёт семейство rib",
+            "PASS" if read.get("family") == "rib" else "FAIL",
+            "семейство=%s интерфейс=%s" % (read.get("family"), read.get("definition_interface")))
+    rep.add("R1-11.read.parameters",
+            "прочитаны side, угол, сегмент, вид тонкой стенки и толщина",
+            "PASS" if params.get("side") == 0 and near(params.get("angle_deg"), 0.0, 1e-6)
+            and params.get("segment_index") == 0 and params.get("thin_type") == "normal"
+            and near(params.get("normal_thickness_mm"), THICKNESS, 1e-6) else "FAIL",
+            "прочитано=%s" % (params,))
+
+    # ===== R1-12: перестроение не теряет ребро =====
+    env, code = call("kompas_rebuild", {"document_id": doc})
+    rebuilt = volume(doc)
+    rep.add("R1-12.rebuild.kept", "перестроение сохраняет ребро: объём тот же",
+            "PASS" if near(rebuilt, PLATE_VOLUME + EXPECTED_ADDED, 1.0) else "FAIL",
+            "до=%s после=%s код=%s" % (after, rebuilt, code))
+
+    # ===== R1-13: отказы =====
+    closed, problem = chain_sketch(doc, [(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)],
+                                   name="r1-closed")
+    if problem:
+        rep.add("R1-13.negative.closed_contour", "замкнутый контур отвергнут до COM", "FAIL", problem)
+    else:
+        env, code = call("kompas_rib", {"sketch_ref": closed, "expected_revision": revision(doc),
+                                        "side": 0, "thickness_mm": THICKNESS})
+        rep.add("R1-13.negative.closed_contour",
+                "замкнутый контур отвергнут до COM кодом INVALID_ARGUMENT",
+                "PASS" if code == "INVALID_ARGUMENT" and "замкнут" in why(env) else "FAIL",
+                "код=%s текст=%s" % (code, why(env)))
+
+    env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                    "side": 4, "thickness_mm": THICKNESS})
+    rep.add("R1-14.negative.side_range", "side = 4 отвергнут: положения вне 0..3 нет",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", "код=%s текст=%s" % (code, why(env)))
+
+    env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                    "side": 0, "thickness_mm": 0.0})
+    rep.add("R1-15.negative.thickness", "нулевая толщина отвергнута",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", "код=%s текст=%s" % (code, why(env)))
+
+    rows = bodies(doc)
+    env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                    "side": 0, "thickness_mm": THICKNESS,
+                                    "body_ref": rows[0].get("body_ref") if rows else None})
+    rep.add("R1-16.negative.body",
+            "body отвергнут именованным отказом: у ksRibDefinition члена «тело» нет",
+            "PASS" if code == "CAPABILITY_UNAVAILABLE" else "FAIL",
+            "код=%s текст=%s" % (code, why(env)))
+
+    outside, problem = chain_sketch(doc, [(0, 60), (20, 80), (40, 60)], name="r1-outside")
+    if problem:
+        rep.add("R1-17.negative.outside_body", "контур вне тела отвергнут ядром", "FAIL", problem)
+    else:
+        env, code = call("kompas_rib", {"sketch_ref": outside, "expected_revision": revision(doc),
+                                        "side": 0, "thickness_mm": THICKNESS})
+        rep.add("R1-17.negative.outside_body", "контур вне тела отвергнут ядром",
+                "PASS" if code == "GEOMETRY_FAILED" else "FAIL",
+                "код=%s текст=%s" % (code, why(env)))
+    close(doc)
+
+    # ===== R1-18: обратная цепочка строит side = 1 =====
+    doc, problem = plate("r1-plate-reverse")
+    if problem:
+        rep.add("R1-18.create.reverse_side1", "обратная цепочка строит side = 1", "FAIL", problem)
+        close(doc)
+        return
+    reverse, problem = chain_sketch(doc, [(40, 20), (20, 40), (0, 20)], name="r1-chain-reverse")
+    if problem:
+        rep.add("R1-18.create.reverse_side1", "обратная цепочка строит side = 1", "FAIL", problem)
+        close(doc)
+        return
+    env, code = call("kompas_rib", {"sketch_ref": reverse, "expected_revision": revision(doc),
+                                    "side": 1, "thickness_mm": THICKNESS})
+    rib = result(env)
+    rep.add("R1-18.create.reverse_side1",
+            "на цепочке справа налево строит side = 1, прирост тот же",
+            "PASS" if not code and near(rib.get("volume_added_mm3"), EXPECTED_ADDED,
+                                        EXPECTED_ADDED * TOL) else "FAIL",
+            "код=%s прирост=%s ожидание=%s" % (code, rib.get("volume_added_mm3"), EXPECTED_ADDED))
+    env, code = call("kompas_rib", {"sketch_ref": reverse, "expected_revision": revision(doc),
+                                    "side": 0, "thickness_mm": THICKNESS})
+    rep.add("R1-19.negative.reverse_side0",
+            "на обратной цепочке side = 0 отвергает ядро: положение считается от кривой",
+            "PASS" if code == "GEOMETRY_FAILED" else "FAIL",
+            "код=%s текст=%s" % (code, why(env)))
+    close(doc)
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -53762,6 +54051,7 @@ EXTRA_GROUP_CHECKS = {
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
     "e5": lambda c, r, a, w, v, p: e5_checks(c, r, a, w),
+    "r1": lambda c, r, a, w, v, p: r1_checks(c, r, a, w),
     # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),

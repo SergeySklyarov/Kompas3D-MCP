@@ -44,12 +44,14 @@ public partial class Api5Session
         var isEvolution = IsEvolutionDefinition(definition);
         var isLoft = IsLoftDefinition(definition);
         var isShell = IsShellDefinition(definition);
+        var isRib = IsRibDefinition(definition);
         var family = ExtrusionFamily.Of(definition)
                      ?? (definition is ksChamferDefinition ? ChamferFamily : null)
                      ?? (definition is ksFilletDefinition ? FilletFamily : null)
                      ?? (isEvolution ? EvolutionFamily : null)
                      ?? (isLoft ? LoftFamily : null)
                      ?? (isShell ? ShellFamily : null)
+                     ?? (isRib ? RibFamily : null)
                      ?? (definition is ksInclineDefinition || entity.type == KompasObjectTypes.Incline
                          ? DraftFamily : null)
                      ?? (isDraftFromEdges ? DraftFromEdgesFamily : null)
@@ -111,6 +113,11 @@ public partial class Api5Session
         var shell = isShell && definition is ksShellDefinition shellDefinition
             ? ReadShellFeature(document, entity, shellDefinition, out shellNote)
             : null;
+        // A rib is read from its API5 definition, the very object the tool writes: the thickness lives
+        // only there, and the read-back is what confirms a creation.
+        var rib = isRib && definition is ksRibDefinition ribDefinition
+            ? ReadRibParameters(document, ribDefinition)
+            : null;
         string? draftNote = null;
         var draft = family == DraftFamily
             ? ReadDraftFeature(document, entity, out draftNote)
@@ -135,6 +142,8 @@ public partial class Api5Session
                                 ? loft is not null && loft.SectionCount is not null
                                 : family == ShellFamily
                                     ? shell?.ThicknessMm is not null
+                                    : family == RibFamily
+                                        ? rib?.NormalThicknessMm is not null
                                     : family == DraftFamily
                                         ? draft?.AngleDeg is not null
                                         : family == DraftFromEdgesFamily
@@ -168,6 +177,7 @@ public partial class Api5Session
                     EvolutionFamily => "sweep_params_read",
                     LoftFamily => "loft_params_read",
                     ShellFamily => "shell_params_read",
+                    RibFamily => "rib_params_read",
                     DraftFamily or DraftFromEdgesFamily => "draft_params_read",
                     ThreadFamily => "thread_params_read",
                     _ => "side_params_read",
@@ -205,6 +215,9 @@ public partial class Api5Session
                     ShellFamily => shell is null
                         ? "ksShellDefinition не прочитано"
                         : $"толщина={shell.ThicknessMm?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не прочитано"} направление={shell.ThinDirection ?? "не прочитано"} снятых граней={shell.RemovedFaceCount?.ToString() ?? "не прочитано"}",
+                    RibFamily => rib is null
+                        ? "ksRibDefinition не прочитано"
+                        : $"side={rib.Side?.ToString() ?? "не прочитано"} угол={rib.AngleDeg?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не прочитано"} сегмент={rib.SegmentIndex?.ToString() ?? "не прочитано"} толщина={rib.NormalThicknessMm?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не прочитано"} вид={rib.ThinType ?? "не прочитано"}",
                     _ => $"{sides.Count}",
                 }),
             new("feature_state_read", state.IsValid is not null,
@@ -237,7 +250,7 @@ public partial class Api5Session
         if (family is null)
         {
             unverified.Insert(0,
-                "family_not_supported — параметрическое чтение заявлено для выдавливаний, фаски, скругления, вращения, родного отверстия, четырёх семейств B3 (булева операция, разделение, отсечение, изменение положения) и трёх семейств B5 (кинематическая операция, элемент по сечениям, оболочка), а также уклона (draft); другие семейства в v1 не раскрываются");
+                "family_not_supported — параметрическое чтение заявлено для выдавливаний, фаски, скругления, вращения, родного отверстия, четырёх семейств B3 (булева операция, разделение, отсечение, изменение положения), трёх семейств B5 (кинематическая операция, элемент по сечениям, оболочка), ребра жёсткости (rib), а также уклона (draft); другие семейства в v1 не раскрываются");
         }
         else if (family == EvolutionFamily && sweepNote is not null)
         {
@@ -316,6 +329,7 @@ public partial class Api5Session
             MaterialToward = materialToward,
             MaterialTowardSource = materialTowardSource,
             MaterialTowardSketchNormal = materialTowardNormal,
+            Rib = rib,
         };
     }
 

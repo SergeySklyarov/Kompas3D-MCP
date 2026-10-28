@@ -5029,6 +5029,142 @@
       ]
     },
     {
+      "operation_id": "SM-14.rib.mode_side_positions",
+      "kind": "profile_mode",
+      "profile": "rib-v1",
+      "priority": "practical_required",
+      "queue": "E2",
+      "context": "part.single_body",
+      "catalog_ref": "SM-14",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_rib.json",
+      "adapter_route": "API5: ksPart.NewEntity(44 = o3d_ribOperation) -> ksEntity::GetDefinition -> ksRibDefinition.SetSketch(эскиз) + side + angle + index + SetThinParam(0, t, 0) -> Create() -> Update(). Толщина живёт ТОЛЬКО здесь: у IRib в справке нет ни толщины, ни параметров тонкой стенки (irib_propers.html), поэтому маршрут API7 для этой строки не годится и остаётся чтением. Положение подтверждается числами, а не значением: прирост объёма против площади цепочки × толщину (400 мм² × 6 мм = 2400 мм³, допуск 1 %), габарит, число граней, одно тело и чтение параметров обратно.",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_started",
+        "rebuild": "verified",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "R1-01.discover.tool",
+        "R1-02.discover.fields",
+        "R1-03.create.side0",
+        "R1-05.geometry.volume",
+        "R1-06.geometry.contour_area",
+        "R1-07.geometry.checks",
+        "R1-08.geometry.level",
+        "R1-09.geometry.body_volume",
+        "R1-10.read.family",
+        "R1-12.rebuild.kept",
+        "R1-13.negative.closed_contour",
+        "R1-14.negative.side_range",
+        "R1-15.negative.thickness",
+        "R1-16.negative.body",
+        "R1-17.negative.outside_body",
+        "R1-18.create.reverse_side1",
+        "R1-19.negative.reverse_side0"
+      ],
+      "evidence": [
+        "coverage/solid-v24/catalog.json#SM-14.rib",
+        "docs/decisions/ribs.md#side-enum",
+        "docs/acceptance/evidence/20261028-e2-probe-60d9076/ (проба блока: 8 сочетаний направления цепочки и Side)"
+      ],
+      "limitations": [
+        "Side считается ОТ НАПРАВЛЕНИЯ КРИВОЙ, а не от осей мира: на цепочке слева направо строит 0, на той же цепочке справа налево строит 1, а 0 отказывает. Значение передаётся как есть, подбирать его под геометрию сервер не будет",
+        "Значения 2 (up) и 3 (down) на измеренной геометрии не строят ни при каком направлении цепочки (Update() = false, объём не меняется). Разбор на второй геометрии - наряд RIB_POSITIONS; здесь они принимаются контрактом, но успеха за них не выдаётся",
+        "Правка параметров построенного ребра, сохранение-переоткрытие и многотельная адресация в эту строку не входят - наряд RIB_MODES",
+        "body объявлен в контракте и ОТВЕРГАЕТСЯ именованным отказом: у API5 ksRibDefinition члена «тело» нет вовсе"
+      ],
+      "depends_on": [
+        "dep.sketch.entities",
+        "dep.refs.planes",
+        "dep.lifecycle.feature_cycle"
+      ]
+    },
+    {
+      "operation_id": "SM-14.rib.mode_face_draft",
+      "kind": "profile_mode",
+      "profile": "rib-v1",
+      "priority": "practical_required",
+      "queue": "E2",
+      "context": "part.single_body",
+      "catalog_ref": "SM-14",
+      "catalog_level": "mcp_implemented",
+      "parameters_schema": "schemas/kompas_rib.json",
+      "adapter_route": "тот же маршрут API5; угол - ksRibDefinition.angle в ГРАДУСАХ, направляющий сегмент - ksRibDefinition.index (ksribdefinition_index.html: «0 - первое ребро эскиза»). Угол читается обратно тем же признаком. ИЗМЕРЕНО: уклон ДОБАВЛЯЕТ материал (2400 / 2663.389 / 3059.881 мм³ при 0° / 2° / 5°), поэтому ожидание по площади к нему неприменимо, и инструмент называет это в unverified_aspects вместо ложного совпадения.",
+      "actions": {
+        "discover": "verified",
+        "create": "implemented",
+        "read": "implemented",
+        "edit": "not_started",
+        "rebuild": "not_started",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "verified",
+        "geometry_validation": "not_started"
+      },
+      "tests": [
+        "R1-02.discover.fields",
+        "R1-11.read.parameters",
+        "R1-14.negative.side_range"
+      ],
+      "evidence": [
+        "docs/decisions/ribs.md#draft",
+        "docs/acceptance/evidence/20261028-e2-probe-60d9076/"
+      ],
+      "limitations": [
+        "Угол передаётся и читается обратно, но строкой группы R1 с НЕНУЛЕВЫМ углом не проверен: эталон объёма при уклоне - измеренные 2663.389 (2°) и 3059.881 (5°) из исследования блока, приёмочной строки на них в наряде RIB_CORE нет",
+        "Угол наклона ГРАНИ не читается: в interop v24 нет IFace.GetNormal/ParamU*, поэтому подтверждение идёт объёмом и повторным чтением параметров, а не углом грани"
+      ],
+      "depends_on": [
+        "dep.sketch.entities",
+        "dep.units.confirm"
+      ]
+    },
+    {
+      "operation_id": "SM-14.rib.mode_symmetric_thickness",
+      "kind": "profile_mode",
+      "profile": "rib-v1",
+      "priority": "practical_required",
+      "queue": "E2",
+      "context": "part.single_body",
+      "catalog_ref": "SM-14",
+      "catalog_level": "catalog_only",
+      "parameters_schema": "schemas/kompas_rib.json",
+      "adapter_route": "документированный маршрут - SetThinParam(2, t, t) (dtBoth, direction_type.html); ИЗМЕРЕНО на пробе блока: 6-мм ребро даёт 4800 мм³ вместо 2400, то есть ровно вдвое, габарит тот же. Инструментом этого наряда режим не выражается: symmetric в контракт не вводился, потому что правка и режимы - наряд RIB_MODES.",
+      "actions": {
+        "discover": "not_started",
+        "create": "not_started",
+        "read": "not_started",
+        "edit": "not_started",
+        "rebuild": "not_started",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "not_started",
+        "geometry_validation": "not_started"
+      },
+      "tests": [],
+      "evidence": [
+        "docs/decisions/ribs.md#thickness",
+        "docs/acceptance/evidence/20261028-e2-probe-60d9076/"
+      ],
+      "limitations": [
+        "Режим не реализован: маршрут документирован и измерен пробой, но в продукте его нет - наряд RIB_MODES",
+        "SetThinParam(1, t, 0) (dtReverse) на измеренной геометрии отказывает (Update() = false) - вопрос В1 отчёта исследования, разбирается вместе с положениями Side"
+      ],
+      "depends_on": [
+        "dep.sketch.entities"
+      ]
+    },
+    {
       "operation_id": "SM-15.union.explicit_target_and_tools",
       "kind": "profile_mode",
       "profile": "mechanical-core-v1",
@@ -16301,7 +16437,6 @@
   "pending_families": [
     "SM-06",
     "SM-10",
-    "SM-14",
     "SM-20",
     "SM-21",
     "SM-22",

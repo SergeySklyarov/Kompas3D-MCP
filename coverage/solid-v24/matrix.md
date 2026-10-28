@@ -259,15 +259,15 @@
 
 - **строк_каталога:** 382
 - **строк_полностью_закрыто:** 194
-- **строк_с_каким_либо_прогрессом:** 215
+- **строк_с_каким_либо_прогрессом:** 217
 - **семейств_в_каталоге:** 48
-- **семейств_без_строк:** 11
+- **семейств_без_строк:** 10
 - **операций:** 152
 - **режимов_и_вариантов:** 233
 - **применимых_действий:** 3074
-- **действий_verified:** 1287
-- **покрытие_действий:** 41.9%
-- **распределение_статусов:** {'not_started': 1780, 'verified': 1287, 'not_applicable': 746, 'implemented': 7}
+- **действий_verified:** 1295
+- **покрытие_действий:** 42.1%
+- **распределение_статусов:** {'not_started': 1770, 'verified': 1295, 'not_applicable': 746, 'implemented': 9}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 83, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -791,9 +791,9 @@
 | `SM-13.shell.mode_direction` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.02.discover, B5O.02.create, B5O.02.read, B5O.02.edit, B5O.02.rebuild, B5O.02.save_reopen, B5O.02.suppress_restore, B5O.02.delete_dependencies, B5O.02.negative_tests, B5O.02.geometry_validation, B5.04, B5.05, B5.06 |
 | `SM-13.shell.mode_variable_thickness` | SM-13 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-13.shell.uniform_thickness` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.03.discover, B5O.03.create, B5O.03.read, B5O.03.edit, B5O.03.rebuild, B5O.03.save_reopen, B5O.03.suppress_restore, B5O.03.delete_dependencies, B5O.03.negative_tests, B5O.03.geometry_validation, B5.04, B5.05 |
-| `SM-14.rib.mode_side_positions` | SM-14 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-14.rib.mode_symmetric_thickness` | SM-14 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-14.rib.mode_face_draft` | SM-14 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | — | OK | — | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-18.create.reverse_side1, R1-19.negative.reverse_side0 |
+| `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | catalog_only | — | — | — | — | — | — | — | — | — | — | — |
+| `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | код | код | — | — | — | — | — | OK | — | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range |
 | `SM-14.rib.mode_extend_to_face` | SM-14 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-16.cut_by_plane.mode_side_removed` | SM-16 | practical_required | B3 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B3.10, B3.11, B3.37, B3L.03, B3.23, B3.24, B3.24a, B3.24b, B3.24c, B3.24d, B3.24e, B3.24f, B3.24g, B3.24h, B3.24i, B3.24j, B3.24k, B3.58, B3M.08.discover, B3M.08.create, B3M.08.read, B3M.08.edit, B3M.08.rebuild, B3M.08.save_reopen, B3M.08.suppress_restore, B3M.08.delete_dependencies, B3M.08.negative_tests, B3M.08.geometry_validation |
 | `SM-16.cut_by_plane.mode_tangent_sets` | SM-16 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1368,6 +1368,17 @@
 - `SM-13.shell.uniform_thickness` — закрыт целиком
   - толщина обязана быть положительным конечным числом: ноль и нечисловое значение отвергаются схемой ДО COM
   - толщина подтверждается ВТОРЫМ числом рядом с объёмом — числом граней; по одному объёму правка толщины неотличима от правки набора граней
+- `SM-14.rib.mode_side_positions` — не закрыт
+  - Side считается ОТ НАПРАВЛЕНИЯ КРИВОЙ, а не от осей мира: на цепочке слева направо строит 0, на той же цепочке справа налево строит 1, а 0 отказывает. Значение передаётся как есть, подбирать его под геометрию сервер не будет
+  - Значения 2 (up) и 3 (down) на измеренной геометрии не строят ни при каком направлении цепочки (Update() = false, объём не меняется). Разбор на второй геометрии - наряд RIB_POSITIONS; здесь они принимаются контрактом, но успеха за них не выдаётся
+  - Правка параметров построенного ребра, сохранение-переоткрытие и многотельная адресация в эту строку не входят - наряд RIB_MODES
+  - body объявлен в контракте и ОТВЕРГАЕТСЯ именованным отказом: у API5 ksRibDefinition члена «тело» нет вовсе
+- `SM-14.rib.mode_symmetric_thickness` — не закрыт
+  - Режим не реализован: маршрут документирован и измерен пробой, но в продукте его нет - наряд RIB_MODES
+  - SetThinParam(1, t, 0) (dtReverse) на измеренной геометрии отказывает (Update() = false) - вопрос В1 отчёта исследования, разбирается вместе с положениями Side
+- `SM-14.rib.mode_face_draft` — не закрыт
+  - Угол передаётся и читается обратно, но строкой группы R1 с НЕНУЛЕВЫМ углом не проверен: эталон объёма при уклоне - измеренные 2663.389 (2°) и 3059.881 (5°) из исследования блока, приёмочной строки на них в наряде RIB_CORE нет
+  - Угол наклона ГРАНИ не читается: в interop v24 нет IFace.GetNormal/ParamU*, поэтому подтверждение идёт объёмом и повторным чтением параметров, а не углом грани
 - `SM-16.cut_by_plane.mode_side_removed` — закрыт целиком
   - expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.
   - ОТКАЗ ЯДРА ДОХОДИТ КАК ОТКАЗ: касание по ребру и разнесённые тела (входы вне объявленной области применимости объединения) отвергаются IBoolean.Update() = false с кодом GEOMETRY_FAILED, partial_effects = true и ФАКТИЧЕСКИМ состоянием модели (B3.18, B3.44), а не выдаются за успех. Правило «успешный Update() не доказывает геометрию» проверяется против ОБЪЯВЛЕННОГО ожидания, а не против наблюдаемого. Это ГРАНИЦА ПРИМЕНИМОСТИ обычного union (справка v24: «Объединение тел возможно, если они пересекаются или имеют общую поверхность»), а не отдельный положительный режим: проверка B3.44 отвечает на вопрос «честен ли отказ», и положительного создания объединения разнесённых тел она не заявляет и не заменяет.
@@ -1964,6 +1975,6 @@
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 
-`SM-06`, `SM-10`, `SM-14`, `SM-20`, `SM-21`, `SM-22`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
+`SM-06`, `SM-10`, `SM-20`, `SM-21`, `SM-22`, `SM-25`, `SM-26`, `SM-27`, `SM-28`, `SM-29`
 
 Полнота инвентаризации не является полнотой реализации (docs/05 §8), а закрытый профиль не является полным P6 (план §1).

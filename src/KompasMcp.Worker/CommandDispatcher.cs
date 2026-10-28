@@ -382,6 +382,7 @@ public sealed class CommandDispatcher
             WorkerCommands.Sweep => _sta.Run(() => Sweep(request), "feat.sweep", cancellationToken),
             WorkerCommands.Loft => _sta.Run(() => Loft(request), "feat.loft", cancellationToken),
             WorkerCommands.Shell => _sta.Run(() => Shell(request), "feat.shell", cancellationToken),
+            WorkerCommands.Rib => _sta.Run(() => Rib(request), "feat.rib", cancellationToken),
             WorkerCommands.Draft => _sta.Run(() => Draft(request), "feat.draft", cancellationToken),
             WorkerCommands.DraftFromEdges =>
                 _sta.Run(() => DraftFromEdges(request), "feat.draft_from_edges", cancellationToken),
@@ -1096,6 +1097,16 @@ public sealed class CommandDispatcher
         var document = _session.DocumentForReference(command.SketchRef);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Sweep(command), document);
+    }
+
+    /// <summary>Rib (SM-14). The document comes from the sketch reference, like the sweep: a rib has one
+    /// support object, and the adapter checks the sketch against that document itself.</summary>
+    private object? Rib(IpcFrame request)
+    {
+        var command = Argument<RibCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.Rib(command), document);
     }
 
     /// <summary>Loft (SM-05). The document comes from <c>document_id</c>, not a section reference: there are several

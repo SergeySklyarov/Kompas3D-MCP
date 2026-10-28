@@ -18,6 +18,7 @@ public partial class Api5Session
     private const string EvolutionFamily = "sweep";
     private const string LoftFamily = "loft";
     private const string ShellFamily = "shell";
+    private const string RibFamily = "rib";
 
     /// <summary>Path-length unit — <c>ST_MIX_*</c>. MEASURED: <c>GetPathLength(1)</c> is millimetres.</summary>
     private const uint PathLengthUnitMillimetres = 1u;
@@ -32,6 +33,9 @@ public partial class Api5Session
 
     /// <summary>Whether the definition answers the shell interface.</summary>
     private static bool IsShellDefinition(object? definition) => definition is ksShellDefinition;
+
+    /// <summary>Whether the definition answers the rib interface.</summary>
+    private static bool IsRibDefinition(object? definition) => definition is ksRibDefinition;
 
     /// <summary>Sweep operation read from the definition taken from the tree. No value comes from the
     /// creation response.</summary>

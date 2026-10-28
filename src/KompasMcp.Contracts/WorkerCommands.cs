@@ -125,6 +125,15 @@ public static class WorkerCommands
     /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
     public const string DraftFromEdges = "feat.draft_from_edges";
 
+    /// <summary>Rib — «Ребро жёсткости» (docs/05 SM-14).</summary> <remarks>DOC: API5 route —
+    /// <c>obj3dtype.html</c> gives <c>o3d_ribOperation = 44</c> with <c>ksRibDefinition</c>, obtained through
+    /// <c>ksEntity::GetDefinition</c>. The route is API5 and not API7 because the THICKNESS lives only on
+    /// <c>ksRibDefinition.SetThinParam</c>: <c>irib_propers.html</c> lists five members of <c>IRib</c> and no
+    /// thickness among them. MEASURED: <c>Side</c> counts from the DIRECTION OF THE CURVE, so only one of the four
+    /// values builds on a given chain; success is therefore confirmed by numbers, never by the value passed.
+    /// History: docs/decisions/ribs.md#routes</remarks>
+    public const string Rib = "feat.rib";
+
     /// <summary>Native thread designation — условное изображение резьбы (docs/05 SM-08).</summary> <remarks>DOC: API7
     /// only — <c>ibody7_threads.html</c> → <c>ithreads_add.html</c> (<c>Add</c> → properties → <c>Update</c>);
     /// diameter and pitch live on the ADDITIONAL interface <c>IThreadsParameters</c>, and <c>Internal</c> is
@@ -1820,7 +1829,13 @@ public sealed record FeatureReadDto(
     /// <remarks>MEASURED: a designation created through API7 <c>IThreads.Add</c> appears in the tree under the
     /// number 58 (<c>o3d_thread</c>) and carries no API5 definition, so the parameters are read through the API7
     /// collection by the feature name. History: docs/decisions/adapter-features.md#thread-route</remarks>
-    ThreadDto? Thread = null);
+    ThreadDto? Thread = null,
+    /// <summary>Rib parameters. Trailing: only for <c>family = "rib"</c>.</summary> <remarks>MEASURED: a rib created
+    /// by <c>NewEntity(44)</c> answers <c>ksRibDefinition</c> in the tree, so the parameters are read from the
+    /// definition rather than from the creation response. The thickness is read through <c>GetThinParam</c>, because
+    /// <c>IRib</c> has no thickness at all.
+    /// History: docs/decisions/ribs.md#routes</remarks>
+    RibDto? Rib = null);
 
 public sealed record GetFeatureCommand
 {
@@ -3130,6 +3145,75 @@ public sealed record ShellCommand
 
     public required long ExpectedRevision { get; init; }
 }
+
+/// <summary>Rib: a stiffening rib built on an open sketch chain (docs/05 SM-14).</summary> <remarks>DOC:
+/// <c>ksribdefinition.html</c> — the definition comes from <c>ksEntity::GetDefinition</c>; members used here are
+/// <c>SetSketch</c>, <c>side</c>, <c>angle</c>, <c>index</c> and <c>SetThinParam(thinType, normal, reverse)</c>.
+/// MEASURED: the entity <c>NewEntity(44)</c> returns enters the tree only after <c>Create()</c>.
+/// INVARIANT: <c>Create() = true</c> is "accepted" — the volume is compared with the chain's area times the
+/// thickness, and a call that leaves the body unchanged is refused.
+/// LIMIT: <c>body</c> is refused when set — the definition has no body member.
+/// History: docs/decisions/ribs.md#rib-tool</remarks>
+public sealed record RibCommand
+{
+    /// <summary>The chain sketch: an explicit <c>sketch:</c> reference. It also sets the document.</summary>
+    public required string SketchRef { get; init; }
+
+    /// <summary>Rib position — <c>ksRibDefinition.side</c>, the values of <c>ksRibSideEnum</c> as they are:
+    /// 0 left, 1 right, 2 up, 3 down. MEASURED: the value counts from the DIRECTION OF THE CURVE, and on one
+    /// geometry only one of the four builds, so the field is passed as given and success is confirmed by volume.
+    /// </summary>
+    public int Side { get; init; }
+
+    /// <summary>Rib thickness, mm — <c>SetThinParam(0, thickness, 0)</c>, i.e. <c>dtNormal</c>. Strictly
+    /// positive.</summary>
+    public required double ThicknessMm { get; init; }
+
+    /// <summary>Draft angle of the rib faces, degrees — <c>ksRibDefinition.angle</c>. MEASURED: a draft ADDS
+    /// material (6 mm rib: 2400 mm³ at 0°, 2663.389 at 2°, 3059.881 at 5°), so an expectation built on "the rib
+    /// narrows" would call a working route broken.</summary>
+    public double DraftAngleDeg { get; init; }
+
+    /// <summary>Guiding segment of the draft — <c>ksRibDefinition.index</c>, zero-based. DOC:
+    /// <c>ksribdefinition_index.html</c> — «0 — первое ребро эскиза, 1, 2… — последующие».</summary>
+    public int SegmentIndex { get; init; }
+
+    /// <summary>Target body. Declared so the field is visible to the caller, and REFUSED when set: the API5
+    /// definition carries no body member, so accepting it would claim a target that was never honoured.
+    /// </summary>
+    public string? BodyRef { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+}
+
+/// <summary>Rib result.</summary>
+public sealed record RibResult(
+    ReferenceDto? FeatureRef,
+    int Side,
+    double ThicknessMm,
+    double DraftAngleDeg,
+    int SegmentIndex,
+    double? ContourAreaMm2,
+    double? ExpectedVolumeMm3,
+    double? VolumeAddedMm3,
+    int BodyCount,
+    double? VolumeMm3,
+    BoundingBoxDto? BoundsMm,
+    RibDto? Parameters,
+    VerificationDto Verification,
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string>? Warnings = null);
+
+/// <summary>Rib parameters read FROM THE MODEL. Every field is nullable: an empty one means "not read", not
+/// zero — the read-back of the parameters is what tells "the edit applied" from "the call returned".</summary>
+public sealed record RibDto(
+    int? Side,
+    double? AngleDeg,
+    int? SegmentIndex,
+    string? ThinType,
+    double? NormalThicknessMm,
+    double? ReverseThicknessMm,
+    string? SketchRef);
 
 /// <summary>Sweep result.</summary>
 public sealed record SweepResult(

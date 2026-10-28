@@ -176,6 +176,9 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.Sweep, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.Loft, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.Shell, WorkerAction.ModelMutation, 240_000);
+        // A rib takes the API5 route, then rebuilds the document and re-reads the bodies twice (before and
+        // after), and reads the sketch chain through the API7 bridge before the call.
+        Cad(WorkerCommands.Rib, WorkerAction.ModelMutation, 240_000);
         // A draft rebuilds the document and re-reads the bodies; the base-line family crosses the API7
         // bridge first, so its budget is the same as the other bridged features.
         Cad(WorkerCommands.Draft, WorkerAction.ModelMutation, 240_000);

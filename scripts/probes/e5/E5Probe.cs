@@ -15,7 +15,7 @@ namespace E5Probe;
 /// DOC: E5_RESEARCH_DEVELOPER_PROMPT.md §1.5; the help snapshot this order captured under
 /// reference/kompas-sdk-v24/ (the `docs-wire-...-e5` directory).
 /// History: docs/decisions/direct-faces.md#probe</remarks>
-internal sealed class E5Probe : IDisposable
+internal sealed partial class E5Probe : IDisposable
 {
     // Box the fixture builds: 40 x 30 x 20 mm, so the volume, the top-face area and the expected
     // volume after a 5 mm move are known numbers, not "something changed".
@@ -34,6 +34,7 @@ internal sealed class E5Probe : IDisposable
     private readonly string _outPath;
     private readonly JsonArray _rows = new();
     private readonly JsonArray _states = new();
+    private bool _conversionRecorded;
     private KompasObject? _app5;
     private IApplication? _app7;
     private ksDocument3D? _doc5;
@@ -41,11 +42,18 @@ internal sealed class E5Probe : IDisposable
 
     public E5Probe(string outPath) => _outPath = Path.GetFullPath(outPath);
 
-    public int Run(bool keepOpen, string? stepPath = null, bool saveBodyOnly = false)
+    public int Run(bool keepOpen, string? stepPath = null, bool saveBodyOnly = false,
+        bool tangentGroup = false)
     {
         try
         {
             Launch();
+            if (tangentGroup)
+            {
+                TangentGroupInvestigation();
+                return Finish(keepOpen);
+            }
+
             if (stepPath is not null)
             {
                 RunStepBody(stepPath);
@@ -333,7 +341,7 @@ internal sealed class E5Probe : IDisposable
             _app7 is null ? "FAIL" : "PASS");
     }
 
-    private void BuildBox()
+    private void BuildBox(bool record = true)
     {
         _doc5 = (ksDocument3D)_app5!.Document3D();
         if (!_doc5.Create(true, false))
@@ -376,7 +384,10 @@ internal sealed class E5Probe : IDisposable
 
         _doc7 = _app5.TransferInterface(_doc5, (int)ksAPITypeEnum.ksAPI7Dual, 0) as IKompasDocument3D
             ?? throw new InvalidOperationException("TransferInterface(документ → API7) не дал IKompasDocument3D");
-        Record("fixture", $"брусок {Width}x{Depth}x{Height} построен выдавливанием", "тело с историей", "PASS");
+        if (record)
+        {
+            Record("fixture", $"брусок {Width}x{Depth}x{Height} построен выдавливанием", "тело с историей", "PASS");
+        }
     }
 
     // ── the measured routes ─────────────────────────────────────────────────────────────────────
@@ -704,8 +715,12 @@ internal sealed class E5Probe : IDisposable
 
         if (result.Count > 0 && direct + transferred == result.Count)
         {
-            Record("face_conversion", "грань API5 отвечает как IFace",
-                $"приведением {direct}, TransferInterface {transferred}, всего {result.Count}", "PASS");
+            if (!_conversionRecorded)
+            {
+                _conversionRecorded = true;
+                Record("face_conversion", "грань API5 отвечает как IFace",
+                    $"приведением {direct}, TransferInterface {transferred}, всего {result.Count}", "PASS");
+            }
         }
         else
         {

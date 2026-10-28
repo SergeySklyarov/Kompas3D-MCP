@@ -15976,7 +15976,7 @@
         "E5.MOVE.outward",
         "E5.NEG.empty_faces",
         "E5.NEG.zero_offset",
-        "E5.NEG.tangent_group",
+        "E5.NEG.tangent_empty",
         "E5.NEG.foreign_face",
         "FaceMoveEffectTests"
       ],
@@ -15988,9 +15988,62 @@
       "limitations": [
         "Группа mcp-smoke E5 пройдена: 11 строк PASS, 1 NAMED. save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта.",
         "Сторона перемещения измерена обеими сторонами на одной грани бруска: reverse=false уводит грань ПРОТИВ внешней нормали (объём 24000 -> 18000 мм3), reverse=true - по нормали (обратный вызов вернул 24000). IFaceMover.Direction - логический признак, поэтому контракт называет сторону полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm.",
-        "Касательные грани (SM-24.move_faces.tangent_group) не выполняются: SetFaces вызывается с TangentFaces = false, а true отвергается именованным отказом. Режим - отдельный наряд DIRECT_FACES_TANGENT.",
+        "Касательные грани (SM-24.move_faces.tangent_group) выполняются отдельной строкой профиля: в этой строке SetFaces вызывается с TangentFaces = false, поэтому касательные соседи в набор не входят и их судьба здесь не читается.",
         "not_applicable у suppress_restore и delete_dependencies: операция прямого моделирования не создаёт признак в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому подавлять и удалять с зависимостями нечего.",
         "Границы измеренного: одно тело, брусок 40x30x20 с историей построения, плоская грань. Многотельный контекст отвергается до COM (все грани одного вызова обязаны принадлежать одному телу), тело без истории построения - отдельный наряд DIRECT_FACES_NO_HISTORY."
+      ],
+      "profile": "direct-faces-v1",
+      "priority": "practical_required",
+      "queue": "E5",
+      "depends_on": [
+        "dep.api7.surface_container",
+        "dep.refs.faces_body"
+      ],
+      "catalog_level": "metadata_found",
+      "not_applicable_reasons": {
+        "suppress_restore": "Операция прямого моделирования не создаёт признак в дереве построения: справка isurfacecontainer.html описывает операции над ГРАНЯМИ и ТЕЛОМ, поэтому подавлять и восстанавливать нечего.",
+        "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции перемещения граней тоже нет, удалять с зависимостями нечего."
+      }
+    },
+        {
+      "operation_id": "SM-24.move_faces.tangent_group",
+      "kind": "profile_mode",
+      "context": "part.single_body",
+      "catalog_ref": "SM-24",
+      "parameters_schema": "schemas/kompas_move_faces.json",
+      "adapter_route": "API7: ISurfaceContainer (приведением от IPart7) → FaceMovers.Add() → IFaceMover.SetFaces(Faces, TangentFaces=true) + Offset + Direction → IModelObject.Update(); размер итогового набора читается из read-only IFaceMover.Faces",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "not_started",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "implemented"
+      },
+      "tests": [
+        "E5.TAN.fixture",
+        "E5.TAN.group_wider",
+        "E5.TAN.group_verified",
+        "E5.TAN.no_tangents",
+        "E5.TAN.single_on_tangent",
+        "E5.NEG.tangent_empty",
+        "FaceMoveEffectTests"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/decisions/direct-faces.md",
+        "scratch/probe-e5-tangent.json"
+      ],
+      "limitations": [
+        "geometry_validation оставлено implemented, а не verified: в этом режиме набор шире названных граней, поэтому объём НЕ предсказывается формулой V + d·A, ответ идёт уровнем call_returned, а успех подтверждается признаками (объём изменился, число граней и тел прежнее, набор вырос). Численного предсказания объёма для группы нет ни в справке, ни в измерении.",
+        "save_reopen не измерялся - действие оставлено not_started, поэтому строка НЕ закрыта: сохранение и переоткрытие группы относится к наряду DIRECT_FACES_NO_HISTORY.",
+        "MEASURED (проба --tangent): брусок 40x30x20 со скруглением R3 по четырём рёбрам длиной 40 - набор операции 8 граней против 1 без режима, объём 23690.97 → 45802.48 при смещении 5 мм, число граней прежнее (10). У грани 30x20 касательных соседей нет: набор остаётся из одной грани, ответ успешен с предупреждением tangent_faces_none.",
+        "Одиночный режим на грани с касательными соседями отказывает по арифметике V + d·A (измерено 6000 против 4800), хотя ход выполнен: касательные двигаются неявно, а признака для этого в API нет. Это долг, а не заслуга - строка E5.TAN.single_on_tangent названа, а не засчитана успехом.",
+        "Границы измеренного: одно тело с историей построения, плоская грань бруска со скруглением; цилиндрическая грань скругления в режиме касательных ведёт себя как плоская (измерено), но отдельной строкой не проверялась."
       ],
       "profile": "direct-faces-v1",
       "priority": "practical_required",

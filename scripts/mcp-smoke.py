@@ -52930,14 +52930,17 @@ def e5_checks(client, rep, app_id, workdir):
     `kompas_delete_faces` в режиме open_shell оставляет оболочку (объём 0, граней на одну меньше),
     `kompas_restore_faces` создаёт ОТДЕЛЬНЫЙ объект (тел +1) и оболочку не вылечивает, а режим
     keep_body назван отказом GEOMETRY_FAILED с `details.mode` на свежем бруске. Отказы проверяются
-    ПО КОДУ: пустой список граней, все грани тела, недокументированные режимы, нулевое смещение,
-    касательные грани, грань другого документа.
+    ПО КОДУ: пустой список граней (в том числе с `tangent_group`), все грани тела,
+    недокументированные режимы, нулевое смещение, грань другого документа.
 
-    ЧЕГО ЗДЕСЬ НЕТ. Тело без истории построения, касательные грани как режим и save -> reopen -
-    отдельные наряды блока E5. Грань ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно
-    многотельное тело): страж - сравнение COM-указателя владельца - строкой не покрыт, и это
-    названо, а не выдано за проверенное. Вылечиваемость тела при keep_body не измерена: на бруске
-    все шесть граней отказывают, и обещаний про другую геометрию инструмент не даёт.
+    ЧЕГО ЗДЕСЬ НЕТ. Тело без истории построения и save -> reopen - отдельные наряды блока E5. Грань
+    ЧУЖОГО ТЕЛА в одном документе здесь не строится (нужно многотельное тело): страж - сравнение
+    COM-указателя владельца - строкой не покрыт, и это названо, а не выдано за проверенное.
+    Вылечиваемость тела при keep_body не измерена: на бруске все шесть граней отказывают, и обещаний
+    про другую геометрию инструмент не даёт. Режим касательных проверен на бруске со скруглением
+    (E5.TAN.*): набор операции шире названной грани, поэтому объём не предсказывается формулой, а
+    подтверждается признаками, и уровень ответа - call_returned. Одиночный режим на такой грани
+    отказывает по арифметике (ход при этом выполнен) - это названо строкой, а не засчитано успехом.
     """
     V0, F0, A_TOP, P_TOP, D = 24000.0, 5200.0, 1200.0, 140.0, 5.0
     TOL_V, TOL_F = 0.05, 1.0
@@ -53112,12 +53115,8 @@ def e5_checks(client, rep, app_id, workdir):
     rep.add("E5.NEG.zero_offset", "e5: нулевое смещение отвергнуто INVALID_ARGUMENT",
             "PASS" if zero_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (zero_code,))
 
-    _e, tan_env, _r = client.tool("kompas_move_faces", {
-        "document_id": box, "expected_revision": rev, "face_refs": [face_refs[0]],
-        "offset_mm": D, "tangent_group": True, "operation_id": str(uuid.uuid4())})
-    tan_code = error_code(tan_env)
-    rep.add("E5.NEG.tangent_group", "e5: tangent_group=true отвергнут CAPABILITY_UNAVAILABLE",
-            "PASS" if tan_code == "CAPABILITY_UNAVAILABLE" else "FAIL", "error=%s" % (tan_code,))
+    # tangent_group на этом бруске не проверяется: режим мутирует тело, а оно нужно строкам E5.DEL/E5.RES
+    # в состоянии 24000 мм3. Строки режима касательных стоят ниже, на своих телах (E5.TAN.*).
 
     other, problem = new_box("e5-other", W, H, DEPTH)
     foreign, foreign_code = (top_face(other) if other else ([], None))
@@ -53259,6 +53258,167 @@ def e5_checks(client, rep, app_id, workdir):
     rep.add("E5.NEG.restore_mode",
             "e5: недокументированный режим восстановления отвергнут INVALID_ARGUMENT",
             "PASS" if r_mode_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (r_mode_code,))
+
+    # ── E5.TAN: касательные грани (наряд DIRECT_FACES_TANGENT) ─────────────────────────────────
+    # Ожидания измерены пробой `scripts/probes/e5 --tangent` на таком же бруске: R3 по четырём рёбрам
+    # длиной 40 даёт 10 граней и объём 23690.9734; набор операции с TangentFaces=true - 8 граней против
+    # 1, объём после хода на 5 мм - 45802.4772; грань 30x20 без касательных даёт 26652.345.
+    def edge_refs_of_length(doc, length):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body_ref(doc), "include": "edges"})
+        rows = ((env or {}).get("result") or {}).get("edges") or []
+        out = []
+        for e in rows:
+            vs = e.get("vertices_mm") or []
+            if len(vs) < 2:
+                continue
+            a, b = vs[0][:3], vs[1][:3]
+            dist = sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
+            if abs(dist - length) <= 1e-6:
+                out.append(e.get("edge_ref"))
+        return out
+
+    def filleted_bar(name):
+        """Брусок 40x30x20 со скруглением R3 по четырём рёбрам длиной 40: у грани 40x30 появляются
+        касательные соседи, у грани 30x20 их нет - на этом различии и держится сравнение режимов."""
+        doc, problem = new_box(name, W, H, DEPTH)
+        if problem:
+            return None, problem
+        refs = edge_refs_of_length(doc, W)
+        if len(refs) != 4:
+            return doc, "рёбер длиной %s найдено %d, ожидалось 4" % (W, len(refs))
+        _e, env, _r = client.tool("kompas_fillet", {
+            "edge_refs": refs, "expected_revision": current_rev(doc), "radius_mm": 3,
+            "operation_id": str(uuid.uuid4())}, timeout=300)
+        code = error_code(env)
+        if code:
+            return doc, "скругление: %s" % (code,)
+        return doc, None
+
+    def face_by_normal(doc, direction):
+        env, code = call("kompas_resolve_selection", {
+            "body_ref": body_ref(doc),
+            "predicate": {"surface_type": "plane", "normal_direction": direction},
+            "require_unique": True, "limit": 10})
+        found = result(env)
+        if isinstance(found, dict):
+            found = found.get("matches") or found.get("items") or []
+        return [row.get("id") for row in (found or []) if row.get("id")], code
+
+    tan_doc, tan_problem = filleted_bar("e5-tangent")
+    if tan_problem:
+        for cid, what in (
+                ("E5.TAN.fixture", "e5: брусок со скруглением R3 построен"),
+                ("E5.TAN.group_wider", "e5: tangent_group=true двигает цепочку касательных"),
+                ("E5.TAN.group_verified", "e5: успех режима касательных подтверждён признаками")):
+            rep.add(cid, what, "NAMED", tan_problem)
+    else:
+        faces_tan = len(all_face_refs(tan_doc))
+        volume_tan = volume(tan_doc)
+        rep.add("E5.TAN.fixture",
+                "e5: брусок со скруглением R3 по четырём рёбрам - 10 граней, объём 23690.97 мм3",
+                "PASS" if faces_tan == 10 and near(volume_tan, 23690.9734, 1.0) else "FAIL",
+                "граней=%s объём=%s ожидание=10 / 23690.9734 (kompas_read_topology, kompas_measure)"
+                % (faces_tan, volume_tan))
+
+        top_tan, top_tan_code = top_face(tan_doc)
+        if not top_tan:
+            rep.add("E5.TAN.group_wider", "e5: tangent_group=true двигает цепочку касательных",
+                    "NAMED", "верхняя грань не найдена: %s" % (top_tan_code,))
+            rep.add("E5.TAN.group_verified", "e5: успех режима касательных подтверждён признаками",
+                    "NAMED", "верхняя грань не найдена: %s" % (top_tan_code,))
+        else:
+            _e, g_env, _r = client.tool("kompas_move_faces", {
+                "document_id": tan_doc, "expected_revision": current_rev(tan_doc),
+                "face_refs": [top_tan[0]], "offset_mm": D, "reverse": True, "tangent_group": True,
+                "operation_id": str(uuid.uuid4())})
+            g_res = result(g_env)
+            g_code = error_code(g_env)
+            g_volume = volume(tan_doc)
+            g_moved = g_res.get("tangent_faces_moved")
+            rep.add("E5.TAN.group_wider",
+                    "e5: tangent_group=true двигает цепочку касательных - в наборе больше одной грани, "
+                    "объём 45802.48",
+                    "PASS" if g_code is None and isinstance(g_moved, int) and g_moved > 1
+                    and near(g_volume, 45802.4772, 1.0) else "FAIL",
+                    "код=%s tangent_faces_moved=%s объём=%s ожидание=>1 грани / 45802.4772 "
+                    "(kompas_measure)" % (g_code, g_moved, g_volume))
+            g_checks = named_checks(g_res)
+            g_notes = g_res.get("notes") or []
+            rep.add("E5.TAN.group_verified",
+                    "e5: успех режима назван уровнем call_returned, все именованные сверки пройдены, "
+                    "предел арифметики назван в notes",
+                    "PASS" if g_code is None and level(g_res) == "call_returned" and g_checks
+                    and all(g_checks.values())
+                    and any("tangent_group_arithmetic_not_applicable" in str(n) for n in g_notes)
+                    else "FAIL",
+                    "level=%s сверки=%s notes=%d"
+                    % (level(g_res), json.dumps(g_checks, ensure_ascii=False), len(g_notes)))
+        close(tan_doc)
+
+    plain_doc, plain_problem = filleted_bar("e5-tangent-plain")
+    if plain_problem:
+        rep.add("E5.TAN.no_tangents", "e5: грань без касательных - успех с предупреждением", "NAMED",
+                plain_problem)
+    else:
+        # Торец 30x20 (x = 0): его рёбра - короткие, скруглены рёбра длиной 40, поэтому касательных
+        # соседей у торца нет. Грань y = 0 для этой роли НЕ годится: она касательна скруглению.
+        plain_refs, plain_code = face_by_normal(plain_doc, [-1, 0, 0])
+        if not plain_refs:
+            rep.add("E5.TAN.no_tangents", "e5: грань без касательных - успех с предупреждением",
+                    "NAMED", "грань 30x20 не найдена по нормали: %s" % (plain_code,))
+        else:
+            _e, n_env, _r = client.tool("kompas_move_faces", {
+                "document_id": plain_doc, "expected_revision": current_rev(plain_doc),
+                "face_refs": [plain_refs[0]], "offset_mm": D, "reverse": True, "tangent_group": True,
+                "operation_id": str(uuid.uuid4())})
+            n_res = result(n_env)
+            n_code = error_code(n_env)
+            n_warn = n_res.get("warnings") or []
+            n_volume = volume(plain_doc)
+            rep.add("E5.TAN.no_tangents",
+                    "e5: у названной грани нет касательных - успех, набор из 1 грани, предупреждение "
+                    "tangent_faces_none, объём 26652.35",
+                    "PASS" if n_code is None and n_res.get("tangent_faces_moved") == 1
+                    and any("tangent_faces_none" in str(w) for w in n_warn)
+                    and near(n_volume, 26652.345, 1.0) else "FAIL",
+                    "код=%s tangent_faces_moved=%s warnings=%s объём=%s ожидание=26652.345"
+                    % (n_code, n_res.get("tangent_faces_moved"),
+                       json.dumps(n_warn, ensure_ascii=False), n_volume))
+        close(plain_doc)
+
+    single_doc, single_problem = filleted_bar("e5-tangent-single")
+    if single_problem:
+        rep.add("E5.TAN.single_on_tangent", "e5: одиночный режим на грани с касательными", "NAMED",
+                single_problem)
+    else:
+        s_refs, s_code = top_face(single_doc)
+        if not s_refs:
+            rep.add("E5.TAN.single_on_tangent", "e5: одиночный режим на грани с касательными",
+                    "NAMED", "верхняя грань не найдена: %s" % (s_code,))
+        else:
+            _e, s_env, _r = client.tool("kompas_move_faces", {
+                "document_id": single_doc, "expected_revision": current_rev(single_doc),
+                "face_refs": [s_refs[0]], "offset_mm": D, "reverse": True,
+                "operation_id": str(uuid.uuid4())})
+            s_err = error_code(s_env)
+            s_message = str(((s_env or {}).get("error") or {}).get("message") or "")
+            rep.add("E5.TAN.single_on_tangent",
+                    "e5: одиночный режим на грани с касательными: ход выполнен, но V + d*A названной "
+                    "грани не сходится (измерено 6000 против 4800)",
+                    "NAMED",
+                    "код=%s объём=%s (ожидание при ходе наружу 29690.97): %s - отказ назван, а не выдан за "
+                    "успех; долг наряда: касательные двигаются неявно, а признака для этого в API нет"
+                    % (s_err, volume(single_doc), s_message[:160]))
+        close(single_doc)
+
+    _e, t_empty, _r = client.tool("kompas_move_faces", {
+        "document_id": box, "expected_revision": current_rev(box), "face_refs": [],
+        "offset_mm": D, "tangent_group": True, "operation_id": str(uuid.uuid4())})
+    rep.add("E5.NEG.tangent_empty",
+            "e5: tangent_group=true с пустым списком граней отвергнут INVALID_ARGUMENT",
+            "PASS" if error_code(t_empty) == "INVALID_ARGUMENT" else "FAIL",
+            "error=%s" % (error_code(t_empty),))
 
     rep.add("E5.GAP.save_reopen",
             "e5: сохранение и переоткрытие перемещённой грани", "NAMED",

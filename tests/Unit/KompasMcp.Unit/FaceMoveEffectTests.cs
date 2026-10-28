@@ -64,4 +64,27 @@ public class FaceMoveEffectTests
         Assert.False(FaceMoveEffect.Matches(30000d, null));
         Assert.False(FaceMoveEffect.Matches(double.NaN, 30000d));
     }
+
+    /// <summary>The two signs a tangent-group move is judged by, because <c>V + d·A</c> over the NAMED
+    /// faces does not predict a swept set that the chain widened.</summary>
+    /// <remarks>MEASURED: on a bar with R3 fillets the set grew from 1 to 8 faces and the volume moved by
+    /// 22111 mm³ against the 4800 the named face alone would sweep, so the formula cannot be the judge.
+    /// History: docs/decisions/direct-faces.md#tangent</remarks>
+    [Fact]
+    public void VolumeChanged_IsTheSignThatTheOperationWasApplied()
+    {
+        Assert.True(FaceMoveEffect.VolumeChanged(Box, 30000d));
+        Assert.False(FaceMoveEffect.VolumeChanged(Box, Box));
+        Assert.False(FaceMoveEffect.VolumeChanged(null, 30000d));
+        Assert.False(FaceMoveEffect.VolumeChanged(Box, double.NaN));
+    }
+
+    [Fact]
+    public void GroupWider_NeedsAReadSizeAboveTheNamedFaces()
+    {
+        Assert.True(FaceMoveEffect.GroupWider(8, 1));
+        Assert.False(FaceMoveEffect.GroupWider(1, 1));
+        Assert.False(FaceMoveEffect.GroupWider(null, 1));
+        Assert.False(FaceMoveEffect.GroupWider(0, 1));
+    }
 }

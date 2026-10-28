@@ -4,8 +4,9 @@ namespace KompasMcp.Contracts;
 /// <c>direct-faces-v1</c>).</summary>
 /// <remarks>DOC: <c>ifacemover.html</c> — <c>Offset</c> is a distance and <c>Direction</c> is a
 /// <c>VARIANT_BOOL</c> «Сменить направление», so the side is named by <c>Reverse</c> and a direction
-/// vector cannot be passed through. DOC: <c>ifacemover_setfaces.html</c> — <c>TangentFaces</c> exists, and
-/// <c>true</c> is refused by name here (mode <c>SM-24.move_faces.tangent_group</c>).
+/// vector cannot be passed through. DOC: <c>ifacemover_setfaces.html</c> — <c>TangentFaces</c> «добавлять
+/// касательные грани» is passed through as <c>TangentGroup</c> (mode
+/// <c>SM-24.move_faces.tangent_group</c>).
 /// INVARIANT: an empty face list, a zero offset and a face of a foreign body are refused BEFORE COM.
 /// History: docs/decisions/direct-faces.md#implementation</remarks>
 public sealed record MoveFacesCommand
@@ -25,9 +26,9 @@ public sealed record MoveFacesCommand
     /// not established, so the result reports the displacement that was actually measured.</summary>
     public bool Reverse { get; init; }
 
-    /// <summary>Tangent faces — <c>IFaceMover.SetFaces(Faces, TangentFaces)</c>. Declared so it is visible
-    /// to the caller; <c>true</c> is refused with a named refusal and belongs to
-    /// <c>DIRECT_FACES_TANGENT</c>.</summary>
+    /// <summary>Tangent faces — <c>IFaceMover.SetFaces(Faces, TangentFaces)</c>. <c>true</c> widens the
+    /// named set with the tangent chain; the size of that set is reported as
+    /// <see cref="MoveFacesResult.TangentFacesMoved"/>.</summary>
     public bool TangentGroup { get; init; }
 
     public double? ExpectedVolumeMm3 { get; init; }
@@ -53,7 +54,13 @@ public sealed record MoveFacesResult(
     long RevisionAfter,
     VerificationDto Verification,
     IReadOnlyList<string> Notes,
-    IReadOnlyList<string>? Warnings = null);
+    IReadOnlyList<string>? Warnings = null)
+{
+    /// <summary>Faces in the operation's set after <c>SetFaces(Faces, true)</c>, read from the documented
+    /// read-only <c>IFaceMover.Faces</c>: the named faces plus the tangent chain. <c>null</c> in single
+    /// mode and when the getter did not answer.</summary>
+    public int? TangentFacesMoved { get; init; }
+}
 
 /// <summary>Delete faces of one body, in one of two documented modes (SM-24.delete_faces, profile
 /// <c>direct-faces-v1</c>).</summary>

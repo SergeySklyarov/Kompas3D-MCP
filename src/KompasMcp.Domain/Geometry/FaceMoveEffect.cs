@@ -34,6 +34,18 @@ public static class FaceMoveEffect
         return (after - before) / area;
     }
 
+    /// <summary>Whether the body changed at all: <c>Update() = true</c> alone is «accepted», and a
+    /// tangent-group move is confirmed by this sign instead of by the volume formula.</summary>
+    public static bool VolumeChanged(double? volumeBeforeMm3, double? volumeAfterMm3) =>
+        volumeBeforeMm3 is double before && volumeAfterMm3 is double after
+        && double.IsFinite(before) && double.IsFinite(after)
+        && Math.Abs(after - before) > 1e-6d;
+
+    /// <summary>Whether the set the operation holds grew past the faces that were named, which is the
+    /// only measurable answer to «did the tangent chain join». <c>null</c> (unread) is not «no».</summary>
+    public static bool GroupWider(int? groupSize, int namedCount) =>
+        groupSize is int size && size > namedCount;
+
     /// <summary>Comparison within the profile tolerance: 0.01 absolute or 1e-6 relative, the same rule the
     /// other geometry checks of the product use.</summary>
     public static bool Matches(double? actual, double? expected)

@@ -153,9 +153,8 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // TangentFaces is false here by contract: the group mode belongs to DIRECT_FACES_TANGENT, and
-        // true is refused before COM.
-        var accepted = SafeBool(() => mover.SetFaces(faces7, false));
+        // TangentFaces comes from the caller: true widens the named set with the tangent chain.
+        var accepted = SafeBool(() => mover.SetFaces(faces7, command.TangentGroup));
         if (accepted != true)
         {
             throw new KompasContractException(
@@ -166,9 +165,14 @@ public partial class Api5Session
                 details: new Dictionary<string, object?>
                 {
                     ["requested_faces"] = faces.Count,
-                    ["tangent_faces"] = false,
+                    ["tangent_faces"] = command.TangentGroup,
                 });
         }
+
+        // DOC: ifacemover_faces.html — Faces is read-only «Массив граней … VT_ARRAY | VT_DISPATCH», so
+        // what the operation holds after SetFaces IS the resolved set, tangent chain included. It is the
+        // only measurable answer to «did the group widen», and it is read before the move.
+        var groupSize = MoverFaceCount(mover);
 
         try
         {
@@ -210,13 +214,28 @@ public partial class Api5Session
         var areaAfter = bodyAfter is null ? null : MassProperties(bodyAfter, (uint)KompasUnits.MassMmKg)?.F;
         var facesAfter = CountFaces(document);
 
-        var observed = FaceMoveEffect.ObservedDisplacement(volumeBefore, volumeAfter, faceArea);
-        var expectedVolume = observed is double displacement && faceArea is double area
-            ? FaceMoveEffect.ExpectedVolume(volumeBefore ?? 0d, area, displacement)
-            : (double?)null;
-        var expectedArea = observed is double shift && perimeter is double band && areaBefore is double surface
-            ? FaceMoveEffect.ExpectedArea(surface, band, shift)
-            : (double?)null;
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
+
+        bool ApplyDeclared(List<NamedCheck> target)
+        {
+            if (!declared.IsDeclared)
+            {
+                return true;
+            }
+
+            DeclaredExpectation.AddIfDeclared(target, "expected_volume", declared);
+            if (declared.IsUnverifiable)
+            {
+                unverified.Add(DeclaredExpectation.UnverifiableReason("объём после перемещения", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после перемещения", declared));
+            }
+
+            return declared.IsConfirmed;
+        }
 
         // INVARIANT: Update() = true without a change is NOT a success. MEASURED on the removal route:
         // the call answered true and the body stayed as it was, so the volume is what decides.
@@ -238,6 +257,84 @@ public partial class Api5Session
                     ["reverse"] = command.Reverse,
                 });
         }
+
+        if (command.TangentGroup)
+        {
+            // MEASURED: the operation moves the tangent chain, so the swept set is wider than the named
+            // one and V + d·A over the NAMED area does not predict the answer. Success is therefore
+            // judged by signs that are documented and readable — the volume changed, the counts held, the
+            // set the operation holds grew — and the level stays call_returned unless the caller declared
+            // the volume. History: docs/decisions/direct-faces.md#tangent
+            var groupChecks = new List<NamedCheck>
+            {
+                new("operation_updated", updated == true, "Update() вернул true"),
+                new("volume_changed", FaceMoveEffect.VolumeChanged(volumeBefore, volumeAfter),
+                    Observed: Num(volumeBefore) + " → " + Num(volumeAfter) + " мм³",
+                    Expected: "объём изменился — иначе перемещения нет"),
+                new("body_count_unchanged", bodiesAfter.Count == bodyCountBefore,
+                    Observed: bodyCountBefore + " → " + bodiesAfter.Count,
+                    Expected: "перемещение грани не добавляет тел"),
+                new("face_count_unchanged", facesAfter == facesBefore,
+                    Observed: Num(facesBefore) + " → " + Num(facesAfter),
+                    Expected: "перемещение грани не меняет число граней"),
+            };
+
+            var wider = FaceMoveEffect.GroupWider(groupSize, faces.Count);
+            if (groupSize is int size)
+            {
+                groupChecks.Add(new NamedCheck("tangent_group_wider", wider,
+                    Observed: size + " граней в наборе операции",
+                    Expected: "больше названных " + faces.Count + ": цепочка касательных"));
+            }
+            else
+            {
+                unverified.Add("tangent_group_size_not_read — IFaceMover.Faces не ответил: широта набора "
+                               + "не измерена, и «касательных граней нет» не утверждается");
+            }
+
+            var declaredConfirmed = ApplyDeclared(groupChecks);
+
+            var groupNotes = new List<string>
+            {
+                "tangent_group_arithmetic_not_applicable — ожидаемый объём V + d·A относится к НАЗВАННЫМ "
+                + "граням; в режиме касательных набор шире, поэтому объём не предсказывается, а "
+                + "проверяется признаками: объём изменился, число граней прежнее, набор вырос",
+                "tangent_faces_moved — число граней в наборе операции после SetFaces(Faces, true), "
+                + "прочитано из IFaceMover.Faces",
+            };
+
+            var groupWarnings = new List<string>();
+            if (groupSize is int held && !wider)
+            {
+                groupWarnings.Add("tangent_faces_none — у названных граней нет касательных соседей: "
+                    + "SetFaces(..., true) дал тот же набор из " + held + " граней, перемещены только "
+                    + "названные");
+            }
+
+            return new MoveFacesResult(
+                faces.Count, command.OffsetMm, command.Reverse,
+                ObservedOffsetMm: null, faceArea, perimeter, volumeBefore, volumeAfter, areaBefore,
+                areaAfter, ExpectedVolumeMm3: null, ExpectedAreaMm2: null, bodiesAfter.Count,
+                revisionBefore, document.Revision,
+                new VerificationDto(
+                    declared.IsDeclared && declaredConfirmed
+                        ? VerificationLevel.GeometryChecked
+                        : VerificationLevel.CallReturned,
+                    groupChecks, unverified),
+                groupNotes,
+                Warnings: groupWarnings.Count == 0 ? null : groupWarnings)
+            {
+                TangentFacesMoved = groupSize,
+            };
+        }
+
+        var observed = FaceMoveEffect.ObservedDisplacement(volumeBefore, volumeAfter, faceArea);
+        var expectedVolume = observed is double displacement && faceArea is double area
+            ? FaceMoveEffect.ExpectedVolume(volumeBefore ?? 0d, area, displacement)
+            : (double?)null;
+        var expectedArea = observed is double shift && perimeter is double band && areaBefore is double surface
+            ? FaceMoveEffect.ExpectedArea(surface, band, shift)
+            : (double?)null;
 
         // The requested distance is the prediction: the face must have swept |offset|, and a face of a
         // different area would give a different volume for the same distance.
@@ -306,23 +403,7 @@ public partial class Api5Session
         }
 
         var geometryConfirmed = distanceMatches && areaMatches && FaceMoveEffect.Matches(volumeAfter, expectedVolume);
-
-        var declared = DeclaredExpectation.Evaluate(
-            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        if (declared.IsDeclared)
-        {
-            DeclaredExpectation.AddIfDeclared(checks, "expected_volume", declared);
-            if (declared.IsUnverifiable)
-            {
-                unverified.Add(DeclaredExpectation.UnverifiableReason("объём после перемещения", declared));
-            }
-            else if (declared.IsNotConfirmed)
-            {
-                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после перемещения", declared));
-            }
-
-            geometryConfirmed &= declared.IsConfirmed;
-        }
+        geometryConfirmed &= ApplyDeclared(checks);
 
         var notes = new List<string>
         {
@@ -335,9 +416,8 @@ public partial class Api5Session
             + "тело без истории проверяется отдельным нарядом DIRECT_FACES_NO_HISTORY",
         };
 
-        unverified.Add("tangent_group_not_executed — SetFaces(Faces, TangentFaces) вызывается с "
-                       + "TangentFaces = false; режим SM-24.move_faces.tangent_group отнесён к "
-                       + "DIRECT_FACES_TANGENT");
+        unverified.Add("implicit_tangent_faces_not_named — SetFaces вызывается с TangentFaces = false, "
+                       + "поэтому касательные соседи в набор не входят и их судьба здесь не читается");
         unverified.Add("dependent_features_not_enumerated — сохранность зависимых признаков здесь не "
                        + "проверяется");
 
@@ -409,22 +489,25 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["offset_mm"] = command.OffsetMm });
         }
 
-        if (command.TangentGroup)
+    }
+
+    /// <summary>Size of the set the operation holds, read from the documented read-only
+    /// <c>IFaceMover.Faces</c>. <c>null</c> when the getter does not answer: «not read» differs from
+    /// «one face».</summary>
+    private static int? MoverFaceCount(IFaceMover mover)
+    {
+        try
         {
-            // The parameter IS declared, otherwise it would be invisible to the caller, but true is not
-            // executed: the mode is a separate order, and answering success for it would be a lie.
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                "tangent_group = true не выполняется: SetFaces(Faces, TangentFaces) вызывается здесь с "
-                + "TangentFaces = false, а выбор касательных граней группой (SM-24.move_faces."
-                + "tangent_group) отнесён к отдельному наряду DIRECT_FACES_TANGENT. Передайте false "
-                + "или не передавайте поле.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["tangent_group"] = true,
-                    ["api7_member"] = "IFaceMover.SetFaces(Faces, TangentFaces)",
-                });
+            return mover.Faces switch
+            {
+                null => null,
+                Array array => array.Length,
+                _ => 1,
+            };
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
         }
     }
 

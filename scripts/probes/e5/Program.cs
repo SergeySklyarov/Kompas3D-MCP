@@ -21,7 +21,8 @@ internal static class Program
         using var probe = new E5Probe(outPath);
         var stepAt = Array.IndexOf(args, "--step");
         var stepPath = stepAt >= 0 && stepAt + 1 < args.Length ? args[stepAt + 1] : null;
-        return probe.Run(args.Contains("--keep-open"), stepPath, args.Contains("--save-body"));
+        return probe.Run(args.Contains("--keep-open"), stepPath, args.Contains("--save-body"),
+            args.Contains("--tangent"));
     }
 
     /// <summary>Loads the vendor interop from the installation: the project references it with

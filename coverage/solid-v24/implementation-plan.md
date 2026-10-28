@@ -1071,3 +1071,8 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 Очередь: `DIRECT_FACES_TANGENT` (выдан) -> `DIRECT_FACES_NO_HISTORY` -> E2 -> E4 -> IGES -> `RELEASE_0_13_0`.
 `delete_faces keep_body` исполняет маршрут с числовым судом и отказывает именованно; `restore_faces` не возвращает объём.
 `save_reopen` строк delete/restore - в `DIRECT_FACES_NO_HISTORY`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 28.10.2026, сорок третья (`DIRECT_FACES_TANGENT` принят).**
+
+Очередь: `DIRECT_FACES_NO_HISTORY` (выдан) -> E2 -> E4 -> IGES -> `RELEASE_0_13_0`. В наряд входят `save_reopen` строк
+`SM-24.*`, тело STEP без истории и устранение долга 81 (ложный отказ одиночного `move_faces` на грани с касательными).

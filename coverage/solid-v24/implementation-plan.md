@@ -1051,3 +1051,11 @@ FAIL 0). По решению заказчика 23.10.2026 на предложе
 Открыто 8 пунктов долга. Очередь: `E5_RESEARCH` (`E5_RESEARCH_DEVELOPER_PROMPT.md`) -> наряды реализации E5
 по его отчёту -> E2 -> E4 -> IGES -> `RELEASE_0_13_0`. Смена ключа `details` у выгрузки DXF
 (`output_path` -> `field`) называется в заметках выпуска.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 28.10.2026, сороковая (`E5_RESEARCH` принят).**
+
+Очередь: `DIRECT_FACES_CORE` (выдан) -> `DIRECT_FACES_DELETE_RESTORE` -> `DIRECT_FACES_TANGENT` ->
+`DIRECT_FACES_NO_HISTORY` -> E2 -> E4 -> IGES -> `RELEASE_0_13_0`. `change_face_position` отдельным
+инструментом не делается; `split_solid_ref` закрывается строкой SM-16; тело без истории - тот же профиль.
+Строки без документированного маршрута (`change_face_position`, `change_fillet` без истории,
+`replace_faces.offset`, `resize_face`) - к докладу заказчику при выпуске.

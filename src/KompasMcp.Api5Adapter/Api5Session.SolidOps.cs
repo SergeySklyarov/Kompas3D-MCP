@@ -1953,6 +1953,12 @@ public sealed partial class Api5Session
         new("left_hand", new[] { ThreadFamily }, c => c.LeftHand),
         new("initial_border_ref", new[] { ThreadFamily }, c => c.InitialBorderRef),
         new("final_border_ref", new[] { ThreadFamily }, c => c.FinalBorderRef),
+        // Fields of the RIB family (SM-14): its own branch reads the first two and refuses the last two
+        // BY NAME, so a B3 feature naming them is refused as foreign instead of swallowing them.
+        new("draft_angle_deg", new[] { RibFamily }, c => c.DraftAngleDeg),
+        new("symmetric", new[] { RibFamily }, c => c.Symmetric),
+        new("side", new[] { RibFamily }, c => c.Side),
+        new("segment_index", new[] { RibFamily }, c => c.SegmentIndex),
     };
 
     /// <summary>Whether the caller declared an analytical geometry expectation — volume and/or bounding box.</summary>

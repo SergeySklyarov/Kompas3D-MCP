@@ -30,6 +30,10 @@ public partial class Api5Session
     /// this order: one thickness, material on one side.</summary>
     private const short ThinTypeNormal = 0;
 
+    /// <summary><c>dtBoth</c> — «в обе стороны»: the symmetric mode, the same thickness on both sides of the
+    /// sketch plane.</summary>
+    private const short ThinTypeBoth = 2;
+
     /// <summary>Rib: one thickness, a given position and draft (SM-14).</summary>
     public RibResult Rib(RibCommand command)
     {
@@ -87,13 +91,16 @@ public partial class Api5Session
         definition.angle = command.DraftAngleDeg;
         definition.index = command.SegmentIndex;
 
+        var thinType = command.Symmetric ? ThinTypeBoth : ThinTypeNormal;
+        var reverseThickness = command.Symmetric ? command.ThicknessMm : 0d;
         var thinAccepted = SafeBool(() =>
-            definition.SetThinParam(ThinTypeNormal, command.ThicknessMm, 0d));
+            definition.SetThinParam(thinType, command.ThicknessMm, reverseThickness));
         if (thinAccepted != true)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "SetThinParam(0, " + Num(command.ThicknessMm) + ", 0) вернул "
+                "SetThinParam(" + thinType + ", " + Num(command.ThicknessMm) + ", "
+                + Num(reverseThickness) + ") вернул "
                 + (thinAccepted is null ? "ошибку вызова" : "false")
                 + ": толщина ребра не задана. Признак не создавался.",
                 RetryPolicy.ReacquireContext,
@@ -101,6 +108,7 @@ public partial class Api5Session
                 {
                     ["named_code"] = "GEOMETRY_FAILED",
                     ["thickness_mm"] = command.ThicknessMm,
+                    ["symmetric"] = command.Symmetric,
                 });
         }
 
@@ -151,7 +159,7 @@ public partial class Api5Session
         var boxAfter = part.GetMainBody() is ksBody bodyAfter ? ReadBodyBox(bodyAfter) : null;
 
         double? added = volumeBefore is double before && volumeAfter is double after ? after - before : null;
-        var expected = RibChain.ExpectedVolumeMm3(chain?.AreaMm2, command.ThicknessMm);
+        var expected = RibChain.ExpectedVolumeMm3(chain?.AreaMm2, command.ThicknessMm, command.Symmetric);
 
         // MEASURED: "accepted" and "applied" differ exactly here - the kernel answers true while the
         // body does not change, so a silent body is a refusal, not a success with zero effect.
@@ -172,12 +180,36 @@ public partial class Api5Session
         }
 
         var parameters = ReadRibParameters(document, definition);
+        var expectedThinType = command.Symmetric ? "both" : "normal";
+
+        // The read-back is the only witness that the MODE was applied: SetThinParam answers before the
+        // geometry exists, so an accepted-but-ignored mode would look like a completed operation.
+        if (parameters.ThinType is string appliedThinType
+            && !string.Equals(appliedThinType, expectedThinType, StringComparison.Ordinal))
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Режим тонкой стенки не применён: запрошено " + expectedThinType + " (SetThinParam("
+                + thinType + ", " + Num(command.ThicknessMm) + ", " + Num(reverseThickness) + ")), а модель "
+                + "читает thin_type = " + appliedThinType + ". Это отказ, а не успех без изменения.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["named_code"] = "GEOMETRY_FAILED",
+                    ["thin_type_read"] = appliedThinType,
+                    ["thin_type_expected"] = expectedThinType,
+                    ["symmetric"] = command.Symmetric,
+                });
+        }
+
         var checks = new List<NamedCheck>
         {
             new("operation_created", created == true, "Create() вернул true"),
             new("sketch_accepted", sketchAccepted == true, "SetSketch принял эскиз"),
             new("thin_param_accepted", thinAccepted == true,
-                "SetThinParam(0, " + Num(command.ThicknessMm) + ", 0) вернул true"),
+                "SetThinParam(" + thinType + ", " + Num(command.ThicknessMm) + ", "
+                + Num(reverseThickness) + ") вернул true"),
             new("body_count_kept", bodiesAfter == bodiesBefore,
                 Observed: "тел " + bodiesBefore + " → " + bodiesAfter,
                 Expected: "ребро приклеивается к телу: число тел не меняется"),
@@ -208,15 +240,17 @@ public partial class Api5Session
             checks.Add(new NamedCheck("volume_matches_contour", matches,
                 Observed: Num(added) + " мм³",
                 Expected: Num(expectedValue) + " мм³ = площадь контура "
-                          + Num(chain.AreaMm2) + " мм² × " + Num(command.ThicknessMm) + " мм, "
+                          + Num(chain.AreaMm2) + " мм² × " + Num(command.ThicknessMm) + " мм"
+                          + (command.Symmetric ? " × 2 (симметрично)" : string.Empty) + ", "
                           + "допуск " + (RibChain.VolumeTolerance * 100d).ToString("0.#",
                               System.Globalization.CultureInfo.InvariantCulture) + " %"));
             if (!matches)
             {
                 throw new KompasContractException(
                     ErrorCodes.GeometryFailed,
-                    "Прирост объёма " + Num(added) + " мм³ не совпал с площадью контура × толщину ("
-                    + Num(expectedValue) + " мм³, допуск "
+                    "Прирост объёма " + Num(added) + " мм³ не совпал с площадью контура × толщину"
+                    + (command.Symmetric ? " × 2" : string.Empty) + " (" + Num(expectedValue)
+                    + " мм³, допуск "
                     + (RibChain.VolumeTolerance * 100d).ToString("0.#",
                         System.Globalization.CultureInfo.InvariantCulture)
                     + " %). Ребро построено не по той цепочке, которую прочитал сервер, либо "
@@ -376,6 +410,23 @@ public partial class Api5Session
             && Math.Abs(thickness - command.ThicknessMm) <= 1e-6,
             Observed: Num(parameters.NormalThicknessMm) + " мм",
             Expected: Num(command.ThicknessMm) + " мм"));
+
+        // The mode is a PAIR: the type says which sides, the reverse thickness says how much of the
+        // second one. Checking only the type would pass a symmetric rib whose second side is empty.
+        var expectedThinType = command.Symmetric ? "both" : "normal";
+        checks.Add(new NamedCheck("read_back_thin_type",
+            string.Equals(parameters.ThinType, expectedThinType, StringComparison.Ordinal),
+            Observed: parameters.ThinType ?? "не прочитано",
+            Expected: expectedThinType));
+
+        if (command.Symmetric)
+        {
+            checks.Add(new NamedCheck("read_back_reverse_thickness",
+                parameters.ReverseThicknessMm is double reverse
+                && Math.Abs(reverse - command.ThicknessMm) <= 1e-6,
+                Observed: Num(parameters.ReverseThicknessMm) + " мм",
+                Expected: Num(command.ThicknessMm) + " мм"));
+        }
 
         if (parameters.SketchRef is null)
         {

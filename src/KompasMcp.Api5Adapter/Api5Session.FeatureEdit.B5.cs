@@ -34,6 +34,12 @@ public partial class Api5Session
         new("thickness_mm", ShellFamily, c => c.ThicknessMm),
         new("thin_inward", ShellFamily, c => c.ThinInward),
         new("face_refs", ShellFamily, c => c.FaceRefs),
+        // Rib (SM-14). thickness_mm is shared with the shell and stays in that family: the rib edit
+        // passes it as an additionally allowed name, because the field is one and the families differ.
+        new("draft_angle_deg", RibFamily, c => c.DraftAngleDeg),
+        new("symmetric", RibFamily, c => c.Symmetric),
+        new("side", RibFamily, c => c.Side),
+        new("segment_index", RibFamily, c => c.SegmentIndex),
     };
 
     /// <summary>Edit fields NOT belonging to B5: extrusion, chamfer, fillet, rotation, the B3 families
@@ -92,13 +98,18 @@ public partial class Api5Session
     };
 
     /// <summary>Reject fields not belonging to this B5 family. Rejected BEFORE any COM call.</summary>
-    private static void RejectForeignB5EditFields(UpdateFeatureCommand command, string family, string allowed)
+    /// <param name="alsoAllowed">Names the calling family owns although the table assigns them to another
+    /// one — <c>thickness_mm</c> is the shell's and the rib's at once, and one field cannot sit in two
+    /// rows of the table.</param>
+    private static void RejectForeignB5EditFields(
+        UpdateFeatureCommand command, string family, string allowed, params string[] alsoAllowed)
     {
         var foreign = NonB5EditFields
             .Where(f => f.Read(command) is not null)
             .Select(f => f.Name)
             .Concat(B5EditFields
                 .Where(f => !string.Equals(f.Family, family, StringComparison.Ordinal)
+                            && !alsoAllowed.Contains(f.Name, StringComparer.Ordinal)
                             && f.Read(command) is not null)
                 .Select(f => f.Name))
             .ToList();

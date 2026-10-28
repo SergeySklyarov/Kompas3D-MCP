@@ -54041,6 +54041,216 @@ def r1_checks(client, rep, app_id, workdir):
                 "код=%s текст=%s" % (code, why(env)))
     close(doc)
 
+    # ===== R1-20…R1-27: режимы — симметричная толщина, правка, сохранение-переоткрытие =====
+    #
+    # Своя деталь на каждый замер: два ребра на одной плите накладываются друг на друга, и второй прирост
+    # перестаёт быть площадью × толщину. Эталон уклона — ОТДЕЛЬНАЯ деталь, построенная сразу с этим углом:
+    # правка подтверждается совпадением с ней, а не числом из прошлого прогона.
+    modes_dir = os.path.join(workdir, "rib-modes")
+    os.makedirs(modes_dir, exist_ok=True)
+    SYMMETRIC_ADDED = 2.0 * EXPECTED_ADDED
+
+    def feats(doc_id_):
+        _e, env_f, _r = client.tool("kompas_list_features", {"document_id": doc_id_})
+        rows_f = result(env_f)
+        return rows_f if isinstance(rows_f, list) else (rows_f or {}).get("features") or []
+
+    def rib_params_of(payload):
+        payload = payload or {}
+        return payload.get("rib") or payload.get("parameters") or {}
+
+    # --- R1-20: симметричная толщина даёт ровно вдвое ---
+    sym_doc, problem = plate("r1-modes-symmetric")
+    sym_added = None
+    if problem:
+        rep.add("R1-20.create.symmetric", "симметричная толщина строит ребро", "FAIL", problem)
+    else:
+        sym_chain, problem = chain_sketch(sym_doc, [(0, 20), (20, 40), (40, 20)],
+                                          name="r1-chain-symmetric")
+        if problem:
+            rep.add("R1-20.create.symmetric", "симметричная толщина строит ребро", "FAIL", problem)
+        else:
+            env, code = call("kompas_rib", {"sketch_ref": sym_chain,
+                                            "expected_revision": revision(sym_doc),
+                                            "side": 0, "thickness_mm": THICKNESS,
+                                            "symmetric": True})
+            payload = result(env)
+            sym_added = payload.get("volume_added_mm3")
+            params = rib_params_of(payload)
+            ok = (not code and near(sym_added, SYMMETRIC_ADDED, SYMMETRIC_ADDED * TOL)
+                  and params.get("thin_type") == "both"
+                  and near(params.get("normal_thickness_mm"), THICKNESS, 1e-6)
+                  and near(params.get("reverse_thickness_mm"), THICKNESS, 1e-6))
+            rep.add("R1-20.create.symmetric",
+                    "симметричная толщина: прирост вдвое против односторонней, thin_type = both, "
+                    "обе толщины 6 мм",
+                    "PASS" if ok else "FAIL",
+                    "код=%s прирост=%s ожидание=%s прочитано=%s"
+                    % (code, sym_added, SYMMETRIC_ADDED, params))
+        close(sym_doc)
+
+    # --- M1: односторонняя, затем правка толщины, режима и угла ---
+    doc, problem = plate("r1-modes-edit")
+    edit_volume = None
+    rib_ref = None
+    if problem:
+        for row, text in (
+                ("R1-21.geometry.symmetric_ratio", "симметричная толщина вдвое больше односторонней"),
+                ("R1-22.edit.thickness", "правка толщины применяется и подтверждается объёмом"),
+                ("R1-23.edit.angle", "правка угла совпадает с построением сразу с этим углом"),
+                ("R1-24.edit.symmetric", "правка режима на симметричный добавляет материал"),
+                ("R1-25.negative.edit_side", "side правкой отвергнут по имени поля"),
+                ("R1-26.negative.edit_no_change", "правка без изменения отвергнута"),
+                ("R1-27.save_reopen", "ребро переживает save→close→reopen с теми же параметрами")):
+            rep.add(row, text, "FAIL", problem)
+        close(doc)
+        return
+
+    chain, problem = chain_sketch(doc, [(0, 20), (20, 40), (40, 20)], name="r1-chain-edit")
+    if problem:
+        for row, text in (
+                ("R1-21.geometry.symmetric_ratio", "симметричная толщина вдвое больше односторонней"),
+                ("R1-22.edit.thickness", "правка толщины применяется и подтверждается объёмом"),
+                ("R1-23.edit.angle", "правка угла совпадает с построением сразу с этим углом"),
+                ("R1-24.edit.symmetric", "правка режима на симметричный добавляет материал"),
+                ("R1-25.negative.edit_side", "side правкой отвергнут по имени поля"),
+                ("R1-26.negative.edit_no_change", "правка без изменения отвергнута"),
+                ("R1-27.save_reopen", "ребро переживает save→close→reopen с теми же параметрами")):
+            rep.add(row, text, "FAIL", problem)
+        close(doc)
+        return
+
+    env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                    "side": 0, "thickness_mm": THICKNESS})
+    one = result(env)
+    one_added = one.get("volume_added_mm3")
+    rib_ref = (one.get("feature_ref") or {}).get("id")
+    plate_volume = volume(doc)
+
+    rep.add("R1-21.geometry.symmetric_ratio",
+            "симметричная толщина даёт ровно вдвое больший прирост, чем односторонняя",
+            "PASS" if (isinstance(one_added, (int, float)) and one_added > 0
+                       and isinstance(sym_added, (int, float))
+                       and abs(sym_added / one_added - 2.0) <= TOL) else "FAIL",
+            "симметрично=%s односторонне=%s отношение=%s"
+            % (sym_added, one_added,
+               (sym_added / one_added) if one_added else None))
+
+    # R1-22: толщина 6 → 10, ожидание — площадь × разность толщин.
+    env, code = call("kompas_update_feature", {
+        "feature_ref": rib_ref, "expected_revision": revision(doc), "thickness_mm": 10.0})
+    after_thickness = volume(doc)
+    delta = (after_thickness - plate_volume
+             if isinstance(after_thickness, (int, float)) and isinstance(plate_volume, (int, float))
+             else None)
+    rep.add("R1-22.edit.thickness",
+            "правка толщины 6 → 10 мм применяется на месте и подтверждается приростом площади × 4 мм",
+            "PASS" if (not code and near(delta, AREA * 4.0, AREA * 4.0 * TOL)) else "FAIL",
+            "код=%s прирост=%s ожидание=%s объём=%s"
+            % (code, delta, AREA * 4.0, after_thickness))
+
+    # R1-24: режим на симметричный при той же толщине — прирост ещё на площадь × толщину.
+    env, code = call("kompas_update_feature", {
+        "feature_ref": rib_ref, "expected_revision": revision(doc), "symmetric": True})
+    after_mode = volume(doc)
+    mode_delta = (after_mode - after_thickness) if after_mode is not None else None
+    rep.add("R1-24.edit.symmetric",
+            "правка режима на симметричный добавляет материал: прирост равен площади × толщину",
+            "PASS" if (not code and near(mode_delta, AREA * 10.0, AREA * 10.0 * TOL)) else "FAIL",
+            "код=%s прирост=%s ожидание=%s объём=%s"
+            % (code, mode_delta, AREA * 10.0, after_mode))
+
+    # R1-23: угол 0 → 5°; эталон — деталь, построенная СРАЗУ с углом 5° и той же толщиной.
+    env, code = call("kompas_update_feature", {
+        "feature_ref": rib_ref, "expected_revision": revision(doc), "draft_angle_deg": 5.0})
+    angle_edit_code = code
+    after_angle = volume(doc)
+    edit_volume = after_angle
+
+    ref_doc, problem = plate("r1-modes-reference")
+    reference_volume = None
+    if problem:
+        rep.add("R1-23.edit.angle", "правка угла совпадает с построением сразу с этим углом",
+                "FAIL", problem)
+    else:
+        ref_chain, problem = chain_sketch(ref_doc, [(0, 20), (20, 40), (40, 20)],
+                                          name="r1-chain-reference")
+        env, code = call("kompas_rib", {"sketch_ref": ref_chain,
+                                        "expected_revision": revision(ref_doc),
+                                        "side": 0, "thickness_mm": 10.0, "symmetric": True,
+                                        "draft_angle_deg": 5.0})
+        ref_code = code
+        reference_volume = volume(ref_doc)
+        rep.add("R1-23.edit.angle",
+                "правка угла 0 → 5° даёт тот же объём, что построение сразу с 5° (толщина 10, "
+                "симметрично)",
+                "PASS" if (not angle_edit_code and not ref_code and edit_volume is not None
+                           and reference_volume is not None
+                           and near(edit_volume, reference_volume, reference_volume * TOL)) else "FAIL",
+                "правка=%s эталон=%s код правки=%s код эталона=%s"
+                % (edit_volume, reference_volume, angle_edit_code, ref_code))
+        close(ref_doc)
+
+    # R1-25: side правкой не меняется — отказ ПО ИМЕНИ поля.
+    env, code = call("kompas_update_feature", {
+        "feature_ref": rib_ref, "expected_revision": revision(doc), "side": 1})
+    details = ((env or {}).get("error") or {}).get("details") or {}
+    rep.add("R1-25.negative.edit_side",
+            "side правкой отвергнут именованным отказом с именем поля",
+            "PASS" if code == "CAPABILITY_UNAVAILABLE" and details.get("field") == "side" else "FAIL",
+            "код=%s field=%s текст=%s" % (code, details.get("field"), why(env)))
+
+    # R1-26: правка, повторяющая прочитанное, — отказ, а не успех без изменения.
+    env, code = call("kompas_update_feature", {
+        "feature_ref": rib_ref, "expected_revision": revision(doc),
+        "draft_angle_deg": 5.0, "thickness_mm": 10.0, "symmetric": True})
+    rep.add("R1-26.negative.edit_no_change",
+            "правка, повторяющая прочитанные параметры, отвергнута INVALID_ARGUMENT",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
+            "код=%s текст=%s" % (code, why(env)))
+
+    # R1-27: цикл save→close→reopen проходит САМА эта строка, параметры сверяются поимённо.
+    rib_path = os.path.join(modes_dir, "rib-modes.m3d")
+    env, code = call("kompas_save_document", {"document_id": doc,
+                                             "expected_revision": revision(doc),
+                                             "target_path": rib_path})
+    saved = (not code) and os.path.isfile(rib_path)
+    call("kompas_close_document", {"document_id": doc, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": rib_path,
+                                             "access": "edit"})
+    reopened = doc_id(env)
+    if not reopened:
+        rep.add("R1-27.save_reopen", "ребро переживает save→close→reopen с теми же параметрами",
+                "FAIL", "документ не переоткрыт: %s" % (code,))
+        return
+    reopened_volume = volume(reopened)
+    # The rib is found in the tree BY ITS FAMILY, not by the type word: the row carries the tree type as
+    # a name, and the family is what the read returns. A document holds a plate and one rib, so the walk
+    # costs two calls.
+    rib_rows = []
+    for row in feats(reopened):
+        row_ref = row.get("feature_ref") or row.get("ref")
+        if not row_ref:
+            continue
+        _e, env_f, _r = client.tool("kompas_get_feature", {"feature_ref": row_ref})
+        read = result(env_f) or {}
+        if read.get("family") == "rib":
+            rib_rows.append(read)
+    read_back = rib_params_of(rib_rows[0]) if rib_rows else {}
+    params_same = (read_back.get("side") == 0 and near(read_back.get("angle_deg"), 5.0, 1e-6)
+                   and read_back.get("segment_index") == 0
+                   and read_back.get("thin_type") == "both"
+                   and near(read_back.get("normal_thickness_mm"), 10.0, 1e-6)
+                   and near(read_back.get("reverse_thickness_mm"), 10.0, 1e-6))
+    rep.add("R1-27.save_reopen",
+            "ребро переживает save→close→reopen: объём тот же, параметры те же, ребро в дереве",
+            "PASS" if (saved and edit_volume is not None and reopened_volume is not None
+                       and near(reopened_volume, edit_volume, 1.0) and len(rib_rows) == 1
+                       and params_same) else "FAIL",
+            "saved=%s до=%s после=%s ребер в дереве=%s прочитано=%s"
+            % (saved, edit_volume, reopened_volume, len(rib_rows), read_back))
+    close(reopened)
+
 
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),

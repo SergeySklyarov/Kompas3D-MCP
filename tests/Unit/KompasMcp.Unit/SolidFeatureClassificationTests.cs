@@ -73,6 +73,12 @@ public sealed class SolidFeatureClassificationTests
         ["left_hand"] = ["thread"],
         ["initial_border_ref"] = ["thread"],
         ["final_border_ref"] = ["thread"],
+        // The rib (SM-14): the three fields its branch WRITES, and the two it refuses by name. side and
+        // segment_index are the family's own — the refusal is about the confirmation, not about the owner.
+        ["draft_angle_deg"] = ["rib"],
+        ["symmetric"] = ["rib"],
+        ["side"] = ["rib"],
+        ["segment_index"] = ["rib"],
     };
 
     /// <summary>Fields not belonging to the B3 families: extrusion, chamfer, fillet, rotation and the B5
@@ -121,7 +127,7 @@ public sealed class SolidFeatureClassificationTests
                  {
                      "Api5Session.SolidOps.cs", "Api5Session.PatternEdit.cs", "Api5Session.Hole.cs",
                      "Api5Session.DraftEdit.cs", "Api5Session.DraftFromEdgesEdit.cs",
-                     "Api5Session.Thread.cs",
+                     "Api5Session.Thread.cs", "Api5Session.FeatureRead.B5.cs",
                  })
         {
             foreach (Match match in Regex.Matches(
@@ -246,10 +252,10 @@ public sealed class SolidFeatureClassificationTests
             $"в ведомствах названы поля, которых в {nameof(UpdateFeatureCommand)} нет: "
             + string.Join(", ", phantom));
 
-        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 51
-        // with the six native-hole edit fields, the draft's two base forms, the base-line family's reverse
-        // and the eight fields of the thread designation.
-        Assert.Equal(51, properties.Count);
+        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 55
+        // with the six native-hole edit fields, the draft's two base forms, the base-line family's reverse,
+        // the eight fields of the thread designation and the rib's four.
+        Assert.Equal(55, properties.Count);
     }
 
     [Fact]

@@ -2010,6 +2010,30 @@ public sealed record UpdateFeatureCommand
     /// History: docs/decisions/contracts.md#shell-thickness-edit</remarks>
     public double? ThicknessMm { get; init; }
 
+    /// <summary>New draft angle of a rib (family=<c>rib</c>), degrees — <c>ksRibDefinition.angle</c>.</summary>
+    /// <remarks>A separate field from <c>angle_deg</c>: for a chamfer that name means the chamfer angle, and one
+    /// name for two different angles would make the answer ambiguous. MEASURED: a draft ADDS material, so an edit
+    /// that leaves the volume unchanged is a refusal, not a success.
+    /// History: docs/decisions/ribs.md#edit</remarks>
+    public double? DraftAngleDeg { get; init; }
+
+    /// <summary>New rib thickness mode (family=<c>rib</c>): true — <c>dtBoth</c> (<c>SetThinParam(2, t, t)</c>),
+    /// false — <c>dtNormal</c>. Null keeps the mode read from the model.</summary> <remarks>DOC:
+    /// <c>direction_type.html</c>. The mode is written TOGETHER with the thickness: writing one half would make
+    /// "exactly what was asked changed" indistinguishable from "this changed too".
+    /// History: docs/decisions/ribs.md#edit</remarks>
+    public bool? Symmetric { get; init; }
+
+    /// <summary>Rib position (family=<c>rib</c>) — declared so the field is visible, and REFUSED by name.</summary>
+    /// <remarks>DOC: <c>ksribdefinition_props.html</c> and <c>ksapi_irib_setside.html</c> give a setter, but no
+    /// numeric confirmation separates "applied" from "accepted" for a side change, so the edit is refused instead
+    /// of claimed. History: docs/decisions/ribs.md#edit</remarks>
+    public int? Side { get; init; }
+
+    /// <summary>Rib draft segment (family=<c>rib</c>) — declared and REFUSED by name, same rule as
+    /// <see cref="Side"/>.</summary>
+    public int? SegmentIndex { get; init; }
+
     /// <summary>New shell wall direction (family=<c>shell</c>): <c>true</c> — inward, <c>false</c> — outward. A
     /// separate field, not the chamfer's shared <c>direction</c>.</summary>
     public bool? ThinInward { get; init; }
@@ -3165,9 +3189,15 @@ public sealed record RibCommand
     /// </summary>
     public int Side { get; init; }
 
-    /// <summary>Rib thickness, mm — <c>SetThinParam(0, thickness, 0)</c>, i.e. <c>dtNormal</c>. Strictly
-    /// positive.</summary>
+    /// <summary>Rib thickness, mm — <c>SetThinParam(thinType, thickness, reverse)</c>. Strictly positive.</summary>
     public required double ThicknessMm { get; init; }
+
+    /// <summary>Symmetric thickness — <c>SetThinParam(2, t, t)</c>, i.e. <c>dtBoth</c>: material on BOTH
+    /// sides of the sketch plane. False is <c>dtNormal</c>, one side.</summary> <remarks>DOC:
+    /// <c>direction_type.html</c> — 0 <c>dtNormal</c>, 2 <c>dtBoth</c>. MEASURED: <c>dtBoth</c> gives exactly
+    /// twice the <c>dtNormal</c> increase at the same thickness and the same bounding box.
+    /// History: docs/decisions/ribs.md#thickness</remarks>
+    public bool Symmetric { get; init; }
 
     /// <summary>Draft angle of the rib faces, degrees — <c>ksRibDefinition.angle</c>. MEASURED: a draft ADDS
     /// material (6 mm rib: 2400 mm³ at 0°, 2663.389 at 2°, 3059.881 at 5°), so an expectation built on "the rib

@@ -1784,7 +1784,7 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_rib", "Ребро жёсткости",
-                "Ребро жёсткости по РАЗОМКНУТОЙ цепочке эскиза, одна толщина (SM-14). Маршрут - API5 " +
+                "Ребро жёсткости по РАЗОМКНУТОЙ цепочке эскиза, толщина односторонняя или симметричная (SM-14). Маршрут - API5 " +
                 "NewEntity(o3d_ribOperation=44) → ksRibDefinition. Маршрут API5, а не API7, потому что ТОЛЩИНА " +
                 "есть только здесь: irib_propers.html перечисляет у IRib пять членов и толщины среди них нет, " +
                 "толщина живёт в ksRibDefinition.SetThinParam. ПОЛОЖЕНИЕ РЕБРА СЧИТАЕТСЯ ОТ НАПРАВЛЕНИЯ КРИВОЙ, " +
@@ -1810,6 +1810,13 @@ public static class ToolCatalog
                             0, 3, 0),
                         "Положение ребра относительно направления кривой.")),
                     ("thickness_mm", Sch.PositiveMm("Толщина ребра")),
+                    ("symmetric", Sch.Described(
+                        Sch.Nullable(Sch.Bool(
+                            "Симметричная толщина: материал с ОБЕИХ сторон плоскости эскиза " +
+                            "SetThinParam(2, t, t), dtBoth. false — односторонняя, SetThinParam(0, t, 0), " +
+                            "dtNormal. Измерено: при том же габарите симметричная даёт ровно вдвое больший " +
+                            "прирост объёма, поэтому ожидание проверки удваивается. Без поля — false.")),
+                        "Симметричная толщина ребра (dtBoth).")),
                     ("draft_angle_deg", Sch.Described(
                         Sch.Nullable(Sch.Num(
                             "Угол уклона граней ребра в ГРАДУСАХ — ksRibDefinition.angle. По модулю меньше 90. " +
@@ -2563,7 +2570,9 @@ public static class ToolCatalog
                                 "radius_mm, edge_refs, base_object_refs. Отверстие: diameter_mm и поля СВОЕГО " +
                                 "режима (depth_mm у blind_flat, counterbore_* у through_counterbore, countersink_* " +
                                 "у through_countersink). Кинематическая операция: shift_mode. Элемент по сечениям: " +
-                                "section_refs, couplings. Оболочка: thickness_mm, thin_inward, face_refs. Булева " +
+                                "section_refs, couplings. Оболочка: thickness_mm, thin_inward, face_refs. Ребро: " +
+                                "draft_angle_deg, thickness_mm, symmetric (side и segment_index объявлены и " +
+                                "ОТВЕРГАЮТСЯ по имени: сеттер есть, числового подтверждения нет). Булева " +
                                 "операция: operation. Разделение: plane. Отсечение: plane и keep_side. Изменение " +
                                 "положения: reposition_kind и поля reposition_*. ПОЛЯ ПРИНАДЛЕЖАТ СВОЕМУ СЕМЕЙСТВУ: " +
                                 "поле чужого семейства отвергается INVALID_ARGUMENT, в details - foreign_fields. " +
@@ -2746,6 +2755,28 @@ public static class ToolCatalog
                         "тело не меняется, и такой вызов выглядел бы выполненным. Ссылки привязаны к ревизии документа: " +
                         "после правки перечитайте kompas_get_feature, старые отсекаются STALE_REFERENCE.",
                         1, 64))),
+                    ("draft_angle_deg", Sch.Nullable(Sch.Num(
+                        "Новый угол уклона РЕБРА (семейство rib), градусы — ksRibDefinition.angle. По модулю " +
+                        "меньше 90. Отдельное поле, а не angle_deg: у фаски angle_deg — угол фаски, и одно имя " +
+                        "для двух разных углов сделало бы ответ неоднозначным. Уклон РАСШИРЯЕТ ребро, поэтому " +
+                        "правка, не изменившая объём, — ОТКАЗ, а не успех.",
+                        -90d, 90d))),
+                    ("symmetric", Sch.Nullable(Sch.Bool(
+                        "Новый режим толщины РЕБРА (семейство rib): true — dtBoth, SetThinParam(2, t, t), " +
+                        "материал с ОБЕИХ сторон плоскости эскиза; false — dtNormal, SetThinParam(0, t, 0). " +
+                        "Пишется вместе с толщиной: режим — пара, и запись одной половины сделала бы " +
+                        "«изменилось ровно запрошенное» неотличимым от «изменилось ещё и это». Без поля режим " +
+                        "остаётся прочитанным с модели."))),
+                    ("side", Sch.Nullable(Sch.Int(
+                        "Положение РЕБРА (семейство rib). Поле объявлено, но значение ОТВЕРГАЕТСЯ именованным " +
+                        "отказом CAPABILITY_UNAVAILABLE: сеттер в документации есть (ksribdefinition_props.html, " +
+                        "ksapi_irib_setside.html), но подтвердить правку числом нечем — объём зеркального ребра " +
+                        "тот же. Пересоздайте ребро с нужным положением.",
+                        0, 3))),
+                    ("segment_index", Sch.Nullable(Sch.Int(
+                        "Направляющий сегмент уклона РЕБРА (семейство rib). Объявлен и ОТВЕРГАЕТСЯ по имени по " +
+                        "той же причине, что side: документированный сеттер есть, числового подтверждения нет.",
+                        0, 4096))),
                     ("reposition_kind", Sch.Nullable(Sch.Enum(
                         "Вид преобразования (семейство reposition) - правка признака изменения положения. Обязателен: без " +
                         "вида непонятно, что менять. Повторный kompas_reposition этому не замена: он создаёт ВТОРОЙ " +

@@ -151,6 +151,19 @@ public class RibChainTests
         Assert.Equal(FixtureVolume, RibChain.ExpectedVolumeMm3(FixtureArea, FixtureThickness)!.Value, 9);
     }
 
+    /// <summary>The symmetric mode (<c>dtBoth</c>) puts the same thickness on both sides of the sketch
+    /// plane, so the expectation is exactly twice the one-sided one at the same thickness.</summary>
+    [Fact]
+    public void ExpectedVolume_DoublesInTheSymmetricMode()
+    {
+        var oneSided = RibChain.ExpectedVolumeMm3(FixtureArea, FixtureThickness)!.Value;
+        var both = RibChain.ExpectedVolumeMm3(FixtureArea, FixtureThickness, symmetric: true)!.Value;
+
+        Assert.Equal(2d * oneSided, both, 9);
+        Assert.Null(RibChain.ExpectedVolumeMm3(null, FixtureThickness, symmetric: true));
+        Assert.Null(RibChain.ExpectedVolumeMm3(FixtureArea, 0d, symmetric: true));
+    }
+
     /// <summary>Without an area there is no expectation at all — <c>null</c>, never zero: a zero
     /// expectation would be "confirmed" by a body that did not change.</summary>
     [Fact]

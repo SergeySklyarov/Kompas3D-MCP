@@ -436,6 +436,8 @@ public partial class Api5Session
             && !splitRequested && !cutRequested && !booleanRequested && !patternRequested
             && !sweepRequested && !loftRequested && !shellRequested && !holeRequested
             && !threadRequested
+            && command.DraftAngleDeg is null && command.Symmetric is null
+            && command.Side is null && command.SegmentIndex is null
             && command.BaseFaceRef is null && command.BasePlane is null && command.Reverse is null
             && command.InitialBorderRef is null && command.FinalBorderRef is null)
         {
@@ -453,7 +455,8 @@ public partial class Api5Session
                 "counterbore_diameter_mm/counterbore_depth_mm у through_counterbore, " +
                 "countersink_diameter_mm/countersink_angle_deg у through_countersink). Цепочки " +
                 "соответствия (couplings) — сопровождение набора сечений, а не самостоятельный вход: " +
-                "они передаются ВМЕСТЕ с section_refs.");
+                "они передаются ВМЕСТЕ с section_refs; для ребра — draft_angle_deg, thickness_mm или " +
+                "symmetric.");
         }
 
         if (command.EndCondition == ExtrudeEndCondition.Through && command.DepthMm is not null)
@@ -492,6 +495,15 @@ public partial class Api5Session
         }
 
         var definition = entity.GetDefinition();
+
+        // A rib (SM-14) is selected by its OWN definition, before the draft branch: the tree number of a
+        // rib is 44, and the fields draft_angle_deg, thickness_mm and symmetric belong to no other
+        // family. See Api5Session.RibEdit.cs.
+        if (definition is ksRibDefinition ribDefinition)
+        {
+            return UpdateRibFeature(
+                document, entity, ribDefinition, command, volumeBefore, featuresBefore, stateBefore);
+        }
 
         // A draft from a base line (SM-12) is recognised by the TREE NUMBER 644, before any definition
         // branch: MEASURED, the family has no API5 definition at all, so only the tree number says whose

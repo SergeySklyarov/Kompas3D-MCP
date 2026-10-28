@@ -5102,9 +5102,9 @@
         "discover": "verified",
         "create": "implemented",
         "read": "implemented",
-        "edit": "not_started",
+        "edit": "verified",
         "rebuild": "not_started",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_started",
         "delete_dependencies": "not_started",
         "negative_tests": "verified",
@@ -5113,14 +5113,17 @@
       "tests": [
         "R1-02.discover.fields",
         "R1-11.read.parameters",
-        "R1-14.negative.side_range"
+        "R1-14.negative.side_range",
+        "R1-23.edit.angle",
+        "R1-27.save_reopen"
       ],
       "evidence": [
         "docs/decisions/ribs.md#draft",
+        "docs/decisions/ribs.md#edit",
         "docs/acceptance/evidence/20261028-e2-probe-60d9076/"
       ],
       "limitations": [
-        "Угол передаётся и читается обратно, но строкой группы R1 с НЕНУЛЕВЫМ углом не проверен: эталон объёма при уклоне - измеренные 2663.389 (2°) и 3059.881 (5°) из исследования блока, приёмочной строки на них в наряде RIB_CORE нет",
+        "Угол с НЕНУЛЕВЫМ значением проверен строкой R1-23: правка 0 → 5° даёт тот же объём, что построение сразу с 5° (толщина 10, симметрично), расхождение в пределах 1 %. Другие углы не измерялись",
         "Угол наклона ГРАНИ не читается: в interop v24 нет IFace.GetNormal/ParamU*, поэтому подтверждение идёт объёмом и повторным чтением параметров, а не углом грани"
       ],
       "depends_on": [
@@ -5136,28 +5139,35 @@
       "queue": "E2",
       "context": "part.single_body",
       "catalog_ref": "SM-14",
-      "catalog_level": "catalog_only",
+      "catalog_level": "mcp_implemented",
       "parameters_schema": "schemas/kompas_rib.json",
-      "adapter_route": "документированный маршрут - SetThinParam(2, t, t) (dtBoth, direction_type.html); ИЗМЕРЕНО на пробе блока: 6-мм ребро даёт 4800 мм³ вместо 2400, то есть ровно вдвое, габарит тот же. Инструментом этого наряда режим не выражается: symmetric в контракт не вводился, потому что правка и режимы - наряд RIB_MODES.",
+      "adapter_route": "тот же маршрут API5; режим - SetThinParam(2, t, t) (dtBoth, direction_type.html) при kompas_rib.symmetric = true и SetThinParam(0, t, 0) при false. Ожидание проверки удваивается (площадь цепочки × толщину × 2), режим подтверждается чтением обратно: thin_type = both И обе толщины равны запрошенной. ИЗМЕРЕНО: 6-мм ребро даёт 4800 мм³ против 2400 у одностороннего при том же габарите, отношение приростов 2,000 с допуском 1 %; правка symmetric на построенном ребре добавляет материал (R1-24). Неприменённый ядром режим - именованный отказ GEOMETRY_FAILED: SetThinParam отвечает до появления геометрии, и единственный свидетель - чтение.",
       "actions": {
-        "discover": "not_started",
-        "create": "not_started",
-        "read": "not_started",
-        "edit": "not_started",
+        "discover": "implemented",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
         "rebuild": "not_started",
-        "save_reopen": "not_started",
+        "save_reopen": "verified",
         "suppress_restore": "not_started",
         "delete_dependencies": "not_started",
         "negative_tests": "not_started",
-        "geometry_validation": "not_started"
+        "geometry_validation": "verified"
       },
-      "tests": [],
+      "tests": [
+        "R1-20.create.symmetric",
+        "R1-21.geometry.symmetric_ratio",
+        "R1-24.edit.symmetric",
+        "R1-27.save_reopen"
+      ],
       "evidence": [
         "docs/decisions/ribs.md#thickness",
+        "docs/decisions/ribs.md#edit",
         "docs/acceptance/evidence/20261028-e2-probe-60d9076/"
       ],
       "limitations": [
-        "Режим не реализован: маршрут документирован и измерен пробой, но в продукте его нет - наряд RIB_MODES",
+        "Режим проверен на одной геометрии (плита 40×30×20, цепочка 400 мм²) и одной толщине 6 мм; на других толщинах отношение приростов не измерялось",
+        "Отказ на НЕприменённый режим (чтение thin_type не совпало с запрошенным) реализован, но отрицательной строкой не вызывался: получить его можно только сломанным ядром",
         "SetThinParam(1, t, 0) (dtReverse) на измеренной геометрии отказывает (Update() = false) - вопрос В1 отчёта исследования, разбирается вместе с положениями Side"
       ],
       "depends_on": [

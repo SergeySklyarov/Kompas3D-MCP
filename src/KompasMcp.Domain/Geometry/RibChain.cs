@@ -190,9 +190,12 @@ public static class RibChain
     /// caller's chain times the thickness, and the kernel's own tolerance is far below this.</summary>
     public const double VolumeTolerance = 0.01d;
 
-    /// <summary>The volume a rib without draft must add: the chain's area times the thickness.</summary>
-    public static double? ExpectedVolumeMm3(double? areaMm2, double thicknessMm) =>
-        areaMm2 is double area && area > 0d && thicknessMm > 0d ? area * thicknessMm : null;
+    /// <summary>The volume a rib without draft must add: the chain's area times the thickness, doubled in the
+    /// symmetric mode (<c>dtBoth</c>), where the material lies on both sides of the sketch plane.</summary>
+    public static double? ExpectedVolumeMm3(double? areaMm2, double thicknessMm, bool symmetric = false) =>
+        areaMm2 is double area && area > 0d && thicknessMm > 0d
+            ? area * thicknessMm * (symmetric ? 2d : 1d)
+            : null;
 
     /// <summary>Whether the measured increase is the expected one within <see cref="VolumeTolerance"/>.</summary>
     public static bool VolumeMatches(double? expectedMm3, double? addedMm3)

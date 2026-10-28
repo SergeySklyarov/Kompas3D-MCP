@@ -12,7 +12,8 @@ namespace E5Probe;
 /// operations reach it, and whether the answers can be compared with an expected number.</summary>
 /// <remarks>WHY A PROBE AND NOT A TEST: the order is research - the product has no direct-face tool yet,
 /// so the only thing that can be measured is what KOMPAS itself answers on the documented routes.
-/// DOC: E5_RESEARCH_DEVELOPER_PROMPT.md §1.5; reference/kompas-sdk-v24/docs-wire-20261028-e5/
+/// DOC: E5_RESEARCH_DEVELOPER_PROMPT.md §1.5; the help snapshot this order captured under
+/// reference/kompas-sdk-v24/ (the `docs-wire-...-e5` directory).
 /// History: docs/decisions/direct-faces.md#probe</remarks>
 internal sealed class E5Probe : IDisposable
 {

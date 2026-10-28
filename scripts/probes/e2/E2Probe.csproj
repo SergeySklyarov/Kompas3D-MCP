@@ -4,7 +4,8 @@
     Research probe for the E2 block (stiffening ribs), run by hand and never by the solution build.
     INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
     the shipping graph could not be used to argue about what the product does.
-    DOC: E2_RESEARCH_DEVELOPER_PROMPT.md §1.5; reference/kompas-sdk-v24/docs-wire-20261028-e2/
+    DOC: E2_RESEARCH_DEVELOPER_PROMPT.md §1.5; the rib family of the SDK 24 help snapshot under
+    reference/kompas-sdk-v24/ (the `docs-wire-...-e2` directory).
     History: docs/decisions/ribs.md#probe
   -->
   <PropertyGroup>

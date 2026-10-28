@@ -10,11 +10,11 @@ namespace E2Probe;
 
 /// <summary>E2 probe: builds a plate with history, then measures whether the documented rib routes
 /// reach it and whether their answers can be compared with an expected number.</summary>
-/// <remarks>WHY A PROBE AND NOT A TEST: the order is research - the product has no rib tool yet, so the
-/// only thing that can be measured is what KOMPAS itself answers on the documented routes.
-/// DOC: E2_RESEARCH_DEVELOPER_PROMPT.md §1.5; reference/kompas-sdk-v24/docs-wire-20261028-e2/
-/// (ksribdefinition*.html, irib*.html, iribs*.html, imodelcontainer_ribs.html, ksribsideenum.html,
-/// ksthinparam*.html, direction_type.html, obj3dtype.html).
+/// <remarks>WHY A PROBE AND NOT A TEST: the order is research - the product has no rib tool yet, so
+/// the only thing measurable is what KOMPAS answers on the documented routes.
+/// DOC: E2_RESEARCH_DEVELOPER_PROMPT.md §1.5; the rib family of the SDK 24 help snapshot this order
+/// captured under reference/kompas-sdk-v24/ (`docs-wire-...-e2`): ksribdefinition*.html, irib*.html,
+/// iribs*.html, imodelcontainer_ribs.html, ksribsideenum.html, ksthinparam*.html, obj3dtype.html.
 /// History: docs/decisions/ribs.md#probe</remarks>
 internal sealed partial class E2Probe : IDisposable
 {

@@ -29,7 +29,10 @@
   (`Update() = false`, код КОМПАС 54): сдвиг всех граней внутрь на 5 мм при R3 вырождает скругления -
   инструмент отвечает `GEOMETRY_FAILED` с числами, а не успехом. Приёмка: группа E5 расширена
   строками `E5.TAN.*` и `E5.NEG.tangent_empty` - 25 строк E5 (23 PASS, 2 NAMED, FAIL 0);
-  `--self-test` 95/0; тесты **1630/1630** (+2 на `VolumeChanged` и `GroupWider`). Стражи:
+  `--self-test` 95/0; тесты **1630/1630** (+2 на `VolumeChanged` и `GroupWider`). Зачётный `--all` на
+  `c2d9498` (Release, дерево чистое): **1939 PASS, 8 NAMED, 3 UNKNOWN, FAIL 0**, 32 минуты, каталог
+  `20261028-050231-all-c2d9498`; против зачёта `95451e5` строк 1945 → 1950, добавлены шесть строк E5,
+  снята `E5.NEG.tangent_group` (утверждала снятое ограничение), прочие строки не разошлись. Стражи:
   `lint-dashes.py` 0, `long-comment-blocks.py` 0, `check-evidence-links.py` 0,
   `emit-coverage-matrix.py` - целостность OK. Строка матрицы `SM-24.move_faces.tangent_group` заведена
   с `geometry_validation = implemented` (численного предсказания объёма для группы нет) и

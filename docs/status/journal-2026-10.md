@@ -6856,6 +6856,9 @@ Release 0 предупреждений, тесты **1614/1614** (в `ExportOver
 изменённым файлам, `check-evidence-links.py` 0. Прибор править не понадобилось: ни одна строка
 `scripts/mcp-smoke.py` не читает `details.output_path` у отказа выгрузки DXF, а строка
 `DRW-05.export.negative_tests` дополнена живым повтором в тот же путь - отказ обязан назвать
-`field=output_path` и не тронуть файл. Строка 75 закрыта, новых нет: открыто **8**, этап 2 закрыт
-целиком. Решение - `docs/decisions/drawings.md#export-formats`; отчёт -
+`field=output_path` и не тронуть файл. Зачётный `--all` на `085de85` (Release, дерево чистое, 30
+минут) - 1916 PASS, 6 NAMED, 3 UNKNOWN, FAIL 0; строка `DRW-05.export.negative_tests` в прогоне PASS,
+повтор в тот же путь дал `PATH_NOT_ALLOWED` с `field=output_path` и не тронул файл (хеш до и после
+совпал), сверка строк с зачётом `a6a7911` дала `identical: true`. Строка 75 закрыта, новых нет:
+открыто **8**, этап 2 закрыт целиком. Решение - `docs/decisions/drawings.md#export-formats`; отчёт -
 `DEBT_ATOMIC_PUBLISH_0_13_REPORT_20261028.md`; коммит `4082c40`.

@@ -28,7 +28,11 @@
   `scripts/mcp-smoke.py` не читает `details.output_path` у отказа выгрузки DXF. Проверки: Release 0
   предупреждений, тесты **1614/1614**, `--self-test` прибора 95 проверок / 0 FAIL, `--emit-schemas
   schemas` - 118 схем и `git status` по `schemas/` пуст, стражи `lint-dashes.py` 0,
-  `long-comment-blocks.py` 0 по изменённым файлам, `check-evidence-links.py` 0.
+  `long-comment-blocks.py` 0 по изменённым файлам, `check-evidence-links.py` 0. Зачётный `--all` на
+  `085de85` (Release, дерево чистое): **1916 PASS, 6 NAMED, 3 UNKNOWN, FAIL 0**, 30 минут, каталог
+  `20261027-233828-all-085de85`; строка `DRW-05.export.negative_tests` в прогоне - PASS, повтор в тот
+  же путь дал `PATH_NOT_ALLOWED` с `field=output_path`, хеш файла до и после совпал;
+  `compare-run-rows.py` с зачётом `a6a7911` - `identical: true` (1925 строк).
   Долг: строка 75 закрыта, новых нет; строк 78, закрыто 70, открыто **8** (1, 3, 4, 10, 38, 53, 54,
   65) - бюджет 0.13 не превышен, этап 2 закрыт целиком. Решение -
   `docs/decisions/drawings.md#export-formats`. Отчёт - `DEBT_ATOMIC_PUBLISH_0_13_REPORT_20261028.md`.

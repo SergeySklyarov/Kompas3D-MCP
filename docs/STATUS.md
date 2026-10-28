@@ -14,24 +14,27 @@
 
 ## Текущее состояние
 
-- **Наряд `DIRECT_FACES_CORE` (28.10.2026, реализация E5: перемещение граней) - В РАБОТЕ, код и
-  контракт сделаны, приёмка не пройдена.** Заведён инструмент `kompas_move_faces` (119-й в каталоге,
-  профиль `direct-faces-v1`): маршрут `IPart7` → `ISurfaceContainer` → `FaceMovers.Add()` →
-  `IFaceMover.SetFaces(Faces, false)` + `Offset` + `Direction` → `IModelObject.Update()`, грань
-  переносится `TransferInterface(грань, ksAPI7Dual, 0)` → `IFace`. Сторона перемещения не
-  назначается: `Direction` - логический признак, поэтому контракт называет сторону полем `reverse`,
-  а результат сообщает `observed_offset_mm` со знаком. Успех подтверждается числами: объём против
-  `V + d·A`, площадь против `F + P·d` (A и P читаются у названных граней), арифметика - в
-  `Domain/Geometry/FaceMoveEffect.cs` с модульными тестами. Отказы до COM: пустой список граней,
-  нулевое смещение, повторы, `tangent_group=true`; по модели: грань чужого тела
-  (`details.body_index`), `Update()=false` (`GEOMETRY_FAILED` с `partial_effects`),
-  `Update()=true` без изменения объёма (`NO_GEOMETRY_CHANGE`). Сборка Debug и Release - 0 ошибок,
-  `dotnet test -c Debug`: 1616 из 1621 (5 падений - только порождённые `schemas/` и `docs/TOOLS.md`,
-  перегенерированы). **Не сделано:** приёмочная группа `mcp-smoke` E5 (положительный сценарий и
-  отказы), `--self-test` состава, `save_reopen`, зачётный `--all` на Release чистого коммита. Строка
-  матрицы `SM-24.move_faces` заведена как `implemented`/`not_started`, до `verified` не поднята.
+- **Наряд `DIRECT_FACES_CORE` (28.10.2026, реализация E5: перемещение граней) - ВЫПОЛНЕН.** Заведён
+  инструмент `kompas_move_faces` (119-й в каталоге, профиль `direct-faces-v1`): маршрут `IPart7` →
+  `ISurfaceContainer` → `FaceMovers.Add()` → `IFaceMover.SetFaces(Faces, false)` + `Offset` +
+  `Direction` → `IModelObject.Update()`, грань переносится `TransferInterface(грань, ksAPI7Dual, 0)` →
+  `IFace`. Сторона перемещения измерена обеими значениями на одной грани бруска: `reverse=false` уводит
+  грань ПРОТИВ внешней нормали (объём 24000 → 18000 мм³), `reverse=true` - по нормали (обратно 24000);
+  контракт называет сторону полем `reverse`, фактическое смещение со знаком сообщается в
+  `observed_offset_mm`. Успех подтверждается числами: объём против `V + d·A`, площадь против `F + P·d`
+  (`d` - измеренное смещение), арифметика - в `Domain/Geometry/FaceMoveEffect.cs` с модульными тестами.
+  Отказы до COM: пустой список граней, нулевое смещение, повторы, `tangent_group=true`; по модели: грань
+  чужого тела (`details.body_index`), `Update()=false` (`GEOMETRY_FAILED` с `partial_effects`),
+  `Update()=true` без изменения объёма (`NO_GEOMETRY_CHANGE`). Приёмка: группа `mcp-smoke` E5 - **11 PASS,
+  1 NAMED (`save_reopen`), FAIL 0**; `--self-test` 95/0; тесты **1621/1621** (было 1616 из 1621 - пять
+  падений были порождёнными `schemas/` и `docs/TOOLS.md` и ушли после перегенерации). Зачётный `--all` на
+  `13e522c` (Release, дерево чистое): **1927 PASS, 7 NAMED, 3 UNKNOWN, FAIL 0**, 31 минута, каталог
+  `20261028-020552-all-13e522c`; по группам отличие от зачёта `085de85` ровно одно - новая `e5`.
   Стражи: `lint-dashes.py` 0, `long-comment-blocks.py` 0, `check-evidence-links.py` 0,
-  `emit-coverage-matrix.py` - целостность OK. Решение - `docs/decisions/direct-faces.md#implementation`.
+  `emit-coverage-matrix.py` - целостность OK. **Не сделано:** `save_reopen` перемещённой грани, грань
+  чужого ТЕЛА (покрыта грань другого документа), ограничение по типу грани вместо отказа. Строка матрицы
+  `SM-24.move_faces` остаётся `metadata_found` с `save_reopen = not_started` и потому НЕ закрыта.
+  Решение - `docs/decisions/direct-faces.md#implementation`. Отчёт - `DIRECT_FACES_CORE_REPORT_20261028.md`.
 - **Наряд `E5_RESEARCH` (28.10.2026, исследование блока E5) - ИССЛЕДОВАНИЕ СДАНО, ПРОБЫ НЕ СДЕЛАНЫ.**
   Снято 354 страницы справки SDK v24 (набор `reference/kompas-sdk-v24/docs-wire-20261028-e5/`, 300
   страниц набора + 54 по ссылкам, все HTTP 200; отрицательный контроль - 404 на `ifaceresizer`,

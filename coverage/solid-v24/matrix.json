@@ -13265,6 +13265,68 @@
       }
     },
     {
+      "operation_id": "IGES.export",
+      "kind": "profile_operation",
+      "profile": null,
+      "priority": "practical_required",
+      "queue": null,
+      "context": "part.single_body",
+      "catalog_ref": "IGES",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_export_iges.json",
+      "adapter_route": "kompas_export_iges пишет файл документированным маршрутом API5 ksDocument3D.AdditionFormatParam() -> ksAdditionFormatParam.Init() -> format = format_IGES(4) -> ksDocument3D.SaveAsToAdditionFormat(output_path, param). DOC: ksdocument3d_saveastoadditionformat.html, d3formatconvtype.html, ksadditionformatparam.html. Ответ строится по байтам файла: разбор структуры IGES (записи по 80 колонок строкой, буква секции в колонке 73, счётчики записи T сверяются с фактическими, чётное D, сущности = D/2).",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_applicable",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "edit": "экспорт модель НЕ правит: он пишет файл, а ревизия документа не двигается (измерено строкой IGES.05: чужая ревизия отвергается REVISION_CONFLICT до конвертера)",
+        "rebuild": "перестраивать нечего: маршрут читает уже построенную модель и пишет файл",
+        "save_reopen": "документ не меняется, поэтому переоткрывать нечего; файл проверяется разбором в строке IGES.02 и повтором в тот же путь в IGES.07",
+        "suppress_restore": "подавлять и восстанавливать нечего: признак не создаётся",
+        "delete_dependencies": "признак не создаётся, зависимостей нет",
+        "geometry_validation": "IGES не несёт объёма для сверки, а обратный импорт нарядом не заказан: уровень инструмента - syntax_checked, и он назван в unverified_aspects строкой geometry_not_validated"
+      },
+      "tests": [
+        "IGES.01.discover",
+        "IGES.02.block",
+        "IGES.03.more_entities",
+        "IGES.04.assembly",
+        "IGES.05.revision_conflict",
+        "IGES.06.extension_refusal",
+        "IGES.07.overwrite",
+        "IGES.08.answer_shape"
+      ],
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "schemas/kompas_export_iges.json",
+        "docs/decisions/geometry.md#iges",
+        "coverage/solid-v24/catalog.json#IGES.export"
+      ],
+      "limitations": [
+        "Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.",
+        "Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.",
+        "Измерено на детали и на сборке с одним компонентом. Многокомпонентная сборка, чертёж и фрагмент этим маршрутом не проверялись; чертёж и фрагмент отвергаются по имени (WRONG_DOCUMENT_KIND)."
+      ],
+      "depends_on": [],
+      "discover_route": {
+        "mode": "any",
+        "routes": [
+          {
+            "tool": "kompas_capabilities"
+          }
+        ]
+      }
+    },
+    {
       "operation_id": "STEP.import",
       "kind": "profile_operation",
       "profile": "mechanical-core-v1",

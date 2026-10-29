@@ -272,18 +272,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 385
-- **строк_полностью_закрыто:** 194
-- **строк_с_каким_либо_прогрессом:** 221
-- **семейств_в_каталоге:** 48
+- **строк_каталога:** 386
+- **строк_полностью_закрыто:** 195
+- **строк_с_каким_либо_прогрессом:** 222
+- **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 152
+- **операций:** 153
 - **режимов_и_вариантов:** 236
-- **применимых_действий:** 3104
-- **действий_verified:** 1329
-- **покрытие_действий:** 42.8%
-- **распределение_статусов:** {'not_started': 1765, 'verified': 1329, 'not_applicable': 746, 'implemented': 10}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **применимых_действий:** 3108
+- **действий_verified:** 1333
+- **покрытие_действий:** 42.9%
+- **распределение_статусов:** {'not_started': 1765, 'verified': 1333, 'not_applicable': 752, 'implemented': 10}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 77, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -1035,6 +1035,7 @@
 | `BOM-02.bom.export` | BOM | practical_required | BOM_MINIMAL | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | BOM-02.discovery, BOM-02.schema, BOM-02.export_csv, BOM-02.export_json, BOM-02.export_overwrite, BOM-02.path_denied |
 | `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
+| `IGES.export` | IGES | practical_required | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | IGES.01.discover, IGES.02.block, IGES.03.more_entities, IGES.04.assembly, IGES.05.revision_conflict, IGES.06.extension_refusal, IGES.07.overwrite, IGES.08.answer_shape |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1831,6 +1832,10 @@
   - Номер раздела принадлежит стилю спецификации, а не порядку разделов ГОСТ (измерено: Документация 5, Детали 20); поэтому раздел читается, но не выводится из названия и обратно.
   - Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.
   - Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd.
+- `IGES.export` — закрыт целиком
+  - Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.
+  - Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.
+  - Измерено на детали и на сборке с одним компонентом. Многокомпонентная сборка, чертёж и фрагмент этим маршрутом не проверялись; чертёж и фрагмент отвергаются по имени (WRONG_DOCUMENT_KIND).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

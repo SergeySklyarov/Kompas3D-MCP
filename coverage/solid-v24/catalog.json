@@ -62,8 +62,8 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 48,
-   "operations": 152,
+   "families": 49,
+   "operations": 153,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 236,
    "operations_without_level": 0,
@@ -8400,7 +8400,43 @@
      ]
     }
    ]
-  }
+  } ,{
+  "id": "IGES",
+  "title": "Экспорт IGES: модель в файл открытого обменного формата",
+  "classification": "solid",
+  "level": "mcp_verified",
+  "evidence": {
+   "documentation": "Справка SDK 24 (зеркало): ksdocument3d_saveastoadditionformat.html - «SaveAsToAdditionFormat - Сохранить модель в файле формата SAT, XT, STEP, IGES, VRML, STL»; d3formatconvtype.html - format_IGES = 4; ksadditionformatparam.html - параметры записи в IGES, SAT, XT, X_B, STEP, STL, VRML; ksdocument3d_additionformatparam.html.",
+   "metadata": "Сканер tools/KompasMcp.InteropScan по обёрткам 24.0.0.2799: ksDocument3D.SaveAsToAdditionFormat(BSTR, LPDISPATCH) -> Boolean, ksDocument3D.AdditionFormatParam() -> ksAdditionFormatParam, ksAdditionFormatParam.format(Int16)/Init()",
+   "runtime": "Живой прогон строк IGES.<NN> группы IGES прибора scripts/mcp-smoke.py на Release-сборке: файл пишет КОМПАС, прибор читает его независимым разбором и сверяет счётчики секций и число сущностей с ответом продукта"
+  },
+  "route": "Экспорт - API5: ksDocument3D.AdditionFormatParam() -> ksAdditionFormatParam.Init() -> format = format_IGES(4) -> ksDocument3D.SaveAsToAdditionFormat(fileName, param). length/angle/formatBinary к IGES справкой не отнесены и не выставляются. Ответ строится по БАЙТАМ: записи по 80 колонок строкой (ядро пишет CRLF), буква секции в колонке 73, счётчики из записи T (в поле стоит буква секции) сверяются с фактическими, D чётное, сущностей = D/2.",
+  "mcp_support": "kompas_export_iges",
+  "operations": [
+   {
+    "id": "IGES.export",
+    "name": "Экспорт IGES: запись модели в файл и разбор его структуры",
+    "level": "mcp_verified",
+    "doc_source": [
+     "ksdocument3d_saveastoadditionformat",
+     "d3formatconvtype",
+     "ksadditionformatparam",
+     "ksdocument3d_additionformatparam"
+    ],
+    "interfaces": {
+     "api5": [
+      "ksDocument3D.AdditionFormatParam() -> ksAdditionFormatParam",
+      "ksAdditionFormatParam.Init() -> Boolean",
+      "ksAdditionFormatParam.format (Int16) = format_IGES = 4",
+      "ksDocument3D.SaveAsToAdditionFormat(BSTR fileName, LPDISPATCH additionPar) -> Boolean"
+     ]
+    },
+    "route": "Файл пишет документированный конвертер; сервер читает файл с диска и разбирает структуру IGES по открытому стандарту. Уровень - syntax_checked: структура верна, форма не сверяется (в IGES нет объёма, обратный импорт в наряд не входит).",
+    "modes": [],
+    "variants": []
+   }
+  ]
+ }
  ],
  "families_pending_entry": {
   "note": "Эти группы обязательны для исследования (docs/05 §5) и ещё не раскрыты; каждая имеет следующий проверяемый шаг. Их отсутствие в заполненном виде не позволяет объявлять инвентаризацию завершённой.",

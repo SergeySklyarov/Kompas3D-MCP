@@ -67,21 +67,28 @@ internal sealed partial class E2Probe : IDisposable
 
     public E2Probe(string outPath) => _outPath = Path.GetFullPath(outPath);
 
-    public int Run(bool keepOpen, string? savePath)
+    public int Run(bool keepOpen, string? savePath, bool positionsOnly = false)
     {
         try
         {
             Launch();
             DetectOrientation();
-            EntryPoints();
-            SideMatrix();
-            ThicknessModes();
-            Draft();
-            Refusals();
-            ReadAndEdit();
-            if (savePath is not null)
+            if (positionsOnly)
             {
-                SaveReopen(savePath);
+                PositionMatrix();
+            }
+            else
+            {
+                EntryPoints();
+                SideMatrix();
+                ThicknessModes();
+                Draft();
+                Refusals();
+                ReadAndEdit();
+                if (savePath is not null)
+                {
+                    SaveReopen(savePath);
+                }
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)

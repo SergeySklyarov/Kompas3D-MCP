@@ -21,7 +21,7 @@ internal static class Program
         var saveAt = Array.IndexOf(args, "--save-to");
         var savePath = saveAt >= 0 && saveAt + 1 < args.Length ? args[saveAt + 1] : null;
         using var probe = new E2Probe(outPath);
-        return probe.Run(args.Contains("--keep-open"), savePath);
+        return probe.Run(args.Contains("--keep-open"), savePath, args.Contains("--positions-only"));
     }
 
     /// <summary>Loads the vendor interop from the installation: the project references it with

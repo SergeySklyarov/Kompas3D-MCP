@@ -53981,6 +53981,21 @@ def r1_checks(client, rep, app_id, workdir):
     rep.add("R1-14.negative.side_range", "side = 4 отвергнут: положения вне 0..3 нет",
             "PASS" if code == "INVALID_ARGUMENT" else "FAIL", "код=%s текст=%s" % (code, why(env)))
 
+    # R1-29: 2 up и 3 down отвергаются ПО ИМЕНИ поля: на двух измеренных геометриях они не строят,
+    # а ядро на них отвечает голым false, неотличимым от ошибки контура.
+    orthogonal = []
+    for value in (2, 3):
+        env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
+                                        "side": value, "thickness_mm": THICKNESS})
+        details = ((env or {}).get("error") or {}).get("details") or {}
+        orthogonal.append((value, code, details.get("field")))
+    rep.add("R1-29.negative.side_orthogonal",
+            "side 2 и 3 отвергнуты именованным отказом с именем поля: ортогональные эскизу положения "
+            "не строят",
+            "PASS" if all(code == "CAPABILITY_UNAVAILABLE" and field == "side"
+                          for _value, code, field in orthogonal) else "FAIL",
+            "код и поле: %s" % (orthogonal,))
+
     env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": revision(doc),
                                     "side": 0, "thickness_mm": 0.0})
     rep.add("R1-15.negative.thickness", "нулевая толщина отвергнута",

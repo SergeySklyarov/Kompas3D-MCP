@@ -612,6 +612,21 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["side"] = command.Side });
         }
 
+        // LIMIT: 2 up and 3 down build on neither of the two measured geometries while 0 and 1 build on
+        // both, so the documented values are refused by name instead of reaching the kernel, which
+        // answers a bare false that reads as a broken contour.
+        // History: docs/decisions/ribs.md#side-enum
+        if (command.Side is 2 or 3)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "side = " + command.Side + " не поддерживается: ортогональные эскизу положения 2 up и 3 down "
+                + "измеренно не строят ни на одной из двух геометрий, где 0 left и 1 right строят. "
+                + "Задайте 0 или 1: положение отсчитывается от направления цепочки.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = "side", ["side"] = command.Side });
+        }
+
         if (!double.IsFinite(command.ThicknessMm) || command.ThicknessMm <= 0d)
         {
             throw new KompasContractException(

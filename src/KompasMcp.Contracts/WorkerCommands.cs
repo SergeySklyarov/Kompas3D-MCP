@@ -3183,10 +3183,11 @@ public sealed record RibCommand
     /// <summary>The chain sketch: an explicit <c>sketch:</c> reference. It also sets the document.</summary>
     public required string SketchRef { get; init; }
 
-    /// <summary>Rib position — <c>ksRibDefinition.side</c>, the values of <c>ksRibSideEnum</c> as they are:
-    /// 0 left, 1 right, 2 up, 3 down. MEASURED: the value counts from the DIRECTION OF THE CURVE, and on one
-    /// geometry only one of the four builds, so the field is passed as given and success is confirmed by volume.
-    /// </summary>
+    /// <summary>Rib position — <c>ksRibDefinition.side</c>: 0 left, 1 right. MEASURED: the value counts from
+    /// the DIRECTION OF THE CURVE, and only one of the two builds on a given chain, so the field is passed as
+    /// given and success is confirmed by volume. 2 up and 3 down are REFUSED by name: they build on neither of
+    /// the two measured geometries where 0 and 1 build. <c>LIMIT</c> — the enum is documented, the route is not.
+    /// History: docs/decisions/ribs.md#side-enum</summary>
     public int Side { get; init; }
 
     /// <summary>Rib thickness, mm — <c>SetThinParam(thinType, thickness, reverse)</c>. Strictly positive.</summary>

@@ -443,6 +443,12 @@ set_transform не считается успешным по одному воз�
 
 ## 2.8. Экспорт - P4
 
+Таблица ниже - редакция ПЛАНА: `kompas_export_flat_dxf`, `kompas_export_sheet_unfold`,
+`kompas_validate_export` и `kompas_prepare_package` в поставке не заведены. Действующие имена
+реестра: `kompas_export_step`, `kompas_export_stl`, `kompas_import_step`, `kompas_export_image`,
+`kompas_export_iges` и `kompas_export_sheet_metal_flat_dxf` (последнее - только развёртка листовой
+детали, `SMB-09`; плоская деталь без листового тела не выгружается).
+
 | Инструмент | Параметры | Особенности |
 |---|---|---|
 | `kompas_export_step` | document_id, output_path, overwrite=false, validation_level | Результат содержит фактически достигнутую проверку |
@@ -457,6 +463,9 @@ set_transform не считается успешным по одному воз�
 Для выданного артефакта обязательны source_revision и SHA256. Экспорт в процессе изменения документа должен быть сериализован; итоговый пакет не смешивает разные ревизии.
 
 ## 2.9. Ограниченные сценарии - P5
+
+**`kompas_run_scenario` в поставке не заведён**: ниже - контракт ПЛАНА, а не действующий
+инструмент. Он описан здесь как задание на наряд `SCENARIO_RUN`, а не как поведение 0.13.0.
 
 `kompas_run_scenario` принимает `scenario_version`, `document_id`, `operation_id`, `checkpoint_policy`, массив шагов `{step_id,tool,arguments}`, `on_error=stop|restore_checkpoint`. Разрешены только зарегистрированные инструменты и ссылки на поля результата предыдущего шага вида `{"from_step":"s1","field":"result.sketch_ref"}`.
 

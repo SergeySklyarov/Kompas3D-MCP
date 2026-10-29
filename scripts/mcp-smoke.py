@@ -17643,6 +17643,113 @@ def main():
                 f"read_only={denied.get('read_only_roots')!r} writable={denied.get('writable_roots')!r}",
                 details={"capabilities": caps_res, "refusal_details": denied})
 
+        # --- F04-F08: file policy and the Host log (spec 1.12 п.3, п.4, п.9) -----------------------
+        # The path decision is made BEFORE COM, so a well-formed but unknown document id is enough:
+        # the row measures the policy, not the document.
+
+        def path_refusal(path_value):
+            """(code, message, details) of a STEP export into `path_value` with a throwaway id."""
+            _err, penv, _prep = client.tool("kompas_export_step", {
+                "document_id": uuid.uuid4().hex, "expected_revision": 1,
+                "output_path": path_value, "operation_id": str(uuid.uuid4()),
+            })
+            perr = (penv or {}).get("error") or {}
+            return (error_code(penv), perr.get("message") or "",
+                    perr.get("details") if isinstance(perr.get("details"), dict) else {})
+
+        ro_roots = [r for r in (caps_res.get("read_only_roots") or []) if isinstance(r, str)]
+        ro_path = os.path.join(ro_roots[0], "proof-readonly.step") if ro_roots else None
+        ro_code, ro_msg, ro_details = path_refusal(ro_path) if ro_path else (None, "", {})
+
+        # INVARIANT: the most specific root decides, so a read-only root nested inside a writable one
+        # keeps denying writes. MEASURED: the local configuration nests read-only under scratch.
+        rep.add("F04",
+                "запись в корень только-для-чтения отвергнута PATH_NOT_ALLOWED по имени поля, даже "
+                "когда корень вложен в разрешённый для записи (spec 1.12 п.3)",
+                "PASS" if (ro_path and ro_code == "PATH_NOT_ALLOWED"
+                           and ro_details.get("field") == "output_path"
+                           and not os.path.isfile(ro_path)) else "FAIL",
+                f"корни чтения={ro_roots[:1]}; путь={ro_path}; код={ro_code}; "
+                f"field={ro_details.get('field')}; "
+                f"файл создан={os.path.isfile(ro_path) if ro_path else 'нет пути'}; {ro_msg}")
+
+        # DOC: root matching and containment are OrdinalIgnoreCase (PathPolicy.PathsEqual/IsWithin),
+        # so the case of a path can neither widen nor narrow access - the verdict is the same.
+        upper_ro = os.path.join(ro_roots[0].upper(), "PROOF-READONLY.STEP") if ro_roots else None
+        upper_ro_code = path_refusal(upper_ro)[0] if upper_ro else None
+        case_path = os.path.join(workdir, "proof-case.step")
+        lower_case_code = path_refusal(case_path)[0]
+        upper_case_code = path_refusal(case_path.upper())[0]
+        rep.add("F05",
+                "регистр пути не меняет вердикт: путь в разрешённом корне проходит в обоих регистрах, "
+                "путь в корне только-для-чтения отвергается в обоих (spec 1.12 п.4)",
+                "PASS" if (upper_ro and upper_ro_code == ro_code == "PATH_NOT_ALLOWED"
+                           and lower_case_code == upper_case_code
+                           and lower_case_code != "PATH_NOT_ALLOWED") else "FAIL",
+                f"корень чтения: {ro_code}/{upper_ro_code}; путь записи: "
+                f"{lower_case_code}/{upper_case_code} ({case_path})")
+
+        unc_path = "\\\\localhost\\C$\\Temp\\proof-unc.step"
+        unc_code, unc_msg, unc_details = path_refusal(unc_path)
+        rep.add("F06",
+                "UNC-путь отвергнут PATH_NOT_ALLOWED по имени поля при allow_unc_paths=false, а не "
+                "принят и не брошен исключением (spec 1.12 п.4)",
+                "PASS" if (unc_code == "PATH_NOT_ALLOWED"
+                           and unc_details.get("field") == "output_path"
+                           and "UNC" in unc_msg) else "FAIL",
+                f"путь={unc_path}; код={unc_code}; field={unc_details.get('field')}; {unc_msg}")
+
+        # MEASURED: Path.GetFullPath does not resolve junctions, so the policy walks the path up to
+        # the matched root and refuses the first reparse point it meets. A junction needs no admin.
+        junction = os.path.join(workdir, "proof-junction")
+        outside_dir = tempfile.mkdtemp(prefix="proof-junction-target-")
+        junction_code, junction_msg = None, "точка соединения не создана"
+        try:
+            made = subprocess.run(["cmd", "/c", "mklink", "/J", junction, outside_dir],
+                                  capture_output=True, text=True)
+            if made.returncode == 0 and os.path.isdir(junction):
+                junction_code, junction_msg, _jdet = path_refusal(
+                    os.path.join(junction, "proof-junction.step"))
+            else:
+                junction_msg = (made.stdout or "").strip() + " " + (made.stderr or "").strip()
+        finally:
+            if os.path.isdir(junction):
+                os.rmdir(junction)  # removes the junction itself; the target stays intact
+            shutil.rmtree(outside_dir, ignore_errors=True)
+        rep.add("F07",
+                "запись через junction внутри разрешённого корня отвергнута PATH_NOT_ALLOWED: "
+                "reparse-точка не выводит за пределы корня (spec 1.12 п.4)",
+                "PASS" if junction_code == "PATH_NOT_ALLOWED" else "FAIL",
+                f"код={junction_code}; {junction_msg}")
+
+        # DOC: HostLog.Build writes ts_utc (round-trip ISO, UTC), level, message, host_pid; HostLog.Open
+        # truncates the file above 16 MB, so a size limit and rotation by truncation do exist.
+        log_file = None
+        try:
+            with open(measured_config, encoding="utf-8-sig") as cfg:
+                log_file = json.load(cfg).get("log_path")
+        except (OSError, ValueError):
+            log_file = None
+        raw_lines = []
+        if log_file and os.path.isfile(log_file):
+            with open(log_file, encoding="utf-8", errors="replace") as lf:
+                raw_lines = [ln for ln in lf.read().splitlines() if ln.strip()]
+        unparsed, utc_ok, fields_ok = [], True, True
+        for line in raw_lines:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                unparsed.append(line[:60])
+                continue
+            utc_ok = utc_ok and str(entry.get("ts_utc") or "").endswith("+00:00")
+            fields_ok = fields_ok and all(k in entry for k in ("level", "message", "host_pid"))
+        rep.add("F08",
+                "журнал Хоста - JSONL: каждая строка разбирается, время в UTC, поля "
+                "ts_utc/level/message/host_pid на месте (spec 1.12 п.9)",
+                "PASS" if (raw_lines and not unparsed and utc_ok and fields_ok) else "FAIL",
+                f"файл={log_file}; строк={len(raw_lines)}; не разобрано={len(unparsed)}; "
+                f"время в UTC={utc_ok}; поля на месте={fields_ok}")
+
         h_err, h_env, _ = client.tool("kompas_health", {"detail": "minimal"})
         rep.add("H01", "kompas_health отвечает без подключения к КОМПАС",
                 "PASS" if h_env and h_env.get("status") == "succeeded" else "FAIL",
@@ -35553,7 +35660,7 @@ def hole_checks(client, rep, app_id, workdir):
                         "FAIL", "ссылка на признак не выдана в details отказа")
         close(doc_f)
 
-    # ═════════════ HO.27: ось отверстия лежит на ЗАПРОШЕННОЙ грани ═════════════
+    # ═════════════ HO.27ax: ось отверстия лежит на ЗАПРОШЕННОЙ грани ═════════════
     # Наряд `DEBT_EDGE_PLACEMENT` (долг 23): опорная грань адресуется ССЫЛКОЙ, и ядро может разрешить
     # её в другую грань тела, а на теле с равнозначными гранями объём переноса не различает. Признак —
     # ось найденной цилиндрической грани запрошенного диаметра: она обязана быть перпендикулярна
@@ -35563,12 +35670,12 @@ def hole_checks(client, rep, app_id, workdir):
     p27_desc = "отверстие: ось лежит на ЗАПРОШЕННОЙ грани, а не на другой"
     doc_27, rev_27, err_27 = new_doc("SM07-placement")
     if not doc_27:
-        rep.add("HO.27", p27_desc, "FAIL", f"документ не создан: {err_27}")
+        rep.add("HO.27ax", p27_desc, "FAIL", f"документ не создан: {err_27}")
     else:
         rev_27, top_27, body_27, berr_27 = build_plate_xy(
             doc_27, rev_27, "h-placement", 120.0, 80.0, 32.0)
         if berr_27:
-            rep.add("HO.27", p27_desc, "FAIL", f"заготовка: {berr_27}")
+            rep.add("HO.27ax", p27_desc, "FAIL", f"заготовка: {berr_27}")
         else:
             _e, env_27, _r = client.tool("kompas_hole", {
                 "face_ref": top_27, "expected_revision": rev_27, "mode": "blind_flat",
@@ -35582,7 +35689,7 @@ def hole_checks(client, rep, app_id, workdir):
                       and f.get("radius_mm") is not None and abs(f["radius_mm"] - 5.0) <= 0.01]
             axis_27 = (cyl_27[0].get("axis_mm") or []) if cyl_27 else []
             axis_ok_27 = len(axis_27) >= 3 and abs(abs(float(axis_27[2])) - 1.0) <= 1e-6
-            rep.add("HO.27", p27_desc,
+            rep.add("HO.27ax", p27_desc,
                     "PASS" if (error_code(env_27) is None and placement_27 is not None
                                and placement_27.get("passed") is True
                                and len(cyl_27) == 1 and axis_ok_27) else "FAIL",
@@ -38191,6 +38298,71 @@ def dirty_close_checks(client, rep, workdir, host, config):
                     and ctx2.get("dirty") is True else "FAIL",
                     f"conflict={conflict} ревизия {rev6} → {rev_after2} dirty={ctx2.get('dirty')}")
             close(doc6, "discard")
+
+        # ═══════════ DL.13: путь несохранённого документа - null, сохранённого - сам путь ═══════════
+        # DOC: DocumentContextDto.Path is null exactly while the document was never saved; once saved
+        # it must be the path that was written, normalised - not a guess and not an empty string.
+        doc13, rev13, _refs13, _vol13, err13 = plate("DL_path")
+        ctx13_before = context(doc13)[0] if doc13 else {}
+        path13 = os.path.join(workdir, "DL_path-null.m3d")
+        clear_path(path13)
+        _sv13, sv13_code, rev13 = save(doc13, rev13, path13) if doc13 else ({}, "NO_DOCUMENT", rev13)
+        ctx13_after = context(doc13)[0] if doc13 else {}
+        written13 = os.path.normcase(os.path.normpath(path13))
+        read13 = (os.path.normcase(os.path.normpath(str(ctx13_after.get("path"))))
+                  if ctx13_after.get("path") else None)
+        rep.add("DL.13",
+                "у несохранённого документа путь null, у сохранённого - записанный путь (spec 1.7 п.2)",
+                "PASS" if (doc13 and "path" in ctx13_before and ctx13_before.get("path") is None
+                           and not sv13_code and read13 == written13) else "FAIL",
+                f"до сохранения path={ctx13_before.get('path', 'поля нет')!r}; после: "
+                f"{ctx13_after.get('path')!r} (ожидание {path13}); сохранение={sv13_code}; "
+                f"построение={err13}")
+        if doc13:
+            close(doc13, "discard")
+
+        # ═══════════ DL.14: внешнее изменение файла читается заново ═══════════
+        # MEASURED: the kernel reads the file at open, so a file replaced behind the product's back is
+        # what the next open sees. The row compares VOLUMES: a stale model would keep the old one.
+        doc14, rev14, refs14, vol14a, err14 = plate("DL_external")
+        path14a = os.path.join(workdir, "DL_external-a.m3d")
+        path14b = os.path.join(workdir, "DL_external-b.m3d")
+        clear_path(path14a)
+        clear_path(path14b)
+        vol14b = None
+        ext_note = f"заготовка: {err14}"
+        if doc14 and refs14:
+            _sv14a, sv14a_code, rev14 = save(doc14, rev14, path14a)
+            env14 = tool("kompas_update_feature", {
+                "feature_ref": refs14[0], "expected_revision": rev14, "depth_mm": 14.0,
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            rev14 = env14.get("revision_after") or rev14
+            vol14b = measured(refs14[1]).get("volume_mm3")
+            _sv14b, sv14b_code, _r14b = save(doc14, rev14, path14b)
+            ext_note = (f"сохранения={sv14a_code}/{sv14b_code}; правка={error_code(env14)}; "
+                        f"объёмы {vol14a}→{vol14b}")
+        volume14 = None
+        if doc14 and vol14b is not None and os.path.isfile(path14b):
+            close(doc14, "discard")
+            shutil.copyfile(path14b, path14a)   # external replacement: the product did not do this
+            reopen14 = tool("kompas_open_document", {
+                "application_id": app_id, "path": path14a, "access": "edit",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            doc14b = ((reopen14.get("result") or {}).get("document_id")
+                      or reopen14.get("document_id"))
+            rows14 = bodies_of(doc14b) if doc14b else []
+            body14 = rows14[0].get("body_ref") if rows14 else None
+            volume14 = measured(body14).get("volume_mm3") if body14 else None
+            ext_note += f"; переоткрытие={error_code(reopen14)} объём из файла={volume14}"
+            if doc14b:
+                close(doc14b, "discard")
+        rep.add("DL.14",
+                "внешняя замена файла читается при переоткрытии: объём равен новому, а не прежнему "
+                "(spec 1.7 п.5, внешнее изменение)",
+                "PASS" if (volume14 is not None and vol14b is not None and vol14a is not None
+                           and abs(vol14b - vol14a) > 1.0
+                           and abs(volume14 - vol14b) <= max(0.01, 1e-6 * vol14b)) else "FAIL",
+                ext_note)
 
         # ═══════════ DL.12: изменение лежит в файле — читает ДРУГОЙ процесс ═══════════
         # Сначала закрывается сеанс прибора целиком: иначе «файл прочитан заново» доказывал бы

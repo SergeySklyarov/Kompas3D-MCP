@@ -34598,6 +34598,14 @@ def hole_checks(client, rep, app_id, workdir):
             return math.pi / 3 * radius ** 2 * (radius / math.tan(half))
         return math.pi / 3 * height * (radius ** 2 + radius * lower + lower ** 2)
 
+    def ref_id(ref):
+        """Строка-идентификатор ссылки: в РЕЗУЛЬТАТЕ инструмента feature_ref — объект ReferenceDto,
+        а в ошибке и в дереве — строка. Смешивать их нельзя: инструмент, ждущий строку, отвечает
+        «Ожидался тип string, фактически object» — то есть строка мерила бы форму ответа, а не режим."""
+        if isinstance(ref, dict):
+            return ref.get("id")
+        return ref
+
     def read_hole(feature_ref):
         _e, env, _r = client.tool("kompas_get_feature", {"feature_ref": feature_ref})
         return ((env or {}).get("result") or {}), env
@@ -34629,7 +34637,7 @@ def hole_checks(client, rep, app_id, workdir):
                     and abs(v_s - (ext_plate - s_removed)) <= max(0.01, 1e-6 * ext_plate) else "FAIL",
                     f"V={v_s} ожидание={ext_plate - s_removed:.6f} снято_ожидание={s_removed:.6f} "
                     f"дельта={s_checks.get('volume_delta', {}).get('observed')}")
-            s_ref = s_res.get("feature_ref")
+            s_ref = ref_id(s_res.get("feature_ref"))
             s_dto, s_gf = read_hole(s_ref) if s_ref else ({}, None)
             s_hole = s_dto.get("hole") or {}
             rep.add("HO.27e", "blind_sphere: дно читается как end_face=sphere, глубина как записана",
@@ -34649,7 +34657,9 @@ def hole_checks(client, rep, app_id, workdir):
                         "ссылка на признак не выдана")
             else:
                 rev_s, _ = ctx(doc_s)
-                delta_edit = s_removed - sphere_removed(s_after_edit)
+                # Знак дельты — часть определения величины: «до − после». Правка на МЕНЬШУЮ глубину
+                # снимает меньше, поэтому дельта ОТРИЦАТЕЛЬНА; первая редакция считала наоборот.
+                delta_edit = sphere_removed(s_after_edit) - s_removed
                 _e, se_env, _r = client.tool("kompas_update_feature", {
                     "feature_ref": s_ref, "expected_revision": rev_s, "depth_mm": s_after_edit,
                     "expected_volume_delta_mm3": delta_edit,
@@ -34733,7 +34743,7 @@ def hole_checks(client, rep, app_id, workdir):
             "face_ref": top_c, "expected_revision": rev_c, "mode": "through_conic",
             "diameter_mm": ext_d, "conic_angle_deg": angle}, cid, f"{conic_desc} {angle:g}°")
         rev_c = (c_env or {}).get("revision_after") or rev_c
-        c_ref = c_res.get("feature_ref")
+        c_ref = ref_id(c_res.get("feature_ref"))
         c_dto, c_gf = read_hole(c_ref) if c_ref else ({}, None)
         c_hole = c_dto.get("hole") or {}
         c_diam = c_hole.get("conic_diameter_mm")
@@ -34741,11 +34751,15 @@ def hole_checks(client, rep, app_id, workdir):
         c_want = (conic_removed(c_diam / 2, angle, ext_thick)
                   if isinstance(c_diam, (int, float)) and c_diam > 0 else None)
         v_c = c_res.get("volume_mm3")
+        # Ожидание печатается через готовые строки: при нечитанном диаметре его НЕТ, и арифметика в
+        # f-строке уронила бы весь прогон вместо честного FAIL этой строки.
+        c_want_txt = "не читается" if c_want is None else f"{c_want:.6f}"
+        c_left_txt = "не читается" if c_want is None else f"{ext_plate - c_want:.6f}"
         rep.add(cid + "v", f"through_conic {angle:g}°: остаточный объём равен усечённому конусу "
                            f"по прочитанному D и полууглу",
                 "PASS" if c_want is not None and v_c is not None
                 and abs(v_c - (ext_plate - c_want)) <= max(0.01, 0.005 * c_want) else "FAIL",
-                f"V={v_c} ожидание={ext_plate - c_want:.6f} снято_ожидание={c_want:.6f} "
+                f"V={v_c} ожидание={c_left_txt} снято_ожидание={c_want_txt} "
                 f"прочитано D={c_diam} угол={c_read_angle} (записан {angle:g}) "
                 f"err={error_code(c_gf)} msg={describe(c_env)[1]}")
         rep.add(cid + "e", f"through_conic {angle:g}°: угол читается обратно как записан, диаметр производный",
@@ -34883,7 +34897,7 @@ def hole_checks(client, rep, app_id, workdir):
                 "expected_volume_delta_mm3": s_removed}, "HO.35z",
                 "заготовка массива: одиночное blind_sphere Ø10 h10")
             rev_g = (g_env or {}).get("revision_after") or rev_g
-            g_ref = g_res.get("feature_ref")
+            g_ref = ref_id(g_res.get("feature_ref"))
             v_single = volume(body_g)
             if not g_ref:
                 rep.add("HO.35", pat_desc, "FAIL", "ссылка на признак не выдана")
@@ -34897,7 +34911,7 @@ def hole_checks(client, rep, app_id, workdir):
                     "operation_id": str(uuid.uuid4())}, timeout=300)
                 pt_res = (pt_env or {}).get("result") or {}
                 v_array = volume(body_g)
-                pt_ref = pt_res.get("feature_ref")
+                pt_ref = ref_id(pt_res.get("feature_ref"))
                 count1 = None
                 if pt_ref:
                     _e, gp_env, _r = client.tool("kompas_get_pattern", {"feature_ref": pt_ref})

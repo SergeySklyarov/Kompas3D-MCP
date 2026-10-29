@@ -240,6 +240,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             var hasBoreDepth = Present(arguments, "counterbore_depth_mm");
             var hasMouth = Present(arguments, "countersink_diameter_mm");
             var hasAngle = Present(arguments, "countersink_angle_deg");
+            var hasConicAngle = Present(arguments, "conic_angle_deg");
             var hasOffsetX = Present(arguments, "offset_x_mm");
             var hasOffsetY = Present(arguments, "offset_y_mm");
 
@@ -262,6 +263,43 @@ public sealed class ToolInvoker : IAsyncDisposable
                         "/mode", "mode",
                         "При mode=blind_flat поля выточки и зенковки запрещены: они принадлежат " +
                         "другим режимам и живут в других интерфейсах параметров.");
+                    break;
+                case "blind_flat" when hasConicAngle:
+                    yield return new SchemaViolation(
+                        "/conic_angle_deg", "mode",
+                        "При mode=blind_flat поле conic_angle_deg запрещено: угол конуса принадлежит " +
+                        "режиму through_conic.");
+                    break;
+                case "blind_sphere" when !holeHasDepth:
+                    yield return new SchemaViolation(
+                        "/depth_mm", "mode",
+                        "При mode=blind_sphere глубина depth_mm обязательна: сферическое дно " +
+                        "отсчитывается от конца цилиндра той же глубины.");
+                    break;
+                case "blind_sphere" when hasBoreDiameter || hasBoreDepth || hasMouth || hasAngle
+                    || hasConicAngle:
+                    yield return new SchemaViolation(
+                        "/mode", "mode",
+                        "При mode=blind_sphere поля выточки, зенковки и конуса запрещены: они " +
+                        "принадлежат другим режимам и живут в других интерфейсах параметров.");
+                    break;
+                case "through_conic" when holeHasDepth:
+                    yield return new SchemaViolation(
+                        "/depth_mm", "mode",
+                        "При mode=through_conic поле depth_mm запрещено: режим сквозной, а конус " +
+                        "задаётся углом при вершине.");
+                    break;
+                case "through_conic" when !hasConicAngle:
+                    yield return new SchemaViolation(
+                        "/conic_angle_deg", "mode",
+                        "При mode=through_conic нужен conic_angle_deg: без угла конус неотличим от " +
+                        "сквозного цилиндра.");
+                    break;
+                case "through_conic" when hasBoreDiameter || hasBoreDepth || hasMouth || hasAngle:
+                    yield return new SchemaViolation(
+                        "/mode", "mode",
+                        "При mode=through_conic поля выточки и зенковки запрещены: это другие режимы " +
+                        "с другими интерфейсами параметров.");
                     break;
                 case "through_counterbore" when holeHasDepth:
                     // Accepting a number and staying silent would pass off as applied a depth that the
@@ -303,7 +341,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                         "При mode=through_countersink поля выточки запрещены: это другой режим с " +
                         "другим интерфейсом параметров.");
                     break;
-                case not ("blind_flat" or "through_counterbore" or "through_countersink"):
+                case not ("blind_flat" or "blind_sphere" or "through_counterbore" or "through_countersink"
+                    or "through_conic"):
                     yield return new SchemaViolation(
                         "/mode", "enum", $"Неизвестный режим отверстия: {mode}.");
                     break;

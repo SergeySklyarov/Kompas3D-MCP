@@ -423,7 +423,8 @@ public partial class Api5Session
                             || command.CounterboreDiameterMm is not null
                             || command.CounterboreDepthMm is not null
                             || command.CountersinkDiameterMm is not null
-                            || command.CountersinkAngleDeg is not null;
+                            || command.CountersinkAngleDeg is not null
+                            || command.ConicAngleDeg is not null;
 
         // A thread designation (SM-08): the fields of the family are its own, and the feature is selected
         // by the TREE NUMBER 58 — a designation is not an operation and has no API5 definition.
@@ -451,9 +452,10 @@ public partial class Api5Session
                 "plane (и необязательно expected_part_volumes_mm3); для отсечения — plane и keep_side; " +
                 "для булевой операции — operation; для кинематической операции — shift_mode; для " +
                 "элемента по сечениям — section_refs; для оболочки — thickness_mm, thin_inward или " +
-                "face_refs; для отверстия — diameter_mm и поля СВОЕГО режима (depth_mm у blind_flat, " +
-                "counterbore_diameter_mm/counterbore_depth_mm у through_counterbore, " +
-                "countersink_diameter_mm/countersink_angle_deg у through_countersink). Цепочки " +
+                "face_refs; для отверстия — diameter_mm и поля СВОЕГО режима (depth_mm у blind_flat и " +
+                "blind_sphere, counterbore_diameter_mm/counterbore_depth_mm у through_counterbore, " +
+                "countersink_diameter_mm/countersink_angle_deg у through_countersink, conic_angle_deg " +
+                "у through_conic). Цепочки " +
                 "соответствия (couplings) — сопровождение набора сечений, а не самостоятельный вход: " +
                 "они передаются ВМЕСТЕ с section_refs; для ребра — draft_angle_deg, thickness_mm или " +
                 "symmetric.");

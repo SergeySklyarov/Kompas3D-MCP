@@ -63,7 +63,8 @@ public sealed class HoleEditClassificationTests
     private static readonly string[] HoleEditFields =
     [
         "diameter_mm", "counterbore_diameter_mm", "counterbore_depth_mm",
-        "countersink_diameter_mm", "countersink_angle_deg", "expected_volume_delta_mm3",
+        "countersink_diameter_mm", "countersink_angle_deg", "conic_angle_deg",
+        "expected_volume_delta_mm3",
     ];
 
     [Fact]

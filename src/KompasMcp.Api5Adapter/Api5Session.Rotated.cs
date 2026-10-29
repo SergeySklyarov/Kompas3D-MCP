@@ -581,7 +581,8 @@ public partial class Api5Session
             // couplings: the foreign-field list must receive every new contract field.
             || command.DiameterMm is not null || command.CounterboreDiameterMm is not null
             || command.CounterboreDepthMm is not null || command.CountersinkDiameterMm is not null
-            || command.CountersinkAngleDeg is not null || command.ExpectedVolumeDeltaMm3 is not null)
+            || command.CountersinkAngleDeg is not null || command.ConicAngleDeg is not null
+            || command.ExpectedVolumeDeltaMm3 is not null)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,

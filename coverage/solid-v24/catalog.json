@@ -65,7 +65,7 @@
    "families": 48,
    "operations": 152,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 233,
+   "modes_and_variants": 235,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -503,21 +503,23 @@
     "DepthType=ksDTReachThrough",
     "правление на месте",
     "переживание save→close→reopen",
-    "различение по entity.type=583 из API5 (EntityCollection(110))"
+    "различение по entity.type=583 из API5 (EntityCollection(110))",
+    "ksHTCounterbore (приёмка HO.2/HO.2v, режим through_counterbore)",
+    "ksHTCountersinking (приёмка HO.3/HO.3d, режим through_countersink)",
+    "ksHTConic по углу (ksCNAngle, приёмка HO.30…HO.33, режим through_conic)",
+    "EndFaceType=ksEFSphere (приёмка HO.27…HO.29, режим blind_sphere)"
    ],
    "modes_unverified": [
-    "ksHTConic",
-    "ksHTCountersinking",
-    "ksHTCounterbore",
-    "библиотечные отверстия",
-    "резьба (IThread)",
-    "несколько отверстий из одного эскиза",
-    "массив отверстий",
-    "произвольное положение через IHoleDisposal (AssociationVertex не сработал, LocalCoordinateSystem вернул null)"
+    "библиотечные отверстия (ksHTLfrLibrary): маршрут есть, но без файла библиотеки признак строится пустым — 0 переменных, 0 мм³ (E4 §4.7); вход невоспроизводим на этой машине",
+    "резьба (IThread): сеттера обозначения нет, ihole3d_setthread = 404 — обозначение задаётся отдельным признаком",
+    "несколько отверстий из одного эскиза: IHole3D не принимает эскиз ни одним членом набора",
+    "массив отверстий: маршрута в снятом наборе нет; массив над признаком отверстия закрыт строкой HO.35 через kompas_pattern_grid",
+    "ksDTObject (глубина до объекта): без объекта ядро принимает молча и снимает 0 мм³ (E4 §4.6) — в профиль не входит",
+    "ksCNDiameter (конус по диаметру): угол читается обратно как 0, снятое равно цилиндру (E4 §4.3) — в профиль не входит"
    ],
-   "mcp_support": "none — только композиция через kompas_extrude(cut), которая не закрывает семейство",
+   "mcp_support": "kompas_hole: blind_flat, blind_sphere, through_counterbore, through_countersink, through_conic; массив — kompas_pattern_grid над признаком",
    "blocked_api": "только для API5, с минимальным примером; по API7 возможность подтверждена частично",
-   "next_step": "покрыть конические/зенкующие режимы и библиотечные отверстия; разрешить вопрос произвольной позиции",
+   "next_step": "HOLE_COUNTERDRILL (цековка с зенковкой) и HOLE_DIRECTION_AND_OBJECT_DEPTH — по плану блока E4",
    "operations": [
     {
      "id": "SM-07.native_hole",
@@ -557,7 +559,14 @@
        "name": "цилиндрическое глухое с плоским дном",
        "level": "mcp_verified",
        "enum": "HoleType=ksHTBase, DepthType≠сквозь, EndFaceType=плоскость",
-       "note": "не исполнялось: проба measure'рила только сквозной эталон"
+       "note": "исполнено приёмкой MCP: HO.1/HO.1v (снято π·r²·h), правка глубины, save→close→reopen (HO.24/HO.25)"
+      },
+      {
+       "id": "SM-07.native_hole.blind_sphere",
+       "name": "цилиндрическое глухое со сферическим дном",
+       "level": "mcp_verified",
+       "enum": "HoleType=ksHTBase, DepthType=ksDTValue, EndFaceType=ksEFSphere",
+       "note": "исполнено приёмкой MCP: HO.27/HO.27v (снято π·r²·h + ⅔·π·r³), дно читается как end_face=sphere (HO.27e), правка глубины (HO.28), save→close→reopen (HO.29), массив 2×1 над признаком (HO.35)"
       },
       {
        "id": "SM-07.native_hole.through_cylindrical",
@@ -571,14 +580,21 @@
        "name": "сквозное с цековкой (цилиндрический уступ с плоским дном)",
        "level": "mcp_verified",
        "enum": "ISpotfacingHoleParameters / ksHTCounterbore",
-       "note": "не исполнялось (ADR-003 §7: проба была на одном эталоне)"
+       "note": "исполнено приёмкой MCP: HO.2/HO.2v/HO.2g (кольцевая выточка, вторая цилиндрическая грань Ø18)"
       },
       {
        "id": "SM-07.native_hole.through_countersink",
        "name": "сквозное с зенковкой (конический уступ)",
        "level": "mcp_verified",
        "enum": "ICountersinkHole3DParameters / ksHTCountersinking",
-       "note": "не исполнялось"
+       "note": "исполнено приёмкой MCP: HO.3/HO.3d — глубина ПРОИЗВОДНА от угла и устья, запись в неё не действует"
+      },
+      {
+       "id": "SM-07.native_hole.through_conic",
+       "name": "сквозное коническое по углу при вершине",
+       "level": "mcp_verified",
+       "enum": "IConicHoleParameters / ksHTConic, ConicType=ksCNAngle",
+       "note": "исполнено приёмкой MCP: HO.30/HO.31 на 30° и 60° (съём против усечённого конуса по ПРОЧИТАННОМУ диаметру и полууглу), HO.32 (правка угла), HO.33 (save→close→reopen). Записанное число — ПОЛНЫЙ угол; ksCNDiameter в профиль не входит (читает угол как 0, снимает цилиндр)"
       },
       {
        "id": "SM-07.native_hole.axis_by_face_normal",
@@ -591,11 +607,11 @@
        "id": "SM-07.native_hole.position_off_origin",
        "name": "произвольная допустимая позиция на плоской грани",
        "level": "mcp_verified",
-       "note": "ОТКРЫТО И КРИТИЧНО для выпуска: AssociationVertex из IPoints3D не изменил исход, ILocalCSObject.LocalCoordinateSystem вернул null; измеренное положение — центр грани (начало (0,0,0), ось (0,0,1)). Требует отдельной пробы до приёмки SM-07"
+       "note": "исполнено приёмкой MCP: HO.5/HO.5r — ось измерена ровно в (25, 15) парой offset_x_mm/offset_y_mm (Point3DParamSurface + ksOffsetByCoords), HO.6 — на сквозном режиме"
       }
      ],
-     "mcp_support": "none — композиция эскиз+вырезание (G02) семейство не закрывает",
-     "next_step": "проба позиционирования вне начала координат + три неисполненных режима на независимых пластинах"
+     "mcp_support": "kompas_hole: пять режимов (blind_flat, blind_sphere, through_counterbore, through_countersink, through_conic) плюс размещение смещением",
+     "next_step": "HOLE_COUNTERDRILL (цековка с зенковкой) и HOLE_DIRECTION_AND_OBJECT_DEPTH — по плану блока E4"
     }
    ]
   },

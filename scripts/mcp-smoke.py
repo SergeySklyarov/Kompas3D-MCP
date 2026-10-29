@@ -34579,6 +34579,339 @@ def hole_checks(client, rep, app_id, workdir):
 
         close(doc_n)
 
+    # ═════════════ HO.27…HO.35: расширенные режимы E4 — сферическое дно и конус по углу ═════════════
+    # Фикстура толще прежней (20 мм вместо 10): полусфера уходит на радиус НИЖЕ дна цилиндра, и на
+    # плите 10 мм она прорезала бы нижнюю грань — строка мерила бы обрезку телом, а не сферическое дно.
+    ext_thick = 20.0
+    ext_plate = 100.0 * 80.0 * ext_thick
+    ext_d = 10.0
+    ext_r = ext_d / 2
+
+    def sphere_removed(depth):
+        return math.pi * ext_r ** 2 * depth + 2 / 3 * math.pi * ext_r ** 3
+
+    def conic_removed(radius, angle_deg, height):
+        """Усечённый конус по ПРОЧИТАННОМУ радиусу и полууглу — закон измерен на 30° (E4 §4.2)."""
+        half = math.radians(angle_deg / 2)
+        lower = radius - height * math.tan(half)
+        if lower <= 1e-9:
+            return math.pi / 3 * radius ** 2 * (radius / math.tan(half))
+        return math.pi / 3 * height * (radius ** 2 + radius * lower + lower ** 2)
+
+    def read_hole(feature_ref):
+        _e, env, _r = client.tool("kompas_get_feature", {"feature_ref": feature_ref})
+        return ((env or {}).get("result") or {}), env
+
+    ext_path = os.path.join(workdir, "SM07-extended.m3d")
+
+    # ── сферическое дно: объём против «цилиндр + полусфера», дно читается как sphere ──
+    s_depth, s_after_edit = 10.0, 6.0
+    s_removed = sphere_removed(s_depth)
+    s_desc = "blind_sphere: глухое Ø10 h10 со сферическим дном, снято π·r²·h + ⅔·π·r³"
+    doc_s, rev_s, err_s = new_doc("SM07-sphere")
+    if not doc_s:
+        for cid in ("HO.27", "HO.28", "HO.29"):
+            rep.add(cid, s_desc, "FAIL", f"документ не создан: {err_s}")
+    else:
+        rev_s, top_s, body_s, berr_s = build_plate_xy(doc_s, rev_s, "h-sphere", 100.0, 80.0, ext_thick)
+        if berr_s:
+            for cid in ("HO.27", "HO.28", "HO.29"):
+                rep.add(cid, s_desc, "FAIL", f"заготовка: {berr_s}")
+        else:
+            s_env, s_res, s_checks = hole({
+                "face_ref": top_s, "expected_revision": rev_s, "mode": "blind_sphere",
+                "diameter_mm": ext_d, "depth_mm": s_depth,
+                "expected_volume_delta_mm3": s_removed}, "HO.27", s_desc)
+            rev_s = (s_env or {}).get("revision_after") or rev_s
+            v_s = s_res.get("volume_mm3")
+            rep.add("HO.27v", "blind_sphere: остаточный объём равен пластине минус цилиндр и полусфера",
+                    "PASS" if v_s is not None
+                    and abs(v_s - (ext_plate - s_removed)) <= max(0.01, 1e-6 * ext_plate) else "FAIL",
+                    f"V={v_s} ожидание={ext_plate - s_removed:.6f} снято_ожидание={s_removed:.6f} "
+                    f"дельта={s_checks.get('volume_delta', {}).get('observed')}")
+            s_ref = s_res.get("feature_ref")
+            s_dto, s_gf = read_hole(s_ref) if s_ref else ({}, None)
+            s_hole = s_dto.get("hole") or {}
+            rep.add("HO.27e", "blind_sphere: дно читается как end_face=sphere, глубина как записана",
+                    "PASS" if s_hole.get("end_face") == "sphere"
+                    and s_hole.get("end_face_type") == "ksEFSphere"
+                    and isinstance(s_hole.get("depth_mm"), (int, float))
+                    and abs(s_hole["depth_mm"] - s_depth) <= 1e-6 else "FAIL",
+                    f"family={s_dto.get('family')} end_face={s_hole.get('end_face')} "
+                    f"end_face_type={s_hole.get('end_face_type')} depth={s_hole.get('depth_mm')} "
+                    f"err={error_code(s_gf)}")
+
+            # ── правка глубины: пересчёт объёма, а не код возврата ──
+            if not s_ref:
+                rep.add("HO.28", "blind_sphere: правка глубины 10 → 6 снимает меньше на разницу", "FAIL",
+                        "ссылка на признак не выдана — править нечего")
+                rep.add("HO.29", "blind_sphere переживает save→close→reopen со сферическим дном", "FAIL",
+                        "ссылка на признак не выдана")
+            else:
+                rev_s, _ = ctx(doc_s)
+                delta_edit = s_removed - sphere_removed(s_after_edit)
+                _e, se_env, _r = client.tool("kompas_update_feature", {
+                    "feature_ref": s_ref, "expected_revision": rev_s, "depth_mm": s_after_edit,
+                    "expected_volume_delta_mm3": delta_edit,
+                    "operation_id": str(uuid.uuid4())}, timeout=300)
+                rev_s = (se_env or {}).get("revision_after") or rev_s
+                se_ver = (se_env or {}).get("verification") or {}
+                se_checks = {c.get("name"): c for c in (se_ver.get("checks") or [])}
+                v_after = volume(body_s)
+                rep.add("HO.28", "blind_sphere: правка глубины 10 → 6 снимает меньше на разницу "
+                                 "формул и остаётся сферической",
+                        "PASS" if error_code(se_env) is None
+                        and se_ver.get("level") == "geometry_checked"
+                        and se_checks.get("depth_read_back", {}).get("passed") is True
+                        and v_after is not None
+                        and abs(v_after - (ext_plate - sphere_removed(s_after_edit)))
+                        <= max(0.01, 1e-6 * ext_plate) else "FAIL",
+                        f"level={se_ver.get('level')} depth_обратно="
+                        f"{se_checks.get('depth_read_back', {}).get('observed')} V={v_after} "
+                        f"ожидание={ext_plate - sphere_removed(s_after_edit):.6f} "
+                        f"дельта={se_checks.get('volume_delta', {}).get('observed')} "
+                        f"err={error_code(se_env)} msg={describe(se_env)[1]}")
+
+                # ── сохранение-переоткрытие: дно и глубина читаются С ДИСКА ──
+                clear_path(ext_path)
+                _e, sv_env, _r = client.tool("kompas_save_document", {
+                    "document_id": doc_s, "expected_revision": rev_s, "target_path": ext_path,
+                    "operation_id": str(uuid.uuid4())})
+                _e, cl_env, _r = client.tool("kompas_close_document", {
+                    "document_id": doc_s, "dirty_policy": "refuse",
+                    "operation_id": str(uuid.uuid4())})
+                _e, op_env, _r = client.tool("kompas_open_document", {
+                    "application_id": app_id, "path": ext_path, "access": "edit",
+                    "operation_id": str(uuid.uuid4())})
+                doc_s2 = (((op_env or {}).get("result") or {}).get("document_id")
+                          or (op_env or {}).get("document_id"))
+                if not doc_s2:
+                    rep.add("HO.29", "blind_sphere переживает save→close→reopen со сферическим дном",
+                            "FAIL", f"не переоткрыт: {error_code(op_env)} msg={describe(op_env)[1]} "
+                                    f"save={error_code(sv_env)} close={error_code(cl_env)}")
+                else:
+                    _e, lf_env, _r = client.tool("kompas_list_features", {"document_id": doc_s2})
+                    rows_s2 = [f for f in ((lf_env or {}).get("result") or []) if isinstance(f, dict)]
+                    hole_s2 = [f for f in rows_s2 if str(f.get("type")) == "583"]
+                    ref_s2 = hole_s2[0].get("feature_ref") if hole_s2 else None
+                    dto_s2, _gf2 = read_hole(ref_s2) if ref_s2 else ({}, None)
+                    hole_dto_s2 = dto_s2.get("hole") or {}
+                    body_s2 = (bodies(doc_s2) or [{}])[0].get("body_ref")
+                    v_s2 = volume(body_s2)
+                    rep.add("HO.29", "blind_sphere переживает save→close→reopen: дно sphere, глубина 6",
+                            "PASS" if len(hole_s2) == 1
+                            and hole_dto_s2.get("end_face") == "sphere"
+                            and isinstance(hole_dto_s2.get("depth_mm"), (int, float))
+                            and abs(hole_dto_s2["depth_mm"] - s_after_edit) <= 1e-6
+                            and v_s2 is not None
+                            and abs(v_s2 - (ext_plate - sphere_removed(s_after_edit)))
+                            <= max(0.01, 1e-6 * ext_plate) else "FAIL",
+                            f"признаков_583={len(hole_s2)} end_face={hole_dto_s2.get('end_face')} "
+                            f"depth={hole_dto_s2.get('depth_mm')} V={v_s2} "
+                            f"ожидание={ext_plate - sphere_removed(s_after_edit):.6f}")
+                    close(doc_s2)
+        close(doc_s)
+
+    # ── конус по углу: два угла, каждый против усечённого конуса по ПРОЧИТАННОМУ диаметру ──
+    conic_desc = "through_conic: конус насквозь по углу при вершине, съём против усечённого конуса"
+    conic_cases = (("HO.30", 30.0), ("HO.31", 60.0))
+    conic_rows = {}
+    for cid, angle in conic_cases:
+        doc_c, rev_c, err_c = new_doc(f"SM07-conic-{int(angle)}")
+        if not doc_c:
+            rep.add(cid, f"{conic_desc} {angle:g}°", "FAIL", f"документ не создан: {err_c}")
+            continue
+        rev_c, top_c, body_c, berr_c = build_plate_xy(
+            doc_c, rev_c, f"h-conic-{int(angle)}", 100.0, 80.0, ext_thick)
+        if berr_c:
+            rep.add(cid, f"{conic_desc} {angle:g}°", "FAIL", f"заготовка: {berr_c}")
+            close(doc_c)
+            continue
+        # Ожидание считается ПОСЛЕ вызова, от прочитанного диаметра: при способе «по углу» верхний
+        # диаметр производен, и подставлять в формулу запрошенные 10 мм значило бы проверять догадку.
+        c_env, c_res, c_checks = hole({
+            "face_ref": top_c, "expected_revision": rev_c, "mode": "through_conic",
+            "diameter_mm": ext_d, "conic_angle_deg": angle}, cid, f"{conic_desc} {angle:g}°")
+        rev_c = (c_env or {}).get("revision_after") or rev_c
+        c_ref = c_res.get("feature_ref")
+        c_dto, c_gf = read_hole(c_ref) if c_ref else ({}, None)
+        c_hole = c_dto.get("hole") or {}
+        c_diam = c_hole.get("conic_diameter_mm")
+        c_read_angle = c_hole.get("conic_angle_deg")
+        c_want = (conic_removed(c_diam / 2, angle, ext_thick)
+                  if isinstance(c_diam, (int, float)) and c_diam > 0 else None)
+        v_c = c_res.get("volume_mm3")
+        rep.add(cid + "v", f"through_conic {angle:g}°: остаточный объём равен усечённому конусу "
+                           f"по прочитанному D и полууглу",
+                "PASS" if c_want is not None and v_c is not None
+                and abs(v_c - (ext_plate - c_want)) <= max(0.01, 0.005 * c_want) else "FAIL",
+                f"V={v_c} ожидание={ext_plate - c_want:.6f} снято_ожидание={c_want:.6f} "
+                f"прочитано D={c_diam} угол={c_read_angle} (записан {angle:g}) "
+                f"err={error_code(c_gf)} msg={describe(c_env)[1]}")
+        rep.add(cid + "e", f"through_conic {angle:g}°: угол читается обратно как записан, диаметр производный",
+                "PASS" if isinstance(c_read_angle, (int, float))
+                and abs(c_read_angle - angle) <= 1e-6
+                and isinstance(c_diam, (int, float)) and c_diam > 0 else "FAIL",
+                f"угол={c_read_angle} (записан {angle:g}) D_производный={c_diam} "
+                f"тип={c_hole.get('hole_type')} конус={c_hole.get('conic_type')}")
+        conic_rows[cid] = (doc_c, body_c, c_ref, angle, c_diam, c_want)
+
+    # ── правка угла 30 → 60 и сохранение-переоткрытие ──
+    first = conic_rows.get("HO.30")
+    if not first:
+        rep.add("HO.32", "through_conic: правка угла 30 → 60 меняет снятый материал по формуле", "FAIL",
+                "опорное построение 30° не удалось")
+        rep.add("HO.33", "through_conic переживает save→close→reopen с углом 60", "FAIL",
+                "опорное построение 30° не удалось")
+    else:
+        doc_c, body_c, c_ref, angle0, diam0, want0 = first
+        if not c_ref:
+            rep.add("HO.32", "through_conic: правка угла 30 → 60 меняет снятый материал по формуле",
+                    "FAIL", "ссылка на признак не выдана — править нечего")
+            rep.add("HO.33", "through_conic переживает save→close→reopen с углом 60", "FAIL",
+                    "ссылка на признак не выдана")
+        else:
+            rev_c, _ = ctx(doc_c)
+            _e, ce_env, _r = client.tool("kompas_update_feature", {
+                "feature_ref": c_ref, "expected_revision": rev_c, "conic_angle_deg": 60.0,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            rev_c = (ce_env or {}).get("revision_after") or rev_c
+            ce_ver = (ce_env or {}).get("verification") or {}
+            ce_checks = {c.get("name"): c for c in (ce_ver.get("checks") or [])}
+            c_dto2, _gf = read_hole(c_ref)
+            c_hole2 = c_dto2.get("hole") or {}
+            diam1 = c_hole2.get("conic_diameter_mm")
+            want1 = (conic_removed(diam1 / 2, 60.0, ext_thick)
+                     if isinstance(diam1, (int, float)) and diam1 > 0 else None)
+            v_c1 = volume(body_c)
+            rep.add("HO.32", "through_conic: правка угла 30 → 60 меняет снятый материал по формуле, "
+                             "угол читается 60",
+                    "PASS" if error_code(ce_env) is None
+                    and ce_checks.get("conic_angle_read_back", {}).get("passed") is True
+                    and want1 is not None and v_c1 is not None
+                    and abs(v_c1 - (ext_plate - want1)) <= max(0.01, 0.005 * want1) else "FAIL",
+                    f"угол_обратно={ce_checks.get('conic_angle_read_back', {}).get('observed')} "
+                    f"D_прочитан={diam1} V={v_c1} ожидание={None if want1 is None else round(ext_plate - want1, 6)} "
+                    f"было D={diam0} снято={None if want0 is None else round(want0, 6)} "
+                    f"level={ce_ver.get('level')} err={error_code(ce_env)} msg={describe(ce_env)[1]}")
+
+            clear_path(ext_path)
+            _e, sv_env, _r = client.tool("kompas_save_document", {
+                "document_id": doc_c, "expected_revision": rev_c, "target_path": ext_path,
+                "operation_id": str(uuid.uuid4())})
+            _e, cl_env, _r = client.tool("kompas_close_document", {
+                "document_id": doc_c, "dirty_policy": "refuse",
+                "operation_id": str(uuid.uuid4())})
+            _e, op_env, _r = client.tool("kompas_open_document", {
+                "application_id": app_id, "path": ext_path, "access": "edit",
+                "operation_id": str(uuid.uuid4())})
+            doc_c2 = (((op_env or {}).get("result") or {}).get("document_id")
+                      or (op_env or {}).get("document_id"))
+            if not doc_c2:
+                rep.add("HO.33", "through_conic переживает save→close→reopen с углом 60", "FAIL",
+                        f"не переоткрыт: {error_code(op_env)} msg={describe(op_env)[1]} "
+                        f"save={error_code(sv_env)} close={error_code(cl_env)}")
+            else:
+                _e, lf_env, _r = client.tool("kompas_list_features", {"document_id": doc_c2})
+                rows_c2 = [f for f in ((lf_env or {}).get("result") or []) if isinstance(f, dict)]
+                hole_c2 = [f for f in rows_c2 if str(f.get("type")) == "583"]
+                ref_c2 = hole_c2[0].get("feature_ref") if hole_c2 else None
+                dto_c2, _gf3 = read_hole(ref_c2) if ref_c2 else ({}, None)
+                hole_dto_c2 = dto_c2.get("hole") or {}
+                body_c2 = (bodies(doc_c2) or [{}])[0].get("body_ref")
+                v_c2 = volume(body_c2)
+                rep.add("HO.33", "through_conic переживает save→close→reopen: угол 60 читается с диска",
+                        "PASS" if len(hole_c2) == 1
+                        and isinstance(hole_dto_c2.get("conic_angle_deg"), (int, float))
+                        and abs(hole_dto_c2["conic_angle_deg"] - 60.0) <= 1e-6
+                        and v_c1 is not None and v_c2 is not None
+                        and abs(v_c2 - v_c1) <= 0.01 else "FAIL",
+                        f"признаков_583={len(hole_c2)} угол={hole_dto_c2.get('conic_angle_deg')} "
+                        f"D={hole_dto_c2.get('conic_diameter_mm')} V_до={v_c1} V_после={v_c2}")
+                close(doc_c2)
+        close(doc_c)
+
+    # ── границы: угол вне (0;180) и чужие поля режима отвергаются ДО мутации ──
+    doc_n, rev_n, err_n = new_doc("SM07-extended-negative")
+    if not doc_n:
+        rep.add("HO.34", "угол конуса вне (0;180) и чужие поля режима отвергнуты, тело не изменено",
+                "FAIL", f"документ не создан: {err_n}")
+    else:
+        rev_n, top_n, body_n, berr_n = build_plate_xy(doc_n, rev_n, "h-ext-neg", 100.0, 80.0, ext_thick)
+        if berr_n:
+            rep.add("HO.34", "угол конуса вне (0;180) и чужие поля режима отвергнуты, тело не изменено",
+                    "FAIL", f"заготовка: {berr_n}")
+        else:
+            v_n_before = volume(body_n)
+            base_n = {"face_ref": top_n, "expected_revision": rev_n, "diameter_mm": ext_d}
+            negatives = (
+                ("угол 0", dict(base_n, mode="through_conic", conic_angle_deg=0.0)),
+                ("угол 180", dict(base_n, mode="through_conic", conic_angle_deg=180.0)),
+                ("угол −5", dict(base_n, mode="through_conic", conic_angle_deg=-5.0)),
+                ("конус без угла", dict(base_n, mode="through_conic")),
+                ("глубина у конуса", dict(base_n, mode="through_conic", conic_angle_deg=30.0,
+                                          depth_mm=6.0)),
+                ("угол конуса у сферического дна", dict(base_n, mode="blind_sphere",
+                                                        depth_mm=6.0, conic_angle_deg=30.0)),
+            )
+            seen_n = []
+            for label, args in negatives:
+                _e, neg_env, _r = client.tool("kompas_hole", dict(
+                    args, operation_id=str(uuid.uuid4())), timeout=120)
+                seen_n.append(f"{label}→{error_code(neg_env)}")
+            v_n_after = volume(body_n)
+            rep.add("HO.34", "угол конуса вне (0;180) и чужие поля режима отвергнуты, тело не изменено",
+                    "PASS" if all(s.endswith("→INVALID_ARGUMENT") for s in seen_n)
+                    and v_n_before is not None and v_n_after is not None
+                    and abs(v_n_after - v_n_before) <= 0.01 else "FAIL",
+                    f"{'; '.join(seen_n)}; V {v_n_before}→{v_n_after}")
+        close(doc_n)
+
+    # ── массив 2×1 над признаком отверстия: съём РОВНО вдвое против одиночного ──
+    pat_desc = "массив 2×1 над признаком blind_sphere: съём ровно вдвое против одиночного"
+    doc_g, rev_g, err_g = new_doc("SM07-hole-array")
+    if not doc_g:
+        rep.add("HO.35", pat_desc, "FAIL", f"документ не создан: {err_g}")
+    else:
+        rev_g, top_g, body_g, berr_g = build_plate_xy(doc_g, rev_g, "h-array", 100.0, 80.0, ext_thick)
+        if berr_g:
+            rep.add("HO.35", pat_desc, "FAIL", f"заготовка: {berr_g}")
+        else:
+            g_env, g_res, _g_checks = hole({
+                "face_ref": top_g, "expected_revision": rev_g, "mode": "blind_sphere",
+                "diameter_mm": ext_d, "depth_mm": s_depth,
+                "expected_volume_delta_mm3": s_removed}, "HO.35z",
+                "заготовка массива: одиночное blind_sphere Ø10 h10")
+            rev_g = (g_env or {}).get("revision_after") or rev_g
+            g_ref = g_res.get("feature_ref")
+            v_single = volume(body_g)
+            if not g_ref:
+                rep.add("HO.35", pat_desc, "FAIL", "ссылка на признак не выдана")
+            else:
+                rev_g, _ = ctx(doc_g)
+                _e, pt_env, _r = client.tool("kompas_pattern_grid", {
+                    "document_id": doc_g, "expected_revision": rev_g, "copy_kind": "operations",
+                    "source_refs": [g_ref],
+                    "axis1_point1_mm": [0.0, 0.0, 0.0], "axis1_point2_mm": [100.0, 0.0, 0.0],
+                    "step1_mm": 20.0, "count1": 2,
+                    "operation_id": str(uuid.uuid4())}, timeout=300)
+                pt_res = (pt_env or {}).get("result") or {}
+                v_array = volume(body_g)
+                pt_ref = pt_res.get("feature_ref")
+                count1 = None
+                if pt_ref:
+                    _e, gp_env, _r = client.tool("kompas_get_pattern", {"feature_ref": pt_ref})
+                    count1 = ((gp_env or {}).get("result") or {}).get("readout", {}).get("count1")
+                rep.add("HO.35", pat_desc,
+                        "PASS" if error_code(pt_env) is None
+                        and v_single is not None and v_array is not None
+                        and abs((v_single - v_array) - s_removed) <= max(0.01, 0.005 * s_removed)
+                        and count1 == 2 else "FAIL",
+                        f"одиночное V={v_single} массив V={v_array} снято_одиночным={s_removed:.6f} "
+                        f"снято_массивом={None if v_single is None or v_array is None else round(v_single - v_array, 6)} "
+                        f"count1={count1} err={error_code(pt_env)} msg={describe(pt_env)[1]}")
+        close(doc_g)
+
     # ═════════════ HO.26: отверстие, которое КОМПАС не построил, - отказ, а не succeeded ═════════════
     # Дефект заказчика 15.10.2026: на боковой грани X=120 плиты 120×80×32 вызов kompas_hole отвечал
     # status=succeeded и error=null, а материал не снимался: признак «Отверстие:N» оставался в дереве

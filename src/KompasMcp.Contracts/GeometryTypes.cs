@@ -176,6 +176,20 @@ public enum HoleMode
 
     /// <summary>Through countersink: a pilot through plus a conical chamfer.</summary>
     ThroughCountersink,
+
+    /// <summary>Blind with a SPHERICAL bottom: <c>ksDTValue</c> + <c>ksEFSphere</c>; removes
+    /// π·r²·h + ⅔·π·r³.</summary>
+    /// <remarks>MEASURED: the bottom ADDS a hemisphere beyond the cylinder of the same depth — the depth is
+    /// measured to the cylinder's end, not to the sphere's apex.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    BlindSphere,
+
+    /// <summary>Through CONE given by its apex angle: <c>ksHTConic</c> + <c>ksCNAngle</c>; the diameter is
+    /// the one on the support face.</summary>
+    /// <remarks>MEASURED: the written angle is the FULL apex angle (30 → half-angle 15°), and the top
+    /// diameter is DERIVED from it. The diameter-driven <c>ksCNDiameter</c> degenerates into a cylinder.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    ThroughConic,
 }
 
 /// <summary>Rotation operation kind. THIS value decides the action, not <c>IRotated1.OperationResult</c>.</summary>

@@ -401,7 +401,10 @@ public sealed record HoleReadDto(
     double? CountersinkAngleDeg,
     double? CountersinkDepthMm,
     string? CountersinkType,
-    IReadOnlyList<string> ReadRoutes);
+    IReadOnlyList<string> ReadRoutes,
+    string? ConicType = null,
+    double? ConicAngleDeg = null,
+    double? ConicDiameterMm = null);
 
 /// <summary>Typed API7 operations over native holes (SM-07); every route is MEASURED on v24.</summary>
 /// <remarks>INVARIANT: mode parameters live not on <c>IHole3D</c> but on <c>HoleParameters</c>, a read-only
@@ -426,6 +429,12 @@ internal static class Api7Hole
 
     /// <summary>A flat bottom (the only mode confirmed by a number in M.4).</summary>
     private const ksEndFaceTypeEnum EndFaceFlat = ksEndFaceTypeEnum.ksEFFlat;
+
+    /// <summary>A spherical bottom of a blind hole — MEASURED to add a hemisphere beyond the cylinder.</summary>
+    private const ksEndFaceTypeEnum EndFaceSphere = ksEndFaceTypeEnum.ksEFSphere;
+
+    /// <summary>The cone is driven by its apex angle; the diameter is then derived.</summary>
+    private const ksConicTypeEnum ConicByAngle = ksConicTypeEnum.ksCNAngle;
 
     /// <summary>A "diameter + angle" countersink: with it the depth is derived from the angle.</summary>
     private const ksCountersinkTypeEnum CountersinkDiameterAngle = ksCountersinkTypeEnum.ksCTDiameterAngle;
@@ -460,6 +469,7 @@ internal static class Api7Hole
 
             var spotfacing = hole.HoleParameters as ISpotfacingHoleParameters;
             var countersink = hole.HoleParameters as ICountersinkHoleParameters;
+            var conic = hole.HoleParameters as IConicHoleParameters;
 
             return new HoleReadDto(
                 HoleType: Text(() => hole.HoleType.ToString()),
@@ -473,7 +483,10 @@ internal static class Api7Hole
                 CountersinkAngleDeg: countersink is null ? null : Read(() => countersink.CountersinkAngle),
                 CountersinkDepthMm: countersink is null ? null : Read(() => countersink.CountersinkDepth),
                 CountersinkType: countersink is null ? null : Text(() => countersink.CountersinkType.ToString()),
-                ReadRoutes: new[] { "API7 IHole3D" });
+                ReadRoutes: new[] { "API7 IHole3D" },
+                ConicType: conic is null ? null : Text(() => conic.ConicType.ToString()),
+                ConicAngleDeg: conic is null ? null : Read(() => conic.ConicAngle),
+                ConicDiameterMm: conic is null ? null : Read(() => conic.ConicDiameter));
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
@@ -493,7 +506,8 @@ internal static class Api7Hole
         IModelContainer container,
         int index,
         double? diameterMm,
-        double? depthMm)
+        double? depthMm,
+        bool sphericalBottom = false)
     {
         try
         {
@@ -504,7 +518,9 @@ internal static class Api7Hole
 
             hole.HoleType = ksHoleTypeEnum.ksHTBase;
             hole.DepthType = DepthByValue;
-            hole.EndFaceType = EndFaceFlat;
+            // The bottom is part of the mode, not a caller parameter: writing ksEFFlat on a spherical
+            // hole would silently turn it into a flat one.
+            hole.EndFaceType = sphericalBottom ? EndFaceSphere : EndFaceFlat;
             if (diameterMm is double diameter)
             {
                 hole.Diameter = diameter;
@@ -644,6 +660,55 @@ internal static class Api7Hole
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             return (false, ex.GetType().Name + ": " + ex.Message, null);
+        }
+    }
+
+    /// <summary>Edit an EXISTING through cone (mode <c>through_conic</c>).</summary>
+    /// <remarks>MEASURED: with <c>ConicType = ksCNAngle</c> the angle is the driver and the top diameter is
+    /// derived; the mode is identified by <c>HoleType = ksHTConic</c> plus that same type.
+    /// INVARIANT: the conic type is written before the numbers — under <c>ksCNDiameter</c> the angle does
+    /// not stick at all.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    public static (bool Written, string? Failure) TryWriteConic(
+        IModelContainer container,
+        int index,
+        double? diameterMm,
+        double? angleDeg)
+    {
+        try
+        {
+            if (container.Holes3D[index] is not IHole3D hole)
+            {
+                return (false, $"элемент коллекции Holes3D[{index}] не отдаёт IHole3D");
+            }
+
+            hole.HoleType = ksHoleTypeEnum.ksHTConic;
+            hole.DepthType = DepthReachThrough;
+            if (diameterMm is double diameter)
+            {
+                hole.Diameter = diameter;
+            }
+
+            if (hole.HoleParameters is not IConicHoleParameters conic)
+            {
+                return (false,
+                    "IHole3D.HoleParameters не приводится к IConicHoleParameters — параметры конуса " +
+                    "записать некуда");
+            }
+
+            conic.ConicType = ConicByAngle;
+            if (angleDeg is double angle)
+            {
+                conic.ConicAngle = angle;
+            }
+
+            return hole.Update()
+                ? (true, null)
+                : (false, "IHole3D.Update() вернул false — числа записаны, но признак не перестроен");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, ex.GetType().Name + ": " + ex.Message);
         }
     }
 
@@ -837,14 +902,16 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>Create a flat-bottomed blind hole: <c>ksDTValue</c> (there is no <c>ksDTBlind</c> member
-    /// in the vendor enum) plus <c>ksEFFlat</c>. Material removed equals <c>π·r²·h</c>.</summary>
+    /// <summary>Create a blind hole: <c>ksDTValue</c> (there is no <c>ksDTBlind</c> member in the vendor
+    /// enum) with a flat or a SPHERICAL bottom. Material removed equals <c>π·r²·h</c> plus, for the sphere,
+    /// <c>⅔·π·r³</c>.</summary>
     public static (bool Created, string? Failure) TryCreateBlindFlat(
         IModelContainer container,
         IModelObject baseSurface,
         double diameterMm,
         double depthMm,
-        Func<IHoleDisposal, PlacementOutcome>? place = null)
+        Func<IHoleDisposal, PlacementOutcome>? place = null,
+        bool sphericalBottom = false)
     {
         try
         {
@@ -862,7 +929,7 @@ internal static class Api7Hole
             hole.Diameter = diameterMm;
             hole.DepthType = DepthByValue;
             hole.Depth = depthMm;
-            hole.EndFaceType = EndFaceFlat;
+            hole.EndFaceType = sphericalBottom ? EndFaceSphere : EndFaceFlat;
             disposal.BaseSurface = baseSurface;
             disposal.Perpendicular = true;
 
@@ -875,6 +942,63 @@ internal static class Api7Hole
                     return (false, outcome.Failure ?? "позиционирование не применено");
                 }
             }
+
+            return hole.Update() ? (true, null) : (false, "IHole3D.Update() вернул false");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    /// <summary>Create a through cone driven by its apex angle: <c>ksHTConic</c> + <c>ksCNAngle</c>.</summary>
+    /// <remarks>MEASURED: the written number is the FULL apex angle, and the top diameter is derived from it
+    /// and the body's thickness — the caller's <paramref name="diameterMm"/> is the cone diameter on the
+    /// support face. LIMIT: <c>ksCNDiameter</c> is not offered at all — it reads the angle back as 0 and
+    /// removes a plain cylinder.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    public static (bool Created, string? Failure) TryCreateConic(
+        IModelContainer container,
+        IModelObject baseSurface,
+        double diameterMm,
+        double angleDeg,
+        Func<IHoleDisposal, PlacementOutcome>? place = null)
+    {
+        try
+        {
+            if (container.Holes3D.Add() is not IHole3D hole)
+            {
+                return (false, "IHoles3D.Add() вернул не IHole3D");
+            }
+
+            if (hole is not IHoleDisposal disposal)
+            {
+                return (false, "объект отверстия не отвечает на QI(IHoleDisposal) — базовую грань подать нечем");
+            }
+
+            hole.HoleType = ksHoleTypeEnum.ksHTConic;
+            hole.Diameter = diameterMm;
+            hole.DepthType = DepthReachThrough;
+            disposal.BaseSurface = baseSurface;
+            disposal.Perpendicular = true;
+
+            // The offset is written BEFORE Update() and on THIS SAME object (see TryCreateCounterbore).
+            if (place is not null)
+            {
+                var outcome = place(disposal);
+                if (!outcome.Applied)
+                {
+                    return (false, outcome.Failure ?? "позиционирование не применено");
+                }
+            }
+
+            if (hole.HoleParameters is not IConicHoleParameters conic)
+            {
+                return (false, "IHole3D.HoleParameters не приводится к IConicHoleParameters — режим конуса недостижим");
+            }
+
+            conic.ConicType = ConicByAngle;
+            conic.ConicAngle = angleDeg;
 
             return hole.Update() ? (true, null) : (false, "IHole3D.Update() вернул false");
         }

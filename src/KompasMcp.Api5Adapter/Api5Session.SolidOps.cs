@@ -1933,6 +1933,9 @@ public sealed partial class Api5Session
         new("counterbore_depth_mm", new[] { HoleFamily }, c => c.CounterboreDepthMm),
         new("countersink_diameter_mm", new[] { HoleFamily }, c => c.CountersinkDiameterMm),
         new("countersink_angle_deg", new[] { HoleFamily }, c => c.CountersinkAngleDeg),
+        // The cone apex angle (SM-07, extended modes): read and edited by the hole branch alone, so a
+        // foreign feature naming it must be refused rather than accept and ignore it.
+        new("conic_angle_deg", new[] { HoleFamily }, c => c.ConicAngleDeg),
         // The volume-delta expectation is also a field of THIS family, not a common one: only the hole
         // branch reads it. Declaring it a "common expectation" would mean accepting it on reposition and
         // boolean operations and silently not applying it — the same class of defect as keep_side (P5).

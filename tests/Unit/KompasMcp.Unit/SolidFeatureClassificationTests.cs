@@ -58,6 +58,9 @@ public sealed class SolidFeatureClassificationTests
         ["counterbore_depth_mm"] = ["hole"],
         ["countersink_diameter_mm"] = ["hole"],
         ["countersink_angle_deg"] = ["hole"],
+        // The cone apex angle of the extended hole modes (SM-07): read and edited by the hole branch
+        // alone, so a foreign feature naming it must be refused rather than accept and ignore it.
+        ["conic_angle_deg"] = ["hole"],
         ["expected_volume_delta_mm3"] = ["hole"],
         // The draft's base (SM-12): two forms of one thing, owned by the draft family alone.
         ["base_face_ref"] = ["draft"],
@@ -252,10 +255,10 @@ public sealed class SolidFeatureClassificationTests
             $"в ведомствах названы поля, которых в {nameof(UpdateFeatureCommand)} нет: "
             + string.Join(", ", phantom));
 
-        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 55
-        // with the six native-hole edit fields, the draft's two base forms, the base-line family's reverse,
-        // the eight fields of the thread designation and the rib's four.
-        Assert.Equal(55, properties.Count);
+        // INVARIANT: completeness also fixes the contract size — growth shows as this line failing; it is 56
+        // with the seven native-hole edit fields (the cone apex angle among them), the draft's two base
+        // forms, the base-line family's reverse, the eight fields of the thread designation and the rib's four.
+        Assert.Equal(56, properties.Count);
     }
 
     [Fact]

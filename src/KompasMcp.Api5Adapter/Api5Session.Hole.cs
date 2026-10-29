@@ -32,6 +32,9 @@ public partial class Api5Session
     /// does not mask "not applied".</remarks>
     private const double HoleEditToleranceMm = 1e-6d;
 
+    /// <summary>The read text of a spherical bottom, as <c>IHole3D.EndFaceType</c> spells it.</summary>
+    private const string SphereEndFace = "ksEFSphere";
+
     /// <summary>Create a native hole of a measured mode. A bridge refusal is returned as
     /// <c>CAPABILITY_UNAVAILABLE</c> with a cause, not a silent null: the caller must tell "API7
     /// unavailable" from "KOMPAS rejected the parameter".</summary>
@@ -434,6 +437,18 @@ public partial class Api5Session
                     container, baseSurface, command.DiameterMm, command.DepthMm!.Value, place);
                 return (blind.Created, blind.Failure, null);
 
+            case HoleMode.BlindSphere:
+                // The same route as the flat blind, one member apart: the bottom is part of the mode.
+                var sphere = Api7Hole.TryCreateBlindFlat(
+                    container, baseSurface, command.DiameterMm, command.DepthMm!.Value, place,
+                    sphericalBottom: true);
+                return (sphere.Created, sphere.Failure, null);
+
+            case HoleMode.ThroughConic:
+                var conic = Api7Hole.TryCreateConic(
+                    container, baseSurface, command.DiameterMm, command.ConicAngleDeg!.Value, place);
+                return (conic.Created, conic.Failure, null);
+
             case HoleMode.ThroughCounterbore:
                 var counterbore = Api7Hole.TryCreateCounterbore(
                     container,
@@ -483,12 +498,13 @@ public partial class Api5Session
         switch (command.Mode)
         {
             case HoleMode.BlindFlat:
+            case HoleMode.BlindSphere:
                 if (command.DepthMm is not double depth || depth <= 0d)
                 {
                     throw new KompasContractException(
                         ErrorCodes.InvalidArgument,
-                        "При mode=blind_flat нужна положительная depth_mm: глухое отверстие без " +
-                        "глубины выразить нечем.",
+                        "При mode=blind_flat и blind_sphere нужна положительная depth_mm: глухое отверстие " +
+                        "без глубины выразить нечем.",
                         RetryPolicy.Never);
                 }
 
@@ -496,6 +512,16 @@ public partial class Api5Session
                 RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "blind_flat");
                 RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "blind_flat");
                 RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "blind_flat");
+                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "blind_flat");
+                break;
+
+            case HoleMode.ThroughConic:
+                RejectPresent(command, "depth_mm", command.DepthMm, "through_conic");
+                RejectPresent(command, "counterbore_diameter_mm", command.CounterboreDiameterMm, "through_conic");
+                RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "through_conic");
+                RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "through_conic");
+                RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "through_conic");
+                RequireConeAngle(command.ConicAngleDeg, "through_conic");
                 break;
 
             case HoleMode.ThroughCounterbore:
@@ -536,6 +562,7 @@ public partial class Api5Session
 
                 RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "through_counterbore");
                 RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "through_counterbore");
+                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_counterbore");
                 break;
 
             case HoleMode.ThroughCountersink:
@@ -574,13 +601,14 @@ public partial class Api5Session
 
                 RejectPresent(command, "counterbore_diameter_mm", command.CounterboreDiameterMm, "through_countersink");
                 RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "through_countersink");
+                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_countersink");
                 break;
 
             default:
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
-                    $"Режим '{command.Mode}' не реализован: измерены blind_flat, through_counterbore " +
-                    "и through_countersink.",
+                    $"Режим '{command.Mode}' не реализован: измерены blind_flat, blind_sphere, " +
+                    "through_counterbore, through_countersink и through_conic.",
                     RetryPolicy.Never);
         }
 
@@ -595,6 +623,23 @@ public partial class Api5Session
                 "оставляет другую на догадку сервера.",
                 RetryPolicy.Never);
         }
+    }
+
+    /// <summary>The cone apex angle, mandatory and strictly inside (0; 180) — the same interval the
+    /// countersink angle was measured in: outside it no cone is built.</summary>
+    private static void RequireConeAngle(double? angleDeg, string mode)
+    {
+        if (angleDeg is double angle && angle > 0d && angle < 180d)
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.InvalidArgument,
+            $"При mode={mode} нужен conic_angle_deg в интервале (0; 180) — это ПОЛНЫЙ угол при вершине, " +
+            "а не половина: вне интервала конус не строится.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["conic_angle_deg"] = angleDeg });
     }
 
     private static void RejectPresent(HoleCommand command, string field, double? value, string mode)
@@ -666,6 +711,12 @@ public partial class Api5Session
         {
             HoleMode.BlindFlat => diameterOk
                 && read.DepthMm is double depth && Math.Abs(depth - command.DepthMm!.Value) <= 1e-6,
+            HoleMode.BlindSphere => diameterOk
+                && read.DepthMm is double sphereDepth && Math.Abs(sphereDepth - command.DepthMm!.Value) <= 1e-6
+                && read.EndFaceType == SphereEndFace,
+            HoleMode.ThroughConic => diameterOk
+                && read.ConicAngleDeg is double coneAngle
+                && Math.Abs(coneAngle - command.ConicAngleDeg!.Value) <= 1e-6,
             HoleMode.ThroughCounterbore => diameterOk
                 && read.SpotfacingDiameterMm is double bore
                 && Math.Abs(bore - command.CounterboreDiameterMm!.Value) <= 1e-6
@@ -691,12 +742,16 @@ public partial class Api5Session
     private static string DescribeHoleCommand(HoleCommand command) => command.Mode switch
     {
         HoleMode.BlindFlat => $"тип=ksHTBase D={Fmt(command.DiameterMm)} глубина={Fmt(command.DepthMm)}",
+        HoleMode.BlindSphere =>
+            $"тип=ksHTBase дно=ksEFSphere D={Fmt(command.DiameterMm)} глубина={Fmt(command.DepthMm)}",
         HoleMode.ThroughCounterbore =>
             $"тип=ksHTCounterbore D={Fmt(command.DiameterMm)} выточка={Fmt(command.CounterboreDiameterMm)}×" +
             $"{Fmt(command.CounterboreDepthMm)}",
         HoleMode.ThroughCountersink =>
             $"тип=ksHTCountersinking D={Fmt(command.DiameterMm)} устье=" +
             $"{Fmt(command.CountersinkDiameterMm)}@ {Fmt(command.CountersinkAngleDeg)}°",
+        HoleMode.ThroughConic =>
+            $"тип=ksHTConic D={Fmt(command.DiameterMm)} угол={Fmt(command.ConicAngleDeg)}°",
         _ => command.Mode.ToString(),
     };
 
@@ -738,7 +793,18 @@ public partial class Api5Session
             CountersinkDepthMm: read.CountersinkDepthMm,
             CenterMm: read.DiameterMm is double d
                 ? Api7Hole.FindCylinderOrigin(document.PartNow(), d / 2d, HoleRadiusToleranceMm)
-                : null);
+                : null,
+            // The end face is published in a stable lowercase form as well as in the vendor spelling: the
+            // mode of a blind hole is told by its bottom, and a client must not parse "ksEF…" for that.
+            EndFace: read.EndFaceType switch
+            {
+                "ksEFFlat" => "flat",
+                "ksEFSphere" => "sphere",
+                "ksEFCone" => "cone",
+                _ => null,
+            },
+            ConicAngleDeg: read.ConicAngleDeg,
+            ConicDiameterMm: read.ConicDiameterMm);
     }
 
     /// <summary>Hole parameters for an EXISTING tree feature — as <see cref="ReadHole"/> but without a
@@ -785,9 +851,10 @@ public partial class Api5Session
         RejectForeignSolidFields(
             command,
             HoleFamily,
-            "diameter_mm, depth_mm (только режим blind_flat), counterbore_diameter_mm и " +
+            "diameter_mm, depth_mm (только режимы blind_flat и blind_sphere), counterbore_diameter_mm и " +
             "counterbore_depth_mm (только through_counterbore), countersink_diameter_mm и " +
-            "countersink_angle_deg (только through_countersink), expected_volume_delta_mm3",
+            "countersink_angle_deg (только through_countersink), conic_angle_deg (только through_conic), " +
+            "expected_volume_delta_mm3",
             // depth_mm is this family's OWN field, although the role table gives it to extrusion: a
             // blind hole's depth is set by it. Whether it is foreign FOR THE MODE (for counterbore and
             // countersink the depth is derived or set by the recess) is decided by ValidateHoleEdit from
@@ -852,6 +919,23 @@ public partial class Api5Session
                 break;
             }
 
+            case HoleMode.BlindSphere:
+            {
+                var outcome = Api7Hole.TryWriteBlindFlat(
+                    container, 0, command.DiameterMm, command.DepthMm, sphericalBottom: true);
+                written = outcome.Written;
+                failure = outcome.Failure;
+                break;
+            }
+
+            case HoleMode.ThroughConic:
+            {
+                var outcome = Api7Hole.TryWriteConic(container, 0, command.DiameterMm, command.ConicAngleDeg);
+                written = outcome.Written;
+                failure = outcome.Failure;
+                break;
+            }
+
             case HoleMode.ThroughCounterbore:
             {
                 var outcome = Api7Hole.TryWriteCounterbore(
@@ -862,7 +946,7 @@ public partial class Api5Session
                 break;
             }
 
-            default:
+            case HoleMode.ThroughCountersink:
             {
                 var outcome = Api7Hole.TryWriteCountersink(
                     container, 0, command.DiameterMm,
@@ -872,6 +956,14 @@ public partial class Api5Session
                 reportedCountersinkDepth = outcome.ReportedDepthMm;
                 break;
             }
+
+            default:
+                // No catch-all write: a mode without its own branch must not be written as a neighbour.
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"Правка режима '{mode.Value}' не реализована: запись по чужому режиму изменила бы " +
+                    "не тот признак.",
+                    RetryPolicy.Never);
         }
 
         if (!written)
@@ -984,6 +1076,14 @@ public partial class Api5Session
                 "countersink_angle_read_back",
                 readBack?.CountersinkAngleDeg is double got && Math.Abs(got - wantedAngle) <= HoleEditToleranceMm,
                 Observed: Fmt(readBack?.CountersinkAngleDeg), Expected: Fmt(wantedAngle)));
+        }
+
+        if (command.ConicAngleDeg is double wantedConeAngle)
+        {
+            checks.Add(new NamedCheck(
+                "conic_angle_read_back",
+                readBack?.ConicAngleDeg is double got && Math.Abs(got - wantedConeAngle) <= HoleEditToleranceMm,
+                Observed: Fmt(readBack?.ConicAngleDeg), Expected: Fmt(wantedConeAngle)));
         }
 
         if (mode.Value == HoleMode.ThroughCountersink)
@@ -1117,7 +1217,10 @@ public partial class Api5Session
     /// i.e. the refusal would look like a completed edit.</remarks>
     private static HoleMode? HoleModeOfRead(HoleReadDto? read) => read?.HoleType switch
     {
-        "ksHTBase" => HoleMode.BlindFlat,
+        // The bottom is the mode of a blind hole: ksHTBase is shared by the flat and the spherical one, and
+        // editing the sphere as a flat would silently flatten it.
+        "ksHTBase" => read.EndFaceType == SphereEndFace ? HoleMode.BlindSphere : HoleMode.BlindFlat,
+        "ksHTConic" => HoleMode.ThroughConic,
         "ksHTCounterbore" => HoleMode.ThroughCounterbore,
         "ksHTCountersinking" => HoleMode.ThroughCountersink,
         _ => null,
@@ -1135,16 +1238,35 @@ public partial class Api5Session
         switch (mode)
         {
             case HoleMode.BlindFlat:
-                RejectForeignHoleEditField(command, "blind_flat", "counterbore_diameter_mm",
+            case HoleMode.BlindSphere:
+            {
+                var modeName = mode == HoleMode.BlindSphere ? "blind_sphere" : "blind_flat";
+                RejectForeignHoleEditField(command, modeName, "counterbore_diameter_mm",
                     command.CounterboreDiameterMm);
-                RejectForeignHoleEditField(command, "blind_flat", "counterbore_depth_mm",
+                RejectForeignHoleEditField(command, modeName, "counterbore_depth_mm",
                     command.CounterboreDepthMm);
-                RejectForeignHoleEditField(command, "blind_flat", "countersink_diameter_mm",
+                RejectForeignHoleEditField(command, modeName, "countersink_diameter_mm",
                     command.CountersinkDiameterMm);
-                RejectForeignHoleEditField(command, "blind_flat", "countersink_angle_deg",
+                RejectForeignHoleEditField(command, modeName, "countersink_angle_deg",
                     command.CountersinkAngleDeg);
-                PositiveHoleEditValue("diameter_mm", command.DiameterMm, "blind_flat");
-                PositiveHoleEditValue("depth_mm", command.DepthMm, "blind_flat");
+                RejectForeignHoleEditField(command, modeName, "conic_angle_deg", command.ConicAngleDeg);
+                PositiveHoleEditValue("diameter_mm", command.DiameterMm, modeName);
+                PositiveHoleEditValue("depth_mm", command.DepthMm, modeName);
+                break;
+            }
+
+            case HoleMode.ThroughConic:
+                RejectForeignHoleEditField(command, "through_conic", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField(command, "through_conic", "counterbore_diameter_mm",
+                    command.CounterboreDiameterMm);
+                RejectForeignHoleEditField(command, "through_conic", "counterbore_depth_mm",
+                    command.CounterboreDepthMm);
+                RejectForeignHoleEditField(command, "through_conic", "countersink_diameter_mm",
+                    command.CountersinkDiameterMm);
+                RejectForeignHoleEditField(command, "through_conic", "countersink_angle_deg",
+                    command.CountersinkAngleDeg);
+                PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_conic");
+                PositiveHoleEditValue("conic_angle_deg", command.ConicAngleDeg, "through_conic");
                 break;
 
             case HoleMode.ThroughCounterbore:
@@ -1153,6 +1275,8 @@ public partial class Api5Session
                     command.CountersinkDiameterMm);
                 RejectForeignHoleEditField(command, "through_counterbore", "countersink_angle_deg",
                     command.CountersinkAngleDeg);
+                RejectForeignHoleEditField(command, "through_counterbore", "conic_angle_deg",
+                    command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_counterbore");
                 PositiveHoleEditValue("counterbore_diameter_mm", command.CounterboreDiameterMm,
                     "through_counterbore");
@@ -1166,6 +1290,8 @@ public partial class Api5Session
                     command.CounterboreDiameterMm);
                 RejectForeignHoleEditField(command, "through_countersink", "counterbore_depth_mm",
                     command.CounterboreDepthMm);
+                RejectForeignHoleEditField(command, "through_countersink", "conic_angle_deg",
+                    command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_countersink");
                 PositiveHoleEditValue("countersink_diameter_mm", command.CountersinkDiameterMm,
                     "through_countersink");
@@ -1176,8 +1302,8 @@ public partial class Api5Session
             default:
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
-                    $"Режим '{mode}' не реализован: измерены blind_flat, through_counterbore и " +
-                    "through_countersink.",
+                    $"Режим '{mode}' не реализован: измерены blind_flat, blind_sphere, " +
+                    "through_counterbore, through_countersink и through_conic.",
                     RetryPolicy.Never);
         }
     }
@@ -1209,8 +1335,10 @@ public partial class Api5Session
     private static string HoleOwnFields(string mode) => mode switch
     {
         "blind_flat" => "diameter_mm, depth_mm",
+        "blind_sphere" => "diameter_mm, depth_mm",
         "through_counterbore" => "diameter_mm, counterbore_diameter_mm, counterbore_depth_mm",
         "through_countersink" => "diameter_mm, countersink_diameter_mm, countersink_angle_deg",
+        "through_conic" => "diameter_mm, conic_angle_deg",
         _ => "нет",
     };
 

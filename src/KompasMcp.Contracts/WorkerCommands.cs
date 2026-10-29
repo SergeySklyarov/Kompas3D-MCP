@@ -1217,8 +1217,8 @@ public sealed record HoleCommand
     /// <summary>Explicit <c>face:</c> reference from kompas_read_topology: the surface the hole starts from.</summary>
     public required string FaceRef { get; init; }
 
-    /// <summary>blind_flat (API7: ksDTValue + ksEFFlat), through_counterbore (M.2), through_countersink
-    /// (M.3).</summary>
+    /// <summary>blind_flat (API7: ksDTValue + ksEFFlat), blind_sphere (ksEFSphere), through_counterbore
+    /// (M.2), through_countersink (M.3), through_conic (ksHTConic + ksCNAngle).</summary>
     public required HoleMode Mode { get; init; }
 
     /// <summary>Hole diameter, mm: for counterbore and countersink this is the PILOT diameter, not the recess or the
@@ -1248,6 +1248,14 @@ public sealed record HoleCommand
 
     /// <summary>Hole centre offset along the support face Y, mm.</summary>
     public double? OffsetYMm { get; init; }
+
+    /// <summary>Cone apex angle in DEGREES for mode=through_conic, strictly between 0 and 180: the FULL
+    /// angle at the apex, not the half one.</summary>
+    /// <remarks>MEASURED: a written 30° removed exactly the frustum of a cone whose half-angle is 15°,
+    /// with the top diameter the object derives from it; the diameter-driven <c>ksCNDiameter</c> reads the
+    /// angle back as 0 and builds a cylinder.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    public double? ConicAngleDeg { get; init; }
 
     /// <summary>Analytic expectation of the volume decrease, when derivable by the caller: <c>π·r²·h</c> (blind),
     /// <c>π·r²·h + π/4·(D²−d²)·h_recess</c> (counterbore), <c>π·r²·h + π·h_actual/3·(rM² + rP·rM − 2·rP²)</c>
@@ -1658,7 +1666,10 @@ public sealed record HoleDto(
     double? CountersinkDiameterMm,
     double? CountersinkAngleDeg,
     double? CountersinkDepthMm,
-    double[]? CenterMm);
+    double[]? CenterMm,
+    string? EndFace = null,
+    double? ConicAngleDeg = null,
+    double? ConicDiameterMm = null);
 
 /// <summary>One extrusion side, as returned by <c>GetSideParam</c>.</summary>
 public sealed record FeatureSideDto(    bool Side,
@@ -2240,6 +2251,12 @@ public sealed record UpdateFeatureCommand
 
     /// <summary>New countersink angle (mode <c>through_countersink</c>), degrees.</summary>
     public double? CountersinkAngleDeg { get; init; }
+
+    /// <summary>New cone apex angle (mode <c>through_conic</c>), degrees, strictly between 0 and 180.</summary>
+    /// <remarks>The full angle at the apex, as on creation. The diameter of the cone is derived from it and
+    /// is not writable on its own.
+    /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
+    public double? ConicAngleDeg { get; init; }
 
     /// <summary>Analytic expectation of the material REMOVED by the edit, mm³: <c>volume_before −
     /// volume_after</c>.</summary> <remarks>The sign is part of the definition: a hole removes material, so "became

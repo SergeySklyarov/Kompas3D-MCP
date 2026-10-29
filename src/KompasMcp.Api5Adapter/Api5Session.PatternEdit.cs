@@ -510,6 +510,11 @@ public partial class Api5Session
             names.Add("countersink_angle_deg");
         }
 
+        if (command.ConicAngleDeg is not null)
+        {
+            names.Add("conic_angle_deg");
+        }
+
         if (command.ExpectedVolumeDeltaMm3 is not null)
         {
             names.Add("expected_volume_delta_mm3");

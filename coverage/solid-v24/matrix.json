@@ -1815,6 +1815,58 @@
       }
     },
     {
+      "operation_id": "SM-07.native_hole.blind_sphere",
+      "kind": "profile_mode",
+      "profile": "mechanical-core-v1",
+      "priority": "practical_required",
+      "queue": "E4",
+      "context": "part",
+      "catalog_ref": "SM-07",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_hole.json",
+      "adapter_route": "API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksHTBase + DepthType=ksDTValue + EndFaceType=ksEFSphere; мост ksGetApplication7()/TransferInterface 5→7",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "verified",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "HO.27",
+        "HO.27v",
+        "HO.27e",
+        "HO.28",
+        "HO.29",
+        "HO.34",
+        "HO.35z",
+        "HO.35",
+        "F08.15.read",
+        "F08.15.edit",
+        "F08.15.negative_tests"
+      ],
+      "evidence": [
+        "docs/acceptance/INDEX.md",
+        "E4_RESEARCH_REPORT_20261029.md",
+        "scripts/mcp-smoke.py"
+      ],
+      "limitations": [
+        "Снятое равно π·r²·h + ⅔·π·r³: глубина считается до конца ЦИЛИНДРА, полусфера добавляется сверх неё (измерено на плите 40×30×20: 1047.198 против 785.398 + 261.799). На плите тоньше суммы глубины и радиуса полусфера прорезает нижнюю грань, и объём перестаёт быть аналитическим.",
+        "Подавление и удаление признака этим режимом не измерялись: строки HO.8/HO.9 исполнены на blind_flat, а соответствие «признак дерева ↔ запись Holes3D» доказано единственностью отверстия."
+      ],
+      "depends_on": [
+        "dep.api7.in_same_adapter",
+        "dep.refs.planar_face",
+        "dep.units.confirm"
+      ],
+      "not_applicable_reasons": {}
+    },
+    {
       "operation_id": "SM-07.native_hole.through_counterbore",
       "kind": "profile_mode",
       "profile": "mechanical-core-v1",
@@ -1956,6 +2008,60 @@
       "blocked_reasons": {
         "edit": "ИЗМЕРЕНО 20.09.2026 (зонд scratch/_f08_route_probe.py, шаг P1, бинари поставки artifacts/publish-b5-20260920, повторено в этом сеансе дважды): `kompas_update_feature` с `depth_mm` по признаку родного отверстия (дерево-тип 583, имя «Отверстие:1») отвечает CAPABILITY_UNAVAILABLE, и объём НЕ меняется — дельта 0.0 при ожидаемых +157.079633 (= π·5²·2, если бы глубина 6 сменилась на 8). Причина названа САМИМ ПРОДУКТОМ: «Правка параметров в v1 поддержана для семейств выдавливания, фаски, скругления, вращения, изменения положения, разделения, отсечения, булевой операции, массива, кинематической операции, элемента по сечениям и оболочки; этот признак — null (type=583)». Две независимые половины подтверждают, что маршрута НЕТ, а не что он не найден: схема `kompas_update_feature` полей режима отверстия не объявляет вовсе (43 опубликованные схемы прочитаны; `additionalProperties: false`, поля `mode`/`diameter_mm` отсутствуют), а единственный инструмент, создающий отверстие, — `kompas_hole` — только СОЗДАЁТ (`container.Holes3D.Add()`), то есть смена режима им означала бы ВТОРОЕ отверстие, а не правку первого. Расширение подписи `edit` на маршрут эскиза (`kompas_edit_sketch`) ОТВЕРГНУТО измерением различающей силы: 18 из 18 строк, которым подпись отказывает сейчас, получили бы ЛОЖНОЕ подтверждение, потому что эскиз рисуется при создании ЛЮБОГО объекта и его окно лежит в окнах создания. Это НЕ дефект продукта по §3.4: правка отверстия не выполняется адаптером по объявленной границе v1, названной в описании инструмента, а не молча; наряд §5 запрещает и менять схему опубликованного инструмента, и публиковать новый, поэтому закрыть действие этой работой нечем."
       }
+    },
+    {
+      "operation_id": "SM-07.native_hole.through_conic",
+      "kind": "profile_mode",
+      "profile": "mechanical-core-v1",
+      "priority": "practical_required",
+      "queue": "E4",
+      "context": "part",
+      "catalog_ref": "SM-07",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_hole.json",
+      "adapter_route": "API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksHTConic + DepthType=ksDTReachThrough + IConicHoleParameters(ConicType=ksCNAngle, ConicAngle); мост ksGetApplication7()/TransferInterface 5→7",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "verified",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "not_started",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "HO.30",
+        "HO.30v",
+        "HO.30e",
+        "HO.31",
+        "HO.31v",
+        "HO.31e",
+        "HO.32",
+        "HO.33",
+        "HO.34",
+        "F08.15.read",
+        "F08.15.edit",
+        "F08.15.negative_tests"
+      ],
+      "evidence": [
+        "docs/acceptance/INDEX.md",
+        "E4_RESEARCH_REPORT_20261029.md",
+        "scripts/mcp-smoke.py"
+      ],
+      "limitations": [
+        "Записанное число — ПОЛНЫЙ угол при вершине: 30° сняли усечённый конус с полууглом 15° (E4 §4.2). Верхний диаметр ПРОИЗВОДЕН от угла и толщины тела и публикуется только для чтения (conic_diameter_mm).",
+        "Способ «по диаметру» (ksCNDiameter) в профиль не входит: угол читается обратно как 0, снятое равно π/4·D²·h, то есть цилиндру (E4 §4.3).",
+        "Подавление и удаление признака не измерялись — по той же причине, что у blind_sphere."
+      ],
+      "depends_on": [
+        "dep.api7.in_same_adapter",
+        "dep.refs.planar_face",
+        "dep.units.confirm"
+      ],
+      "not_applicable_reasons": {}
     },
     {
       "operation_id": "SM-07.native_hole.axis_by_face_normal",

@@ -84,6 +84,7 @@ public partial class Api5Session
         new("counterbore_depth_mm", "hole", c => c.CounterboreDepthMm),
         new("countersink_diameter_mm", "hole", c => c.CountersinkDiameterMm),
         new("countersink_angle_deg", "hole", c => c.CountersinkAngleDeg),
+        new("conic_angle_deg", "hole", c => c.ConicAngleDeg),
         new("expected_volume_delta_mm3", "hole", c => c.ExpectedVolumeDeltaMm3),
         // Thread designation (SM-08). Listed for the same reason as the hole fields: without them a
         // "left_hand + radius_mm" call on a fillet would apply the radius and swallow the flag.

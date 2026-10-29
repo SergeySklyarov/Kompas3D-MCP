@@ -272,19 +272,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 382
+- **строк_каталога:** 384
 - **строк_полностью_закрыто:** 194
-- **строк_с_каким_либо_прогрессом:** 218
+- **строк_с_каким_либо_прогрессом:** 220
 - **семейств_в_каталоге:** 48
 - **семейств_без_строк:** 10
 - **операций:** 152
-- **режимов_и_вариантов:** 233
-- **применимых_действий:** 3074
-- **действий_verified:** 1304
-- **покрытие_действий:** 42.4%
-- **распределение_статусов:** {'not_started': 1760, 'verified': 1304, 'not_applicable': 746, 'implemented': 10}
+- **режимов_и_вариантов:** 235
+- **применимых_действий:** 3094
+- **действий_verified:** 1320
+- **покрытие_действий:** 42.7%
+- **распределение_статусов:** {'not_started': 1764, 'verified': 1320, 'not_applicable': 746, 'implemented': 10}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 83, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **уровни_каталога_режимов:** {'mcp_verified': 85, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -739,9 +739,11 @@
 | `SM-03.cut_rotated.full_turn` | SM-03 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | RO.3, RO.3v, RO.3g, RO.7, RO.8z, RO.9d, RO.18z, RO.18g, RO.18e, RO.18r, RO.10t, RO.10, RO.10p, RO.11, RO.11r, RO.12, RO.13z, RO.13, RO.14, RO.16, RO.16b, F08.14.discover, F08.14.create, F08.14.read, F08.14.edit, F08.14.rebuild, F08.14.save_reopen, F08.14.suppress_restore, F08.14.delete_dependencies, F08.14.negative_tests, F08.14.geometry_validation |
 | `SM-03.cut_rotated.partial_angle` | SM-03 | later | — | runtime_verified | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-07.native_hole.blind_flat_bottom` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.1, HO.1v, HO.1g, HO.5, HO.5r, HO.5v, HO.11, HO.12, HO.18, HO.22, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, HO.26, HO.26t, F08.15.discover, F08.15.create, F08.15.read, F08.15.edit, F08.15.rebuild, F08.15.save_reopen, F08.15.suppress_restore, F08.15.delete_dependencies, F08.15.negative_tests, F08.15.geometry_validation |
+| `SM-07.native_hole.blind_sphere` | SM-07 | practical_required | E4 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | HO.27, HO.27v, HO.27e, HO.28, HO.29, HO.34, HO.35z, HO.35, F08.15.read, F08.15.edit, F08.15.negative_tests |
 | `SM-07.native_hole.through_cylindrical` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.2, HO.2v, HO.2g, HO.6, HO.13, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.16.discover, F08.16.create, F08.16.read, F08.16.edit, F08.16.rebuild, F08.16.save_reopen, F08.16.suppress_restore, F08.16.delete_dependencies, F08.16.negative_tests, F08.16.geometry_validation |
 | `SM-07.native_hole.through_counterbore` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.2, HO.2v, HO.2g, HO.6, HO.14, HO.15, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.17.discover, F08.17.create, F08.17.read, F08.17.edit, F08.17.rebuild, F08.17.save_reopen, F08.17.suppress_restore, F08.17.delete_dependencies, F08.17.negative_tests, F08.17.geometry_validation |
 | `SM-07.native_hole.through_countersink` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.3, HO.3v, HO.3g, HO.3d, HO.16, HO.17, HO.20, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.18.discover, F08.18.create, F08.18.read, F08.18.edit, F08.18.rebuild, F08.18.save_reopen, F08.18.suppress_restore, F08.18.delete_dependencies, F08.18.negative_tests, F08.18.geometry_validation |
+| `SM-07.native_hole.through_conic` | SM-07 | practical_required | E4 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | HO.30, HO.30v, HO.30e, HO.31, HO.31v, HO.31e, HO.32, HO.33, HO.34, F08.15.read, F08.15.edit, F08.15.negative_tests |
 | `SM-07.native_hole.axis_by_face_normal` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.1, HO.1g, HO.5r, HO.6, HO.23, HO.23b, F08.19.discover, F08.19.create, F08.19.read, F08.19.edit, F08.19.rebuild, F08.19.save_reopen, F08.19.suppress_restore, F08.19.delete_dependencies, F08.19.negative_tests, F08.19.geometry_validation |
 | `SM-07.native_hole.position_off_origin` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.5, HO.5r, HO.5v, HO.6, HO.18, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.20.discover, F08.20.create, F08.20.read, F08.20.edit, F08.20.rebuild, F08.20.save_reopen, F08.20.suppress_restore, F08.20.delete_dependencies, F08.20.negative_tests, F08.20.geometry_validation |
 | `SM-09.fillet.constant_radius_body_edges` | SM-09 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | G04, G04e, G04v, FL01, FL01v, FL02, FL03, FL04, FL04r, FL04p, FL05, FL06, FL07, FL08, FL09, F08.21.discover, F08.21.create, F08.21.read, F08.21.edit, F08.21.rebuild, F08.21.save_reopen, F08.21.suppress_restore, F08.21.delete_dependencies, F08.21.negative_tests, F08.21.geometry_validation, FL29, FL29v |
@@ -1222,6 +1224,9 @@
   - Члена ksDTBlind в вендорском перечислении НЕТ: плоское дно — это ksDTValue + ksEFFlat. Измерено пробой M.4: снято 471.238898038471 против аналитических π·5²·6 = 471.238898038469.
   - Позиция пишется ДО hole.Update() и на ТОМ ЖЕ объекте (маршрут Point3DParamSurface + OffsetType=ksOffsetByCoords + Offset1/Offset2, проба M.5). Второй Add() вместо доведения того же объекта уже приводил к отверстию в начале координат — исправлено и закрыто HO.5r.
   - Отверстие, которое КОМПАС не применил к телу, отвергается, а не объявляется успехом: признак, оставшийся в дереве с ненулевым object_error, даёт GEOMETRY_FAILED, а неизменившееся тело (объём и число граней) — NO_GEOMETRY_CHANGE; ответ несёт feature_ref оставшегося признака. Строки HO.26/HO.26t исполняют измеренный вход, на котором вызов раньше отвечал succeeded при нулевом эффекте.
+- `SM-07.native_hole.blind_sphere` — не закрыт
+  - Снятое равно π·r²·h + ⅔·π·r³: глубина считается до конца ЦИЛИНДРА, полусфера добавляется сверх неё (измерено на плите 40×30×20: 1047.198 против 785.398 + 261.799). На плите тоньше суммы глубины и радиуса полусфера прорезает нижнюю грань, и объём перестаёт быть аналитическим.
+  - Подавление и удаление признака этим режимом не измерялись: строки HO.8/HO.9 исполнены на blind_flat, а соответствие «признак дерева ↔ запись Holes3D» доказано единственностью отверстия.
 - `SM-07.native_hole.through_cylindrical` — закрыт целиком
   - Сквозной режим числа глубины не принимает: поле depth_mm запрещено контрактом и отвергается до COM (HO.13) — сквозное означает сквозное, а не большую глубину.
 - `SM-07.native_hole.through_counterbore` — закрыт целиком
@@ -1232,6 +1237,10 @@
   - Глубина зенковки ПРОИЗВОДНА и записана быть не может: при способе «диаметр + угол» объект возвращает h = (rM − rP)/tan(угол/2), где rM — радиус устья, rP — радиус пилота. Измерено N.2: серия устьев Ø14/16/18/20/24 при пилоте Ø10 и 90° дала h = 2/3/4/5/7, и все пять сошлись с этой формулой; прежняя запись «4/tan(угол/2)» была подгонкой под одну строку Ø18, где rM − rP случайно равно 4.
   - Дополнительный материал снимается как π·h/3·(rM² + rP·rM − 2·rP²); измерено M.3 на десяти строках (три угла, три входные глубины, шесть разных диаметров) и повторно сверено с возвращённой глубиной в N.2.
   - Угол обязан лежать строго между 0 и 180: конус через 200° не выражается (HO.20). Диаметр устья и угол задаются парой — устье без угла конуса не форма (HO.17).
+- `SM-07.native_hole.through_conic` — не закрыт
+  - Записанное число — ПОЛНЫЙ угол при вершине: 30° сняли усечённый конус с полууглом 15° (E4 §4.2). Верхний диаметр ПРОИЗВОДЕН от угла и толщины тела и публикуется только для чтения (conic_diameter_mm).
+  - Способ «по диаметру» (ksCNDiameter) в профиль не входит: угол читается обратно как 0, снятое равно π/4·D²·h, то есть цилиндру (E4 §4.3).
+  - Подавление и удаление признака не измерялись — по той же причине, что у blind_sphere.
 - `SM-07.native_hole.axis_by_face_normal` — закрыт целиком
   - Контракт описывает ровно измеренную комбинацию «перенесённая грань + Perpendicular», и ничего сверх неё: вклад одного Perpendicular без грани не изолирован пробой, и заявлять его самостоятельным маршрутом было бы утверждением без измерения.
   - Грань обязана пересечь мост API5→API7: непереданная грань — это значение, которое API7 не примет, и тогда отверстие не создаётся вовсе (GEOMETRY_FAILED до мутации).

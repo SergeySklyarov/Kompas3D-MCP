@@ -38364,6 +38364,80 @@ def dirty_close_checks(client, rep, workdir, host, config):
                            and abs(volume14 - vol14b) <= max(0.01, 1e-6 * vol14b)) else "FAIL",
                 ext_note)
 
+        # ═══════════ DL.15: отпечаток состояния чувствителен к мутации ═══════════
+        # DOC: DocumentContextDto.Fingerprint is an opaque geometry-state fingerprint used when events are
+        # unavailable; ExternalChangeDetection names how far it can be trusted (spec 1.7 п.6).
+        doc15, rev15, refs15, _vol15, err15 = plate("DL_fingerprint")
+        fp_note = f"заготовка: {err15}"
+        fp_same = fp_diff = None
+        fp_mode = None
+        if doc15 and refs15:
+            def full_context(doc):
+                env = tool("kompas_get_context", {"document_id": doc, "detail": "full"}, timeout=180)
+                return env.get("result") or {}
+
+            ctx15a = full_context(doc15)
+            ctx15b = full_context(doc15)
+            env15 = tool("kompas_update_feature", {
+                "feature_ref": refs15[0], "expected_revision": rev15, "depth_mm": 15.0,
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            ctx15c = full_context(doc15)
+            fp_same = (ctx15a.get("fingerprint") is not None
+                       and ctx15a.get("fingerprint") == ctx15b.get("fingerprint"))
+            fp_diff = (ctx15a.get("fingerprint") is not None
+                       and ctx15a.get("fingerprint") != ctx15c.get("fingerprint"))
+            fp_mode = ctx15a.get("external_change_detection")
+            fp_note = (f"отпечаток {ctx15a.get('fingerprint')} / {ctx15b.get('fingerprint')} / "
+                       f"{ctx15c.get('fingerprint')}; режим обнаружения={fp_mode}; "
+                       f"правка={error_code(env15)}")
+            close(doc15, "discard")
+        rep.add("DL.15",
+                "отпечаток состояния равен при повторном чтении без изменений и меняется от мутации, "
+                "режим обнаружения внешнего изменения назван (spec 1.7 п.6)",
+                "PASS" if (fp_same and fp_diff and fp_mode in ("reliable", "conservative",
+                                                               "unavailable")) else "FAIL",
+                fp_note)
+
+        # ═══════════ DL.16: после перестроения старая ссылка не переиспользуется ═══════════
+        # INVARIANT (spec 1.7 п.8 и п.11): a rebuild invalidates the old reference, and the reference is
+        # used again only after a fresh read. MEASURED: the same ref answers STALE_REFERENCE after
+        # rebuild - a named refusal, not a silent redirect to another feature.
+        doc16, rev16, refs16, vol16, err16 = plate("DL_rebuild")
+        rb_note = f"заготовка: {err16}"
+        rb_ok = False
+        if doc16 and refs16:
+            listed16 = tool("kompas_list_features", {"document_id": doc16}, timeout=180).get("result")
+            rows16_before = listed16 if isinstance(listed16, list) else []
+            first16 = (rows16_before[0].get("feature_ref") or rows16_before[0].get("ref")) if rows16_before else None
+            before16 = tool("kompas_get_feature", {"feature_ref": first16}, timeout=180) if first16 else {}
+            fam_before = (before16.get("result") or {}).get("family")
+            rb16 = tool("kompas_rebuild", {"document_id": doc16, "operation_id": str(uuid.uuid4())},
+                        timeout=300)
+            after16 = tool("kompas_get_feature", {"feature_ref": refs16[0]}, timeout=180)
+            stale_code = error_code(after16)
+            listed16b = tool("kompas_list_features", {"document_id": doc16}, timeout=180).get("result")
+            rows16_after = listed16b if isinstance(listed16b, list) else []
+            first16b = (rows16_after[0].get("feature_ref") or rows16_after[0].get("ref")) if rows16_after else None
+            fam_after = ((tool("kompas_get_feature", {"feature_ref": first16b}, timeout=180).get("result")
+                          or {}).get("family")) if first16b else None
+            rows16 = bodies_of(doc16)
+            body16 = rows16[0].get("body_ref") if rows16 else None
+            vol16_after = measured(body16).get("volume_mm3") if body16 else None
+            rb_ok = (fam_before is not None and stale_code == "STALE_REFERENCE"
+                     and len(rows16_before) == len(rows16_after) and fam_after == fam_before
+                     and error_code(rb16) is None
+                     and vol16_after is not None
+                     and abs(vol16_after - vol16) <= max(0.01, 1e-6 * vol16))
+            rb_note = (f"старая ссылка после rebuild={stale_code}; признаков "
+                       f"{len(rows16_before)}→{len(rows16_after)}; первый family "
+                       f"{fam_before}→{fam_after}; rebuild={error_code(rb16)}; "
+                       f"объём {vol16}→{vol16_after}")
+            close(doc16, "discard")
+        rep.add("DL.16",
+                "после перестроения старая ссылка на признак отвергается STALE_REFERENCE, а "
+                "перечитанная указывает на тот же признак и тот же объём (spec 1.7 п.8, п.11)",
+                "PASS" if rb_ok else "FAIL", rb_note)
+
         # ═══════════ DL.12: изменение лежит в файле — читает ДРУГОЙ процесс ═══════════
         # Сначала закрывается сеанс прибора целиком: иначе «файл прочитан заново» доказывал бы
         # тот же процесс, который файл и записал.

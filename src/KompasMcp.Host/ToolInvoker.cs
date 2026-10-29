@@ -10,6 +10,7 @@ using KompasMcp.Domain.Paths;
 using KompasMcp.Domain.Schema;
 using KompasMcp.Domain.Verification;
 using KompasMcp.Host.Catalog;
+using KompasMcp.Host.Scenarios;
 
 namespace KompasMcp.Host;
 
@@ -126,6 +127,15 @@ public sealed class ToolInvoker : IAsyncDisposable
                 Verification = new VerificationDto(VerificationLevel.ArgumentValidated, new[] { new NamedCheck("path_policy", false) }, Array.Empty<string>()),
                 Error = pathFailure,
             };
+        }
+
+        // A scenario is a plan of ORDINARY calls: it re-enters this method per step, so a step gets the
+        // same schema check, path policy, journal and queue as a direct call. The command never reaches
+        // the Worker. History: docs/decisions/scenario.md#scenario-run
+        if (string.Equals(tool.WorkerCommand, WorkerCommands.Scenario, StringComparison.Ordinal))
+        {
+            return await new ScenarioRunner(_options.ControlCopyDirectory, InvokeAsync)
+                .RunAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
         return tool.IsMutation

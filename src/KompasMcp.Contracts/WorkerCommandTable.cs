@@ -113,6 +113,10 @@ public static class WorkerCommandTable
         // Not free: the probe enumerates the ROT and the process list.
         Control(WorkerCommands.Ping, WorkerAction.Read, 2_000);
         Control(WorkerCommands.EnvironmentProbe, WorkerAction.Read, 10_000);
+        // The scenario never reaches the Worker: the Host runs the plan and each step travels as its own
+        // command. The row exists because every constant must be described, and the control lane is
+        // where a command that touches no COM belongs. History: docs/decisions/scenario.md#scenario-run
+        Control(WorkerCommands.Scenario, WorkerAction.Read, 0);
 
         // ---- session and document lifecycle ----
         // Launching or attaching an instance starts a process and waits for its answer.

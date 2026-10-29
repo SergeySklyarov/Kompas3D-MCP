@@ -102,6 +102,7 @@ public static class CompactCatalog
         ["kompas_export_step"] = "file", ["kompas_export_stl"] = "file",
         ["kompas_export_iges"] = "file",
         ["kompas_export_image"] = "file", ["kompas_import_step"] = "file",
+        ["kompas_run_scenario"] = "scenario",
     };
 
     private static readonly Dictionary<string, ToolDefinition> ByName =

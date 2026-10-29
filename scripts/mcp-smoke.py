@@ -748,8 +748,9 @@ def step_metadata_export(client, app_id, path):
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties) → 119 (DIRECT_FACES_CORE: kompas_move_faces)
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
-# → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges).
-EXPECTED_TOOL_COUNT = 123
+# → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
+# → 124 (SCENARIO_RUN: kompas_run_scenario).
+EXPECTED_TOOL_COUNT = 124
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -920,6 +921,10 @@ RUN_GROUPS = (
     ("update", "update", "update-acceptance.json",
      "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
      "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
+    ("scenario", "scenario", "scenario-acceptance.json",
+     "Приёмка SC: ограниченный сценарий kompas_run_scenario - цепочка шагов со ссылками назад, "
+     "повтор с тем же operation_id без эффекта, остановка на отказе с partial_effects, "
+     "восстановление из контрольной точки и отказы до выполнения (наряд SCENARIO_RUN, контракт §2.9)"),
     ("iges", "iges", "iges-acceptance.json",
      "Приёмка IGES: экспорт модели в IGES - файл записан, структура разобрана прибором по открытому "
      "стандарту (счётчики секций, сущности), сборка, отказы по имени и повтор в тот же путь "
@@ -982,6 +987,8 @@ ALL_GROUPS_EXTRA = (
     # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
     # `initialize.instructions` можно увидеть только в процессе, поднятом ПОСЛЕ записи итога.
     ("update", ["--update-only"]),
+    # Группа SC строит свои детали и не зависит от общего сеанса: свежий сеанс ей не нужен.
+    ("scenario", ["--scenario-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
 )
@@ -2160,6 +2167,7 @@ FLAGS = (
     ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
+    ("--scenario-only", False, "группа SC: ограниченный сценарий kompas_run_scenario"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
@@ -14866,6 +14874,324 @@ IGES_REFERENCE = {
 }
 
 
+def scenario_checks(client, rep, app_id, workdir):
+    """SC.* — ограниченный сценарий `kompas_run_scenario` (наряд SCENARIO_RUN, контракт §2.9).
+
+    ЗАЧЕМ ЭТА ГРУППА. Инструмент оркеструет УЖЕ зарегистрированные инструменты на стороне сервера:
+    шаг идёт тем же путём, что обычный вызов, ссылки разрешены только назад, operation_id шага
+    производный, а отказ шага либо останавливает план, либо возвращает документ из контрольной
+    точки. Строки сравнивают ЗНАЧЕНИЯ (объём, число признаков, ревизию), а не только `ok`: сценарий,
+    который «выполнился», но ничего не изменил, прошёл бы проверку вида `ok`.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Сборка с восстановлением графа зависимостей (наряд `ASSEMBLY_CHECKPOINT`),
+    вложенные сценарии и файловый ввод-вывод внутри шага — они запрещены и проверяются отказом.
+    """
+    import os as _os
+
+    def call(tool, args, timeout=600):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def err_details(env):
+        err = (env or {}).get("error") or {}
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def feature_count(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("feature_count")
+
+    def body_volume(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        if isinstance(rows, dict):
+            rows = rows.get("rows") or rows.get("bodies") or []
+        if not isinstance(rows, list) or not rows:
+            return None
+        _e, env, _r = client.tool("kompas_measure",
+                                  {"target_ref": rows[0].get("body_ref"), "properties": ["volume"]})
+        return ((env or {}).get("result") or {}).get("volume_mm3")
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def run(doc, steps, on_error="stop", policy="none", parent=None):
+        payload = {
+            "scenario_version": 1,
+            "document_id": doc,
+            "operation_id": parent or str(uuid.uuid4()),
+            "on_error": on_error,
+            "checkpoint_policy": policy,
+            "steps": steps,
+        }
+        return call("kompas_run_scenario", payload, timeout=600)
+
+    def step_rows(env):
+        rows = result(env).get("steps")
+        return rows if isinstance(rows, list) else []
+
+    def statuses(env):
+        return [(row.get("step_id"), row.get("status")) for row in step_rows(env)]
+
+    def new_document(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return doc_of(env), code, emsg(env)
+
+    rect = [{"kind": "rectangle", "start_mm": [0.0, 0.0], "width_mm": 40.0, "height_mm": 20.0}]
+
+    def chain_steps(name, first_revision=1):
+        """Эскиз -> правка эскиза -> замкнутый профиль -> выдавливание, все ссылки назад.
+
+        first_revision — ревизия документа к моменту первого шага: контрольная точка снимается
+        документированным SaveAs и САМА поднимает ревизию (измерено: 1 -> 2).
+        """
+        return [
+            {"step_id": "s1", "tool": "kompas_create_sketch",
+             "arguments": {"expected_revision": first_revision,
+                           "plane": {"base": "xy", "offset_mm": 0.0}, "name": name}},
+            {"step_id": "s2", "tool": "kompas_edit_sketch",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s1", "field": "revision.after"},
+                           "mode": "append", "entities": rect}},
+            {"step_id": "s3", "tool": "kompas_finish_sketch",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "require_closed_profile": False}},
+            {"step_id": "s4", "tool": "kompas_extrude",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s3", "field": "revision.after"},
+                           "operation": "base", "depth_mm": 10.0, "direction": "positive"}},
+        ]
+
+    # -- SC.01.discover -------------------------------------------------------------------------
+    entry = entry_of(client, "kompas_run_scenario")
+    schema_ok = False
+    if entry is not None:
+        published = _os.path.join(ROOT, "schemas", "kompas_run_scenario.json")
+        try:
+            with open(published, encoding="utf-8-sig") as fh:
+                want = json.load(fh)
+            want.pop("$schema", None)
+            schema_ok = entry.get("inputSchema") == want
+        except (OSError, ValueError):
+            schema_ok = False
+    rep.add("SC.01.discover",
+            "kompas_run_scenario опубликован, схема совпадает с реестром "
+            "(schemas/kompas_run_scenario.json)",
+            "PASS" if entry is not None and schema_ok else "FAIL",
+            "" if entry is not None and schema_ok else f"entry={entry is not None}, schema={schema_ok}")
+
+    doc, code, message = new_document("sc-chain")
+    if not doc:
+        rep.add("SC.02.chain", "сценарий из 4 шагов со ссылками назад: эскиз -> выдавливание",
+                "FAIL", f"документ не создан: {code} {message}")
+        rep.add("SC.03.repeat", "повтор сценария с тем же operation_id не даёт эффекта", "FAIL",
+                "документ не создан")
+        rep.add("SC.04.stop", "отказ шага при on_error=stop: failed_step, partial_effects, skipped",
+                "FAIL", "документ не создан")
+        rep.add("SC.05.restore",
+                "отказ шага при on_error=restore_checkpoint: восстановление подтверждено",
+                "FAIL", "документ не создан")
+        rep.add("SC.06.refusals",
+                "отказ до выполнения: ссылка вперёд, предел 100 шагов, вложенный сценарий",
+                "FAIL", "документ не создан")
+        return
+
+    volume_before = body_volume(doc)
+    features_before = feature_count(doc)
+    parent = str(uuid.uuid4())
+
+    # -- SC.02.chain ----------------------------------------------------------------------------
+    env, code = run(doc, chain_steps("sc-chain"), parent=parent)
+    steps = step_rows(env)
+    child_ids = [row.get("operation_id") for row in steps]
+    volume = body_volume(doc)
+    features = feature_count(doc)
+    chain_ok = (
+        code is None
+        and result(env).get("status") == "succeeded"
+        and statuses(env) == [("s1", "succeeded"), ("s2", "succeeded"),
+                              ("s3", "succeeded"), ("s4", "succeeded")]
+        and len(set(child_ids)) == 4
+        and volume is not None and abs(volume - 8000.0) <= 1.0
+        and features == (features_before or 0) + 1
+    )
+    rep.add("SC.02.chain",
+            "сценарий из 4 шагов со ссылками назад: все шаги succeeded, operation_id шагов различны, "
+            "объём тела 8000 мм3 (40x20x10), признаков на один больше",
+            "PASS" if chain_ok else "FAIL",
+            f"code={code} status={result(env).get('status')} steps={statuses(env)} "
+            f"volume={volume} features={features} (было {features_before}) "
+            f"unique_ids={len(set(child_ids))} err={emsg(env)}",
+            details={"answer": result(env), "volume_mm3": volume, "feature_count": features})
+
+    # -- SC.03.repeat ---------------------------------------------------------------------------
+    env2, code2 = run(doc, chain_steps("sc-chain"), parent=parent)
+    volume2 = body_volume(doc)
+    features2 = feature_count(doc)
+    repeat_ok = (
+        code2 is None
+        and volume2 is not None and abs(volume2 - (volume or 0.0)) <= 1.0
+        and features2 == features
+        and [row.get("operation_id") for row in step_rows(env2)] == child_ids
+    )
+    rep.add("SC.03.repeat",
+            "повтор того же сценария с тем же operation_id: ни одного нового эффекта (объём и число "
+            "признаков прежние, operation_id шагов те же)",
+            "PASS" if repeat_ok else "FAIL",
+            f"code={code2} volume={volume2} (было {volume}) features={features2} (было {features}) "
+            f"err={emsg(env2)}")
+
+    # -- SC.04.stop -----------------------------------------------------------------------------
+    fail_doc, code_f, message_f = new_document("sc-stop")
+    if fail_doc:
+        steps_fail = [
+            {"step_id": "s1", "tool": "kompas_create_sketch",
+             "arguments": {"expected_revision": 1,
+                           "plane": {"base": "xy", "offset_mm": 0.0}, "name": "sc-stop-profile"}},
+            {"step_id": "s2", "tool": "kompas_edit_sketch",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s1", "field": "revision.after"},
+                           "mode": "append", "entities": rect}},
+            {"step_id": "s3", "tool": "kompas_extrude",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s2", "field": "revision.after"},
+                           "operation": "cut", "depth_mm": 5.0, "direction": "positive"}},
+            {"step_id": "s4", "tool": "kompas_rebuild",
+             "arguments": {"expected_revision": {"from_step": "s3", "field": "revision.after"}}},
+        ]
+        env_stop, code_stop = run(fail_doc, steps_fail)
+        answer = result(env_stop)
+        stop_ok = (
+            code_stop is not None
+            and answer.get("status") == "failed"
+            and answer.get("failed_step") == "s3"
+            and answer.get("partial_effects") == ["s1", "s2"]
+            and statuses(env_stop) == [("s1", "succeeded"), ("s2", "succeeded"),
+                                       ("s3", "failed"), ("s4", "skipped")]
+        )
+        rep.add("SC.04.stop",
+                "отказ шага в середине при on_error=stop: failed_step=s3, partial_effects=[s1,s2], "
+                "последующий шаг skipped",
+                "PASS" if stop_ok else "FAIL",
+                f"code={code_stop} status={answer.get('status')} "
+                f"failed_step={answer.get('failed_step')} partial={answer.get('partial_effects')} "
+                f"steps={statuses(env_stop)} err={emsg(env_stop)}")
+    else:
+        rep.add("SC.04.stop", "отказ шага при on_error=stop", "FAIL",
+                f"документ не создан: {code_f} {message_f}")
+
+    # -- SC.05.restore --------------------------------------------------------------------------
+    restore_doc, code_r, message_r = new_document("sc-restore")
+    if restore_doc:
+        steps_restore = [
+            {"step_id": "s1", "tool": "kompas_create_sketch",
+             "arguments": {"expected_revision": 2,
+                           "plane": {"base": "xy", "offset_mm": 0.0}, "name": "sc-restore-profile"}},
+            {"step_id": "s2", "tool": "kompas_edit_sketch",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s1", "field": "revision.after"},
+                           "mode": "append", "entities": rect}},
+            {"step_id": "s3", "tool": "kompas_extrude",
+             "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                           "expected_revision": {"from_step": "s2", "field": "revision.after"},
+                           "operation": "cut", "depth_mm": 5.0, "direction": "positive"}},
+        ]
+        env_restore, code_restore = run(restore_doc, steps_restore,
+                                        on_error="restore_checkpoint", policy="document_copy")
+        answer_r = result(env_restore)
+        restore = answer_r.get("restore") or {}
+        checkpoint = answer_r.get("checkpoint") or {}
+        after_doc = restore.get("document_id_after")
+        after_volume = body_volume(after_doc) if after_doc else None
+        after_features = feature_count(after_doc) if after_doc else None
+        restore_ok = (
+            code_restore is not None
+            and answer_r.get("failed_step") == "s3"
+            and checkpoint.get("taken") is True
+            and restore.get("attempted") is True
+            and restore.get("succeeded") is True
+            and after_doc is not None
+            # Тела нет — это и есть состояние до сценария: копия снята до первого признака.
+            and after_volume in (None, 0.0)
+            and (after_features or 0) == 0
+        )
+        rep.add("SC.05.restore",
+                "отказ шага при on_error=restore_checkpoint: копия снята, документ закрыт без "
+                "сохранения, копия открыта заново — тела нет и признаков 0 (как до сценария)",
+                "PASS" if restore_ok else "FAIL",
+                f"code={code_restore} checkpoint={checkpoint.get('taken')} "
+                f"restore={restore.get('attempted')}/{restore.get('succeeded')} "
+                f"reason={restore.get('reason')} after_doc={after_doc} "
+                f"volume={after_volume} features={after_features} err={emsg(env_restore)}",
+                details={"answer": answer_r})
+        close(after_doc)
+    else:
+        rep.add("SC.05.restore", "отказ шага при on_error=restore_checkpoint", "FAIL",
+                f"документ не создан: {code_r} {message_r}")
+
+    # -- SC.06.refusals -------------------------------------------------------------------------
+    refusal_doc, code_d, message_d = new_document("sc-refusals")
+    if refusal_doc:
+        revision_before = current_rev(refusal_doc)
+        forward = [
+            {"step_id": "s1", "tool": "kompas_extrude",
+             "arguments": {"sketch_ref": {"from_step": "s2", "field": "result.id"},
+                           "expected_revision": 1, "operation": "base", "depth_mm": 5.0,
+                           "direction": "positive"}},
+            {"step_id": "s2", "tool": "kompas_create_sketch",
+             "arguments": {"expected_revision": 1,
+                           "plane": {"base": "xy", "offset_mm": 0.0}, "name": "sc-forward"}},
+        ]
+        env_forward, code_forward = run(refusal_doc, forward)
+        nested = [{"step_id": "s1", "tool": "kompas_run_scenario", "arguments": {}}]
+        env_nested, code_nested = run(refusal_doc, nested)
+        too_long = [{"step_id": f"s{i}", "tool": "kompas_rebuild",
+                     "arguments": {"expected_revision": 1}} for i in range(101)]
+        env_long, code_long = run(refusal_doc, too_long)
+        revision_after = current_rev(refusal_doc)
+        refusals_ok = (
+            code_forward == "INVALID_ARGUMENT"
+            and err_details(env_forward).get("field") == "steps[0].arguments.sketch_ref.from_step"
+            and code_nested == "INVALID_ARGUMENT"
+            and code_long == "INVALID_ARGUMENT"
+            and revision_after == revision_before
+        )
+        rep.add("SC.06.refusals",
+                "отказ до выполнения: ссылка вперёд (поле названо), вложенный сценарий, 101 шаг — "
+                "ревизия документа не изменилась",
+                "PASS" if refusals_ok else "FAIL",
+                f"forward={code_forward} nested={code_nested} long={code_long} "
+                f"revision {revision_before}->{revision_after} "
+                f"field={err_details(env_forward).get('field')}")
+        close(refusal_doc)
+    else:
+        rep.add("SC.06.refusals", "отказ до выполнения", "FAIL",
+                f"документ не создан: {code_d} {message_d}")
+
+    close(doc)
+    if fail_doc:
+        close(fail_doc)
+
+
 def iges_checks(client, rep, app_id, workdir):
     """IGES.* — экспорт IGES (блок IGES) через MCP на бинарях поставки.
 
@@ -17202,6 +17528,8 @@ def main():
     r1_only = "--r1-only" in sys.argv
     # Блок IGES (экспорт модели в IGES): группа IGES на своём сеансе, строки `IGES.<NN>.<действие>`.
     iges_only = "--iges-only" in sys.argv
+    # Блок SC (ограниченный сценарий): группа SC на своём сеансе, строки `SC.<NN>.<действие>`.
+    scenario_only = "--scenario-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -17360,6 +17688,7 @@ def main():
         "e5": e5_only,
         "r1": r1_only,
         "iges": iges_only,
+        "scenario": scenario_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -18081,6 +18410,14 @@ def main():
 
         if r1_only:
             r1_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if scenario_only:
+            scenario_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -55667,6 +56004,7 @@ EXTRA_GROUP_CHECKS = {
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),
     "iges": lambda c, r, a, w, v, p: iges_checks(c, r, a, w),
+    "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
 }
 
 

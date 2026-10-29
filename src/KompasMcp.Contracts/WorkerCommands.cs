@@ -439,6 +439,12 @@ public static class WorkerCommands
     /// "applied" differ by measurement, not wording.
     /// History: docs/decisions/contracts.md#sketch-entity-edit-route</remarks>
     public const string EditSketchEntity = "sketch.entity_edit";
+
+    /// <summary>Bounded scenario: a plan of registered tool calls orchestrated by the Host.</summary>
+    /// <remarks>INVARIANT: this command is never sent to the Worker — the Host runs the plan and each
+    /// step travels as its own command. It exists so the tool has a behaviour and a schema like any
+    /// other registry entry. History: docs/decisions/scenario.md#scenario-run</remarks>
+    public const string Scenario = "scenario.run";
 }
 
 /// <summary>Request to create an auxiliary-geometry object.</summary> <remarks><para><b>Kind and mode are separated,

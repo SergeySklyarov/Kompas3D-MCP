@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 123.
+Всего инструментов: 124.
 
 | Инструмент | Путь вызова | Назначение | Что делает |
 |---|---|---|---|
@@ -120,6 +120,7 @@
 | `kompas_create_variable` | run | Создать переменную детали | СОЗДАЁТ именованную переменную верхнего компонента детали документированным маршрутом API7: IPart7.AddVariable(Name, Value, Note) → IVariable7, затем .External и .Expression. |
 | `kompas_list_feature_parameters` | run | Параметры операции | ЧИТАЕТ переменные-параметры ОДНОЙ операции и ничего не записывает: признак (ссылка из kompas_list_features) → ksEntity.GetFeature() → ksFeature.VariableCollection → перечисление GetCount/GetByIndex и чтение ksVariable.name, displayName,… |
 | `kompas_bind_parameter` | run | Привязать параметр операции | ЗАПИСЫВАЕТ выражение параметра операции, адресуя параметр его ТОЧНЫМ именем (поле name из kompas_list_feature_parameters), а НЕ значением или позицией: два параметра с равным значением по значению неразличимы. |
+| `kompas_run_scenario` | run | Сценарий из шагов | Ограниченный сценарий: план из зарегистрированных инструментов, выполняемый по порядку. |
 | `kompas_probe_units` | run | Замер единиц | Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. |
 | `kompas_read_topology` | run | Топология тела | Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры. |
 | `kompas_resolve_selection` | run | Однозначный выбор | Структурный предикат по граням тела: surface_type, area_range_mm2, normal_direction, normal_angle_tolerance_deg - это весь предикат; нормаль задаётся в системе координат детали, которой принадлежит тело. |

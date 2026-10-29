@@ -1161,3 +1161,13 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 снятие требования и уровня `geometry_roundtrip_checked` - заказчику на стоп-докладе выпуска. Очередь: `STEP_METADATA`
 (выдан) -> `SCENARIO_RUN` -> `DXF_FLAT_PART` -> `OPS_CONTRACT` -> `ASSEMBLY_CHECKPOINT` -> `DIAG_PACKAGE` ->
 `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, пятьдесят пятая (`STEP_METADATA` принят; выдан `SCENARIO_RUN`).**
+
+`STEP_METADATA` принят попыткой 1: поля `schema`/`units`/`unique_solids`/`instance_count` STEP - разбором файла,
+`sha256`/`captured_at` снимка; зачётный `--all` на `2632c72` - 2022 PASS, FAIL 0. Цена обратного импорта в ответе
+экспорта - 435 мс на образце прибора; уровень `geometry_roundtrip_checked` не добавлен, вопрос - заказчику на
+стоп-докладе выпуска. Выдан `SCENARIO_RUN` (`kompas_run_scenario` по §2.9 `docs/02_TOOL_CONTRACTS.md`, оркестровка
+зарегистрированных инструментов, новых маршрутов API нет; `restore_checkpoint` для сборки - отказ до
+`ASSEMBLY_CHECKPOINT`). Очередь: `SCENARIO_RUN` (выдан) -> `DXF_FLAT_PART` -> `OPS_CONTRACT` -> `ASSEMBLY_CHECKPOINT`
+-> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.

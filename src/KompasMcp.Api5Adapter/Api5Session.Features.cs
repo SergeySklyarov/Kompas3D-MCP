@@ -455,7 +455,8 @@ public partial class Api5Session
                 "face_refs; для отверстия — diameter_mm и поля СВОЕГО режима (depth_mm у blind_flat и " +
                 "blind_sphere, counterbore_diameter_mm/counterbore_depth_mm у through_counterbore, " +
                 "countersink_diameter_mm/countersink_angle_deg у through_countersink, conic_angle_deg " +
-                "у through_conic). Цепочки " +
+                "у through_conic, counterbore_diameter_mm/counterbore_depth_mm/countersink_angle_deg " +
+                "у through_counterdrill). Цепочки " +
                 "соответствия (couplings) — сопровождение набора сечений, а не самостоятельный вход: " +
                 "они передаются ВМЕСТЕ с section_refs; для ребра — draft_angle_deg, thickness_mm или " +
                 "symmetric.");

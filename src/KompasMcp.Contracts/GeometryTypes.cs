@@ -190,6 +190,14 @@ public enum HoleMode
     /// diameter is DERIVED from it. The diameter-driven <c>ksCNDiameter</c> degenerates into a cylinder.
     /// History: docs/decisions/adapter-features.md#hole-extended-modes</remarks>
     ThroughConic,
+
+    /// <summary>Through hole with a spotfacing AND a countersink: <c>ksHTCounterdrill</c> +
+    /// <c>ICountersinkSpotfacingHoleParameters</c>.</summary>
+    /// <remarks>MEASURED: the cone sits at the BOTTOM of the spotfacing and tapers to the pilot; the
+    /// written angle is the FULL apex angle. The interface has ONE diameter, shared by the spotfacing
+    /// and the countersink, so there is no separate countersink diameter to give.
+    /// History: docs/decisions/adapter-features.md#hole-counterdrill</remarks>
+    ThroughCounterdrill,
 }
 
 /// <summary>Rotation operation kind. THIS value decides the action, not <c>IRotated1.OperationResult</c>.</summary>

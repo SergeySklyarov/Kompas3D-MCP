@@ -470,6 +470,9 @@ internal static class Api7Hole
             var spotfacing = hole.HoleParameters as ISpotfacingHoleParameters;
             var countersink = hole.HoleParameters as ICountersinkHoleParameters;
             var conic = hole.HoleParameters as IConicHoleParameters;
+            // Its own interface, with ONE diameter for the spotfacing and the countersink: the two
+            // fields below are filled from that single number, not from two.
+            var counterdrill = hole.HoleParameters as ICountersinkSpotfacingHoleParameters;
 
             return new HoleReadDto(
                 HoleType: Text(() => hole.HoleType.ToString()),
@@ -477,10 +480,16 @@ internal static class Api7Hole
                 DepthType: Text(() => hole.DepthType.ToString()),
                 DepthMm: Read(() => hole.Depth),
                 EndFaceType: Text(() => hole.EndFaceType.ToString()),
-                SpotfacingDiameterMm: spotfacing is null ? null : Read(() => spotfacing.SpotfacingDiameter),
-                SpotfacingDepthMm: spotfacing is null ? null : Read(() => spotfacing.SpotfacingDepth),
+                SpotfacingDiameterMm: spotfacing is not null
+                    ? Read(() => spotfacing.SpotfacingDiameter)
+                    : counterdrill is null ? null : Read(() => counterdrill.SpotfacingCountersinkDiameter),
+                SpotfacingDepthMm: spotfacing is not null
+                    ? Read(() => spotfacing.SpotfacingDepth)
+                    : counterdrill is null ? null : Read(() => counterdrill.SpotfacingDepth),
                 CountersinkDiameterMm: countersink is null ? null : Read(() => countersink.CountersinkDiameter),
-                CountersinkAngleDeg: countersink is null ? null : Read(() => countersink.CountersinkAngle),
+                CountersinkAngleDeg: countersink is not null
+                    ? Read(() => countersink.CountersinkAngle)
+                    : counterdrill is null ? null : Read(() => counterdrill.CountersinkAngle),
                 CountersinkDepthMm: countersink is null ? null : Read(() => countersink.CountersinkDepth),
                 CountersinkType: countersink is null ? null : Text(() => countersink.CountersinkType.ToString()),
                 ReadRoutes: new[] { "API7 IHole3D" },
@@ -826,6 +835,134 @@ internal static class Api7Hole
             spotfacing.SpotfacingDepth = boreDepthMm;
 
             return hole.Update() ? (true, null) : (false, "IHole3D.Update() вернул false");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    /// <summary>Create a through counterdrill: a through pilot, a spotfacing, then a cone from the
+    /// spotfacing diameter down to the pilot.</summary>
+    /// <remarks>MEASURED: the removal equals the pilot, plus the spotfacing ring, plus the frustum whose
+    /// height follows from the FULL apex angle - and the cone starts at the BOTTOM of the spotfacing.
+    /// INVARIANT: the interface has ONE diameter for the spotfacing and the countersink; there is no
+    /// second diameter to write.
+    /// History: docs/decisions/adapter-features.md#hole-counterdrill</remarks>
+    public static (bool Created, string? Failure) TryCreateCounterdrill(
+        IModelContainer container,
+        IModelObject baseSurface,
+        double pilotDiameterMm,
+        double spotfacingDiameterMm,
+        double spotfacingDepthMm,
+        double angleDeg,
+        Func<IHoleDisposal, PlacementOutcome>? place = null)
+    {
+        try
+        {
+            if (container.Holes3D.Add() is not IHole3D hole)
+            {
+                return (false, "IHoles3D.Add() вернул не IHole3D");
+            }
+
+            if (hole is not IHoleDisposal disposal)
+            {
+                return (false, "объект отверстия не отвечает на QI(IHoleDisposal) — базовую грань подать нечем");
+            }
+
+            hole.HoleType = ksHoleTypeEnum.ksHTCounterdrill;
+            hole.Diameter = pilotDiameterMm;
+            hole.DepthType = DepthReachThrough;
+            disposal.BaseSurface = baseSurface;
+            disposal.Perpendicular = true;
+
+            // The offset is written BEFORE Update() and on THIS SAME object (see TryCreateCounterbore).
+            if (place is not null)
+            {
+                var outcome = place(disposal);
+                if (!outcome.Applied)
+                {
+                    return (false, outcome.Failure ?? "позиционирование не применено");
+                }
+            }
+
+            if (hole.HoleParameters is not ICountersinkSpotfacingHoleParameters parameters)
+            {
+                return (false,
+                    "IHole3D.HoleParameters не приводится к ICountersinkSpotfacingHoleParameters — " +
+                    "режим цековки с зенковкой недостижим");
+            }
+
+            parameters.SpotfacingCountersinkDiameter = spotfacingDiameterMm;
+            parameters.SpotfacingDepth = spotfacingDepthMm;
+            parameters.CountersinkAngle = angleDeg;
+
+            return hole.Update() ? (true, null) : (false, "IHole3D.Update() вернул false");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    /// <summary>Edit an EXISTING through counterdrill (mode <c>through_counterdrill</c>).</summary>
+    /// <remarks>INVARIANT: only members of THIS mode are written, and an unsupplied number is NOT
+    /// written — a read value is derived from the model and must not be frozen as input.
+    /// History: docs/decisions/adapter-features.md#hole-counterdrill</remarks>
+    public static (bool Written, string? Failure) TryWriteCounterdrill(
+        IModelContainer container,
+        int index,
+        double? diameterMm,
+        double? spotfacingDiameterMm,
+        double? spotfacingDepthMm,
+        double? angleDeg)
+    {
+        try
+        {
+            if (container.Holes3D[index] is not IHole3D hole)
+            {
+                return (false, $"элемент коллекции Holes3D[{index}] не отдаёт IHole3D");
+            }
+
+            hole.HoleType = ksHoleTypeEnum.ksHTCounterdrill;
+            hole.DepthType = DepthReachThrough;
+            if (diameterMm is double diameter)
+            {
+                hole.Diameter = diameter;
+            }
+
+            if (spotfacingDiameterMm is null && spotfacingDepthMm is null && angleDeg is null)
+            {
+                return hole.Update()
+                    ? (true, null)
+                    : (false, "IHole3D.Update() вернул false — числа записаны, но признак не перестроен");
+            }
+
+            if (hole.HoleParameters is not ICountersinkSpotfacingHoleParameters parameters)
+            {
+                return (false,
+                    "IHole3D.HoleParameters не приводится к ICountersinkSpotfacingHoleParameters — " +
+                    "параметры режима записать некуда");
+            }
+
+            if (spotfacingDiameterMm is double spotfacingDiameter)
+            {
+                parameters.SpotfacingCountersinkDiameter = spotfacingDiameter;
+            }
+
+            if (spotfacingDepthMm is double spotfacingDepth)
+            {
+                parameters.SpotfacingDepth = spotfacingDepth;
+            }
+
+            if (angleDeg is double angle)
+            {
+                parameters.CountersinkAngle = angle;
+            }
+
+            return hole.Update()
+                ? (true, null)
+                : (false, "IHole3D.Update() вернул false — числа записаны, но признак не перестроен");
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

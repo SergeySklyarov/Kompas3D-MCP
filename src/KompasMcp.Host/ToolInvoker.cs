@@ -341,8 +341,29 @@ public sealed class ToolInvoker : IAsyncDisposable
                         "При mode=through_countersink поля выточки запрещены: это другой режим с " +
                         "другим интерфейсом параметров.");
                     break;
+                case "through_counterdrill" when holeHasDepth:
+                    yield return new SchemaViolation(
+                        "/depth_mm", "mode",
+                        "При mode=through_counterdrill поле depth_mm запрещено: режим сквозной, а " +
+                        "глубина выточки задаётся counterbore_depth_mm.");
+                    break;
+                case "through_counterdrill" when !hasBoreDiameter || !hasBoreDepth || !hasAngle:
+                    yield return new SchemaViolation(
+                        !hasBoreDiameter ? "/counterbore_diameter_mm"
+                            : !hasBoreDepth ? "/counterbore_depth_mm" : "/countersink_angle_deg",
+                        "mode",
+                        "При mode=through_counterdrill нужны counterbore_diameter_mm (диаметр " +
+                        "выточки), counterbore_depth_mm и countersink_angle_deg: без любого из трёх " +
+                        "режим отличается от сквозного отверстия только именем.");
+                    break;
+                case "through_counterdrill" when hasMouth:
+                    yield return new SchemaViolation(
+                        "/countersink_diameter_mm", "mode",
+                        "При mode=through_counterdrill countersink_diameter_mm запрещён: у режима ОДИН " +
+                        "диаметр — counterbore_diameter_mm, он же диаметр зенковки.");
+                    break;
                 case not ("blind_flat" or "blind_sphere" or "through_counterbore" or "through_countersink"
-                    or "through_conic"):
+                    or "through_conic" or "through_counterdrill"):
                     yield return new SchemaViolation(
                         "/mode", "enum", $"Неизвестный режим отверстия: {mode}.");
                     break;

@@ -133,8 +133,54 @@ public sealed class HoleExtendedModesTests
     }
 
     [Fact]
-    public void ABlindHolesMode_IsToldByItsBottom()
+    public void TheCounterdrill_IsBranchedOnCreateAndOnEdit_WithItsOwnWrite()
     {
+        var hole = AdapterSource("Api5Session.Hole.cs");
+        Assert.Contains("case HoleMode.ThroughCounterdrill:", hole, StringComparison.Ordinal);
+        Assert.Contains("Api7Hole.TryCreateCounterdrill(", hole, StringComparison.Ordinal);
+        Assert.Contains("Api7Hole.TryWriteCounterdrill(", hole, StringComparison.Ordinal);
+
+        // The mode is read back from the vendor name, not guessed: without this line an edit of a
+        // counterdrill refuses as an unknown mode.
+        Assert.Contains("\"ksHTCounterdrill\" => HoleMode.ThroughCounterdrill", hole, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCounterdrill_RefusesASecondDiameter_AndRequiresItsThreeNumbers()
+    {
+        // MEASURED: ICountersinkSpotfacingHoleParameters has ONE diameter, shared by the spotfacing and
+        // the countersink. Accepting countersink_diameter_mm would pass off as applied a number the
+        // kernel never reads, and a spotfacing no wider than the pilot degenerates to no cone at all.
+        var hole = AdapterSource("Api5Session.Hole.cs");
+        // The label appears in TWO switches (create and edit), so the slice is anchored on the
+        // validation method itself, not on the first match: a slice taken by the label alone ended at
+        // the create switch's own default and proved nothing about the refusals.
+        var create = hole.IndexOf("private static void ValidateHoleMode", StringComparison.Ordinal);
+        Assert.True(create > 0, "проверка режима при создании не найдена — разбор устарел");
+        var end = hole.IndexOf("private static void RequireSpotfacing", create, StringComparison.Ordinal);
+        var branch = end > create ? hole[create..end] : hole[create..];
+        Assert.Contains("RequireSpotfacing(command, \"through_counterdrill\")", branch, StringComparison.Ordinal);
+        Assert.Contains("RequireConeAngle(command.CountersinkAngleDeg", branch, StringComparison.Ordinal);
+        Assert.Contains("countersink_diameter_mm", branch, StringComparison.Ordinal);
+        Assert.Contains("ОДИН диаметр", branch, StringComparison.Ordinal);
+
+        // The edit side refuses the foreign fields of the neighbouring modes, and names its own.
+        Assert.Contains("\"through_counterdrill\" =>", hole, StringComparison.Ordinal);
+        Assert.Contains("counterbore_diameter_mm, counterbore_depth_mm, countersink_angle_deg",
+            hole, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSchema_PublishesTheCounterdrillMode()
+    {
+        var holeSchema = ToolCatalog.All.Single(t => t.Name == "kompas_hole").InputSchema;
+        var modes = ((holeSchema["properties"] as JsonObject)?["mode"] as JsonObject)?["enum"] as JsonArray
+                    ?? throw new InvalidOperationException("у kompas_hole нет перечня режимов в схеме");
+        Assert.Contains("through_counterdrill", modes.Select(v => v?.GetValue<string>()));
+    }
+
+    [Fact]
+    public void ABlindHolesMode_IsToldByItsBottom()    {
         // INVARIANT: ksHTBase is shared by the flat and the spherical blind hole, so reading the type
         // alone would edit a spherical hole as a flat one and silently flatten it.
         var hole = AdapterSource("Api5Session.Hole.cs");

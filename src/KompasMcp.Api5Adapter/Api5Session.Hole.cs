@@ -472,6 +472,17 @@ public partial class Api5Session
                     place);
                 return (countersink.Created, countersink.Failure, countersink.ReportedDepthMm);
 
+            case HoleMode.ThroughCounterdrill:
+                var counterdrill = Api7Hole.TryCreateCounterdrill(
+                    container,
+                    baseSurface,
+                    command.DiameterMm,
+                    command.CounterboreDiameterMm!.Value,
+                    command.CounterboreDepthMm!.Value,
+                    command.CountersinkAngleDeg!.Value,
+                    place);
+                return (counterdrill.Created, counterdrill.Failure, null);
+
             default:
                 return (false, $"режим '{command.Mode}' не реализован", null);
         }
@@ -604,11 +615,38 @@ public partial class Api5Session
                 RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_countersink");
                 break;
 
+            case HoleMode.ThroughCounterdrill:
+                // Three numbers of THIS mode: the spotfacing diameter and depth, and the cone angle.
+                // Reused field names, because the meaning is the same: the spotfacing IS the
+                // cylindrical recess, and the angle is the cone's apex angle.
+                RejectPresent(command, "depth_mm", command.DepthMm, "through_counterdrill");
+                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_counterdrill");
+                RequireSpotfacing(command, "through_counterdrill");
+                RequireConeAngle(command.CountersinkAngleDeg, "through_counterdrill");
+                if (command.CountersinkDiameterMm is not null)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.InvalidArgument,
+                        "При mode=through_counterdrill countersink_diameter_mm не принимается: у этого " +
+                        "режима ОДИН диаметр — counterbore_diameter_mm, он же диаметр зенковки. " +
+                        "Принять второе число значило бы выдать за применённый параметр, которого " +
+                        "ядро не читает.",
+                        RetryPolicy.Never,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["family"] = HoleFamily,
+                            ["hole_mode"] = "through_counterdrill",
+                            ["foreign_fields"] = new[] { "countersink_diameter_mm" },
+                        });
+                }
+
+                break;
+
             default:
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
                     $"Режим '{command.Mode}' не реализован: измерены blind_flat, blind_sphere, " +
-                    "through_counterbore, through_countersink и through_conic.",
+                    "through_counterbore, through_countersink, through_conic и through_counterdrill.",
                     RetryPolicy.Never);
         }
 
@@ -622,6 +660,42 @@ public partial class Api5Session
                 "Смещение задаётся парой offset_x_mm и offset_y_mm: одна координата без второй " +
                 "оставляет другую на догадку сервера.",
                 RetryPolicy.Never);
+        }
+    }
+
+    /// <summary>The spotfacing pair, mandatory and positive, with the diameter above the pilot: a
+    /// spotfacing no wider than the pilot removes nothing, and the kernel answers true anyway.</summary>
+    private static void RequireSpotfacing(HoleCommand command, string mode)
+    {
+        if (command.CounterboreDiameterMm is not double diameter || diameter <= 0d)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"При mode={mode} нужен положительный counterbore_diameter_mm — диаметр выточки, он же " +
+                "диаметр зенковки.",
+                RetryPolicy.Never);
+        }
+
+        if (command.CounterboreDepthMm is not double depth || depth <= 0d)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"При mode={mode} нужна положительная counterbore_depth_mm — глубина выточки.",
+                RetryPolicy.Never);
+        }
+
+        if (diameter <= command.DiameterMm)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Диаметр выточки обязан быть больше диаметра пилота: выточка уже пилота не снимает " +
+                $"материал, а конус вырождается в ноль. Режим {mode}.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["counterbore_diameter_mm"] = diameter,
+                    ["diameter_mm"] = command.DiameterMm,
+                });
         }
     }
 
@@ -727,6 +801,15 @@ public partial class Api5Session
                 && Math.Abs(mouth - command.CountersinkDiameterMm!.Value) <= 1e-6
                 && read.CountersinkAngleDeg is double angle
                 && Math.Abs(angle - command.CountersinkAngleDeg!.Value) <= 1e-6,
+            // The countersink diameter is NOT compared: this mode has one diameter, and demanding the
+            // mouth the caller did not give would invent a field.
+            HoleMode.ThroughCounterdrill => diameterOk
+                && read.SpotfacingDiameterMm is double spotfacingDiameter
+                && Math.Abs(spotfacingDiameter - command.CounterboreDiameterMm!.Value) <= 1e-6
+                && read.SpotfacingDepthMm is double spotfacingDepth
+                && Math.Abs(spotfacingDepth - command.CounterboreDepthMm!.Value) <= 1e-6
+                && read.CountersinkAngleDeg is double counterdrillAngle
+                && Math.Abs(counterdrillAngle - command.CountersinkAngleDeg!.Value) <= 1e-6,
             _ => false,
         };
     }
@@ -752,6 +835,9 @@ public partial class Api5Session
             $"{Fmt(command.CountersinkDiameterMm)}@ {Fmt(command.CountersinkAngleDeg)}°",
         HoleMode.ThroughConic =>
             $"тип=ksHTConic D={Fmt(command.DiameterMm)} угол={Fmt(command.ConicAngleDeg)}°",
+        HoleMode.ThroughCounterdrill =>
+            $"тип=ksHTCounterdrill D={Fmt(command.DiameterMm)} выточка={Fmt(command.CounterboreDiameterMm)}×" +
+            $"{Fmt(command.CounterboreDepthMm)}@ {Fmt(command.CountersinkAngleDeg)}°",
         _ => command.Mode.ToString(),
     };
 
@@ -899,7 +985,7 @@ public partial class Api5Session
                 ErrorCodes.CapabilityUnavailable,
                 "Режим существующего отверстия не опознан: IHole3D.HoleType прочитан как " +
                 $"'{readBefore?.HoleType ?? "не читается"}', а правка выполняется только в СВОЁМ " +
-                "режиме. Измерены три: ksHTBase, ksHTCounterbore, ksHTCountersinking.",
+                "режиме. Измерены четыре: ksHTBase, ksHTCounterbore, ksHTCountersinking, ksHTCounterdrill.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["hole_type"] = readBefore?.HoleType });
         }
@@ -954,6 +1040,16 @@ public partial class Api5Session
                 written = outcome.Written;
                 failure = outcome.Failure;
                 reportedCountersinkDepth = outcome.ReportedDepthMm;
+                break;
+            }
+
+            case HoleMode.ThroughCounterdrill:
+            {
+                var outcome = Api7Hole.TryWriteCounterdrill(
+                    container, 0, command.DiameterMm,
+                    command.CounterboreDiameterMm, command.CounterboreDepthMm, command.CountersinkAngleDeg);
+                written = outcome.Written;
+                failure = outcome.Failure;
                 break;
             }
 
@@ -1223,6 +1319,7 @@ public partial class Api5Session
         "ksHTConic" => HoleMode.ThroughConic,
         "ksHTCounterbore" => HoleMode.ThroughCounterbore,
         "ksHTCountersinking" => HoleMode.ThroughCountersink,
+        "ksHTCounterdrill" => HoleMode.ThroughCounterdrill,
         _ => null,
     };
 
@@ -1299,11 +1396,26 @@ public partial class Api5Session
                     "through_countersink");
                 break;
 
+            case HoleMode.ThroughCounterdrill:
+                RejectForeignHoleEditField(command, "through_counterdrill", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField(command, "through_counterdrill", "countersink_diameter_mm",
+                    command.CountersinkDiameterMm);
+                RejectForeignHoleEditField(command, "through_counterdrill", "conic_angle_deg",
+                    command.ConicAngleDeg);
+                PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_counterdrill");
+                PositiveHoleEditValue("counterbore_diameter_mm", command.CounterboreDiameterMm,
+                    "through_counterdrill");
+                PositiveHoleEditValue("counterbore_depth_mm", command.CounterboreDepthMm,
+                    "through_counterdrill");
+                PositiveHoleEditValue("countersink_angle_deg", command.CountersinkAngleDeg,
+                    "through_counterdrill");
+                break;
+
             default:
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
                     $"Режим '{mode}' не реализован: измерены blind_flat, blind_sphere, " +
-                    "through_counterbore, through_countersink и through_conic.",
+                    "through_counterbore, through_countersink, through_conic и through_counterdrill.",
                     RetryPolicy.Never);
         }
     }
@@ -1339,6 +1451,8 @@ public partial class Api5Session
         "through_counterbore" => "diameter_mm, counterbore_diameter_mm, counterbore_depth_mm",
         "through_countersink" => "diameter_mm, countersink_diameter_mm, countersink_angle_deg",
         "through_conic" => "diameter_mm, conic_angle_deg",
+        "through_counterdrill" =>
+            "diameter_mm, counterbore_diameter_mm, counterbore_depth_mm, countersink_angle_deg",
         _ => "нет",
     };
 

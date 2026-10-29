@@ -25,6 +25,10 @@ internal sealed class E4Probe : IDisposable
     private const double Height = 20;
     private const double PlateVolume = Width * Depth * Height;
 
+    // Thickness of the CURRENT plate. The counterdrill law has to hold on more than one, so the
+    // fixture is rebuilt per thickness instead of assuming the base one.
+    private double _height = Height;
+
     private const int PlaneXoy = 1;
     private const int SketchType = 5;
     private const int BossExtrusionType = 25;
@@ -127,7 +131,7 @@ internal sealed class E4Probe : IDisposable
         var extrusion = feature.GetDefinition() as ksBossExtrusionDefinition
             ?? throw new InvalidOperationException("ksBossExtrusionDefinition не получен");
         extrusion.SetSketch(plate);
-        if (!extrusion.SetSideParam(true, 0, Height, 0, false))
+        if (!extrusion.SetSideParam(true, 0, _height, 0, false))
         {
             throw new InvalidOperationException("SetSideParam вернул false");
         }
@@ -167,7 +171,7 @@ internal sealed class E4Probe : IDisposable
                 continue;
             }
 
-            if (Math.Abs(z - Height) > 1e-6 || nz < 0.9d)
+            if (Math.Abs(z - _height) > 1e-6 || nz < 0.9d)
             {
                 continue;
             }
@@ -185,7 +189,8 @@ internal sealed class E4Probe : IDisposable
             throw new InvalidOperationException("верхняя грань не перенесена в API7");
         }
 
-        Record("top_face", "верхняя грань z = 20 перенесена в API7", $"площадь {bestArea:0.##} мм2", "PASS");
+        Record("top_face", "верхняя грань z = толщине перенесена в API7",
+            $"площадь {bestArea:0.##} мм2, z = {_height:0}", "PASS");
         return face7;
     }
 
@@ -225,99 +230,126 @@ internal sealed class E4Probe : IDisposable
 
     // ── measured modes ──────────────────────────────────────────────────────────────────────────
 
-    /// <summary><c>ksHTCounterdrill</c> (3): pilot, spotfacing and countersink on one feature. The
-    /// expected number is INTEGRATED here from the three parameters instead of written as a closed
-    /// form: the union of the bore and the cone is where a hand formula goes wrong.</summary>
+    /// <summary><c>ksHTCounterdrill</c> (3): pilot, spotfacing and countersink on one feature. The order
+    /// asks for a law of simple bodies rather than a reference number, so every input set is measured on
+    /// TWO thicknesses and compared with two hypotheses at once.</summary>
+    /// <remarks>MEASURED: the cone sits at the BOTTOM of the spotfacing and tapers to the pilot, and the
+    /// written angle is the FULL apex angle. A cone counted from the support face overstates the bore,
+    /// which is why the first revision of this probe found no formula at all.
+    /// History: docs/decisions/adapter-features.md#hole-counterdrill</remarks>
     private void Counterdrill()
     {
         const double pilot = 10;
-        const double boreDiameter = 18;
-        const double boreDepth = 4;
-        const double mouthDiameter = 22;
-        const double angleDeg = 90;
+        const double diameter = 22;
+        const double depth = 4;
+        const double angle = 90;
+        var model = CounterdrillModel(pilot, diameter, depth, angle, Height);
 
         // The direction is MEASURED, not assumed: with the default one the feature added material
         // outward on the first run, and a probe that trusted it would report the mode as broken.
         foreach (var direction in new[] { (bool?)null, true, false })
         {
             var (updated, failure, hole, before, after) = Create("counterdrill", pilot,
-                (h, _) =>
-                {
-                    h.HoleType = ksHoleTypeEnum.ksHTCounterdrill;
-                    h.DepthType = ksDepthTypeEnum.ksDTReachThrough;
-                    h.EndFaceType = ksEndFaceTypeEnum.ksEFFlat;
-                    if (h.HoleParameters is ICountersinkSpotfacingHoleParameters parameters)
-                    {
-                        parameters.SpotfacingDepth = boreDepth;
-                        parameters.SpotfacingCountersinkDiameter = mouthDiameter;
-                        parameters.CountersinkAngle = angleDeg;
-                    }
-                },
-                direction);
+                (h, _) => SetCounterdrill(h, diameter, depth, angle), direction);
 
             var name = direction is null ? "по умолчанию" : direction.Value.ToString();
             if (!updated)
             {
-                Record("counterdrill_created_" + name, "признак построен через IHole3D",
+                Record("counterdrill_direction_" + name, "признак построен через IHole3D",
                     "Update=false: " + failure, "FAIL");
                 continue;
             }
 
             var parameters7 = hole!.HoleParameters as ICountersinkSpotfacingHoleParameters;
-            var expected = ExpectedCounterdrill(pilot, boreDiameter, boreDepth, mouthDiameter, angleDeg, Height);
             var removed = Volume(before) - Volume(after);
             Record("counterdrill_direction_" + name,
-                $"снято {expected:0.###} мм3 (интеграл по объединению выточки и конуса)",
+                $"снято {model:0.###} мм3 (пилот + кольцо выточки + конус от дна)",
                 $"снято {removed:0.###} мм3; прочитано D={SafeDouble(() => parameters7!.SpotfacingCountersinkDiameter):0.###}, " +
                 $"глубина={SafeDouble(() => parameters7!.SpotfacingDepth):0.###}, " +
                 $"угол={SafeDouble(() => parameters7!.CountersinkAngle):0.###}",
-                removed > 1e-6 && Near(removed, expected, 2e-3) ? "PASS"
+                removed > 1e-6 && Near(removed, model, 5e-3) ? "PASS"
                     : removed < -1e-6 ? "FAIL" : "MEASURED");
         }
 
-        // Isolation: the measured removal is larger than the union model, so each term is measured on
-        // its own. First the bore alone - the countersink is made no wider than the bore, so it cannot
-        // remove anything the bore has not already taken.
-        var boreOnly = Isolate("counterdrill_bore_only", pilot, 18, 4, 18, 90);
-        var boreExpected = Math.PI * pilot * pilot / 4d * Height
-                           + Math.PI * (18 * 18 - pilot * pilot) / 4d * 4;
-        Record("counterdrill_bore_only", $"снято {boreExpected:0.###} мм3 (пилот + кольцо выточки)",
-            $"снято {boreOnly:0.###} мм3", Near(boreOnly, boreExpected, 2e-3) ? "PASS" : "MEASURED");
+        // One input at a time, plus a second and a third angle: a law fitted to a single set proves
+        // nothing, and the plate thickness is the variable the previous capture never touched.
+        var sets = new (double Pilot, double Diameter, double Depth, double Angle)[]
+        {
+            (10, 22, 4, 90),
+            (10, 18, 4, 90),
+            (12, 24, 5, 90),
+            (10, 22, 4, 60),
+            (10, 22, 6, 90),
+            (8, 20, 3, 60),
+            (10, 26, 2, 120),
+        };
 
-        // Second the cone alone: the bore is made no wider than the pilot, so only the cone removes.
-        var coneOnly = Isolate("counterdrill_cone_only", pilot, pilot, 4, 22, 90);
-        var coneExpected = Math.PI * pilot * pilot / 4d * Height
-                           + Math.PI / 3d * (11d * 11d + 11d * 5d + 5d * 5d) * 6d
-                           - Math.PI * 25d * 6d;
-        Record("counterdrill_cone_only", $"снято {coneExpected:0.###} мм3 (пилот + конус 22@90°)",
-            $"снято {coneOnly:0.###} мм3", Near(coneOnly, coneExpected, 2e-3) ? "PASS" : "MEASURED");
+        var passed = 0;
+        var total = 0;
+        foreach (var thickness in new[] { 20d, 30d })
+        {
+            _height = thickness;
+            foreach (var set in sets)
+            {
+                total++;
+                var id = $"counterdrill_t{thickness:0}_{set.Pilot:0}x{set.Diameter:0}x{set.Depth:0}a{set.Angle:0}";
+                var (updated, failure, hole, before, after) = Create(id, set.Pilot,
+                    (h, _) => SetCounterdrill(h, set.Diameter, set.Depth, set.Angle));
+                if (!updated)
+                {
+                    Record(id, "признак построен через IHole3D", "Update=false: " + failure, "FAIL");
+                    continue;
+                }
 
-        // The two isolations together are the comparable baseline the order asks for: the mouth grows
-        // from 18 to 22 and the bore stops mattering, so the cone term is the DIFFERENCE of the two.
-        Record("counterdrill_model", "прирост от устья 18 до 22 объясняется конусом",
-            $"устье 18: {boreOnly:0.###} мм3, устье 22: {coneOnly:0.###} мм3, " +
-            $"разница {coneOnly - boreOnly:0.###} мм3; одной формулой по трём числам не описывается",
-            "MEASURED");
+                var parameters = hole!.HoleParameters as ICountersinkSpotfacingHoleParameters;
+                var readDiameter = SafeDouble(() => parameters!.SpotfacingCountersinkDiameter);
+                var readDepth = SafeDouble(() => parameters!.SpotfacingDepth);
+                var readAngle = SafeDouble(() => parameters!.CountersinkAngle);
+                var removed = Volume(before) - Volume(after);
+                var bottomCone = CounterdrillModel(set.Pilot, set.Diameter, set.Depth, set.Angle, thickness);
+                var faceCone = ConeFromFaceModel(set.Pilot, set.Diameter, set.Depth, set.Angle, thickness);
+                var faces = after["faces"]?.GetValue<int>() ?? -1;
+                var matches = Near(removed, bottomCone, 5e-3);
+                var readBack = Near(readDiameter, set.Diameter, 1e-9) && Near(readDepth, set.Depth, 1e-9)
+                               && Near(readAngle, set.Angle, 1e-9);
+                if (matches && readBack)
+                {
+                    passed++;
+                }
+
+                Record(id,
+                    $"снято {bottomCone:0.###} мм3 по модели; параметры читаются как записаны",
+                    $"снято {removed:0.###} мм3 (отклонение {Deviation(removed, bottomCone):0.###} %), " +
+                    $"«конус от опорной грани» - {Deviation(removed, faceCone):0.###} %; " +
+                    $"прочитано D={readDiameter:0.###}, глубина={readDepth:0.###}, угол={readAngle:0.###}, " +
+                    $"граней {faces}",
+                    matches && readBack ? "PASS" : removed < -1e-6 ? "FAIL" : "MEASURED");
+            }
+        }
+
+        _height = Height;
+        Record("counterdrill_model", "закон из простых тел объясняет все наборы на двух толщинах",
+            $"{passed} из {total} наборов: пилот + кольцо выточки + конус от ДНА выточки до пилота; " +
+            "записанный угол - полный",
+            passed == total ? "PASS" : "MEASURED");
     }
 
-    /// <summary>One counterdrill with the given numbers; returns the removed volume or NaN.</summary>
-    private double Isolate(string label, double pilot, double boreDiameter, double boreDepth,
-        double mouthDiameter, double angleDeg)
+    /// <summary>Writes the three mode members. The spotfacing diameter is the ONLY diameter of this
+    /// interface: the bore and the countersink share it, so there is no separate bore field.</summary>
+    private static bool SetCounterdrill(IHole3D hole, double diameterMm, double depthMm, double angleDeg)
     {
-        var (updated, _, _, before, after) = Create(label, pilot,
-            (h, _) =>
-            {
-                h.HoleType = ksHoleTypeEnum.ksHTCounterdrill;
-                h.DepthType = ksDepthTypeEnum.ksDTReachThrough;
-                h.EndFaceType = ksEndFaceTypeEnum.ksEFFlat;
-                if (h.HoleParameters is ICountersinkSpotfacingHoleParameters parameters)
-                {
-                    parameters.SpotfacingDepth = boreDepth;
-                    parameters.SpotfacingCountersinkDiameter = mouthDiameter;
-                    parameters.CountersinkAngle = angleDeg;
-                }
-            });
-        return updated ? Volume(before) - Volume(after) : double.NaN;
+        hole.HoleType = ksHoleTypeEnum.ksHTCounterdrill;
+        hole.DepthType = ksDepthTypeEnum.ksDTReachThrough;
+        hole.EndFaceType = ksEndFaceTypeEnum.ksEFFlat;
+        if (hole.HoleParameters is not ICountersinkSpotfacingHoleParameters parameters)
+        {
+            return false;
+        }
+
+        parameters.SpotfacingDepth = depthMm;
+        parameters.SpotfacingCountersinkDiameter = diameterMm;
+        parameters.CountersinkAngle = angleDeg;
+        return true;
     }
 
     /// <summary><c>ksHTConic</c> (4) with <c>ksCNDiameter</c>: the cone is given by its top diameter and
@@ -550,32 +582,48 @@ internal sealed class E4Probe : IDisposable
 
     // ── expected numbers ───────────────────────────────────────────────────────────────────────
 
-    /// <summary>Volume removed by a counterdrill: the through pilot, plus the union of the spotfacing
-    /// ring and the countersink cone, integrated in 2000 steps over the plate thickness.</summary>
-    private static double ExpectedCounterdrill(double pilot, double boreDiameter, double boreDepth,
-        double mouthDiameter, double angleDeg, double thickness)
+    /// <summary>ACCEPTED law for a counterdrill: the through pilot, plus the spotfacing ring, plus the
+    /// frustum from the spotfacing diameter down to the pilot, whose height follows from the FULL apex
+    /// angle. The cone starts at the BOTTOM of the spotfacing.</summary>
+    private static double CounterdrillModel(double pilot, double diameter, double depth, double angleDeg,
+        double thickness)
+    {
+        var pilotRadius = pilot / 2d;
+        var outerRadius = diameter / 2d;
+        var coneDepth = (outerRadius - pilotRadius) / Math.Tan(angleDeg * Math.PI / 360d);
+
+        var volume = Math.PI * pilotRadius * pilotRadius * thickness;
+        volume += Math.PI * (outerRadius * outerRadius - pilotRadius * pilotRadius) * depth;
+        volume += Math.PI / 3d * coneDepth
+                  * (outerRadius * outerRadius + outerRadius * pilotRadius + pilotRadius * pilotRadius)
+                  - Math.PI * pilotRadius * pilotRadius * coneDepth;
+        return volume;
+    }
+
+    /// <summary>REJECTED hypothesis: the same cone counted from the support face, integrated in 2000
+    /// steps over the plate thickness. Kept in the capture so the report can show what it costs.</summary>
+    private static double ConeFromFaceModel(double pilot, double diameter, double depth, double angleDeg,
+        double thickness)
     {
         const int steps = 2000;
         var pilotRadius = pilot / 2d;
-        var boreRadius = boreDiameter / 2d;
-        // A countersink at angle a widens the hole by 2*z*tan(a/2) from the mouth: the cone reaches the
-        // pilot radius at depth (R_mouth - r_pilot) / tan(a/2).
+        var outerRadius = diameter / 2d;
         var slope = Math.Tan(angleDeg * Math.PI / 360d);
-        var coneDepth = (mouthDiameter / 2d - pilotRadius) / slope;
+        var coneDepth = (outerRadius - pilotRadius) / slope;
         var step = thickness / steps;
         var volume = Math.PI * pilotRadius * pilotRadius * thickness;
         for (var index = 0; index < steps; index++)
         {
             var z = (index + 0.5) * step;
             var radius = pilotRadius;
-            if (z <= boreDepth)
+            if (z <= depth)
             {
-                radius = Math.Max(radius, boreRadius);
+                radius = Math.Max(radius, outerRadius);
             }
 
             if (z <= coneDepth)
             {
-                radius = Math.Max(radius, mouthDiameter / 2d - slope * z);
+                radius = Math.Max(radius, outerRadius - slope * z);
             }
 
             volume += Math.PI * (radius * radius - pilotRadius * pilotRadius) * step;
@@ -583,6 +631,9 @@ internal sealed class E4Probe : IDisposable
 
         return volume;
     }
+
+    private static double Deviation(double actual, double expected) =>
+        double.IsFinite(actual) && expected > 0d ? Math.Abs(actual - expected) / expected * 100d : double.NaN;
 
     // ── reading ─────────────────────────────────────────────────────────────────────────────────
 

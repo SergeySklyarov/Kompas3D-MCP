@@ -272,19 +272,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 384
+- **строк_каталога:** 385
 - **строк_полностью_закрыто:** 194
-- **строк_с_каким_либо_прогрессом:** 220
+- **строк_с_каким_либо_прогрессом:** 221
 - **семейств_в_каталоге:** 48
 - **семейств_без_строк:** 10
 - **операций:** 152
-- **режимов_и_вариантов:** 235
-- **применимых_действий:** 3094
-- **действий_verified:** 1320
-- **покрытие_действий:** 42.7%
-- **распределение_статусов:** {'not_started': 1764, 'verified': 1320, 'not_applicable': 746, 'implemented': 10}
+- **режимов_и_вариантов:** 236
+- **применимых_действий:** 3104
+- **действий_verified:** 1329
+- **покрытие_действий:** 42.8%
+- **распределение_статусов:** {'not_started': 1765, 'verified': 1329, 'not_applicable': 746, 'implemented': 10}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 76, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 85, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -744,6 +744,7 @@
 | `SM-07.native_hole.through_counterbore` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.2, HO.2v, HO.2g, HO.6, HO.14, HO.15, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.17.discover, F08.17.create, F08.17.read, F08.17.edit, F08.17.rebuild, F08.17.save_reopen, F08.17.suppress_restore, F08.17.delete_dependencies, F08.17.negative_tests, F08.17.geometry_validation |
 | `SM-07.native_hole.through_countersink` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.3, HO.3v, HO.3g, HO.3d, HO.16, HO.17, HO.20, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.18.discover, F08.18.create, F08.18.read, F08.18.edit, F08.18.rebuild, F08.18.save_reopen, F08.18.suppress_restore, F08.18.delete_dependencies, F08.18.negative_tests, F08.18.geometry_validation |
 | `SM-07.native_hole.through_conic` | SM-07 | practical_required | E4 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | HO.30, HO.30v, HO.30e, HO.31, HO.31v, HO.31e, HO.32, HO.33, HO.34, F08.15.read, F08.15.edit, F08.15.negative_tests |
+| `SM-07.native_hole.through_counterdrill` | SM-07 | practical_required | E4 | mcp_verified | OK | OK | OK | OK | OK | OK | — | OK | OK | OK | HO.36, HO.37, HO.38, HO.39, HO.40, HO.41 |
 | `SM-07.native_hole.axis_by_face_normal` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.1, HO.1g, HO.5r, HO.6, HO.23, HO.23b, F08.19.discover, F08.19.create, F08.19.read, F08.19.edit, F08.19.rebuild, F08.19.save_reopen, F08.19.suppress_restore, F08.19.delete_dependencies, F08.19.negative_tests, F08.19.geometry_validation |
 | `SM-07.native_hole.position_off_origin` | SM-07 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | HO.5, HO.5r, HO.5v, HO.6, HO.18, HO.7p, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.23, HO.23b, HO.24, HO.25, F08.20.discover, F08.20.create, F08.20.read, F08.20.edit, F08.20.rebuild, F08.20.save_reopen, F08.20.suppress_restore, F08.20.delete_dependencies, F08.20.negative_tests, F08.20.geometry_validation |
 | `SM-09.fillet.constant_radius_body_edges` | SM-09 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | G04, G04e, G04v, FL01, FL01v, FL02, FL03, FL04, FL04r, FL04p, FL05, FL06, FL07, FL08, FL09, F08.21.discover, F08.21.create, F08.21.read, F08.21.edit, F08.21.rebuild, F08.21.save_reopen, F08.21.suppress_restore, F08.21.delete_dependencies, F08.21.negative_tests, F08.21.geometry_validation, FL29, FL29v |
@@ -1241,6 +1242,10 @@
   - Записанное число — ПОЛНЫЙ угол при вершине: 30° сняли усечённый конус с полууглом 15° (E4 §4.2). Верхний диаметр ПРОИЗВОДЕН от угла и толщины тела и публикуется только для чтения (conic_diameter_mm).
   - Способ «по диаметру» (ksCNDiameter) в профиль не входит: угол читается обратно как 0, снятое равно π/4·D²·h, то есть цилиндру (E4 §4.3).
   - Подавление и удаление признака не измерялись — по той же причине, что у blind_sphere.
+- `SM-07.native_hole.through_counterdrill` — не закрыт
+  - У режима ОДИН диаметр на выточку и зенковку (ICountersinkSpotfacingHoleParameters): поля countersink_diameter_mm нет, второе число отвергается по имени. Записанный угол — ПОЛНЫЙ угол при вершине.
+  - Модель снятия проверена на сквозном пилоте и плоской опорной грани: пилот π·r²·T + кольцо выточки + усечённый конус ОТ ДНА выточки. Глухое отверстие с выточкой и зенковкой, наклонная грань и конус, доходящий до противоположной грани, не измерялись.
+  - Подавление и восстановление признака не измерялись; удаление одиночного признака измерено строкой HO.41 (объём возвращается), зависимых признаков в постановке не было.
 - `SM-07.native_hole.axis_by_face_normal` — закрыт целиком
   - Контракт описывает ровно измеренную комбинацию «перенесённая грань + Perpendicular», и ничего сверх неё: вклад одного Perpendicular без грани не изолирован пробой, и заявлять его самостоятельным маршрутом было бы утверждением без измерения.
   - Грань обязана пересечь мост API5→API7: непереданная грань — это значение, которое API7 не примет, и тогда отверстие не создаётся вовсе (GEOMETRY_FAILED до мутации).

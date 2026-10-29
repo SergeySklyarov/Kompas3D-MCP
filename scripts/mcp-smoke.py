@@ -34926,6 +34926,206 @@ def hole_checks(client, rep, app_id, workdir):
                         f"count1={count1} err={error_code(pt_env)} msg={describe(pt_env)[1]}")
         close(doc_g)
 
+    # ═════════════ HO.36…HO.41: выточка с зенковкой (through_counterdrill) ═════════════
+    # Модель снятия измерена пробой на 14 наборах (две толщины плиты, углы 60/90/120): пилот насквозь,
+    # кольцо выточки, затем конус ОТ ДНА выточки до пилота; записанный угол - ПОЛНЫЙ. Наборы приёмки в
+    # подборе модели не участвовали: иначе строка сравнивала бы число с самим собой.
+    def counterdrill_model(pilot, dia, depth, angle_deg, thickness):
+        """Снятое: пилот + кольцо выточки + усечённый конус минус пилот в высоте конуса."""
+        r_p, r_o = pilot / 2.0, dia / 2.0
+        cone = (r_o - r_p) / math.tan(math.radians(angle_deg / 2.0))
+        return (math.pi * r_p * r_p * thickness
+                + math.pi * (r_o * r_o - r_p * r_p) * depth
+                + math.pi / 3.0 * cone * (r_o * r_o + r_o * r_p + r_p * r_p)
+                - math.pi * r_p * r_p * cone)
+
+    cd_sets = (
+        ("HO.36", "набор А Ø10/Ø24×5@90°", 10.0, 24.0, 5.0, 90.0),
+        ("HO.37", "набор Б Ø12/Ø26×4@60°", 12.0, 26.0, 4.0, 60.0),
+    )
+    cd_docs = {}
+    for cid, label, cd_pilot, cd_dia, cd_depth, cd_angle in cd_sets:
+        cd_model = counterdrill_model(cd_pilot, cd_dia, cd_depth, cd_angle, ext_thick)
+        cd_desc = (f"through_counterdrill {label}: снято {cd_model:.3f} мм3 по модели "
+                   "(пилот + кольцо выточки + конус от дна)")
+        doc_c, rev_c, err_c = new_doc("SM07-counterdrill-" + cid)
+        if not doc_c:
+            rep.add(cid, cd_desc, "FAIL", f"документ не создан: {err_c}")
+            continue
+        rev_c, top_c, body_c, berr_c = build_plate_xy(doc_c, rev_c, "h-cdrill", 100.0, 80.0, ext_thick)
+        if berr_c:
+            rep.add(cid, cd_desc, "FAIL", f"заготовка: {berr_c}")
+            close(doc_c)
+            continue
+        v_c_before = volume(body_c)
+        c_env, c_res, c_checks = hole({
+            "face_ref": top_c, "expected_revision": rev_c, "mode": "through_counterdrill",
+            "diameter_mm": cd_pilot, "counterbore_diameter_mm": cd_dia,
+            "counterbore_depth_mm": cd_depth, "countersink_angle_deg": cd_angle,
+            "expected_volume_delta_mm3": cd_model}, cid + "z",
+            f"заготовка {label}: выточка с зенковкой создана")
+        rev_c = (c_env or {}).get("revision_after") or rev_c
+        v_c_after = volume(body_c)
+        c_ref = ref_id(c_res.get("feature_ref"))
+        removed_c = None if v_c_before is None or v_c_after is None else v_c_before - v_c_after
+        params_ok = (c_checks.get("parameters_read_back") or {}).get("observed")
+        cd_docs[cid] = (doc_c, rev_c, body_c, c_ref, cd_model, v_c_before, cd_pilot, cd_dia,
+                        cd_depth, cd_angle, removed_c)
+        rep.add(cid, cd_desc,
+                "PASS" if error_code(c_env) is None and removed_c is not None
+                and abs(removed_c - cd_model) <= 0.005 * cd_model and params_ok else "FAIL",
+                f"V {v_c_before}→{v_c_after} снято={None if removed_c is None else round(removed_c, 6)} "
+                f"модель={cd_model:.6f} отклонение="
+                f"{None if removed_c is None else round(100.0 * abs(removed_c - cd_model) / cd_model, 4)}% "
+                f"параметры_как_записаны={params_ok} err={error_code(c_env)}")
+
+    # ── HO.38: правка ОДНОГО параметра режима с пересчётом против модели ──
+    cd_edit_desc = "through_counterdrill: правка глубины выточки 5 → 8 меняет снятое по модели"
+    doc_e, rev_e, body_e, ref_e, model_e, v_e_before, p_e, d_e, h_e, a_e, _r_e = \
+        cd_docs.get("HO.36", (None, None, None, None, None, None, None, None, None, None, None))
+    if not doc_e or not ref_e:
+        rep.add("HO.38", cd_edit_desc, "FAIL", "набор А не создан — править нечего")
+    else:
+        rev_e, _ = ctx(doc_e)
+        _e, u_env, _r = client.tool("kompas_update_feature", {
+            "feature_ref": ref_e, "expected_revision": rev_e,
+            "counterbore_depth_mm": 8.0, "operation_id": str(uuid.uuid4())}, timeout=300)
+        model_e2 = counterdrill_model(p_e, d_e, 8.0, a_e, ext_thick)
+        v_e_after = volume(body_e)
+        removed_e = None if v_e_before is None or v_e_after is None else v_e_before - v_e_after
+        rep.add("HO.38", cd_edit_desc,
+                "PASS" if error_code(u_env) is None and removed_e is not None
+                and abs(removed_e - model_e2) <= 0.005 * model_e2 else "FAIL",
+                f"V {v_e_before}→{v_e_after} снято={None if removed_e is None else round(removed_e, 6)} "
+                f"модель={model_e2:.6f} было={model_e:.6f} err={error_code(u_env)}")
+        close(doc_e)
+
+    # ── HO.39: сохранение-переоткрытие: параметры и съём читаются с диска ──
+    cd_path = os.path.join(workdir, "SM07-counterdrill.m3d")
+    doc_b, rev_b, body_b, ref_b, model_b, v_b_before, p_b, d_b, h_b, a_b, _r_b = \
+        cd_docs.get("HO.37", (None, None, None, None, None, None, None, None, None, None, None))
+    if not doc_b or not ref_b:
+        rep.add("HO.39", "through_counterdrill переживает save→close→reopen с теми же параметрами",
+                "FAIL", "набор Б не создан")
+    else:
+        rev_b, _ = ctx(doc_b)
+        clear_path(cd_path)
+        _e, sv_env, _r = client.tool("kompas_save_document", {
+            "document_id": doc_b, "expected_revision": rev_b, "target_path": cd_path,
+            "operation_id": str(uuid.uuid4())})
+        client.tool("kompas_close_document", {
+            "document_id": doc_b, "dirty_policy": "refuse", "operation_id": str(uuid.uuid4())})
+        _e, op_env, _r = client.tool("kompas_open_document", {
+            "application_id": app_id, "path": cd_path, "access": "edit",
+            "operation_id": str(uuid.uuid4())})
+        doc_b2 = (((op_env or {}).get("result") or {}).get("document_id")
+                  or (op_env or {}).get("document_id"))
+        v_b2 = None
+        hole_dto = {}
+        if doc_b2:
+            # Ссылка прежнего документа после переоткрытия мертва: признак ищется в дереве нового
+            # документа (как в HO.24/HO.25), а не берётся из ответа создания.
+            body_b2 = (bodies(doc_b2) or [{}])[0].get("body_ref")
+            v_b2 = volume(body_b2)
+            _e, lf_env, _r = client.tool("kompas_list_features", {"document_id": doc_b2})
+            rows_b2 = [f for f in ((lf_env or {}).get("result") or []) if isinstance(f, dict)]
+            holes_b2 = [f for f in rows_b2 if str(f.get("type")) == "583"]
+            ref_b2 = holes_b2[0].get("feature_ref") if holes_b2 else None
+            if ref_b2:
+                _e, gf_env, _r = client.tool("kompas_get_feature", {"feature_ref": ref_b2})
+                hole_dto = (((gf_env or {}).get("result") or {}).get("hole") or {})
+        removed_b = None if v_b_before is None or v_b2 is None else v_b_before - v_b2
+        same = (hole_dto.get("counterbore_diameter_mm"), hole_dto.get("counterbore_depth_mm"),
+                hole_dto.get("countersink_angle_deg"))
+        rep.add("HO.39", "through_counterdrill переживает save→close→reopen с теми же параметрами",
+                "PASS" if error_code(sv_env) is None and error_code(op_env) is None
+                and removed_b is not None and abs(removed_b - model_b) <= 0.005 * model_b
+                and same[0] is not None and abs(same[0] - d_b) <= 1e-6
+                and same[1] is not None and abs(same[1] - h_b) <= 1e-6
+                and same[2] is not None and abs(same[2] - a_b) <= 1e-6 else "FAIL",
+                f"снято_до={None if v_b_before is None else round(model_b, 6)} "
+                f"после_диска={None if removed_b is None else round(removed_b, 6)} "
+                f"прочитано D/h/угол={same} ожидалось ({d_b}, {h_b}, {a_b}) "
+                f"hole={json.dumps(hole_dto, ensure_ascii=False)[:200]} err={error_code(op_env)}")
+        if doc_b2:
+            close(doc_b2)
+
+    # ── HO.40: отказы по ИМЕНАМ полей; тело не меняется ──
+    cd_neg_desc = ("through_counterdrill: второй диаметр, пилот без выточки, угол вне (0;180) и "
+                   "чужие поля отвергнуты по имени, тело не изменено")
+    doc_n3, rev_n3, err_n3 = new_doc("SM07-counterdrill-neg")
+    if not doc_n3:
+        rep.add("HO.40", cd_neg_desc, "FAIL", f"документ не создан: {err_n3}")
+    else:
+        rev_n3, top_n3, body_n3, berr_n3 = build_plate_xy(doc_n3, rev_n3, "h-cdrill-neg", 100.0, 80.0,
+                                                          ext_thick)
+        if berr_n3:
+            rep.add("HO.40", cd_neg_desc, "FAIL", f"заготовка: {berr_n3}")
+        else:
+            v_n3_before = volume(body_n3)
+            base_n3 = {"face_ref": top_n3, "expected_revision": rev_n3,
+                       "mode": "through_counterdrill", "diameter_mm": 10.0,
+                       "counterbore_diameter_mm": 22.0, "counterbore_depth_mm": 4.0,
+                       "countersink_angle_deg": 90.0}
+            seen_n3 = []
+            for label, payload in (
+                    ("второй диаметр", dict(base_n3, countersink_diameter_mm=20.0)),
+                    ("выточка не шире пилота", dict(base_n3, counterbore_diameter_mm=10.0)),
+                    ("глубина выточки 0", dict(base_n3, counterbore_depth_mm=0.0)),
+                    ("угол 180", dict(base_n3, countersink_angle_deg=180.0)),
+                    ("без угла", {k: v for k, v in base_n3.items()
+                                  if k != "countersink_angle_deg"}),
+                    ("глубина у сквозного", dict(base_n3, depth_mm=6.0)),
+                    ("угол конуса", dict(base_n3, conic_angle_deg=30.0))):
+                _e, neg_env, _r = client.tool("kompas_hole", dict(
+                    payload, operation_id=str(uuid.uuid4())), timeout=120)
+                seen_n3.append(f"{label}→{error_code(neg_env)}")
+            v_n3_after = volume(body_n3)
+            rep.add("HO.40", cd_neg_desc,
+                    "PASS" if all(s.endswith("→INVALID_ARGUMENT") for s in seen_n3)
+                    and v_n3_before is not None and v_n3_after is not None
+                    and abs(v_n3_after - v_n3_before) <= 0.01 else "FAIL",
+                    f"{'; '.join(seen_n3)}; V {v_n3_before}→{v_n3_after}")
+        close(doc_n3)
+
+    # ── HO.41: удаление признака возвращает исходный объём ──
+    # Свой документ: ссылка выдаётся против ревизии, и после правки HO.38 прежняя уже мертва —
+    # удаление «той же» ссылкой отказывало бы STALE_REFERENCE, измеряя реестр, а не удаление.
+    cd_del_desc = "through_counterdrill: удаление признака возвращает объём плиты"
+    doc_d, rev_d, err_d = new_doc("SM07-counterdrill-del")
+    if not doc_d:
+        rep.add("HO.41", cd_del_desc, "FAIL", f"документ не создан: {err_d}")
+    else:
+        rev_d, top_d, body_d, berr_d = build_plate_xy(doc_d, rev_d, "h-cdrill-del", 100.0, 80.0, ext_thick)
+        if berr_d:
+            rep.add("HO.41", cd_del_desc, "FAIL", f"заготовка: {berr_d}")
+        else:
+            v_d_before = volume(body_d)
+            _env_d, res_d, _ch_d = hole({
+                "face_ref": top_d, "expected_revision": rev_d, "mode": "through_counterdrill",
+                "diameter_mm": 10.0, "counterbore_diameter_mm": 22.0,
+                "counterbore_depth_mm": 4.0, "countersink_angle_deg": 90.0,
+                "expected_volume_delta_mm3": counterdrill_model(10.0, 22.0, 4.0, 90.0, ext_thick)},
+                "HO.41z", "заготовка удаления: выточка с зенковкой создана")
+            ref_d = ref_id(res_d.get("feature_ref"))
+            v_d_after = volume(body_d)
+            if not ref_d:
+                rep.add("HO.41", cd_del_desc, "FAIL", "ссылка на признак не выдана")
+            else:
+                rev_d, _ = ctx(doc_d)
+                _e, d_env, _r = client.tool("kompas_delete_feature", {
+                    "feature_ref": ref_d, "expected_revision": rev_d,
+                    "operation_id": str(uuid.uuid4())}, timeout=300)
+                v_d_del = volume(body_d)
+                rep.add("HO.41", cd_del_desc,
+                        "PASS" if error_code(d_env) is None and v_d_before is not None
+                        and v_d_after is not None and v_d_del is not None
+                        and v_d_after < v_d_before - 1.0
+                        and abs(v_d_del - v_d_before) <= 0.01 else "FAIL",
+                        f"V до отверстия={v_d_before} после создания={v_d_after} "
+                        f"после удаления={v_d_del} err={error_code(d_env)}")
+        close(doc_d)
+
     # ═════════════ HO.26: отверстие, которое КОМПАС не построил, - отказ, а не succeeded ═════════════
     # Дефект заказчика 15.10.2026: на боковой грани X=120 плиты 120×80×32 вызов kompas_hole отвечал
     # status=succeeded и error=null, а материал не снимался: признак «Отверстие:N» оставался в дереве

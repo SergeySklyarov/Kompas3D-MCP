@@ -65,7 +65,7 @@
    "families": 48,
    "operations": 152,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 235,
+   "modes_and_variants": 236,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -507,7 +507,8 @@
     "ksHTCounterbore (приёмка HO.2/HO.2v, режим through_counterbore)",
     "ksHTCountersinking (приёмка HO.3/HO.3d, режим through_countersink)",
     "ksHTConic по углу (ksCNAngle, приёмка HO.30…HO.33, режим through_conic)",
-    "EndFaceType=ksEFSphere (приёмка HO.27…HO.29, режим blind_sphere)"
+    "EndFaceType=ksEFSphere (приёмка HO.27…HO.29, режим blind_sphere)",
+    "ksHTCounterdrill (приёмка HO.36…HO.41, режим through_counterdrill)"
    ],
    "modes_unverified": [
     "библиотечные отверстия (ksHTLfrLibrary): маршрут есть, но без файла библиотеки признак строится пустым — 0 переменных, 0 мм³ (E4 §4.7); вход невоспроизводим на этой машине",
@@ -517,9 +518,9 @@
     "ksDTObject (глубина до объекта): без объекта ядро принимает молча и снимает 0 мм³ (E4 §4.6) — в профиль не входит",
     "ksCNDiameter (конус по диаметру): угол читается обратно как 0, снятое равно цилиндру (E4 §4.3) — в профиль не входит"
    ],
-   "mcp_support": "kompas_hole: blind_flat, blind_sphere, through_counterbore, through_countersink, through_conic; массив — kompas_pattern_grid над признаком",
+   "mcp_support": "kompas_hole: blind_flat, blind_sphere, through_counterbore, through_countersink, through_conic, through_counterdrill; массив — kompas_pattern_grid над признаком",
    "blocked_api": "только для API5, с минимальным примером; по API7 возможность подтверждена частично",
-   "next_step": "HOLE_COUNTERDRILL (цековка с зенковкой) и HOLE_DIRECTION_AND_OBJECT_DEPTH — по плану блока E4",
+   "next_step": "HOLE_DIRECTION_AND_OBJECT_DEPTH — последний наряд блока E4 по плану",
    "operations": [
     {
      "id": "SM-07.native_hole",
@@ -597,6 +598,13 @@
        "note": "исполнено приёмкой MCP: HO.30/HO.31 на 30° и 60° (съём против усечённого конуса по ПРОЧИТАННОМУ диаметру и полууглу), HO.32 (правка угла), HO.33 (save→close→reopen). Записанное число — ПОЛНЫЙ угол; ksCNDiameter в профиль не входит (читает угол как 0, снимает цилиндр)"
       },
       {
+       "id": "SM-07.native_hole.through_counterdrill",
+       "name": "сквозное с выточкой и зенковкой",
+       "level": "mcp_verified",
+       "enum": "ICountersinkSpotfacingHoleParameters / ksHTCounterdrill",
+       "note": "исполнено приёмкой MCP: HO.36/HO.37 — съём против модели на двух наборах, не участвовавших в подборе; HO.38 — правка глубины выточки с пересчётом; HO.39 — save→close→reopen; HO.40 — отказы по именам полей; HO.41 — удаление возвращает объём. Модель: пилот + кольцо выточки + конус ОТ ДНА выточки до пилота, записанный угол — полный; у режима ОДИН диаметр на выточку и зенковку"
+      },
+      {
        "id": "SM-07.native_hole.axis_by_face_normal",
        "name": "ось по нормали опорной грани",
        "level": "mcp_verified",
@@ -611,7 +619,7 @@
       }
      ],
      "mcp_support": "kompas_hole: пять режимов (blind_flat, blind_sphere, through_counterbore, through_countersink, through_conic) плюс размещение смещением",
-     "next_step": "HOLE_COUNTERDRILL (цековка с зенковкой) и HOLE_DIRECTION_AND_OBJECT_DEPTH — по плану блока E4"
+     "next_step": "HOLE_DIRECTION_AND_OBJECT_DEPTH — последний наряд блока E4 по плану"
     }
    ]
   },

@@ -2064,6 +2064,54 @@
       "not_applicable_reasons": {}
     },
     {
+      "operation_id": "SM-07.native_hole.through_counterdrill",
+      "kind": "profile_mode",
+      "profile": "mechanical-core-v1",
+      "priority": "practical_required",
+      "queue": "E4",
+      "context": "part",
+      "catalog_ref": "SM-07",
+      "catalog_level": "mcp_verified",
+      "parameters_schema": "schemas/kompas_hole.json",
+      "adapter_route": "API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksHTCounterdrill + DepthType=ksDTReachThrough + ICountersinkSpotfacingHoleParameters(SpotfacingCountersinkDiameter, SpotfacingDepth, CountersinkAngle); мост ksGetApplication7()/TransferInterface 5→7",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "verified",
+        "suppress_restore": "not_started",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "verified"
+      },
+      "tests": [
+        "HO.36",
+        "HO.37",
+        "HO.38",
+        "HO.39",
+        "HO.40",
+        "HO.41"
+      ],
+      "evidence": [
+        "docs/acceptance/INDEX.md",
+        "HOLE_COUNTERDRILL_REPORT_20261029.md",
+        "scripts/mcp-smoke.py"
+      ],
+      "limitations": [
+        "У режима ОДИН диаметр на выточку и зенковку (ICountersinkSpotfacingHoleParameters): поля countersink_diameter_mm нет, второе число отвергается по имени. Записанный угол — ПОЛНЫЙ угол при вершине.",
+        "Модель снятия проверена на сквозном пилоте и плоской опорной грани: пилот π·r²·T + кольцо выточки + усечённый конус ОТ ДНА выточки. Глухое отверстие с выточкой и зенковкой, наклонная грань и конус, доходящий до противоположной грани, не измерялись.",
+        "Подавление и восстановление признака не измерялись; удаление одиночного признака измерено строкой HO.41 (объём возвращается), зависимых признаков в постановке не было."
+      ],
+      "depends_on": [
+        "dep.api7.in_same_adapter",
+        "dep.refs.planar_face",
+        "dep.units.confirm"
+      ],
+      "not_applicable_reasons": {}
+    },
+    {
       "operation_id": "SM-07.native_hole.axis_by_face_normal",
       "kind": "profile_mode",
       "profile": "mechanical-core-v1",

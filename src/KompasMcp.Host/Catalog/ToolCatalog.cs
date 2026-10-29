@@ -1482,7 +1482,7 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_hole", "Родное отверстие",
-                                "Родное отверстие на явной опорной грани face_ref из kompas_read_topology. Три режима, все - " +
+                                "Родное отверстие на явной опорной грани face_ref из kompas_read_topology. Шесть режимов, все - " +
                 "маршрутом API7 того же сеанса: в API5 параметров режима не существует (типа ksHoleDefinition в " +
                 "обёртке нет), режимные числа живут на HoleParameters, приведённом к интерфейсу СВОЕГО режима. " +
                 "blind_flat - глухое с плоским дном: ksDTValue плюс ksEFFlat. blind_sphere - глухое со " +
@@ -1495,7 +1495,11 @@ public static class ToolCatalog
                 "конус; снятое сверх пилота равно π·h/3·(rM² + rP·rM − 2·rP²), где h - глубина, которую вернул САМ " +
                 "объект, rM - радиус устья, rP - радиус пилота. Глубина зенковки ПРОИЗВОДНА и записью не " +
                 "управляется: объект возвращает (rM − rP)/tan(угол/2), поэтому глубина публикуется как " +
-                "countersink_depth_read_back_mm. Позиция вне начала координат задаётся парой " +
+                "countersink_depth_read_back_mm. through_counterdrill - выточка с зенковкой: ksHTCounterdrill, " +
+                "пилот насквозь, кольцо выточки, затем КОНУС ОТ ДНА выточки до пилота; снятое равно " +
+                "π·r²·h_плиты + π·(R²−r²)·h_выточки + усечённый конус минус цилиндр пилота в его высоте " +
+                "(R − r)/tan(угол/2). У этого режима ОДИН диаметр на выточку и зенковку, поэтому " +
+                "countersink_diameter_mm для него запрещён. Позиция вне начала координат задаётся парой " +
                 "offset_x_mm/offset_y_mm и работает маршрутом Point3DParamSurface + OffsetType=ksOffsetByCoords; " +
                 "AssociationVertex и DirectionObject дают DISP_E_TYPEMISMATCH, эскиз со смещённой окружностью до " +
                 "API7 не доезжает, DepthVertex/DepthFace читаются как null. Если мост API7 недоступен, вызов " +
@@ -1511,9 +1515,10 @@ public static class ToolCatalog
                         "blind_flat — глухое с плоским дном; blind_sphere — глухое со СФЕРИЧЕСКИМ дном; " +
                         "through_counterbore — цековка (пилот насквозь + кольцевая выточка); " +
                         "through_countersink — зенковка (пилот насквозь + конус); through_conic — конус " +
-                        "насквозь по углу при вершине.",
+                        "насквозь по углу при вершине; through_counterdrill — выточка с зенковкой " +
+                        "(пилот насквозь + кольцо выточки + конус от её дна).",
                         "blind_flat", "blind_sphere", "through_counterbore", "through_countersink",
-                        "through_conic")),
+                        "through_conic", "through_counterdrill")),
                     ("diameter_mm", Sch.PositiveMm(
                         "Диаметр отверстия",
                         "У цековки и зенковки это диаметр ПИЛОТА, а не выточки и не устья.")),
@@ -1523,19 +1528,20 @@ public static class ToolCatalog
                         "сквозное отверстие числа глубины не принимает."))),
                     ("counterbore_diameter_mm", Sch.Nullable(Sch.PositiveMm(
                         "Диаметр выточки",
-                        "Только для mode=through_counterbore. Обязателен там и должен быть БОЛЬШЕ "
-                        + "диаметра пилота: выточка уже пилота не снимает материал, потому что "
-                        + "измеренная формула M.2 — кольцо π/4·(D²−d²)·h."))),
+                        "Для mode=through_counterbore и through_counterdrill, где обязателен. Обязан быть "
+                        + "БОЛЬШЕ диаметра пилота: выточка уже пилота не снимает материал. У "
+                        + "through_counterdrill это ЕДИНСТВЕННЫЙ диаметр режима — он же диаметр зенковки."))),
                     ("counterbore_depth_mm", Sch.Nullable(Sch.PositiveMm(
                         "Глубина выточки",
-                        "Только для mode=through_counterbore, где обязательна."))),
+                        "Для mode=through_counterbore и through_counterdrill, где обязательна."))),
                     ("countersink_diameter_mm", Sch.Nullable(Sch.PositiveMm(
                         "Диаметр УСТЬЯ зенковки",
                         "Только для mode=through_countersink. Обязателен там и должен быть больше "
-                        + "диаметра пилота."))),
+                        + "диаметра пилота. Для mode=through_counterdrill ЗАПРЕЩЁН: у того режима один "
+                        + "диаметр на выточку и зенковку — counterbore_diameter_mm."))),
                     ("countersink_angle_deg", Sch.Nullable(Sch.Num(
-                        "Угол зенковки в ГРАДУСАХ, строго между 0 и 180 — только для " +
-                        "mode=through_countersink, где обязателен. Измерялись 60, 90 и 120 (M.3). " +
+                        "Угол зенковки в ГРАДУСАХ, строго между 0 и 180 — для mode=through_countersink и " +
+                        "through_counterdrill, где обязателен. Измерялись 60, 90 и 120 (M.3). " +
                         "Глубина при способе «диаметр + угол» ПРОИЗВОДНА: объект возвращает " +
                         "(rM − rP)/tan(угол/2), где rM — радиус устья, rP — радиус пилота, а " +
                         "запись глубины не действует (запись 2, 4 и 6 даёт один и тот же снятый " +
@@ -1567,7 +1573,9 @@ public static class ToolCatalog
                         "прочитанному диаметру и полууглу для through_conic; " +
                         "π·r²·h + π/4·(D²−d²)·h_выточки для цековки; " +
                         "π·r²·h + π·h_факт/3·(rM² + rP·rM − 2·rP²) для зенковки, причём h_факт — " +
-                        "глубина, которую ВЕРНУЛ объект, а не запрошенная. С ним проверка " +
+                        "глубина, которую ВЕРНУЛ объект, а не запрошенная; " +
+                        "π·r²·h_плиты + π·(R²−r²)·h_выточки + усечённый конус минус цилиндр пилота в " +
+                        "его высоте для through_counterdrill. С ним проверка " +
                         "численная, без него — только направление изменения. " +
                         "ОСЬ ОБЯЗАНА ЛЕЖАТЬ НА ЗАПРОШЕННОЙ ГРАНИ: если найденная цилиндрическая " +
                         "грань запрошенного диаметра не перпендикулярна её нормали либо её цилиндр " +

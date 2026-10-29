@@ -9,12 +9,10 @@ namespace E2Probe;
 /// rib across the sketch plane has material to lean on.</summary>
 /// <remarks>WHY A SECOND FIXTURE: the first one puts the XOZ plane in the MIDDLE of the plate, so both
 /// normals point into material and nothing tells "up/down refused" apart from "nothing to lean on".
-/// Here the same XOZ plane is a FACE of the body: one of the two orthogonal sides points into the
-/// material and the other into air, which is the pair the order asks to measure.
-/// INVARIANT: a negative answer is only worth something next to a control - a chain on the same body
-/// that DOES build with <c>Side</c> 0/1. Every chain variant is therefore measured with all four values.
-/// DOC: ksribsideenum.html - 0 left, 1 right (within the sketch plane), 2 up, 3 down (across it).
-/// History: docs/decisions/ribs.md#side-enum</remarks>
+/// Here the same XOZ plane is a FACE: one orthogonal side points into material, the other into air.
+/// INVARIANT: a refusal is worth nothing without a control - a chain on the same body that DOES build
+/// with 0/1 - so every chain variant is measured with all four values.
+/// DOC: ksribsideenum.html. History: docs/decisions/ribs.md#side-enum</remarks>
 internal sealed partial class E2Probe
 {
     private const double FlangePlateLength = 40;

@@ -1804,6 +1804,8 @@ public static class ToolCatalog
                 "остальные не изменились. Без body_ref тело выбирает ядро, и это названо в unverified_aspects.",
                 Sch.Props(
                     ("sketch_ref", Sch.Ref("#/$defs/reference")),
+                    // INVARIANT: the range stays 0..3 so 2/3 reach the handler and are refused by name; a
+                    // maximum of 1 stops them at the schema and the refusal loses the field it names.
                     ("side", Sch.Described(
                         Sch.Int(
                             "Положение ребра — ksRibDefinition.side. Принимаются 0 left и 1 right: отсчёт идёт " +
@@ -1811,7 +1813,7 @@ public static class ToolCatalog
                             "той же цепочке справа налево 1. Значения 2 up и 3 down (ортогонально эскизу) " +
                             "ОТВЕРГАЮТСЯ именованным отказом: измерено, что они не строят ни на одной из двух " +
                             "геометрий, где 0 и 1 строят. Без поля — 0.",
-                            0, 1, 0),
+                            0, 3, 0),
                         "Положение ребра относительно направления кривой (0 left, 1 right).")),
                     ("thickness_mm", Sch.PositiveMm("Толщина ребра")),
                     ("symmetric", Sch.Described(

@@ -1133,3 +1133,11 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `SaveAsToAdditionFormat` с `format_IGES = 4` документирован (`d3formatconvtype.html`), открытие IGES селектора не
 имеет и в блок не входит. Очередь: `IGES_EXPORT` (`IGES_EXPORT_DEVELOPER_PROMPT.md`, выдан) -> `V1_SCOPE_AUDIT`
 (решение техлида 27.10.2026) -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, пятьдесят вторая (`IGES_EXPORT` принят; блок IGES закрыт).**
+
+`kompas_export_iges` (маршрут `SaveAsToAdditionFormat`, `format_IGES = 4`, ответ по разбору структуры файла),
+зачётный `--all` на `a5db7ee` - FAIL 0. Единицы глобальной секции не читаются (`units_not_read`, `LIMIT:`).
+Поправка к пятьдесят первой: `d3formatconvtype.html` называет и `load_format_IGES`; есть ли программный маршрут
+открытия - выяснит `V1_SCOPE_AUDIT` (только назвать, импорт в 0.13.0 не входит). Очередь: `V1_SCOPE_AUDIT`
+(`V1_SCOPE_AUDIT_DEVELOPER_PROMPT.md`, выдан) -> наряды по его итогу (решает техлид) -> `RELEASE_0_13_0`.

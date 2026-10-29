@@ -1118,3 +1118,10 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 входит, только если `HOLE_COUNTERDRILL` сведёт съём к модели по геометрии (вторая толщина плиты); иначе режим не
 выставляется. Очередь: `HOLE_SPHERE_CONIC` (`HOLE_SPHERE_CONIC_DEVELOPER_PROMPT.md`, выдан) -> `HOLE_COUNTERDRILL`
 -> IGES -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, пятидесятая (`HOLE_SPHERE_CONIC` принят).**
+
+`kompas_hole` получил режимы `blind_sphere` и `through_conic` (по углу), страж нулевого съёма покрывает оба, зачётный
+`--all` на `fd87232` - FAIL 0. Очередь: `HOLE_COUNTERDRILL` (`HOLE_COUNTERDRILL_DEVELOPER_PROMPT.md`, выдан; сначала
+модель съёма на двух толщинах, затем ветка А - режим `through_counterdrill`, или ветка Б - режим не выставляется и
+причина пишется в решения) -> IGES -> `RELEASE_0_13_0`.

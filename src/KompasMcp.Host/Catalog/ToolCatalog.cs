@@ -3107,6 +3107,26 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_export_iges", "Экспорт IGES",
+                "Сохранение модели в файл IGES документированным маршрутом ksDocument3D.SaveAsToAdditionFormat " +
+                "с IAdditionFormatParam (format_IGES=4). Возврат конвертера true НЕ считается доказательством " +
+                "файла: сервер читает байты с диска и разбирает структуру по открытому стандарту IGES - записи " +
+                "по 80 колонок, буква секции в колонке 73, счётчики секций из записи T сверяются с фактическими, " +
+                "число записей D чётное, сущностей = D/2 и не ноль. В ответе путь, размер, хеш, число " +
+                "сущностей, строк каждой секции и единицы из глобальной секции (не прочитались - null с " +
+                "причиной). Уровень syntax_checked: проверена структура файла, не геометрия. Расширение " +
+                "output_path - .igs или .iges, иное - INVALID_ARGUMENT по имени поля ДО COM; формат вне " +
+                "D3FormatConvType - FORMAT_UNAVAILABLE; отказ конвертера, пустой файл или несошедшийся разбор - " +
+                "EXPORT_FAILED (разбор - с partial_effects=true). Чертёж и фрагмент дают WRONG_DOCUMENT_KIND; " +
+                "сборка экспортируется тем же маршрутом. Импорт IGES не публикуется.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("output_path", Sch.Ref("#/$defs/output_path"))),
+                WorkerCommands.ExportIges,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_export_stl", "Экспорт STL",
                                 "Сохранение модели в файл STL маршрутом ksDocument3D.SaveAsToAdditionFormat с IAdditionFormatParam " +
                 "(format_STL=6). Параметры триангуляции: max_edge_length_mm (плотность сетки STL на v24 этим " +

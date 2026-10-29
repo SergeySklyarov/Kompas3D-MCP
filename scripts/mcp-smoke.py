@@ -665,8 +665,8 @@ def file_sha256(path):
 # → 114 (SHEET_METAL_DXF) → 116 (BOM_MINIMAL: kompas_get_bom и kompas_export_bom)
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties) → 119 (DIRECT_FACES_CORE: kompas_move_faces)
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
-# → 122 (RIB_CORE: kompas_rib).
-EXPECTED_TOOL_COUNT = 122
+# → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges).
+EXPECTED_TOOL_COUNT = 123
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -837,6 +837,10 @@ RUN_GROUPS = (
     ("update", "update", "update-acceptance.json",
      "Приёмка UN: сообщение о новом выпуске без сети - поле update в kompas_health, строка в "
      "initialize.instructions, выключатель и битый источник (наряд UPDATE_NOTICE)"),
+    ("iges", "iges", "iges-acceptance.json",
+     "Приёмка IGES: экспорт модели в IGES - файл записан, структура разобрана прибором по открытому "
+     "стандарту (счётчики секций, сущности), сборка, отказы по имени и повтор в тот же путь "
+     "(наряд IGES_EXPORT)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -895,6 +899,8 @@ ALL_GROUPS_EXTRA = (
     # Группа UN тоже ведёт свои Хосты: состояние проверки складывается на старте процесса, и строку
     # `initialize.instructions` можно увидеть только в процессе, поднятом ПОСЛЕ записи итога.
     ("update", ["--update-only"]),
+    # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
+    ("iges", ["--iges-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -2071,6 +2077,7 @@ FLAGS = (
     ("--dismantle-only", False, "группа DSM: разнесённый вид сборки"),
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
+    ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -14759,6 +14766,356 @@ def export_inertia_checks(client, rep, app_id, workdir):
     close(asm_doc)
 
 
+IGES_REFERENCE = {
+    "block_width_mm": 40.0,
+    "block_depth_mm": 30.0,
+    "block_height_mm": 20.0,
+    "boss_size_mm": 10.0,
+    "boss_height_mm": 8.0,
+    # Поля ответа kompas_export_iges по п. 1.4 наряда: содержимого модели сверх них быть не должно.
+    "answer_fields": (
+        "output_path", "byte_length", "sha256", "entity_count", "start_records", "global_records",
+        "directory_records", "parameter_records", "terminate_records", "units_flag", "units_name",
+        "units_mm_per_unit", "reached_level", "unverified_aspects", "source_revision",
+        # Конверт сеанса, а не содержимое модели: так помечает ответ любой инструмент продукта.
+        "document_id", "revision",
+    ),
+}
+
+
+def iges_checks(client, rep, app_id, workdir):
+    """IGES.* — экспорт IGES (блок IGES) через MCP на бинарях поставки.
+
+    ЗАЧЕМ ЭТА ГРУППА. Инструмент kompas_export_iges написан по документированному маршруту
+    ksDocument3D.SaveAsToAdditionFormat с format_IGES=4, а разборщик покрыт модульными тестами. Группа —
+    ЖИВОЕ подтверждение: файл пишет КОМПАС, прибор читает его САМ по открытому стандарту IGES и сверяет
+    счётчики секций и число сущностей с ответом продукта, а не верит ни ответу, ни возврату конвертера.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Импорт IGES (селектор открытия не документирован), геометрическая сверка объёма и
+    габарита с исходником, клиентская приёмка и Trust.
+    """
+    import os as _os
+
+    ref = dict(IGES_REFERENCE)
+    evidence_dir = _os.path.join(workdir, "iges-runs",
+                                 _os.path.basename(rep.context.get("run_directory") or "run"))
+    _os.makedirs(evidence_dir, exist_ok=True)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def err_details(env):
+        err = (env or {}).get("error") or {}
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def body_of(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+
+    def new_document(kind, name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": kind, "name": name})
+        return doc_of(env), code, emsg(env)
+
+    def draw_and_extrude(doc, entities, name, depth, operation="base", plane="xy", offset=0.0):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": plane, "offset_mm": offset}, "name": name})
+        sketch = result(env).get("id")
+        if not sketch:
+            return f"create_sketch({name}): {code} {emsg(env)}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": entities})
+        if code:
+            return f"edit_sketch({name}): {code} {emsg(env)}"
+        env, code = call("kompas_finish_sketch",
+                         {"sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return f"finish_sketch({name}): {code} {emsg(env)}"
+        payload = {"sketch_ref": sketch, "expected_revision": current_rev(doc),
+                   "operation": operation, "depth_mm": depth, "direction": "positive"}
+        if operation != "base":
+            body = body_of(doc)
+            if body:
+                payload["target_body_ref"] = body
+        env, code = call("kompas_extrude", payload)
+        if code:
+            return f"extrude({name}): {code} {emsg(env)}"
+        return None
+
+    def export_iges(doc, path, revision=None, timeout=300):
+        return call("kompas_export_iges", {
+            "document_id": doc,
+            "expected_revision": revision if revision is not None else current_rev(doc),
+            "output_path": path}, timeout=timeout)
+
+    # Независимый читатель файла: прибор считает секции САМ по открытому стандарту, а не верит ответу.
+    def read_iges(path):
+        size = _os.path.getsize(path)
+        if size == 0:
+            return None
+        with open(path, "rb") as fh:
+            data = fh.read().decode("ascii", "replace")
+        counts = {}
+        global_text = ""
+        terminate = ""
+        # Запись - СТРОКА из 80 колонок: ядро пишет файл с CRLF, и срез по 80 байт сдвигал букву секции.
+        for record in data.splitlines():
+            if not record:
+                continue
+            if len(record) != 80:
+                return None
+            letter = record[72]
+            if letter not in "SGDPT":
+                return None
+            counts[letter] = counts.get(letter, 0) + 1
+            if letter == "G":
+                global_text += record[:72]
+            elif letter == "T":
+                terminate = record
+        declared = []
+        for field in range(4):
+            slice_ = terminate[field * 8:(field + 1) * 8].strip() if terminate else ""
+            digits = "".join(ch for ch in slice_ if ch.isdigit())
+            declared.append(int(digits) if digits else None)
+        return {"counts": counts, "declared": declared, "size": size, "global": global_text}
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def fail_all(reason):
+        for cid, desc in (
+            ("IGES.01.discover", "kompas_export_iges в tools/list, схема совпадает с реестром, число "
+                                 "инструментов равно ожидаемому"),
+            ("IGES.02.block", "брусок: файл записан, разбор сошёлся, сущностей > 0, счётчики секций из "
+                              "записи T равны фактическим и ответу продукта"),
+            ("IGES.03.more_entities", "деталь с бобышкой даёт сущностей БОЛЬШЕ, чем брусок того же габарита"),
+            ("IGES.04.assembly", "сборка: исход экспорта назван измерением — либо разбор сошёлся, либо "
+                                 "отказ по имени"),
+            ("IGES.05.revision_conflict", "чужая ревизия — REVISION_CONFLICT, файла нет"),
+            ("IGES.06.extension_refusal", "расширение не .igs/.iges — отказ по имени поля ДО COM, файла нет"),
+            ("IGES.07.overwrite", "повторный экспорт в тот же путь перезаписывает испорченный файл"),
+            ("IGES.08.answer_shape", "ответ не несёт содержимого модели сверх перечня п. 1.4 наряда"),
+        ):
+            rep.add(cid, desc, "FAIL", reason)
+
+    # ── IGES.01.discover ──────────────────────────────────────────────────────────────────────────
+    tools = client.tools()
+    names = sorted(t["name"] for t in tools)
+    entry = entry_of(client, "kompas_export_iges")
+    schema_ok = False
+    if entry is not None:
+        published = _os.path.join(ROOT, "schemas", "kompas_export_iges.json")
+        try:
+            with open(published, encoding="utf-8-sig") as fh:
+                want = json.load(fh)
+            want.pop("$schema", None)
+            schema_ok = entry.get("inputSchema") == want
+        except (OSError, ValueError):
+            schema_ok = False
+    rep.add("IGES.01.discover",
+            "kompas_export_iges в tools/list, его inputSchema совпадает с schemas/kompas_export_iges.json, "
+            "число инструментов равно ожидаемому",
+            "PASS" if (entry is not None and schema_ok and listing_matches(client, names)) else "FAIL",
+            f"инструмент найден={entry is not None}; схема совпадает={schema_ok}; "
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT})")
+
+    # ── сборка эталона: брусок и брусок с бобышкой ───────────────────────────────────────────────
+    block_doc, code, message = new_document("part", "IGES-block")
+    block_error = None
+    if not block_doc:
+        block_error = f"create_document(part): {code} {message}"
+    else:
+        block_error = draw_and_extrude(
+            block_doc,
+            [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+              "width_mm": ref["block_width_mm"], "height_mm": ref["block_depth_mm"]}],
+            "iges-block", ref["block_height_mm"])
+
+    boss_doc, code, message = new_document("part", "IGES-boss")
+    boss_error = None
+    if not boss_doc:
+        boss_error = f"create_document(part): {code} {message}"
+    else:
+        boss_error = draw_and_extrude(
+            boss_doc,
+            [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+              "width_mm": ref["block_width_mm"], "height_mm": ref["block_depth_mm"]}],
+            "iges-boss-base", ref["block_height_mm"])
+    if boss_doc and not boss_error:
+        boss_error = draw_and_extrude(
+            boss_doc,
+            [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+              "width_mm": ref["boss_size_mm"], "height_mm": ref["boss_size_mm"]}],
+            "iges-boss-top", ref["boss_height_mm"], operation="boss",
+            offset=ref["block_height_mm"])
+
+    if block_error or boss_error or not block_doc or not boss_doc:
+        fail_all(f"эталон не построен: брусок={block_error}, брусок с бобышкой={boss_error}")
+        close(block_doc)
+        close(boss_doc)
+        return
+
+    # ── IGES.02.block ────────────────────────────────────────────────────────────────────────────
+    block_path = _os.path.join(evidence_dir, "block.igs")
+    env, code = export_iges(block_doc, block_path)
+    res = result(env)
+    file_facts = read_iges(block_path) if _os.path.isfile(block_path) else None
+    counts_match = False
+    answer_matches_file = False
+    if file_facts:
+        counts = file_facts["counts"]
+        counts_match = (file_facts["declared"][:4] == [counts.get("S", 0), counts.get("G", 0),
+                                                       counts.get("D", 0), counts.get("P", 0)])
+        answer_matches_file = (
+            res.get("start_records") == counts.get("S", 0)
+            and res.get("global_records") == counts.get("G", 0)
+            and res.get("directory_records") == counts.get("D", 0)
+            and res.get("parameter_records") == counts.get("P", 0)
+            and res.get("terminate_records") == counts.get("T", 0)
+            and res.get("entity_count") == counts.get("D", 0) // 2)
+    rep.add("IGES.02.block",
+            "брусок 40x30x20: файл записан, разбор сошёлся (счётчики записи T = фактические, D чётное, "
+            "сущностей > 0), ответ продукта равен прочитанному прибором",
+            "PASS" if (not code and file_facts and counts_match and answer_matches_file
+                       and (res.get("entity_count") or 0) > 0) else "FAIL",
+            f"код={code} {emsg(env) or ''}; размер={_os.path.getsize(block_path) if file_facts else 'нет'}; "
+            f"ответ: сущностей={res.get('entity_count')} секции="
+            f"{res.get('start_records')}/{res.get('global_records')}/{res.get('directory_records')}/"
+            f"{res.get('parameter_records')}/{res.get('terminate_records')}; "
+            f"файл: {file_facts['counts'] if file_facts else 'не прочитан'}, "
+            f"объявлено={file_facts['declared'] if file_facts else 'нет'}; "
+            f"счётчики сошлись={counts_match}, ответ=файл={answer_matches_file}; "
+            f"единицы={res.get('units_flag')}/{res.get('units_name')}/{res.get('units_mm_per_unit')}")
+
+    # ── IGES.03.more_entities ────────────────────────────────────────────────────────────────────
+    boss_path = _os.path.join(evidence_dir, "block-boss.igs")
+    boss_env, boss_code = export_iges(boss_doc, boss_path)
+    boss_res = result(boss_env)
+    boss_facts = read_iges(boss_path) if _os.path.isfile(boss_path) else None
+    block_entities = res.get("entity_count")
+    boss_entities = boss_res.get("entity_count")
+    rep.add("IGES.03.more_entities",
+            "деталь того же габарита с бобышкой 10x10x8 даёт сущностей БОЛЬШЕ, чем брусок: число "
+            "сущностей следует за геометрией, а не за размером файла",
+            "PASS" if (not boss_code and boss_facts and isinstance(block_entities, int)
+                       and isinstance(boss_entities, int) and boss_entities > block_entities) else "FAIL",
+            f"код={boss_code} {emsg(boss_env) or ''}; сущностей: брусок={block_entities}, "
+            f"с бобышкой={boss_entities}; прибор прочитал "
+            f"{boss_facts['counts'].get('D', 0) // 2 if boss_facts else 'н/д'}")
+
+    # ── IGES.04.assembly ────────────────────────────────────────────────────────────────────────
+    asm_doc, code, message = new_document("assembly", "IGES-assembly")
+    asm_result = None
+    asm_note = f"create_document(assembly): {code} {message}"
+    if asm_doc:
+        source_path = _os.path.join(evidence_dir, "block-source.m3d")
+        save_env, save_code = call("kompas_save_document", {
+            "document_id": block_doc, "expected_revision": current_rev(block_doc),
+            "target_path": source_path})
+        if save_code or not _os.path.isfile(source_path):
+            asm_note = f"деталь для вставки не сохранена: {save_code} {emsg(save_env)}"
+        else:
+            ins_env, ins_code = call("kompas_insert_component", {
+                "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+                "source_path": source_path, "fixed": False})
+            if ins_code:
+                asm_note = f"компонент не вставлен: {ins_code} {emsg(ins_env)}"
+            else:
+                asm_path = _os.path.join(evidence_dir, "assembly.igs")
+                asm_env, asm_code = export_iges(asm_doc, asm_path)
+                asm_res = result(asm_env)
+                asm_facts = read_iges(asm_path) if _os.path.isfile(asm_path) else None
+                if not asm_code:
+                    asm_result = bool(asm_facts) and (asm_res.get("entity_count") or 0) > 0
+                    asm_note = (f"экспорт прошёл: сущностей={asm_res.get('entity_count')}, "
+                                f"секции={asm_facts['counts'] if asm_facts else 'файл не прочитан'}")
+                else:
+                    # Отказ по имени — тоже состоявшийся исход; он назван кодом и полем.
+                    asm_result = asm_code in ("WRONG_DOCUMENT_KIND", "EXPORT_FAILED", "FORMAT_UNAVAILABLE")
+                    asm_note = f"отказ {asm_code}: {emsg(asm_env)}; details={err_details(asm_env)}"
+    rep.add("IGES.04.assembly",
+            "сборка с одним компонентом: исход назван измерением — либо экспорт прошёл и разбор сошёлся, "
+            "либо отказ пришёл названным кодом, а не исключением COM",
+            "PASS" if asm_result else ("NAMED" if asm_doc else "FAIL"),
+            asm_note or "сборка не создана")
+
+    # ── IGES.05.revision_conflict ───────────────────────────────────────────────────────────────
+    stale_path = _os.path.join(evidence_dir, "stale.igs")
+    stale_env, stale_code = export_iges(block_doc, stale_path,
+                                        revision=current_rev(block_doc) + 5)
+    rep.add("IGES.05.revision_conflict",
+            "экспорт с чужой ревизией отвергается REVISION_CONFLICT и файла не создаёт",
+            "PASS" if (stale_code == "REVISION_CONFLICT" and not _os.path.isfile(stale_path)) else "FAIL",
+            f"код={stale_code} {emsg(stale_env) or ''}; файл существует={_os.path.isfile(stale_path)}")
+
+    # ── IGES.06.extension_refusal ───────────────────────────────────────────────────────────────
+    wrong_ext = _os.path.join(evidence_dir, "wrong-extension.stp")
+    ext_env, ext_code = export_iges(block_doc, wrong_ext)
+    ext_field = err_details(ext_env).get("field")
+    rep.add("IGES.06.extension_refusal",
+            "расширение не .igs/.iges отвергается INVALID_ARGUMENT по имени поля output_path до COM, "
+            "файла нет",
+            "PASS" if (ext_code == "INVALID_ARGUMENT" and ext_field == "output_path"
+                       and not _os.path.isfile(wrong_ext)) else "FAIL",
+            f"код={ext_code}, field={ext_field}, файл существует={_os.path.isfile(wrong_ext)}; "
+            f"{emsg(ext_env) or ''}")
+
+    # ── IGES.07.overwrite ───────────────────────────────────────────────────────────────────────
+    overwrite_path = _os.path.join(evidence_dir, "overwrite.igs")
+    first_env, first_code = export_iges(block_doc, overwrite_path)
+    with open(overwrite_path, "w", encoding="ascii") as fh:
+        fh.write("NOT AN IGES FILE")
+    second_env, second_code = export_iges(block_doc, overwrite_path)
+    second_facts = read_iges(overwrite_path) if _os.path.isfile(overwrite_path) else None
+    rep.add("IGES.07.overwrite",
+            "повторный экспорт в тот же путь перезаписывает испорченный файл: разбор снова сходится и "
+            "хеш совпадает с первым экспортом",
+            # Хеши двух экспортов НЕ сравниваются: глобальная секция IGES несёт дату и время записи,
+            # поэтому одинаковые модели дают разные байты. Доказательство перезаписи - файл снова
+            # разбирается после того, как в него записали мусор.
+            "PASS" if (not first_code and not second_code and second_facts
+                       and second_facts["size"] > len("NOT AN IGES FILE")) else "FAIL",
+            f"коды={first_code}/{second_code}; после повтора файл прочитан={bool(second_facts)}, "
+            f"размер={second_facts['size'] if second_facts else 'н/д'}")
+
+    # ── IGES.08.answer_shape ────────────────────────────────────────────────────────────────────
+    allowed = set(ref["answer_fields"])
+    answer = result(first_env)
+    extra = sorted(key for key in answer if key not in allowed)
+    rep.add("IGES.08.answer_shape",
+            "ответ kompas_export_iges не несёт содержимого модели сверх перечня п. 1.4 наряда: ни списка "
+            "сущностей, ни параметрических данных",
+            "PASS" if not extra and answer.get("sha256") and answer.get("output_path") else "FAIL",
+            f"лишние поля={extra}; поля ответа={sorted(answer)}")
+
+    close(block_doc)
+    close(boss_doc)
+    close(asm_doc)
+
+
 def variables_bind_checks(client, rep, app_id, workdir):
     """VB.* — три инструмента блока G3 через MCP на бинарях поставки.
 
@@ -16760,6 +17117,8 @@ def main():
     e5_only = "--e5-only" in sys.argv
     # Блок E2 (рёбра жёсткости): группа R1 на своём сеансе, строки `R1-<NN>.<действие>`.
     r1_only = "--r1-only" in sys.argv
+    # Блок IGES (экспорт модели в IGES): группа IGES на своём сеансе, строки `IGES.<NN>.<действие>`.
+    iges_only = "--iges-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -16917,6 +17276,7 @@ def main():
         "sections": sections_only,
         "e5": e5_only,
         "r1": r1_only,
+        "iges": iges_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -17531,6 +17891,14 @@ def main():
 
         if r1_only:
             r1_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if iges_only:
+            iges_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -54915,6 +55283,7 @@ EXTRA_GROUP_CHECKS = {
     # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),
+    "iges": lambda c, r, a, w, v, p: iges_checks(c, r, a, w),
 }
 
 

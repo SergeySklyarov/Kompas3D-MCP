@@ -316,6 +316,7 @@ public sealed class WorkerCommandTableTests
     {
         "kompas_export_step",
         "kompas_export_stl",
+        "kompas_export_iges",
         "kompas_export_image",
         "kompas_export_bom",
     };

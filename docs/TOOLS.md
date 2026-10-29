@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 122.
+Всего инструментов: 123.
 
 | Инструмент | Путь вызова | Назначение | Что делает |
 |---|---|---|---|
@@ -94,6 +94,7 @@
 | `kompas_delete_feature` | run | Удалить признак, эскиз или объект вспомогательной геометрии | Удаляет объект модели детали по ссылке из перечня: ПРИЗНАК (kompas_list_features), ЭСКИЗ (kompas_list_sketches) или объект ВСПОМОГАТЕЛЬНОЙ ГЕОМЕТРИИ - плоскость, ось, точку (kompas_list_aux_geometry). |
 | `kompas_rebuild` | run | Перестроить | Перестроение документа. |
 | `kompas_export_step` | run | Экспорт STEP | Экспорт нативным конвертером. |
+| `kompas_export_iges` | run | Экспорт IGES | Сохранение модели в файл IGES документированным маршрутом ksDocument3D.SaveAsToAdditionFormat с IAdditionFormatParam (format_IGES=4). |
 | `kompas_export_stl` | run | Экспорт STL | Сохранение модели в файл STL маршрутом ksDocument3D.SaveAsToAdditionFormat с IAdditionFormatParam (format_STL=6). |
 | `kompas_import_step` | run | Импорт STEP | Чтение STEP. |
 | `kompas_export_image` | run | Снимок модели или чертежа | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat; ЧЕРТЁЖ снимается тем же маршрутом на своём указателе (ksDocument2D.RasterFormatParam → ksRasterFormatParam →… |

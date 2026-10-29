@@ -271,6 +271,10 @@ public static class WorkerCommands
     /// (<c>ksDocument3D.SaveAsToAdditionFormat</c> with <c>format_STL</c>). The file is a MUTATION of the
     /// file system, so the tool carries an <c>operation_id</c>; the model itself is not changed.</summary>
     public const string ExportStl = "export.stl";
+
+    /// <summary>Save a part/assembly to IGES through the same documented additional-format route, with
+    /// <c>format_IGES</c>. A file-system mutation like <see cref="ExportStl"/>; the model is not changed.</summary>
+    public const string ExportIges = "export.iges";
     public const string UnitProbe = "probe.units";
 
     // BOM domain (block BOM_MINIMAL, profile bom-minimal-v1): bom.get → BOM-01, bom.export → BOM-02,
@@ -2765,6 +2769,64 @@ public sealed record ExportStlResultDto
     /// <summary>Verification block of the envelope, so the level the Host publishes is the level THIS
     /// call reached rather than a substituted <c>call_returned</c>.</summary>
     public required VerificationDto Verification { get; init; }
+
+    public required IReadOnlyList<string> UnverifiedAspects { get; init; }
+
+    public required long SourceRevision { get; init; }
+}
+
+/// <summary>Save a part or assembly to IGES through the documented additional-format route.</summary>
+/// <remarks>DOC: <c>ksdocument3d_saveastoadditionformat.html</c> — «Сохранить модель в файле формата SAT,
+/// XT, STEP, IGES, VRML, STL»; <c>d3formatconvtype.html</c> — <c>format_IGES = 4</c>. The answer is built
+/// from the BYTES of the file, never from the converter's <c>true</c>.
+/// History: docs/decisions/geometry.md#iges</remarks>
+public sealed record ExportIgesCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Full destination path; the extension must be .igs or .iges, judged before any COM call.</summary>
+    public required string OutputPath { get; init; }
+
+    /// <summary>Revision the caller read; a mismatch aborts before the converter runs.</summary>
+    public required long ExpectedRevision { get; init; }
+}
+
+/// <summary>What <c>kompas_export_iges</c> produced, measured from the FILE.</summary>
+/// <remarks>INVARIANT: the section counts are read from the records and compared with the declaration in
+/// the terminate record; a file that does not agree with itself is <c>EXPORT_FAILED</c>, not a success.
+/// History: docs/decisions/geometry.md#iges</remarks>
+public sealed record ExportIgesResultDto
+{
+    public required string OutputPath { get; init; }
+
+    public required long ByteLength { get; init; }
+
+    public required string Sha256 { get; init; }
+
+    /// <summary>Entities in the directory section: two records per entity.</summary>
+    public required int EntityCount { get; init; }
+
+    public required int StartRecords { get; init; }
+
+    public required int GlobalRecords { get; init; }
+
+    public required int DirectoryRecords { get; init; }
+
+    public required int ParameterRecords { get; init; }
+
+    public required int TerminateRecords { get; init; }
+
+    /// <summary>Units flag of global field 14; null when the field is unreadable.</summary>
+    public int? UnitsFlag { get; init; }
+
+    /// <summary>Units name of global field 15 as written; null when empty.</summary>
+    public string? UnitsName { get; init; }
+
+    /// <summary>Millimetres per unit, resolved from the flag only; null when the flag is not defined by
+    /// the standard or means "see the name".</summary>
+    public double? UnitsMmPerUnit { get; init; }
+
+    public required VerificationLevel ReachedLevel { get; init; }
 
     public required IReadOnlyList<string> UnverifiedAspects { get; init; }
 

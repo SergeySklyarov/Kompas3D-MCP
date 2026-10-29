@@ -307,6 +307,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.ExportStep, WorkerAction.FileWrite, 300_000);
         Cad(WorkerCommands.ImportStep, WorkerAction.ModelMutation, 300_000);
         Cad(WorkerCommands.ExportStl, WorkerAction.FileWrite, 300_000);
+        Cad(WorkerCommands.ExportIges, WorkerAction.FileWrite, 300_000);
         // A raster snapshot renders the document and (in file mode) writes a file: longer than a read,
         // shorter than a converter. The budget is a number, not the default: a high-resolution snapshot
         // measured in seconds, and hitting the common budget would look like a product failure.

@@ -100,6 +100,7 @@ public static class CompactCatalog
         ["kompas_copy_geometry"] = "master", ["kompas_list_copies_geometry"] = "master",
         ["kompas_synchronise_copy"] = "master",
         ["kompas_export_step"] = "file", ["kompas_export_stl"] = "file",
+        ["kompas_export_iges"] = "file",
         ["kompas_export_image"] = "file", ["kompas_import_step"] = "file",
     };
 

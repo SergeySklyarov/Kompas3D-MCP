@@ -404,6 +404,7 @@ public sealed class CommandDispatcher
             WorkerCommands.Rebuild => _sta.Run(() => Rebuild(request), "doc.rebuild", cancellationToken),
             WorkerCommands.ExportStep => _sta.Run(() => ExportStep(request), "export.step", cancellationToken),
             WorkerCommands.ExportStl => _sta.Run(() => ExportStl(request), "export.stl", cancellationToken),
+            WorkerCommands.ExportIges => _sta.Run(() => ExportIges(request), "export.iges", cancellationToken),
             WorkerCommands.ImportStep => _sta.Run(() => ImportStep(request), "import.step", cancellationToken),
             WorkerCommands.ExportImage => _sta.Run(() => ExportImage(request), "export.image", cancellationToken),
             WorkerCommands.UnitProbe => _sta.Run(() => UnitProbe(request), "probe.units", cancellationToken),
@@ -1350,6 +1351,15 @@ public sealed class CommandDispatcher
         var command = Argument<ExportStlCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return Tagged(document.Id, document.Revision, _session.ExportStl(command));
+    }
+
+    private object? ExportIges(IpcFrame request)
+    {
+        // Tagged, not TaggedAfter: IGES writes a FILE, not the model. The revision is checked inside the
+        // adapter (REVISION_CONFLICT before the converter runs) and the model revision does not move.
+        var command = Argument<ExportIgesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ExportIges(command));
     }
 
     // DRW (block drawings): the three mutating tools go through the common mutation point so the

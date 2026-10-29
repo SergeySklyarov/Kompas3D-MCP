@@ -1107,3 +1107,14 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `kompas_rib.side` принимает 0 и 1; 2/3 на двух геометриях не строят и отвергаются по имени, `mode_side_positions`
 закрыта по 0/1, зачётный `--all` на `07c6afa` - FAIL 0. Очередь: `E4_RESEARCH` (`E4_RESEARCH_DEVELOPER_PROMPT.md`,
 выдан) -> наряды реализации E4 по его отчёту -> IGES -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, сорок девятая (`E4_RESEARCH` принят; профиль E4 утверждён техлидом).**
+
+Профиль E4 - расширение `kompas_hole` (MINOR): `blind_sphere` (`ksEFSphere`), `through_conic` только по углу
+(`ksCNAngle`; `ksCNDiameter` вырождается в цилиндр), затем `through_counterdrill`. Поле `direction` не вводится
+(`false` снимает 0 мм3) - вместо него страж «нулевой съём = отказ». `ksDTObject`, библиотечное отверстие и
+`AssociationVertex` в профиль не входят. Массив отверстий закрывается строкой приёмки через `kompas_pattern_grid`;
+«несколько отверстий из одного эскиза» маршрута не имеет - к докладу заказчику при выпуске. Цековка с зенковкой
+входит, только если `HOLE_COUNTERDRILL` сведёт съём к модели по геометрии (вторая толщина плиты); иначе режим не
+выставляется. Очередь: `HOLE_SPHERE_CONIC` (`HOLE_SPHERE_CONIC_DEVELOPER_PROMPT.md`, выдан) -> `HOLE_COUNTERDRILL`
+-> IGES -> `RELEASE_0_13_0`.

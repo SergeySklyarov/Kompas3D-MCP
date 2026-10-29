@@ -1101,3 +1101,9 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `symmetric`, правка ребра, `save_reopen` и `body` (API7 `IRib.Body` до `Create()`) реализованы, зачётный `--all` на
 `80a4afc` - FAIL 0. Очередь: `RIB_POSITIONS` (`RIB_POSITIONS_DEVELOPER_PROMPT.md`, выдан; второй замер `Side` 2/3 и
 закрытие `mode_side_positions` по одной из двух заранее утверждённых веток) -> E4 -> IGES -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, сорок восьмая (`RIB_POSITIONS` принят; блок E2 закрыт).**
+
+`kompas_rib.side` принимает 0 и 1; 2/3 на двух геометриях не строят и отвергаются по имени, `mode_side_positions`
+закрыта по 0/1, зачётный `--all` на `07c6afa` - FAIL 0. Очередь: `E4_RESEARCH` (`E4_RESEARCH_DEVELOPER_PROMPT.md`,
+выдан) -> наряды реализации E4 по его отчёту -> IGES -> `RELEASE_0_13_0`.

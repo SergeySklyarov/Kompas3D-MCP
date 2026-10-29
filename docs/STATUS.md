@@ -32,7 +32,10 @@
   (`R1-29.negative.side_orthogonal`: оба значения отвергнуты, код и имя поля сверены). Схемы
   перегенерированы (`schemas/kompas_rib.json`: принимаются 0 и 1, диапазон 0…3), матрица - генератором,
   `docs/TOOLS.md` не изменился. Debug/Release: сборки 0 предупреждений, тесты **1645/1645**, группа
-  `R1` на Release - 52 PASS / 0 FAIL. Строка матрицы
+  `R1` на Release - 52 PASS / 0 FAIL. **Итог зачётного `--all`** (`07c6afa`, дерево чистое, 32 минуты):
+  1978 PASS / 0 FAIL / 6 NAMED / 3 UNKNOWN, 1987 строк, группа `R1` - 29 PASS; сверка строк с зачётом
+  `RIB_MODES` (`80a4afc`) - одна новая строка `R1-29.negative.side_orthogonal`, группа `r1` 28 → 29,
+  прочие 24 группы совпали. Строка матрицы
   `SM-14.rib.mode_side_positions` закрыта по действиям режима (create, read, geometry_validation,
   negative_tests); целиком строка не закрыта - `suppress_restore` и `delete_dependencies` остаются
   `not_started`, как и после `RIB_MODES`. Отчёт - `RIB_POSITIONS_REPORT_20261029.md`.

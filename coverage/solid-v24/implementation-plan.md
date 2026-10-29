@@ -1125,3 +1125,11 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `--all` на `fd87232` - FAIL 0. Очередь: `HOLE_COUNTERDRILL` (`HOLE_COUNTERDRILL_DEVELOPER_PROMPT.md`, выдан; сначала
 модель съёма на двух толщинах, затем ветка А - режим `through_counterdrill`, или ветка Б - режим не выставляется и
 причина пишется в решения) -> IGES -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 29.10.2026, пятьдесят первая (`HOLE_COUNTERDRILL` принят; блок E4 закрыт).**
+
+`kompas_hole` получил режим `through_counterdrill` (ветка А): съём сведён к модели по геометрии на 14 наборах двух
+толщин, зачётный `--all` на `ed72dd3` - FAIL 0. Блок IGES - один наряд реализации без исследования: маршрут
+`SaveAsToAdditionFormat` с `format_IGES = 4` документирован (`d3formatconvtype.html`), открытие IGES селектора не
+имеет и в блок не входит. Очередь: `IGES_EXPORT` (`IGES_EXPORT_DEVELOPER_PROMPT.md`, выдан) -> `V1_SCOPE_AUDIT`
+(решение техлида 27.10.2026) -> `RELEASE_0_13_0`.

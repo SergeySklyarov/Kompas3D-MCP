@@ -3098,7 +3098,16 @@ public static class ToolCatalog
                 requiresDocument: true),
 
             Mutation("kompas_export_step", "Экспорт STEP",
-                "Экспорт нативным конвертером. В ответе — фактически достигнутый уровень проверки: file_created или syntax_checked, но не геометрия.",
+                "Экспорт нативным конвертером. В ответе — фактически достигнутый уровень проверки: file_created или syntax_checked, но не геометрия. "
+                + "Метаданные читаются РАЗБОРОМ записанного файла (ISO 10303-21), а не из настроек конвертера: "
+                + "schema — строка FILE_SCHEMA заголовка как в файле; units — единица длины контекста "
+                + "(SI_UNIT/CONVERSION_BASED_UNIT, канонически: mm); unique_solids — число сущностей "
+                + "твёрдых тел B-rep (MANIFOLD_SOLID_BREP, BREP_WITH_VOIDS, FACETED_BREP); instance_count — "
+                + "вхождений: у детали по одному на тело, у сборки по NEXT_ASSEMBLY_USAGE_OCCURRENCE. "
+                + "Чего файл не несёт — null с причиной в unverified_aspects (schema_not_found, "
+                + "units_not_read, instance_count_not_read), а не значение по умолчанию. Выбор схемы "
+                + "AP203/AP214/AP242 документированным параметром не настраивается: такого поля в "
+                + "ksAdditionFormatParam нет.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -3211,7 +3220,9 @@ public static class ToolCatalog
                 "(10 рендерится, 100 - RASTER_EMPTY, 1000 - RASTER_REFUSED), и зажим называется. Промах дальше 10 % " +
                 "от цели - не отказ, а причина в sizing_note. Прежнее поведение - передать явные resolution или " +
                 "scale. В ответе: sizing (explicit | auto_two_pass), probe_long_side_px, applied_scale, " +
-                "target_long_side_px.",
+                "target_long_side_px, а также sha256 байтов снимка (тот же хеш даёт файл из save_path) и " +
+                "captured_at — момент съёмки в UTC по ISO 8601, взятый с часов вызова, а не из времени " +
+                "изменения файла.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

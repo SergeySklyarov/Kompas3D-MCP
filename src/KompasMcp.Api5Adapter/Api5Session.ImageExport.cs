@@ -4,6 +4,7 @@ using Kompas6API5;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Imaging;
 
 namespace KompasMcp.Api5Adapter;
@@ -341,10 +342,15 @@ public sealed partial class Api5Session
             base64 = Convert.ToBase64String(data);
         }
 
+        // The bytes are final from here on: the moment named as captured_at belongs to THIS content, so
+        // it is taken after the last render, not from the file's modification time.
+        var capturedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+
         var unverified = new List<string>
         {
             "image_content_not_analysed — сервер не разбирает изображение и не сверяет его с моделью",
         };
+
         if (viewState.Applied)
         {
             unverified.Add(
@@ -405,6 +411,8 @@ public sealed partial class Api5Session
             ViewRestored = viewState.Restored,
             ViewProjectionScheme = viewState.Scheme,
             ImageBase64 = base64,
+            Sha256 = FileHash.Sha256(data),
+            CapturedAt = capturedAt,
             ReachedLevel = facts.PixelWidth is null ? VerificationLevel.FileCreated : VerificationLevel.SyntaxChecked,
             UnverifiedAspects = unverified,
         };

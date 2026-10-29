@@ -77,7 +77,7 @@ public sealed partial class Api5Session
         // is a separate, explicit roundtrip that this call does not perform and that no published
         // tool performs yet (the contract document plans one under the name kompas_validate_export);
         // it is never implied by this call.
-        var structural = StepFileInspector.Inspect(destination);
+        var structural = StepFileInspector.Inspect(destination, document.Kind is DocumentKind.Assembly);
         var checks = new List<NamedCheck>
         {
             new("file_created", true, Observed: structural.ByteLength.ToString(CultureInfo.InvariantCulture) + " байт"),
@@ -90,6 +90,13 @@ public sealed partial class Api5Session
             OutputPath = destination,
             ByteLength = structural.ByteLength,
             Sha256 = FileHash.Sha256(destination),
+            // Read from the bytes, not from the converter settings: the header and the units of the
+            // written file are the only source that says what was actually exported.
+            // History: docs/decisions/geometry.md#step-metadata
+            Schema = structural.Schema,
+            Units = structural.Units,
+            UniqueSolids = structural.UniqueSolids,
+            InstanceCount = structural.InstanceCount,
             ReachedLevel = level,
             UnverifiedAspects = structural.UnverifiedAspects,
             SourceRevision = document.Revision,
@@ -576,71 +583,5 @@ public sealed partial class Api5Session
         }
 
         return seen.Count;
-    }
-}
-
-/// <summary>Minimal, dependency-free structural read of a STEP file: enough to report the schema token and
-/// entity counts without claiming any geometric validation (spec 1.11 levels).</summary>
-public static class StepFileInspector
-{
-    public sealed record StepFacts(long ByteLength, bool HeaderParsed, string? Schema, int EntityStatements, IReadOnlyList<string> UnverifiedAspects);
-
-    public static StepFacts Inspect(string path)
-    {
-        var info = new FileInfo(path);
-        var text = ReadHead(path, 256 * 1024);
-
-        var schema = FirstMatch(text, "AUTOMOTIVE_DESIGN_THEORY", "AP242", "AUTOMOTIVE_DESIGN", "CONFIG_CONTROL_DESIGN", "AP214", "AP203");
-        var headerParsed = text.Contains("ISO-10303-21;HEADER", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("FILE_SCHEMA", StringComparison.OrdinalIgnoreCase);
-        var statements = CountOccurrences(text, "();");
-
-        var unverified = new List<string>
-        {
-            "geometry_not_validated — проверена только структура файла, не форма",
-            "units_not_confirmed_from_file — запись единиц ищется, но не трактуется как подтверждение масштаба",
-        };
-
-        if (schema is null)
-        {
-            unverified.Add("schema_token_not_found");
-        }
-
-        return new StepFacts(info.Length, headerParsed, schema, statements, unverified);
-    }
-
-    private static string ReadHead(string path, int limit)
-    {
-        using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var length = (int)Math.Min(limit, stream.Length);
-        var buffer = new byte[length];
-        stream.ReadExactly(buffer);
-        return new UTF8Encoding(false).GetString(buffer);
-    }
-
-    private static string? FirstMatch(string haystack, params string[] needles)
-    {
-        foreach (var needle in needles)
-        {
-            if (haystack.Contains(needle, StringComparison.OrdinalIgnoreCase))
-            {
-                return needle;
-            }
-        }
-
-        return null;
-    }
-
-    private static int CountOccurrences(string haystack, string needle)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = haystack.IndexOf(needle, index, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            count++;
-            index += needle.Length;
-        }
-
-        return count;
     }
 }

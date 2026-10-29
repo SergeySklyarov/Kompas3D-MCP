@@ -641,6 +641,89 @@ def file_sha256(path):
         return ""
 
 
+def read_step_facts(path):
+    """Независимый разбор STEP по ISO 10303-21: строка FILE_SCHEMA, единица длины, число тел.
+
+    Прибор не верит ответу продукта: он читает ТЕ ЖЕ байты своим разбором. Единица приводится к
+    каноническому имени (SI_UNIT(.MILLI.,.METRE.) → mm), тело считается по экземплярам B-rep
+    (имя сразу после `=`), а не по вхождениям подстроки в строковых аргументах.
+    History: docs/decisions/geometry.md#step-metadata
+    """
+    text = open(path, encoding="utf-8", errors="replace").read()
+    at = text.find("FILE_SCHEMA")
+    quote = text.find("'", at) if at >= 0 else -1
+    schema = text[quote + 1:text.find("'", quote + 1)] if quote >= 0 else None
+    solids = sum(text.count("=%s(" % name)
+                 for name in ("MANIFOLD_SOLID_BREP", "BREP_WITH_VOIDS", "FACETED_BREP"))
+    units = None
+    unit_at = text.find("LENGTH_UNIT")
+    if unit_at >= 0:
+        assign = text.rfind("=", 0, unit_at)
+        start = text.rfind("#", 0, assign) if assign >= 0 else -1
+        entity = text[start:text.find(";", unit_at)] if start >= 0 else ""
+        si_at = entity.find("SI_UNIT(")
+        conversion_at = entity.find("CONVERSION_BASED_UNIT(")
+        if si_at >= 0 and (conversion_at < 0 or si_at < conversion_at):
+            arguments = entity[si_at + len("SI_UNIT("):entity.find(")", si_at)].split(",")
+            prefix = {"MILLI": "m", "CENTI": "c", "KILO": "k", "MICRO": "µ", "DECI": "d"}.get(
+                arguments[0].strip().strip("."), "")
+            units = prefix + "m" if arguments[1].strip().strip(".").lower() == "metre" else None
+        elif conversion_at >= 0:
+            units = entity[entity.find("'", conversion_at) + 1:].split("'")[0].lower()
+    return {"schema": schema, "units": units, "solids": solids, "size": os.path.getsize(path)}
+
+
+def step_metadata_export(client, app_id, path):
+    """Деталь из ДВУХ тел и её экспорт в STEP — заготовка строки E01c.
+
+    Маршрут второго тела — base+base (измерен строкой U05p): изолированный контур даёт отдельное
+    тело, селектор цели у base нет. Возвращает (код ошибки экспорта, конверт экспорта, id документа).
+    History: docs/decisions/geometry.md#step-metadata
+    """
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def body(doc, entities, name):
+        env = call("kompas_create_sketch", {"document_id": doc, "expected_revision": revision(doc),
+                                            "plane": {"base": "xy"}, "name": name})
+        sketch = ((env or {}).get("result") or {}).get("id")
+        if not sketch:
+            return error_code(env)
+        call("kompas_edit_sketch", {"sketch_ref": sketch, "expected_revision": revision(doc),
+                                    "mode": "append", "entities": entities})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        env = call("kompas_extrude", {"sketch_ref": sketch, "expected_revision": revision(doc),
+                                      "operation": "base", "depth_mm": 10,
+                                      "direction": "positive"})
+        return error_code(env)
+
+    env = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                          "name": "step_metadata_two_bodies"})
+    doc = ((env or {}).get("result") or {}).get("document_id") or (env or {}).get("document_id")
+    if not doc:
+        return error_code(env) or "DOCUMENT_NOT_CREATED", env, None
+    code = body(doc, [{"kind": "rectangle", "start_mm": [-50, -40], "width_mm": 100,
+                       "height_mm": 80}], "meta_plate")
+    if code is None:
+        code = body(doc, [{"kind": "circle", "center_mm": [150, 0], "radius_mm": 12}], "meta_blob")
+    if code is not None:
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return code, env, doc
+    clear_path(path)
+    env = call("kompas_export_step", {"document_id": doc, "expected_revision": revision(doc),
+                                      "output_path": path}, timeout=240)
+    call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+    return error_code(env), env, doc
+
+
 # -----------------------------------------------------------------------------------------------
 # КАТАЛОГ ПРОГОНА: у каждого запуска СВОЙ отчёт и СВОИ журналы
 # -----------------------------------------------------------------------------------------------
@@ -18737,6 +18820,26 @@ def main():
                            and ex_ver.get("level") != "call_returned" and aspects_ok) else "FAIL",
                 f"verification.level={ex_ver.get('level')!r} result.reached_level={ex_reached!r} "
                 f"verification.unverified={ex_env_aspects!r} result.unverified={ex_aspects!r}")
+
+        # E01c: метаданные STEP (§1.11 п.2 ТЗ) читаются РАЗБОРОМ записанного файла, а не из настроек
+        # конвертера. Прибор читает те же байты своим разбором и сравнивает: схема равна строке
+        # заголовка, единицы — mm, у детали из двух тел тел 2 и вхождений 2.
+        # History: docs/decisions/geometry.md#step-metadata
+        two_path = os.path.join(workdir, "P1_StepTwoBodies.step")
+        two_err, two_env, _two_doc = step_metadata_export(client, app_id, two_path)
+        two_res = (two_env or {}).get("result") or {}
+        two_facts = read_step_facts(two_path) if os.path.exists(two_path) else {}
+        rep.add("E01c", "метаданные STEP (§1.11 п.2): schema, units, unique_solids, instance_count "
+                        "совпадают с независимым разбором файла — деталь из двух тел",
+                "PASS" if (two_err is None
+                           and two_res.get("schema") == two_facts.get("schema")
+                           and two_res.get("units") == two_facts.get("units") == "mm"
+                           and two_res.get("unique_solids") == two_facts.get("solids") == 2
+                           and two_res.get("instance_count") == 2) else "FAIL",
+                f"ответ: schema={two_res.get('schema')!r} units={two_res.get('units')!r} "
+                f"solids={two_res.get('unique_solids')} instances={two_res.get('instance_count')}; "
+                f"файл: schema={two_facts.get('schema')!r} units={two_facts.get('units')!r} "
+                f"solids={two_facts.get('solids')}; err={two_err}")
 
         im_err, im_env, _ = client.tool("kompas_import_step", {
             "application_id": app_id, "input_path": exp_path, "desired_kind": "auto",
@@ -45562,6 +45665,40 @@ def image_checks(client, rep, app_id, workdir):
             details={"error": (illegal["env"] or {}).get("error"),
                      "measured_why": ("проба P4: ядро вернуло успех, базовый файл 0 байт, "
                                       "полезная нагрузка — в потоке `name?.png` (8639 байт)")})
+
+    # IMG.24 — метаданные снимка (§1.12 п.10): sha256 равен хешу записанного файла, а captured_at
+    # лежит внутри времени вызова. Прибор считает хеш САМ по файлу и запоминает часы до/после:
+    # ответ, повторивший запрос, этой проверки не проходит.
+    # History: docs/decisions/geometry.md#step-metadata
+    meta_dir = os.path.join(shot, "metadata")
+    os.makedirs(meta_dir, exist_ok=True)
+    meta_path = os.path.join(meta_dir, "img24.png")
+    clear_path(meta_path)
+    started = datetime.datetime.now(datetime.timezone.utc)
+    meta = export(doc, rev, format="png", resolution=100, scale=1.0,
+                  return_image_content=False, save_path=meta_path)
+    finished = datetime.datetime.now(datetime.timezone.utc)
+    meta_res = meta["result"]
+    file_hash = file_sha256(meta_path) if os.path.exists(meta_path) else ""
+    captured = meta_res.get("captured_at")
+    captured_ok = False
+    if isinstance(captured, str) and captured.endswith("Z"):
+        try:
+            stamp = datetime.datetime.strptime(captured, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+                tzinfo=datetime.timezone.utc)
+            captured_ok = started <= stamp <= finished
+        except ValueError:
+            captured_ok = False
+    passed = (meta["code"] is None and bool(file_hash)
+              and meta_res.get("sha256") == file_hash and captured_ok)
+    rep.add("IMG.24.metadata",
+            "AUX-IMAGE.raster_export (§1.12 п.10): sha256 равен хешу записанного файла, captured_at "
+            "внутри времени вызова",
+            "PASS" if passed else "FAIL",
+            f"sha256 ответа={meta_res.get('sha256')!r} файла={file_hash!r} "
+            f"captured_at={captured!r} в_окне={captured_ok} код={meta['code']}",
+            details={"error": (meta["env"] or {}).get("error"),
+                     "window": [started.isoformat(), finished.isoformat()]})
 
     _e, env, _r = client.tool("kompas_close_document", {
         "document_id": doc, "dirty_policy": "discard",

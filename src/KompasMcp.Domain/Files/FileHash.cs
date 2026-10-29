@@ -13,6 +13,11 @@ public static class FileHash
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    /// <summary>Hash of bytes already in hand: a caller that holds the content does not have to write it
+    /// to disk first to name it.</summary>
+    public static string Sha256(byte[] data) =>
+        Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+
     public static async Task<string> Sha256Async(string path, CancellationToken cancellationToken)
     {
         await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

@@ -2976,6 +2976,14 @@ public sealed record ExportImageResultDto
     /// structure.</summary>
     public string? ImageBase64 { get; init; }
 
+    /// <summary>SHA-256 of the bytes the response carries, lowercase hex — the same hash a caller gets
+    /// by hashing the file named in <see cref="SavePath"/>.</summary>
+    public string? Sha256 { get; init; }
+
+    /// <summary>When the snapshot was taken, UTC, ISO 8601 with <c>Z</c>. Read from the clock of the
+    /// call that produced the bytes, not from the file's modification time.</summary>
+    public string? CapturedAt { get; init; }
+
     public required VerificationLevel ReachedLevel { get; init; }
 
     public required IReadOnlyList<string> UnverifiedAspects { get; init; }
@@ -3102,6 +3110,22 @@ public sealed record ExportResultDto
     public required long ByteLength { get; init; }
 
     public required string Sha256 { get; init; }
+
+    /// <summary>Schema string of the <c>FILE_SCHEMA</c> header entry, as written in the file; null —
+    /// the header was not read (<c>schema_not_found</c> in <see cref="UnverifiedAspects"/>).</summary>
+    public string? Schema { get; init; }
+
+    /// <summary>Length unit of the file's context, canonical name: <c>mm</c> for
+    /// <c>SI_UNIT(.MILLI.,.METRE.)</c>, the name of a conversion-based unit otherwise. Null — not found
+    /// (<c>units_not_read</c>), never a default.</summary>
+    public string? Units { get; init; }
+
+    /// <summary>Number of B-rep solid entities in the file: one per body for a part.</summary>
+    public int? UniqueSolids { get; init; }
+
+    /// <summary>Number of occurrences: one per body for a part, the count of
+    /// <c>NEXT_ASSEMBLY_USAGE_OCCURRENCE</c> for an assembly (null when the file has none).</summary>
+    public int? InstanceCount { get; init; }
 
     public required VerificationLevel ReachedLevel { get; init; }
 

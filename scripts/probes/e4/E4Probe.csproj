@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Research probe for the E4 block (extended hole modes), run by hand and never by the solution build.
+    INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
+    the shipping graph could not be used to argue about what the product does.
+    DOC: E4_RESEARCH_DEVELOPER_PROMPT.md §1.4; the hole family of the SDK 24 help snapshot under
+    reference/kompas-sdk-v24/ (the `docs-wire-...-e4` directory).
+    History: docs/decisions/adapter-features.md#hole-extended-modes
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>E4Probe</RootNamespace>
+    <AssemblyName>E4Probe</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Vendor interop is referenced, never copied (build/KompasInterop.props convention). -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KompasAPI7">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasInteropDir" Value="$(KompasInteropDir)" />
+  </ItemGroup>
+
+</Project>

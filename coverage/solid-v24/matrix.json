@@ -1852,7 +1852,6 @@
       ],
       "evidence": [
         "docs/acceptance/INDEX.md",
-        "E4_RESEARCH_REPORT_20261029.md",
         "scripts/mcp-smoke.py"
       ],
       "limitations": [
@@ -2048,7 +2047,6 @@
       ],
       "evidence": [
         "docs/acceptance/INDEX.md",
-        "E4_RESEARCH_REPORT_20261029.md",
         "scripts/mcp-smoke.py"
       ],
       "limitations": [
@@ -2096,7 +2094,6 @@
       ],
       "evidence": [
         "docs/acceptance/INDEX.md",
-        "HOLE_COUNTERDRILL_REPORT_20261029.md",
         "scripts/mcp-smoke.py"
       ],
       "limitations": [

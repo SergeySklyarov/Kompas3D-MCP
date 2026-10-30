@@ -52183,7 +52183,7 @@ def catalog_checks(host, config, workdir, rep):
 
 
 def ops_checks(host, config, workdir, rep):
-    """OPS.01…OPS.11 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
+    """OPS.01…OPS.12 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
 
     ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Длинная мутация, не уложившаяся в бюджет синхронизации, отвечает
     `running` с `operation_id`; вторая мутация того же документа, пока первая не закончилась, отвечает
@@ -52230,6 +52230,23 @@ def ops_checks(host, config, workdir, rep):
                 probe.p.stdin.close()
         except OSError:
             pass
+
+    def _common_part_matches(excerpt, full):
+        """Совпадает ли выдержка с полным значением по общей части.
+
+        Статус отдаёт длинный результат усечённым (5 элементов массива, 300 символов строки), поэтому
+        равенство проверяется там, где оно вообще возможно: строка - по началу, список - по первым
+        элементам, словарь - по общим ключам. Вызов без усечения сюда не попадает.
+        """
+        if isinstance(excerpt, str) and isinstance(full, str):
+            return full.startswith(excerpt)
+        if isinstance(excerpt, list) and isinstance(full, list):
+            return (len(excerpt) <= len(full)
+                    and all(_common_part_matches(e, f) for e, f in zip(excerpt, full)))
+        if isinstance(excerpt, dict) and isinstance(full, dict):
+            return all(k in full and _common_part_matches(v, full[k]) for k, v in excerpt.items())
+        return _json.dumps(excerpt, sort_keys=True, ensure_ascii=False) == \
+            _json.dumps(full, sort_keys=True, ensure_ascii=False)
 
     # Мутации группы обязаны нести operation_id: схема требует его, а клиент прибора здесь
     # обходится без обёртки, которая добавляла бы поле сама.
@@ -52314,6 +52331,10 @@ def ops_checks(host, config, workdir, rep):
     def err_msg(env):
         error = (env or {}).get("error")
         return (error or {}).get("message") if isinstance(error, dict) else None
+
+    def err_details(env):
+        error = (env or {}).get("error")
+        return (error or {}).get("details") or {} if isinstance(error, dict) else {}
 
     def revision(probe, doc):
         # `detail` - обязательное поле схемы: без него чтение отвергается до COM.
@@ -52419,15 +52440,21 @@ def ops_checks(host, config, workdir, rep):
 
         final = poll_until_done(probe, long_op) if long_op else {}
         replay = call(probe, "kompas_edit_sketch", long_args) if long_op else {}
-        # Записанный результат длинной операции не помещается в ответ статуса (предел 16 КиБ), и
-        # тогда сравнивать нечего: равенство повтора доказывается тем, что повтор отвечает тем же
-        # итогом, а его ревизия совпадает с фактической ревизией документа.
-        recorded = result(final).get("result")
+        # Статус отдаёт результат завершённой операции ЦЕЛИКОМ, пока он помещается в предел ответа, а
+        # сверх предела - выдержку с признаком `result_truncated` и исходным размером. Строка поэтому
+        # сравнивает значения: на коротком результате - равенство с повтором, на длинном - признак и
+        # совпадение общей части (усечённая строка совпадает с полной по началу).
+        status_payload = result(final)
+        recorded = status_payload.get("result")
+        truncated = status_payload.get("result_truncated")
+        size_bytes = status_payload.get("result_size_bytes")
         replay_result = result(replay)
         result_known = recorded is not None
-        same_result = ((not result_known)
-                       or _json.dumps(recorded, sort_keys=True, ensure_ascii=False)
-                       == _json.dumps(replay_result, sort_keys=True, ensure_ascii=False))
+        if truncated:
+            same_result = _common_part_matches(recorded, replay_result)
+        else:
+            same_result = (_json.dumps(recorded, sort_keys=True, ensure_ascii=False)
+                           == _json.dumps(replay_result, sort_keys=True, ensure_ascii=False))
         rev_after_all = revision(probe, doc)
         same_revision = (replay or {}).get("revision_after") == rev_after_all
         rep.add("OPS.02.states",
@@ -52435,11 +52462,12 @@ def ops_checks(host, config, workdir, rep):
                 "PASS" if (status_of(long_env) == "running" and long_op
                            and status_of(short_env) == "queued" and short_op
                            and op_status(final) == "succeeded" and status_of(replay) == "succeeded"
+                           and truncated is not None and size_bytes is not None
                            and same_result and same_revision) else "FAIL",
                 f"длинная: status={status_of(long_env)} op={bool(long_op)}; вторая: status={status_of(short_env)} "
                 f"op={bool(short_op)}; опрос: {op_status(final)}; повтор: {status_of(replay)}; "
-                f"результат повтора совпал={same_result} (записанный результат "
-                f"{'есть' if result_known else 'не помещается в ответ статуса'}), "
+                f"результат статуса: {'выдержка' if truncated else 'целиком'} "
+                f"({size_bytes} байт), совпал с повтором={same_result}, "
                 f"ревизия повтора={((replay or {}).get('revision_after'))} против фактической {rev_after_all}")
 
         # ── OPS.03.status_while_busy: статус отвечает при занятом Worker ────────────────
@@ -52565,13 +52593,20 @@ def ops_checks(host, config, workdir, rep):
         dep_final = poll_until_done(probe, (second_env or {}).get("operation_id")) if second_env.get("operation_id") else {}
         rev_after_dep = revision(probe, doc)
         # Защита названа тем, чем она есть: вторая мутация не отвергается и не выполняется поверх
-        # первой, а ждёт очереди гейта и получает СВОЮ ревизию.
+        # первой, а ждёт очереди гейта и получает отказ по УСТАРЕВШЕЙ ревизии. Строка сравнивает
+        # ТОЧНЫЙ итог второй операции, а не «что-нибудь из двух»: прирост 1 означает, что документ
+        # изменён один раз, а `delta in (1, 2)` принимал бы и двойное применение.
         delta = (rev_after_dep - (rev_before_dep or 0)) if rev_after_dep is not None else None
+        second_code = err_of(dep_final) or err_of(second_env)
         rep.add("OPS.10.dependent_step",
-                "вторая мутация того же документа не выполняется поверх первой: она ждёт очереди Хоста, документ изменён не более двух раз",
-                "PASS" if (status_of(second_env) == "queued" and delta in (1, 2)) else "FAIL",
-                f"вторая мутация: status={status_of(second_env)} err={err_of(second_env)}; её итог={status_of(dep_final)}; "
-                f"ревизия {rev_before_dep}->{rev_after_dep}, прирост {delta} (допустимо 1 или 2: каждая мутация один раз)")
+                "вторая мутация того же документа не выполняется поверх первой: отказ по устаревшей ревизии, документ изменён ровно один раз",
+                "PASS" if (status_of(second_env) == "queued"
+                           and op_status(dep_final) == "failed"
+                           and second_code == "REVISION_CONFLICT"
+                           and delta == 1) else "FAIL",
+                f"вторая мутация: ответ={status_of(second_env)} err={err_of(second_env)}; её итог по статусу="
+                f"{op_status(dep_final)} код={second_code}; ревизия {rev_before_dep}->{rev_after_dep}, "
+                f"прирост {delta} (требуется ровно 1: вторая операция не должна оставить следа)")
     finally:
         if app_id:
             try:
@@ -52699,6 +52734,28 @@ def ops_checks(host, config, workdir, rep):
                     f"{result(st).get('needs_reconciliation')}; счётчик в session_status={counter}; повтор того же "
                     f"operation_id: status={status_of(repeat)} err={err_of(repeat)} "
                     f"({str(err_msg(repeat))[:160]}) за {repeat_seconds:.2f} с")
+
+            # ── OPS.12.blocked_mutation: мутация документа с несогласованной записью ────
+            # Запрет стоит ДО журнала и ДО Worker, поэтому проверяется на записи с вымышленным
+            # документом: дойти до COM вызов не может и не должен. Аргументы валидны по схеме -
+            # иначе отказ случился бы на её проверке и ничего не сказал бы о запрете.
+            blocked = call(probe_rec, "kompas_set_variable", {
+                "operation_id": str(uuid.uuid4()), "document_id": stale_doc,
+                "expected_revision": 7, "name": "OPS_BLOCK"})
+            other_doc = uuid.uuid4().hex
+            other = call(probe_rec, "kompas_set_variable", {
+                "operation_id": str(uuid.uuid4()), "document_id": other_doc,
+                "expected_revision": 1, "name": "OPS_BLOCK"})
+            blocked_details = err_details(blocked)
+            rep.add("OPS.12.blocked_mutation",
+                    "мутация документа с несогласованной операцией отклонена до журнала и до Worker, "
+                    "details.operation_id назван; другой документ запретом не затронут",
+                    "PASS" if (err_of(blocked) == "DOCUMENT_NEEDS_RECONCILIATION"
+                               and blocked_details.get("operation_id") == stale_op
+                               and err_of(other) != "DOCUMENT_NEEDS_RECONCILIATION") else "FAIL",
+                    f"тот же документ: код={err_of(blocked)} "
+                    f"details.operation_id={blocked_details.get('operation_id')} (ожидался {stale_op}); "
+                    f"другой документ: код={err_of(other)} (запрет не должен срабатывать)")
         finally:
             close_host(probe_rec)
 

@@ -70,9 +70,18 @@ CONFIG_INVALID.
 - `OPERATION_NOT_FOUND` - в журнале нет записи с таким `operation_id` (`kompas_operation_status`,
   `kompas_operation_cancel`, `kompas_operation_reconcile`). Отличается от `INVALID_ARGUMENT` тем, что
   id корректен по форме, а лечится не правкой поля, а чтением id из ответа, который выдал операцию.
-- `OPERATION_NOT_APPLIED` - согласование доказало, что команда следа не оставила: ревизия документа
-  равна записанной в журнале перед вызовом. Отличается от `OUTCOME_UNKNOWN` тем, что исход теперь
-  ИЗВЕСТЕН, и повтор с тем же `operation_id` допустим (`retry_policy: same_operation_id`).
+- `OPERATION_NOT_APPLIED` - согласование доказало, что команда не исполнялась: Хост знает, что она не
+  передавалась в Worker. Отличается от `OUTCOME_UNKNOWN` тем, что исход теперь ИЗВЕСТЕН, и повтор с тем
+  же `operation_id` допустим (`retry_policy: same_operation_id`). Равная ревизия документа этим
+  доказательством НЕ является: ревизия сдвигается только после успешных вызовов COM, поэтому при
+  истёкшем бюджете Worker, исключении в мутации или откате файла она остаётся прежней, хотя команда
+  могла ещё исполняться.
+- `DOCUMENT_NEEDS_RECONCILIATION` - у документа есть операция с неопределённым исходом, поэтому мутация
+  ТОГО ЖЕ документа отклонена **до журнала и до Worker**; `details.operation_id` называет запись,
+  `retry_policy: after_reconciliation`. Отличается от `OUTCOME_UNKNOWN` тем, что исход отклонённого
+  вызова известен (ничего не произошло), а лечение - `kompas_operation_reconcile` либо закрытие и
+  повторное открытие документа (новый `document_id` снимает запрет). Чтение и мутации других
+  документов не блокируются.
 
 Метка `needs_reconciliation` видна снаружи в трёх местах: в `error.details.needs_reconciliation`
 конверта отказа (вместе с `retry_policy: after_reconciliation`), полем `needs_reconciliation` в ответе

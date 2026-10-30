@@ -30,6 +30,12 @@ public sealed class ToolInvoker : IAsyncDisposable
     // policy judges a field by its NAME. History: docs/decisions/host.md#path-fields
     private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 
+    /// <summary>Result size a status answer carries whole. Beyond it the answer holds a bounded excerpt
+    /// and says so: <c>result_truncated</c> plus the original <c>result_size_bytes</c>.
+    /// LIMIT: the excerpt keeps 5 array items and 300 characters per string (ScenarioRunner.Compact),
+    /// so a client compares a long result by its common part, not by equality.</summary>
+    private const int StatusResultLimit = 8_000;
+
     private readonly HostOptions _options;
     private readonly WorkerSupervisor _worker;
     private readonly OperationJournal _journal;
@@ -683,6 +689,32 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     private async Task<ResultEnvelope<JsonNode?>> RunMutationAsync(ToolDefinition tool, JsonObject arguments, string operationId, CancellationToken cancellationToken)
     {
+        // INVARIANT: a mutation of a document whose earlier operation still needs reconciliation is
+        // refused BEFORE the journal and BEFORE the Worker. Its effect on the model is unknown, so the
+        // next command would be applied on top of an unknown state — the double application the
+        // `after_reconciliation` policy exists to prevent. Reads and other documents are unaffected.
+        if (ReadString(arguments, "document_id") is { Length: > 0 } targetDocument
+            && _journal.NeedsReconciliationFor(targetDocument) is { } blocking)
+        {
+            throw new KompasContractException(
+                ErrorCodes.DocumentNeedsReconciliation,
+                $"У документа {targetDocument} операция {blocking.OperationId} ({blocking.Tool}) имеет "
+                + "неопределённый исход: её эффект неизвестен, и новая мутация того же документа "
+                + "применилась бы поверх неизвестного состояния. Вызов отклонён до журнала и до Worker. "
+                + "Выход: kompas_run с tool=kompas_operation_reconcile и этим operation_id, либо закрытие "
+                + "и повторное открытие документа (новый document_id снимает запрет). Чтение и мутации "
+                + "других документов не блокируются.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: false,
+                hresult: null,
+                details: new Dictionary<string, object?>
+                {
+                    ["operation_id"] = blocking.OperationId,
+                    ["document_id"] = targetDocument,
+                    ["tool"] = blocking.Tool,
+                });
+        }
+
         var decision = _journal.TryBegin(operationId, tool.Name, Canonical(tool, arguments), ReadString(arguments, "document_id"), ReadLong(arguments, "expected_revision"));
 
         if (!decision.Proceed && decision.Existing is { } existing)
@@ -731,8 +763,9 @@ public sealed class ToolInvoker : IAsyncDisposable
                 + (phase == OperationStatus.Queued
                     ? "стоит в очереди Хоста и ещё не передана в Worker (queued)"
                     : "выполняется в Worker (running)")
-                + $". Состояние даёт kompas_operation_status с operation_id {operationId}; повтор того же "
-                + "вызова с тем же operation_id вернёт записанный исход, когда он появится. Отмена "
+                + $". Состояние даёт kompas_run с tool=kompas_operation_status и operation_id {operationId} "
+                + "(в профиле compact этого имени нет в tools/list); повтор того же вызова с тем же "
+                + "operation_id вернёт записанный исход, когда он появится. Отмена "
                 + "очередной операции подтверждается, отмена выполняющейся - только запросом: COM не "
                 + "прерывается.",
             });
@@ -887,7 +920,7 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (record.Outcome == JournalOutcome.OutcomeUnknown || status == OperationStatus.OutcomeUnknown)
         {
-            warnings.Add("Исход предыдущей попытки неизвестен: сверьте модель с ожиданием (объём, число тел, история признаков), повтор мутации с НОВЫМ operation_id запрещён. Отдельного инструмента сверки в каталоге нет — повтор с тем же operation_id отвечает записанным исходом, но не фактическим состоянием модели.");
+            warnings.Add("Исход предыдущей попытки неизвестен: сверьте модель с ожиданием (объём, число тел, история признаков), повтор мутации с НОВЫМ operation_id запрещён. Согласование даёт kompas_run с tool=kompas_operation_reconcile и этим operation_id; повтор с тем же operation_id отвечает записанным исходом, но не фактическим состоянием модели.");
         }
 
         JsonNode? result = null;
@@ -1116,7 +1149,21 @@ public sealed class ToolInvoker : IAsyncDisposable
         {
             try
             {
-                node["result"] = JsonNode.Parse(json);
+                var parsed = JsonNode.Parse(json);
+                node["result_size_bytes"] = json.Length;
+                if (json.Length <= StatusResultLimit)
+                {
+                    node["result"] = parsed;
+                    node["result_truncated"] = false;
+                }
+                else
+                {
+                    // A long operation's result does not fit the answer limit, and losing it silently
+                    // would leave the client unable to compare a poll with a repeat of the same call.
+                    node["result"] = ScenarioRunner.Compact(parsed, out var truncated);
+                    node["result_truncated"] = true;
+                    node["result_excerpt_complete"] = !truncated;
+                }
             }
             catch (JsonException)
             {
@@ -1145,11 +1192,28 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         var status = StateOf(record, _dispatched.TryGetValue(operationId, out var dispatched) && dispatched);
         var confirmed = false;
-        if (status == OperationStatus.Queued && _queue.TryCancelQueued(operationId))
+        if (status == OperationStatus.Queued)
         {
-            _journal.Cancel(operationId);
-            status = OperationStatus.Cancelled;
-            confirmed = true;
+            if (_queue.TryCancelQueued(operationId))
+            {
+                _journal.Cancel(operationId);
+                status = OperationStatus.Cancelled;
+                confirmed = true;
+            }
+            else
+            {
+                // INVARIANT: the answer describes the state AFTER the attempt. The queue slot can vanish
+                // between the read and the cancel (the command took its turn), and answering "queued"
+                // with a refusal to cancel would name a state that no longer exists.
+                _journal.TryGet(operationId, out record);
+                status = record is null
+                    ? OperationStatus.Queued
+                    : StateOf(record, _dispatched.TryGetValue(operationId, out var nowDispatched) && nowDispatched);
+                if (status == OperationStatus.Running)
+                {
+                    _cancelRequested[operationId] = true;
+                }
+            }
         }
         else if (status == OperationStatus.Running)
         {
@@ -1163,8 +1227,8 @@ public sealed class ToolInvoker : IAsyncDisposable
             ["cancel_requested"] = _cancelRequested.ContainsKey(operationId),
             ["confirmed"] = confirmed,
             ["reason"] = CancelReason(status),
-            ["document_id"] = record.DocumentId,
-            ["needs_reconciliation"] = record.NeedsReconciliation,
+            ["document_id"] = record?.DocumentId,
+            ["needs_reconciliation"] = record?.NeedsReconciliation ?? false,
         };
     }
 
@@ -1175,6 +1239,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         OperationStatus.Cancelled => "Команда снята из очереди Хоста и в Worker не уходила.",
         OperationStatus.Running => "Команда уже в Worker: отмена записана, COM не прерывается, итог "
             + "будет тем, который реально вышел.",
+        OperationStatus.Queued => "Очередь не подтвердила снятие: команда уже передаётся в Worker. "
+            + "Отмена не подтверждена — повторите вызов: выполняющуюся команду она только пометит.",
         _ => "Операция уже завершена: состояние не меняется.",
     };
 
@@ -1232,14 +1298,19 @@ public sealed class ToolInvoker : IAsyncDisposable
             && string.Equals(r.DocumentId, documentId, StringComparison.Ordinal)
             && r.StartedUtc >= record.StartedUtc);
 
-        switch (DecideReconcile(baseRevision, revisionNow, others))
+        // The only proof of "never executed" this Host holds: its own dispatch flag. `null` after a
+        // restart — an absent fact, not a negative one.
+        bool? commandLeftHost = _dispatched.TryGetValue(operationId, out var left) ? left : null;
+        var partialEffects = record.Error?.PartialEffects == true;
+
+        switch (DecideReconcile(baseRevision, revisionNow, others, commandLeftHost, partialEffects))
         {
             case ReconcileVerdict.NotApplied:
             {
                 var error = new ErrorDto(
                     ErrorCodes.OperationNotApplied,
-                    $"Согласование: ревизия документа осталась {revisionNow}, записанной до вызова, — команда "
-                    + "следа не оставила. Повтор с тем же operation_id допустим.",
+                    "Согласование: Хост знает, что команда не передавалась в Worker, — исполнения не было. "
+                    + "Повтор с тем же operation_id допустим.",
                     RetryPolicy.SameOperationId,
                     null,
                     false,
@@ -1254,7 +1325,7 @@ public sealed class ToolInvoker : IAsyncDisposable
                     ["needs_reconciliation"] = !recorded,
                     ["revision_before"] = baseRevision,
                     ["revision_now"] = revisionNow,
-                    ["reason"] = "Документ не изменился после базовой ревизии: команда не применилась.",
+                    ["reason"] = "Команда не уходила из Хоста в Worker: исполнения не было.",
                 };
             }
 
@@ -1262,6 +1333,15 @@ public sealed class ToolInvoker : IAsyncDisposable
                 return Undetermined(operationId, record, revisionNow < baseRevision
                     ? $"Ревизия документа ({revisionNow}) МЕНЬШЕ записанной ({baseRevision}): документ заменён "
                         + "или переоткрыт, приписать изменение операции нельзя."
+                    : partialEffects
+                        ? $"Записанная ошибка говорит о частичном следе (partial_effects), ревизия выросла до "
+                            + $"{revisionNow}: рост может быть этим следом, а не итогом команды. Исход остаётся "
+                            + "неизвестным."
+                    : revisionNow == baseRevision
+                        ? $"Ревизия документа осталась {revisionNow}, но это доказывает только то, что она не "
+                            + "сдвинулась: команда могла ещё исполняться или примениться без сдвига ревизии "
+                            + "(истёк бюджет Worker, исключение в мутации, откат файла). Исполнения не "
+                            + "опровергнуто — исход остаётся неизвестным."
                     : $"Ревизия выросла до {revisionNow}, но после этой записи по тому же документу начато "
                         + $"ещё операций: {others}. Приписать изменение одной из них нечем — исход остаётся "
                         + "неизвестным.");
@@ -1291,16 +1371,29 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
     }
 
-    private JsonObject Undetermined(string operationId, JournalRecord record, string reason) => new()
+    /// <summary>An answer that resolves nothing. The marker stays: only a proven outcome clears it.</summary>
+    private JsonObject Undetermined(string operationId, JournalRecord record, string reason)
     {
-        ["operation_id"] = operationId,
-        ["status"] = Wire(OperationStatus.OutcomeUnknown),
-        ["outcome"] = "undetermined",
-        ["needs_reconciliation"] = record.NeedsReconciliation,
-        ["revision_before"] = record.BaseRevision,
-        ["document_id"] = record.DocumentId,
-        ["reason"] = reason,
-    };
+        var node = new JsonObject
+        {
+            ["operation_id"] = operationId,
+            ["status"] = Wire(OperationStatus.OutcomeUnknown),
+            ["outcome"] = "undetermined",
+            ["needs_reconciliation"] = record.NeedsReconciliation,
+            ["revision_before"] = record.BaseRevision,
+            ["document_id"] = record.DocumentId,
+            ["reason"] = reason,
+        };
+
+        // The recorded error may already name a partial trace; an answer that stays silent about it
+        // would let the client read a grown revision as the command's result.
+        if (record.Error?.PartialEffects == true)
+        {
+            node["partial_effects"] = true;
+        }
+
+        return node;
+    }
 
     /// <summary>Journal outcome plus the Host phase, in one place: every reader of a state must agree.</summary>
     /// <param name="dispatched">Whether the command already left the Host for the Worker.</param>
@@ -1321,7 +1414,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         /// <summary>The revision grew and no other operation shared the window.</summary>
         Applied,
 
-        /// <summary>The revision equals the base: nothing changed, so the command left no trace.</summary>
+        /// <summary>PROVEN that the command never executed: the Host knows it never left for the Worker.</summary>
         NotApplied,
 
         /// <summary>Nothing follows from the observation; the outcome stays unknown.</summary>
@@ -1329,11 +1422,18 @@ public sealed class ToolInvoker : IAsyncDisposable
     }
 
     /// <summary>The three-outcome rule, kept pure so it can be tested without a Worker.</summary>
-    /// <param name="others">Operations on the same document recorded after this one; a non-zero count
-    /// makes the attribution impossible rather than merely uncertain.</param>
-    internal static ReconcileVerdict DecideReconcile(long baseRevision, long revisionNow, int others) =>
-        revisionNow == baseRevision ? ReconcileVerdict.NotApplied
+    /// <remarks>INVARIANT: an unchanged revision does NOT prove "not applied" — it moves only after the
+    /// COM calls succeed, so a budget expiry, an exception or a file rollback leaves it untouched while
+    /// the command may still run or already be applied. <c>not_applied</c> needs the Host's own proof
+    /// that the command never left (<paramref name="commandLeftHost"/> false; <c>null</c> is not proof),
+    /// and a recorded partial trace or a second operation in the window leaves it undetermined.
+    /// History: docs/decisions/host.md#reconcile-evidence</remarks>
+    internal static ReconcileVerdict DecideReconcile(
+        long baseRevision, long revisionNow, int others, bool? commandLeftHost, bool partialEffects) =>
+        commandLeftHost == false ? ReconcileVerdict.NotApplied
+        : revisionNow == baseRevision ? ReconcileVerdict.Undetermined
         : revisionNow < baseRevision ? ReconcileVerdict.Undetermined
+        : partialEffects ? ReconcileVerdict.Undetermined
         : others > 0 ? ReconcileVerdict.Undetermined
         : ReconcileVerdict.Applied;
 
@@ -1349,11 +1449,20 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     /// <summary>Drop the in-memory bookkeeping of a finished operation. The journal keeps the durable
     /// record; these maps only describe what THIS process is doing.</summary>
+    /// <remarks>INVARIANT: two facts outlive the operation. The dispatch flag stays while the record needs
+    /// reconciliation — it is the only proof that the command never left the Host, and `not_applied` may
+    /// not be claimed without it. The cancellation request stays for the whole session: a finished
+    /// operation that was asked to stop must not later read <c>cancel_requested=false</c>.</remarks>
     private void Forget(string operationId)
     {
         _inFlight.TryRemove(operationId, out _);
+
+        if (_journal.TryGet(operationId, out var record) && record?.NeedsReconciliation == true)
+        {
+            return;
+        }
+
         _dispatched.TryRemove(operationId, out _);
-        _cancelRequested.TryRemove(operationId, out _);
     }
 
     public JournalRecord? Status(string operationId)

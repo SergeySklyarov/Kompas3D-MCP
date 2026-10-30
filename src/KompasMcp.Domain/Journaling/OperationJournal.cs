@@ -464,6 +464,22 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
+    /// <summary>The oldest record of THIS document whose outcome still needs reconciliation, or
+    /// <c>null</c>. One record is enough to refuse a further mutation of the same document: its effect is
+    /// unknown, so the next command would be applied on top of an unknown state.
+    /// History: docs/decisions/host.md#operation-control</summary>
+    public JournalRecord? NeedsReconciliationFor(string documentId)
+    {
+        lock (_gate)
+        {
+            return _byOperation.Values
+                .Where(r => r.NeedsReconciliation
+                    && string.Equals(r.DocumentId, documentId, StringComparison.Ordinal))
+                .OrderBy(r => r.StartedUtc)
+                .FirstOrDefault();
+        }
+    }
+
     /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its
     /// newline go out in a single <c>Write</c> to an append-mode handle.</summary>
     /// <returns><c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within

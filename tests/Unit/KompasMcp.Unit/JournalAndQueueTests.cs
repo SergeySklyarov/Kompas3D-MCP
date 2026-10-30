@@ -31,6 +31,39 @@ public class OperationJournalTests : IDisposable
         Assert.Null(decision.Existing);
     }
 
+    /// <summary>INVARIANT: an unknown outcome blocks the SAME document, and only it.</summary>
+    /// <remarks>A mutation applied on top of an unknown state is the double application the
+    /// `after_reconciliation` policy exists to prevent; reads and other documents are untouched.
+    /// History: docs/decisions/host.md#operation-control</remarks>
+    [Fact]
+    public void NeedsReconciliationFor_BlocksTheDocumentThatHasAnUnknownOutcome()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        journal.MarkUnknown(id, "бюджет истёк");
+
+        var blocking = journal.NeedsReconciliationFor("doc-1");
+
+        Assert.NotNull(blocking);
+        Assert.Equal(id, blocking!.OperationId);
+        Assert.Null(journal.NeedsReconciliationFor("doc-2"));
+    }
+
+    [Fact]
+    public void NeedsReconciliationFor_StopsBlockingOnceTheOutcomeIsProven()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        journal.MarkUnknown(id, "бюджет истёк");
+        Assert.NotNull(journal.NeedsReconciliationFor("doc-1"));
+
+        journal.Complete(id, """{"body_count":1}""");
+
+        Assert.Null(journal.NeedsReconciliationFor("doc-1"));
+    }
+
     [Fact]
     public void SameIdAndSameArguments_IsReplayedNotRedischarged()
     {

@@ -68,14 +68,43 @@ public sealed class OperationControlTests
         Assert.Contains("не меняется", ToolInvoker.CancelReason(OperationStatus.Succeeded), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CancelReason_QueuedWithoutConfirmationDoesNotReadAsFinished()
+    {
+        // The queue may have handed the command over between the read and the cancel: the answer must
+        // not claim "already finished" while the state is still queued.
+        var queued = ToolInvoker.CancelReason(OperationStatus.Queued);
+        Assert.DoesNotContain("уже завершена", queued, StringComparison.Ordinal);
+        Assert.Contains("не подтверждена", queued, StringComparison.Ordinal);
+    }
+
     [Theory]
-    [InlineData(17L, 17L, 0, ToolInvoker.ReconcileVerdict.NotApplied)]
-    [InlineData(17L, 18L, 0, ToolInvoker.ReconcileVerdict.Applied)]
-    [InlineData(17L, 18L, 1, ToolInvoker.ReconcileVerdict.Undetermined)]
-    [InlineData(17L, 16L, 0, ToolInvoker.ReconcileVerdict.Undetermined)]
-    [InlineData(17L, 19L, 2, ToolInvoker.ReconcileVerdict.Undetermined)]
-    public void DecideReconcile_NamesThreeOutcomes(long baseRevision, long revisionNow, int others, ToolInvoker.ReconcileVerdict expected) =>
-        Assert.Equal(expected, ToolInvoker.DecideReconcile(baseRevision, revisionNow, others));
+    [InlineData(17L, 18L, 0, true, false, ToolInvoker.ReconcileVerdict.Applied)]
+    [InlineData(17L, 18L, 1, true, false, ToolInvoker.ReconcileVerdict.Undetermined)]
+    [InlineData(17L, 16L, 0, true, false, ToolInvoker.ReconcileVerdict.Undetermined)]
+    [InlineData(17L, 19L, 2, true, false, ToolInvoker.ReconcileVerdict.Undetermined)]
+    [InlineData(17L, 18L, 0, true, true, ToolInvoker.ReconcileVerdict.Undetermined)]
+    [InlineData(17L, 17L, 0, false, false, ToolInvoker.ReconcileVerdict.NotApplied)]
+    public void DecideReconcile_NamesThreeOutcomes(
+        long baseRevision, long revisionNow, int others, bool? commandLeftHost, bool partialEffects,
+        ToolInvoker.ReconcileVerdict expected) =>
+        Assert.Equal(
+            expected,
+            ToolInvoker.DecideReconcile(baseRevision, revisionNow, others, commandLeftHost, partialEffects));
+
+    [Theory]
+    [InlineData(true)]  // the Host handed the command over: it may still run or already be applied
+    [InlineData(null)]  // a recovered record: the Host cannot know
+    public void DecideReconcile_EqualRevisionDoesNotProveNotApplied(bool? commandLeftHost)
+    {
+        // MEASURED: the revision moves only AFTER the COM calls succeed, so every source of
+        // `outcome_unknown` — an expired Worker budget, an unexpected exception in the mutation, a
+        // rolled-back file — leaves it untouched while the command may still be executing. Treating the
+        // equality as "not applied" allowed a second application of a command that never reported back.
+        Assert.Equal(
+            ToolInvoker.ReconcileVerdict.Undetermined,
+            ToolInvoker.DecideReconcile(baseRevision: 7, revisionNow: 7, others: 0, commandLeftHost, partialEffects: false));
+    }
 
     [Fact]
     public void DecideReconcile_GrownRevisionWithASecondOperationIsNotAttributedToThisOne()
@@ -85,6 +114,16 @@ public sealed class OperationControlTests
         // "undetermined" rather than a guess.
         Assert.Equal(
             ToolInvoker.ReconcileVerdict.Undetermined,
-            ToolInvoker.DecideReconcile(baseRevision: 5, revisionNow: 6, others: 1));
+            ToolInvoker.DecideReconcile(baseRevision: 5, revisionNow: 6, others: 1, commandLeftHost: true, partialEffects: false));
+    }
+
+    [Fact]
+    public void DecideReconcile_PartialTraceIsNotTheCommandResult()
+    {
+        // A recorded `partial_effects` says the command left part of its effect behind: a grown revision
+        // may be exactly that trace, so the outcome is not proven.
+        Assert.Equal(
+            ToolInvoker.ReconcileVerdict.Undetermined,
+            ToolInvoker.DecideReconcile(baseRevision: 3, revisionNow: 4, others: 0, commandLeftHost: true, partialEffects: true));
     }
 }

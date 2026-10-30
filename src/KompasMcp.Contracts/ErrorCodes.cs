@@ -147,10 +147,16 @@ public static class ErrorCodes
     /// answer that issued it, not to fix a field.</summary>
     public const string OperationNotFound = "OPERATION_NOT_FOUND";
 
-    /// <summary>Reconciliation proved the command left NO effect: the document revision equals the one the
-    /// journal recorded before the call. A separate code, not <see cref="OutcomeUnknown"/>: the outcome IS
-    /// known now, and the same <c>operation_id</c> may be sent again.</summary>
+    /// <summary>Reconciliation proved the command left NO effect: the Host knows the command never left for
+    /// the Worker. A separate code, not <see cref="OutcomeUnknown"/>: the outcome IS known now, and the same
+    /// <c>operation_id</c> may be sent again. An unchanged document revision is NOT this proof.</summary>
     public const string OperationNotApplied = "OPERATION_NOT_APPLIED";
+
+    /// <summary>The document has an operation whose outcome still needs reconciliation, so a further mutation
+    /// of the SAME document is refused before the journal and before the Worker. A separate code, not
+    /// <see cref="OutcomeUnknown"/>: the outcome of the refused call is known (nothing happened), and the
+    /// caller's remedy is <c>kompas_operation_reconcile</c> on the named operation.</summary>
+    public const string DocumentNeedsReconciliation = "DOCUMENT_NEEDS_RECONCILIATION";
 }
 
 /// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
@@ -251,8 +257,13 @@ public static class ErrorMessages
             "В журнале операций нет записи с таким operation_id: id приходит в ответе, который выдал " +
             "операцию (status, running или отказ), и переписывать его нельзя.",
         [ErrorCodes.OperationNotApplied] =
-            "Согласование доказало, что команда не оставила следа: ревизия документа равна той, что " +
-            "записана в журнале перед вызовом. Повтор с тем же operation_id допустим.",
+            "Согласование доказало, что команда не исполнялась: Хост знает, что она не передавалась в " +
+            "Worker. Повтор с тем же operation_id допустим.",
+        [ErrorCodes.DocumentNeedsReconciliation] =
+            "У документа есть операция с неопределённым исходом: её эффект неизвестен, поэтому следующая " +
+            "мутация того же документа отклонена до журнала и до Worker. Согласуйте её " +
+            "(kompas_operation_reconcile с operation_id из details) либо закройте и откройте документ " +
+            "заново: новый document_id снимает запрет. Чтение не блокируется.",
     };
 
     public static string For(string code) =>

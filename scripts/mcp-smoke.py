@@ -15506,6 +15506,19 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             if not error_twin:
                 code_s, message_s = save_as(twin_doc, twin_top)
                 error_twin = None if not code_s else f"сохранение: {code_s} {message_s}"
+    # Сохранённый файл обязан содержать столько же компонентов, сколько документ в памяти. Если это не
+    # так, вставки теряет сохранение/перечитывание, а не переназначение копии.
+    saved_links = None
+    in_memory = None
+    if twin_doc and not error_twin:
+        in_memory = len(links_of(twin_doc))
+        _e, env_saved, _r = client.tool("kompas_open_document", {
+            "application_id": app_id, "path": twin_top, "access": "read_only"})
+        saved_doc = doc_of(env_saved)
+        if saved_doc:
+            saved_links = len(links_of(saved_doc))
+            close(saved_doc)
+
     if twin_doc and not error_twin:
         env, code = run(twin_doc, rebuild_step(1))
         answer = result(env)
@@ -15527,13 +15540,17 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             and len(rows_twin) == 2
             and len(copies) == 2
             and None not in copies
-            and insertions == [1, 2])
+            and insertions == [1, 2]
+            # Файл нельзя открыть, пока документ открыт на запись: тогда сверка числа компонентов
+            # недоступна и строка её не требует (но и не выдаёт отсутствие за совпадение).
+            and (saved_links is None or saved_links == in_memory))
         rep.add("ASC.09.same_name",
                 "одноимённые файлы из разных каталогов не столкнулись; файл с двумя вставками "
                 "скопирован один раз и назван в manifest с числом вставок 2",
                 "PASS" if same_name_ok else "FAIL",
                 f"code={code} rows={len(rows_twin)} copies={len(copies)} insertions={insertions} "
-                f"(ждали [1, 2]) err={emsg(env)}")
+                f"(ждали [1, 2]) components in memory={in_memory} in saved file={saved_links} "
+                f"err={emsg(env)}")
 
         # -- ASC.11 успешный шаг идёт в КОПИЮ, и ответ это называет ----------------------------
         # §2 п.5 наряда и п.3 замечаний: план продолжается на копии, поэтому правка обязана быть в копии,

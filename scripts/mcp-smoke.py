@@ -749,8 +749,8 @@ def step_metadata_export(client, app_id, path):
 # → 117 (BOM_PROPERTIES: kompas_get_component_properties) → 119 (DIRECT_FACES_CORE: kompas_move_faces)
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
 # → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
-# → 124 (SCENARIO_RUN: kompas_run_scenario).
-EXPECTED_TOOL_COUNT = 124
+# → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf).
+EXPECTED_TOOL_COUNT = 125
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -925,6 +925,10 @@ RUN_GROUPS = (
      "Приёмка SC: ограниченный сценарий kompas_run_scenario - цепочка шагов со ссылками назад, "
      "повтор с тем же operation_id без эффекта, остановка на отказе с partial_effects, "
      "восстановление из контрольной точки и отказы до выполнения (наряд SCENARIO_RUN, контракт §2.9)"),
+    ("flat_part", "flat-part", "flat-part-acceptance.json",
+     "Приёмка FLT: DXF контура плоской детали - вид по оси нормали, петли и габарит, отверстие и "
+     "скругления, площадь контура против площади грани, сторонний разбор ezdxf, отказы по плоскости "
+     "и по нормали (наряд DXF_FLAT_PART, контракт §2.7)"),
     ("iges", "iges", "iges-acceptance.json",
      "Приёмка IGES: экспорт модели в IGES - файл записан, структура разобрана прибором по открытому "
      "стандарту (счётчики секций, сущности), сборка, отказы по имени и повтор в тот же путь "
@@ -991,6 +995,7 @@ ALL_GROUPS_EXTRA = (
     ("scenario", ["--scenario-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
+    ("flat_part", ["--flat-part-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -2169,6 +2174,7 @@ FLAGS = (
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
     ("--scenario-only", False, "группа SC: ограниченный сценарий kompas_run_scenario"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
+    ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -15192,6 +15198,324 @@ def scenario_checks(client, rep, app_id, workdir):
         close(fail_doc)
 
 
+def flat_part_checks(client, rep, app_id, workdir):
+    """FLT.* — DXF контура плоской детали (наряд DXF_FLAT_PART, контракт §2.7) через MCP.
+
+    ЗАЧЕМ ЭТА ГРУППА. Инструмент kompas_export_flat_dxf строит ОДИН стандартный вид по оси нормали
+    плоской грани и публикует контур конечного тела, а не эскиза. Строки сравнивают ЗНАЧЕНИЯ: число
+    петель, габарит, радиус отверстия и скруглений, площадь контура с площадью грани, слой; отдельная
+    строка читает тот же файл СТОРОННИМ разборщиком (ezdxf), чтобы совпадение не держалось на одном
+    коде. Ось нормали проверяется двумя деталями - по Z и по X: выбор вида задаётся осью, и ошибка
+    выбора видна как чужой габарит контура.
+    """
+    import hashlib
+    import math
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
+
+    def digest_of(path):
+        if not os.path.exists(path):
+            return None
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+
+    def new_part(name):
+        env, _code = call("kompas_create_document",
+                          {"application_id": app_id, "kind": "part", "name": name})
+        return doc_id(env)
+
+    def plate(name, base, width, height, thickness):
+        """Заготовка: прямоугольник в плоскости base, выдавленный на thickness."""
+        doc = new_part(name)
+        if not doc:
+            return None
+        env, _code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": base, "offset_mm": 0}, "name": name + "-sketch"})
+        sketch = result(env).get("id")
+        if not sketch:
+            return None
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [-width / 2.0, -height / 2.0],
+                          "width_mm": width, "height_mm": height}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": True})
+        call("kompas_extrude", {"sketch_ref": sketch, "expected_revision": current_rev(doc),
+                                "operation": "base", "depth_mm": thickness,
+                                "direction": "positive"})
+        return doc
+
+    def through_hole(doc, diameter_mm, base, offset_mm, depth_mm):
+        """Отверстие насквозь: круг в плоскости base на высоте offset_mm, вырез в материал."""
+        env, _code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": base, "offset_mm": offset_mm}, "name": "hole-sketch"})
+        sketch = result(env).get("id")
+        if not sketch:
+            return False
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "circle", "center_mm": [0.0, 0.0],
+                          "radius_mm": diameter_mm / 2.0}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": True})
+        _env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "cut",
+            "depth_mm": depth_mm, "direction": "positive", "end_condition": "blind"})
+        return (not code), code or emsg(_env)
+
+    def main_body(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+
+    def faces_of(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology",
+                                  {"document_id": doc, "body_ref": body, "include": "faces"})
+        return (result(env) or {}).get("faces") or []
+
+    def edges_of(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology",
+                                  {"document_id": doc, "body_ref": body, "include": "edges"})
+        return (result(env) or {}).get("edges") or []
+
+    def biggest_face(doc, body):
+        faces = sorted((face for face in faces_of(doc, body)
+                        if face.get("surface_type") == "plane"),
+                       key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
+        return faces[0] if faces else None
+
+    def export(doc, body, path, overwrite=False, clear=True):
+        if clear and os.path.exists(path):
+            os.remove(path)
+        env, code = call("kompas_export_flat_dxf", {
+            "document_id": doc, "body_ref": body, "output_path": path,
+            "overwrite": overwrite}, timeout=300)
+        return env, code
+
+    def layers_of(path):
+        """Слои СУЩНОСТЕЙ контура: записи таблиц DXF тоже несут код 8 и к контуру не относятся."""
+        return sorted({dict(entity["values"]).get(8) for entity in dxf_entities(path)
+                       if entity["type"] in ("LINE", "ARC", "CIRCLE", "LWPOLYLINE", "POLYLINE")
+                       and dict(entity["values"]).get(8)})
+
+    # ── FLT.01: инструмент опубликован и схема совпадает с реестром ───────────────────────────────
+    entry = entry_of(client, "kompas_export_flat_dxf")
+    schema_path = os.path.join(ROOT, "schemas", "kompas_export_flat_dxf.json")
+    published_schema = None
+    if os.path.exists(schema_path):
+        with open(schema_path, "r", encoding="utf-8") as handle:
+            published_schema = json.load(handle)
+    schema_ok = entry is not None and published_schema is not None and entry["inputSchema"] == published_schema
+    rep.add("FLT.01.discover",
+            "kompas_export_flat_dxf в tools/list, его inputSchema совпадает с "
+            "schemas/kompas_export_flat_dxf.json",
+            "PASS" if schema_ok else "FAIL",
+            "запись=" + str(entry is not None) + " схема_файла=" + str(published_schema is not None)
+            + " совпала=" + str(schema_ok))
+
+    # ── FLT.02: пластина с отверстием и скруглениями, нормаль по Z ────────────────────────────────
+    width_mm, height_mm, thickness_mm, hole_d_mm, fillet_mm = 40.0, 30.0, 20.0, 10.0, 5.0
+    doc = plate("FLT-plate", "xy", width_mm, height_mm, thickness_mm)
+    if not doc:
+        rep.add("FLT.02.contour", "пластина с отверстием и скруглениями выгружена в DXF", "FAIL",
+                "деталь не создана")
+        return
+    body = main_body(doc)
+    hole_ok, hole_code = through_hole(doc, hole_d_mm, "xy", 0.0, thickness_mm + 5.0)
+    vertical = [edge.get("edge_ref") for edge in edges_of(doc, body)
+                if edge.get("curve_type") == "line" and near(edge.get("length_mm"), thickness_mm, 0.01)]
+    fillet_ok, fillet_code = False, None
+    if len(vertical) == 4:
+        _env, code_fillet = call("kompas_fillet", {
+            "edge_refs": vertical, "expected_revision": current_rev(doc),
+            "radius_mm": fillet_mm}, timeout=300)
+        fillet_ok, fillet_code = not code_fillet, code_fillet or emsg(_env)
+    face = biggest_face(doc, body)
+    face_area = face.get("area_mm2") if face else None
+    path = os.path.join(workdir, "flt-plate.dxf")
+    saved = call("kompas_save_document", {
+        "document_id": doc, "expected_revision": current_rev(doc),
+        "target_path": os.path.join(workdir, "flt-plate.m3d")})[1]
+    env, code = export(doc, body, path)
+    got = result(env)
+    contour = got.get("contour") or {}
+    checks = {row.get("name"): row.get("passed")
+              for row in ((got.get("verification") or {}).get("checks") or [])}
+    counts = got.get("entity_counts") or {}
+    layers = layers_of(path) if os.path.exists(path) else []
+    circles = [(float(dict(entity["values"])[10]), float(dict(entity["values"])[20]),
+                float(dict(entity["values"])[40]))
+               for entity in (dxf_entities(path) if os.path.exists(path) else [])
+               if entity["type"] == "CIRCLE"]
+    hole_circle = next((circle for circle in circles
+                        if near(circle[2], hole_d_mm / 2.0, 0.001)), None)
+    contour_area = got.get("contour_area_mm2")
+    area_ok = (face_area is not None and contour_area is not None
+               and abs(contour_area - face_area) <= max(0.005 * face_area, 0.01))
+    ok02 = (not code and os.path.exists(path)
+            and got.get("loops") == 2 and got.get("outer_loops") == 1 and got.get("inner_loops") == 1
+            and near(contour.get("width_mm"), width_mm, 0.01)
+            and near(contour.get("height_mm"), height_mm, 0.01)
+            and hole_circle is not None
+            and (counts.get("ARC") or 0) == 4
+            and got.get("layer") == "CUT"
+            and area_ok and hole_ok and fillet_ok
+            and got.get("reached_level") == "geometry_checked"
+            and checks.get("contour_area_matches_face") is True)
+    rep.add("FLT.02.contour",
+            "пластина 40x30x20 с отверстием D10 и скруглениями R5: петель 2 (внешняя 1, внутренняя 1), "
+            "габарит контура 40x30, отверстие - CIRCLE R5, скругления - 4 ARC R5, слой CUT, площадь "
+            "контура равна площади грани (допуск 0,5 %)",
+            "PASS" if ok02 else "FAIL",
+            "code=" + str(code) + " петель=" + str(got.get("loops")) + " внешних="
+            + str(got.get("outer_loops")) + " внутренних=" + str(got.get("inner_loops"))
+            + " контур=" + str(contour.get("width_mm")) + "x" + str(contour.get("height_mm"))
+            + " площадь_контура=" + str(contour_area) + " площадь_грани=" + str(face_area)
+            + " сущности=" + str(counts) + " круги=" + str(circles) + " слои=" + str(layers)
+            + " отверстие=" + str(hole_ok) + "/" + str(hole_code) + " скругление=" + str(fillet_ok)
+            + "/" + str(fillet_code) + " (рёбер "
+            + str(len(vertical)) + ") сохранение=" + str(saved) + " проверки=" + str(checks)
+            + " " + str(emsg(env) or ""))
+
+    # ── FLT.03: сторонний разбор того же файла ───────────────────────────────────────────────────
+    try:
+        import ezdxf
+        from ezdxf import recover
+
+        document = ezdxf.readfile(path)
+        auditor = document.audit()
+        audit_errors = len(auditor.errors)
+        model = document.modelspace()
+        kinds = {}
+        for entity in model:
+            kinds[entity.dxftype()] = kinds.get(entity.dxftype(), 0) + 1
+        same = (kinds.get("CIRCLE", 0) == (counts.get("CIRCLE") or 0)
+                and kinds.get("ARC", 0) == (counts.get("ARC") or 0)
+                and kinds.get("LINE", 0) == (counts.get("LINE") or 0))
+        layers_ext = sorted({entity.dxf.layer for entity in model})
+        ok03 = (audit_errors == 0 and same and layers_ext == ["CUT"]
+                and kinds.get("CIRCLE", 0) == 1 and kinds.get("ARC", 0) == 4)
+        detail03 = ("ezdxf=" + ezdxf.__version__ + " ошибок_аудита=" + str(audit_errors)
+                    + " сущности_стороннего=" + str(kinds) + " сущности_ответа=" + str(counts)
+                    + " слои=" + str(layers_ext))
+    except Exception as exc:  # noqa: BLE001 - сторонний разбор обязан назвать причину, а не упасть
+        ok03 = False
+        detail03 = "ezdxf не прочитал файл: " + type(exc).__name__ + ": " + str(exc)
+    rep.add("FLT.03.ezdxf_audit",
+            "тот же файл читает ezdxf (1.4.5, только в приборе) без ошибок аудита; число и тип "
+            "сущностей совпадают с ответом инструмента; слой один - CUT",
+            "PASS" if ok03 else "FAIL", detail03)
+
+    # ── FLT.04: нормаль по X - вид выбирается осью, а не «Спереди» по умолчанию ──────────────────
+    doc_x = plate("FLT-plate-x", "yz", width_mm, height_mm, thickness_mm)
+    body_x = main_body(doc_x) if doc_x else None
+    path_x = os.path.join(workdir, "flt-plate-x.dxf")
+    if doc_x and body_x:
+        call("kompas_save_document", {
+            "document_id": doc_x, "expected_revision": current_rev(doc_x),
+            "target_path": os.path.join(workdir, "flt-plate-x.m3d")})
+        env_x, code_x = export(doc_x, body_x, path_x)
+        got_x = result(env_x)
+        contour_x = got_x.get("contour") or {}
+        normal = got_x.get("normal") or []
+        ok04 = (not code_x and os.path.exists(path_x)
+                and near(contour_x.get("width_mm"), width_mm, 0.01)
+                and near(contour_x.get("height_mm"), height_mm, 0.01)
+                and len(normal) == 3 and abs(abs(normal[0]) - 1.0) < 1e-4
+                and got_x.get("loops") == 1)
+        rep.add("FLT.04.axis_normal",
+                "деталь с нормалью по оси X (толщина вдоль X): контур 40x30 и одна петля - вид выбран "
+                "осью нормали, а не видом «Спереди» по умолчанию",
+                "PASS" if ok04 else "FAIL",
+                "code=" + str(code_x) + " контур=" + str(contour_x.get("width_mm")) + "x"
+                + str(contour_x.get("height_mm")) + " нормаль=" + str(normal) + " петель="
+                + str(got_x.get("loops")) + " " + str(emsg(env_x) or ""))
+    else:
+        rep.add("FLT.04.axis_normal", "деталь с нормалью по оси X", "FAIL", "деталь не создана")
+
+    # ── FLT.05: отказы по плоскости - ступень и куб, файла нет ──────────────────────────────────
+    code_boss = None
+    step = plate("FLT-step", "xy", width_mm, height_mm, 10.0)
+    if step:
+        env_b, _code_b = call("kompas_create_sketch", {
+            "document_id": step, "expected_revision": current_rev(step),
+            "plane": {"base": "xy", "offset_mm": 10.0}, "name": "boss-sketch"})
+        boss = result(env_b).get("id")
+        if boss:
+            call("kompas_edit_sketch", {
+                "sketch_ref": boss, "expected_revision": current_rev(step), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [-10.0, -7.5],
+                              "width_mm": 20.0, "height_mm": 15.0}]})
+            call("kompas_finish_sketch", {"sketch_ref": boss, "require_closed_profile": True})
+            _env_boss, code_boss = call("kompas_extrude", {
+                "sketch_ref": boss, "expected_revision": current_rev(step),
+                "operation": "boss", "depth_mm": 10.0, "direction": "positive"})
+        call("kompas_save_document", {
+            "document_id": step, "expected_revision": current_rev(step),
+            "target_path": os.path.join(workdir, "flt-step.m3d")})
+        step_path = os.path.join(workdir, "flt-step.dxf")
+        env_s, code_s = export(step, main_body(step), step_path)
+        code_boss = code_boss or emsg(_env_boss)
+        step_ok = code_s == "NOT_CONSTANT_THICKNESS" and not os.path.exists(step_path)
+    else:
+        env_s, code_s, step_ok, code_boss = {}, None, False, None
+    cube = plate("FLT-cube", "xy", 20.0, 20.0, 20.0)
+    if cube:
+        call("kompas_save_document", {
+            "document_id": cube, "expected_revision": current_rev(cube),
+            "target_path": os.path.join(workdir, "flt-cube.m3d")})
+        cube_path = os.path.join(workdir, "flt-cube.dxf")
+        env_c, code_c = export(cube, main_body(cube), cube_path)
+        cube_ok = code_c == "AMBIGUOUS_FLAT_PATTERN" and not os.path.exists(cube_path)
+    else:
+        env_c, code_c, cube_ok = {}, None, False
+    rep.add("FLT.05.refusals",
+            "ступенчатая деталь - NOT_CONSTANT_THICKNESS, куб - AMBIGUOUS_FLAT_PATTERN; в обоих случаях "
+            "файл не создан",
+            "PASS" if (step_ok and cube_ok) else "FAIL",
+            "ступень=" + str(code_s) + " куб=" + str(code_c) + " выступ=" + str(code_boss))
+
+    # ── FLT.06: перезапись без флага и несохранённый документ ──────────────────────────────────
+    before = digest_of(path)
+    env_o, code_o = export(doc, body, path, overwrite=False, clear=False)
+    after = digest_of(path)
+    dirty = plate("FLT-dirty", "xy", 20.0, 20.0, 5.0)
+    dirty_path = os.path.join(workdir, "flt-dirty.dxf")
+    env_d, code_d = export(dirty, main_body(dirty), dirty_path) if dirty else ({}, None)
+    ok06 = (bool(code_o) and before is not None and before == after
+            and code_d == "DOCUMENT_DIRTY" and not os.path.exists(dirty_path))
+    rep.add("FLT.06.overwrite_and_dirty",
+            "overwrite=false при существующем файле - отказ, файл прежний (sha256); несохранённый "
+            "документ - DOCUMENT_DIRTY до COM, файла нет",
+            "PASS" if ok06 else "FAIL",
+            "перезапись=" + str(code_o) + " sha256 до=" + str(before)[:16] + " после="
+            + str(after)[:16] + " несохранённый=" + str(code_d))
+
+
 def iges_checks(client, rep, app_id, workdir):
     """IGES.* — экспорт IGES (блок IGES) через MCP на бинарях поставки.
 
@@ -17528,6 +17852,8 @@ def main():
     r1_only = "--r1-only" in sys.argv
     # Блок IGES (экспорт модели в IGES): группа IGES на своём сеансе, строки `IGES.<NN>.<действие>`.
     iges_only = "--iges-only" in sys.argv
+    # Блок FLT (DXF контура плоской детали): группа FLT на своём сеансе, строки `FLT.<NN>.<действие>`.
+    flat_part_only = "--flat-part-only" in sys.argv
     # Блок SC (ограниченный сценарий): группа SC на своём сеансе, строки `SC.<NN>.<действие>`.
     scenario_only = "--scenario-only" in sys.argv
 
@@ -18418,6 +18744,14 @@ def main():
 
         if scenario_only:
             scenario_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if flat_part_only:
+            flat_part_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -56004,6 +56338,7 @@ EXTRA_GROUP_CHECKS = {
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),
     "iges": lambda c, r, a, w, v, p: iges_checks(c, r, a, w),
+    "flat_part": lambda c, r, a, w, v, p: flat_part_checks(c, r, a, w),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
 }
 

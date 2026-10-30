@@ -66,6 +66,12 @@ public static class ErrorCodes
     public const string UnitsUnverified = "UNITS_UNVERIFIED";
     public const string NotConstantThickness = "NOT_CONSTANT_THICKNESS";
     public const string AmbiguousFlatPattern = "AMBIGUOUS_FLAT_PATTERN";
+
+    /// <summary>The body is flat, but its normal is not along an axis of the part, and v24 documents no
+    /// view normal to an arbitrary direction: <c>OrientationNormalTo</c> is described in the help but
+    /// absent from the shipped type library. A separate code, not <see cref="AmbiguousFlatPattern"/>: the
+    /// pattern is known, the documented route to project it is not.</summary>
+    public const string FlatNormalNotAxis = "FLAT_NORMAL_NOT_AXIS";
     public const string VerificationFailed = "VERIFICATION_FAILED";
     public const string CancelNotConfirmed = "CANCEL_NOT_CONFIRMED";
 
@@ -202,6 +208,9 @@ public static class ErrorMessages
         [ErrorCodes.UnitsUnverified] = "Единицы результата не подтверждены; значение не выдаётся.",
         [ErrorCodes.NotConstantThickness] = "Деталь не является плоской постоянной толщины.",
         [ErrorCodes.AmbiguousFlatPattern] = "Одной проекции недостаточно для однозначного контура.",
+        [ErrorCodes.FlatNormalNotAxis] =
+            "Нормаль плоской детали не совпадает ни с одной осью X, Y, Z: вид по произвольной нормали "
+            + "в v24 не поддерживается.",
         [ErrorCodes.VerificationFailed] = "Заявленная проверка результата не пройдена.",
         [ErrorCodes.CancelNotConfirmed] = "Отмена запрошена, но фактическое прекращение не подтверждено.",
         [ErrorCodes.DependentFeatures] =

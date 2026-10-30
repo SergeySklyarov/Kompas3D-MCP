@@ -338,6 +338,8 @@ public static class WorkerCommands
     public const string GetSheetMetalUnfold = "sheet_metal.get_unfold";
     // sheet_metal.export_flat_dxf: the unfolded body as a DXF file, through a temporary drawing.
     public const string ExportSheetMetalFlatDxf = "sheet_metal.export_flat_dxf";
+    // flat_part.export_dxf: the contour of a flat part of constant thickness as a DXF file.
+    public const string ExportFlatDxf = "flat_part.export_dxf";
     // ── block DRW "drawings" (profile drawings-minimal-v1) ──
     // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
     // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →

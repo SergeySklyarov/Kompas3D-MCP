@@ -68,6 +68,7 @@ public static class CompactCatalog
         ["kompas_set_sheet_metal_unfold"] = "sheet_metal",
         ["kompas_get_sheet_metal_unfold"] = "sheet_metal",
         ["kompas_export_sheet_metal_flat_dxf"] = "sheet_metal",
+        ["kompas_export_flat_dxf"] = "file",
         ["kompas_pattern_grid"] = "pattern", ["kompas_pattern_circular"] = "pattern",
         ["kompas_pattern_mirror"] = "pattern", ["kompas_get_pattern"] = "pattern",
         ["kompas_insert_component"] = "assembly", ["kompas_replace_component"] = "assembly",

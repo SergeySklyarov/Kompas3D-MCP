@@ -272,6 +272,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.SetSheetMetalUnfold, WorkerAction.ModelMutation, 240_000);
         Cad(WorkerCommands.GetSheetMetalUnfold, WorkerAction.Read);
         Cad(WorkerCommands.ExportSheetMetalFlatDxf, WorkerAction.ModelMutation, 300_000);
+        Cad(WorkerCommands.ExportFlatDxf, WorkerAction.ModelMutation, 300_000);
 
         // ---- drawings ----
         // Views and export go through the API7 bridge (TransferInterface + AddStandartViews or the

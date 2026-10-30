@@ -27,6 +27,9 @@ public static class CompactCatalog
         "kompas_health", "kompas_connect", "kompas_session_status", "kompas_acquire_session",
         "kompas_release_session", "kompas_disconnect", "kompas_create_document", "kompas_open_document",
         "kompas_close_document", "kompas_get_context", "kompas_capabilities",
+        // Operation control is NOT direct: the published listing has a size ceiling, and three more
+        // direct tools with full descriptions break it. They stay reachable through kompas_run, which
+        // re-enters the same handler. History: docs/decisions/host.md#operation-control
     };
 
     /// <summary>Groups shown by <see cref="FindTool"/>. Presentation only: the operation set stays

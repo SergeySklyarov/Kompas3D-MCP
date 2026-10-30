@@ -172,8 +172,20 @@ internal sealed class AssemblyCheckpoint
         // SaveAs leaves the copy under a NEW id: the plan's own id would address nothing afterwards. The id
         // is taken from the session's document list BY PATH, because the save result names the id it wrote
         // only when the session re-registered the document, and a guess here costs every later step.
-        var copyDocumentId = await ResolveDocumentIdAsync(topCopy, applicationId, cancellationToken)
-            .ConfigureAwait(false)
+        var sessionRows = await ListDocumentsAsync(applicationId, cancellationToken).ConfigureAwait(false);
+        report["session_documents"] = new JsonArray(sessionRows
+            .Take(10)
+            .Select(row => (JsonNode)new JsonObject
+            {
+                ["id"] = JsonScalars.ReadString(row["id"]),
+                ["path"] = JsonScalars.ReadString(row["path"]),
+            })
+            .ToArray());
+        var copyDocumentId = sessionRows
+            .Where(row => string.Equals(JsonScalars.ReadString(row["path"]), topCopy,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(row => JsonScalars.ReadString(row["id"]))
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
             ?? JsonScalars.ReadString(saved.Result?["context"]?["id"])
             ?? documentId;
         var revisionNow = saved.RevisionAfter ?? revision.Value;
@@ -222,6 +234,26 @@ internal sealed class AssemblyCheckpoint
             TryWriteAtomic(manifestPath, manifest, out manifestReason);
         }
 
+        // INVARIANT: the verification document is closed without saving, so the copy must be reopened for
+        // the plan to work in: the closed id addresses nothing, and every step after the checkpoint would
+        // be refused as unregistered.
+        var reopenedArguments = new JsonObject
+        {
+            ["path"] = topCopy,
+            ["access"] = "edit",
+            ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "checkpoint-reopen"),
+        };
+        if (!string.IsNullOrWhiteSpace(applicationId))
+        {
+            reopenedArguments["application_id"] = applicationId;
+        }
+
+        var reopened = await _invoke("kompas_open_document", reopenedArguments, cancellationToken)
+            .ConfigureAwait(false);
+        var planDocumentId = JsonScalars.ReadString(reopened.Result?["document_id"])
+            ?? JsonScalars.ReadString(reopened.Result?["id"])
+            ?? copyDocumentId;
+
         if (verification.Mismatches.Count > 0)
         {
             DeleteFolderIfCreated(folder, created);
@@ -239,7 +271,7 @@ internal sealed class AssemblyCheckpoint
 
         report["taken"] = true;
         report["path"] = topCopy;
-        report["document_id_after"] = copyDocumentId;
+        report["document_id_after"] = planDocumentId;
         report["revision"] = revision.Value;
         report["application_id"] = applicationId;
         report["manifest_path"] = manifestPath;
@@ -259,9 +291,8 @@ internal sealed class AssemblyCheckpoint
 
     // ---- Graph ----
 
-    /// <summary>The id the session has for a path, or <c>null</c> when the path is not registered.</summary>
-    private async Task<string?> ResolveDocumentIdAsync(
-        string path, string? applicationId, CancellationToken cancellationToken)
+    /// <summary>The session's document contexts, as the documented list command answers them.</summary>
+    private async Task<JsonObject[]> ListDocumentsAsync(string? applicationId, CancellationToken cancellationToken)
     {
         // DOC: kompas_list_documents answers with an ARRAY of document contexts and filters by
         // application_id, so the id is passed here rather than read from the answer.
@@ -273,12 +304,7 @@ internal sealed class AssemblyCheckpoint
 
         var listed = await _invoke("kompas_list_documents", arguments, cancellationToken)
             .ConfigureAwait(false);
-        return (listed.Result as JsonArray ?? new JsonArray())
-            .OfType<JsonObject>()
-            .Where(row => string.Equals(JsonScalars.ReadString(row["path"]), path,
-                StringComparison.OrdinalIgnoreCase))
-            .Select(row => JsonScalars.ReadString(row["id"]) ?? JsonScalars.ReadString(row["document_id"]))
-            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+        return (listed.Result as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToArray();
     }
 
     private sealed record GraphRead(bool Ok, string Message, IReadOnlyList<AssemblyComponentLink> Links, int ComponentCount);

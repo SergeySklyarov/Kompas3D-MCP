@@ -15090,25 +15090,30 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 f"code={code} taken={checkpoint.get('taken')} format={manifest.get('format')} "
                 f"verified={manifest.get('verified')} rows={len(rows)} (ждали {len(sources)}) "
                 f"hashes={hashes_ok} inside={copy_inside} path={checkpoint.get('path')} "
-                f"doc_after={checkpoint.get('document_id_after')} err={emsg(env)}")
+                f"doc_after={checkpoint.get('document_id_after')} "
+                f"docs={checkpoint.get('session_documents')} err={emsg(env)}")
 
         # ── ASC.02 ссылки перечитаны из заново открытой копии ──────────────────────────────────
+        # `application_id` обязателен в контракте open: без него отказ INVALID_ARGUMENT, а не открытие.
         opened, code_open = call("kompas_open_document", {
+            "application_id": app_id,
             "path": checkpoint.get("path") or top_path, "access": "read_only"})
         copy_doc = doc_of(opened)
         links = links_of(copy_doc) if copy_doc else []
         copy_root = _os.path.abspath(_os.path.dirname(checkpoint.get("path") or top_path))
         inside = [row for row in links
                   if _os.path.abspath(row.get("source_path") or "").startswith(copy_root)]
+        # Обход рекурсивный: вложенная деталь подсборки тоже в перечне, поэтому число ссылок сверяется
+        # с числом файлов manifest, а не с числом компонентов верхнего уровня.
         refs_ok = (
-            bool(copy_doc) and len(links) == 2 and len(inside) == len(links)
-            and all(row.get("depth") == 0 for row in inside))
+            bool(copy_doc) and bool(links) and len(inside) == len(links)
+            and len(links) == len(manifest.get("files") or []))
         rep.add("ASC.02.refs_inside_copy",
                 "ссылки перечитаны из заново открытой копии: все ведут внутрь каталога копии, "
                 "число компонентов совпало с исходным",
                 "PASS" if refs_ok else "FAIL",
-                f"open={code_open} links={[row.get('source_path') for row in links]} "
-                f"inside={len(inside)} root={copy_root}")
+                f"open={code_open} links={len(links)} inside={len(inside)} "
+                f"manifest_files={len(manifest.get('files') or [])} root={copy_root}")
         close(copy_doc)
     else:
         rep.add("ASC.01.graph_copy", "copy: копия графа сборки", "FAIL", failure)
@@ -15137,7 +15142,8 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
 
     # ── ASC.05 read_only ───────────────────────────────────────────────────────────────────────
     if built:
-        opened, _code = call("kompas_open_document", {"path": top_path, "access": "edit"})
+        opened, _code = call("kompas_open_document", {
+            "application_id": app_id, "path": top_path, "access": "edit"})
         read_doc = doc_of(opened)
         if read_doc:
             env, code = run(read_doc, rebuild_step(current_rev(read_doc)),

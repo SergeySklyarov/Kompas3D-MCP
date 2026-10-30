@@ -1190,3 +1190,16 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 `needs_reconciliation`, новых маршрутов API нет. Умолчание `sync_budget_ms` 40 000 остаётся (решение заказчика
 15.10.2026); §1.8 п.7 - вопрос заказчику на стоп-докладе выпуска. Очередь: `OPS_CONTRACT` (выдан) ->
 `ASSEMBLY_CHECKPOINT` -> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 30.10.2026, пятьдесят восьмая (`OPS_CONTRACT` принят; выдан `ASSEMBLY_CHECKPOINT`).**
+
+`OPS_CONTRACT` принят попыткой 3: `kompas_operation_status`, `kompas_operation_cancel`, `kompas_operation_reconcile`,
+запрет мутации поверх несогласованной операции с выходом через закрытие без записи файла; зачётный `--all` на
+`081538c` - 2048 PASS / 8 NAMED / 3 UNKNOWN, FAIL 0. `OPS.09` и `OPS.14` NAMED: `applied`/`not_applied` и закрытие на
+живом документе держат модульные тесты и `OPS.13`, настоящая запись с живым документом требует исчерпания статического
+бюджета Worker. Долг 84 (16 мутаций без `document_id`) - класс «дефект продукта», срок `DEBT_REVIEW_0_13_0`. Пересчёт
+бюджета долга: открыто 12 при бюджете 10 (строки 1 и 65 выпали из пересчёта наряда, возвращены). Решение техлида:
+наряд `DEBT_MATRIX_SYNC_0_13` (строки 79, 80, один прибор) до выпуска снимает превышение. Выдан `ASSEMBLY_CHECKPOINT`:
+копия графа зависимостей сборки и manifest (§1.9 п.2, 3), маршрут `IPart7.PartsEx` и `IPart7.FileName` + `Update`,
+новых инструментов нет. Очередь: `ASSEMBLY_CHECKPOINT` (выдан) -> `DEBT_MATRIX_SYNC_0_13` -> `DIAG_PACKAGE` ->
+`EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.

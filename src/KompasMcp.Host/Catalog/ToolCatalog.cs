@@ -3979,11 +3979,11 @@ public static class ToolCatalog
                 Sch.Props(
                     ("scenario_version", Sch.Int("Версия плана. Поддерживается 1.", 1, 1, 1)),
                     ("document_id", Sch.Ref("#/$defs/document_id")),
-                    ("external_parts", Sch.Enum(
+                    ("external_parts", Sch.Nullable(Sch.Enum(
                         "copy - компоненты сборки копируются и ссылки копии ведут внутрь каталога копии "
                         + "(по умолчанию); read_only - компоненты не копируются, ссылки копии ведут на "
                         + "исходные файлы, и контрольная точка их НЕ защищает. На детали не влияет.",
-                        "copy", "read_only")),
+                        "copy", "read_only"))),
                     ("checkpoint_policy", Sch.Enum(
                         "document_copy - перед первым изменяющим шагом снять копию файла документа "
                         + "(документированный SaveAs); none - не снимать. none допустим только при "

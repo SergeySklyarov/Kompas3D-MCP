@@ -290,7 +290,11 @@ internal sealed class AssemblyCheckpoint
 
         if (opened.Status != OperationStatus.Succeeded)
         {
-            return new ReassignResult(false, "копия вложенной сборки не открылась", null);
+            // The underlying refusal is repeated in the message: "the copy did not open" alone names no
+            // cause, and the cause is what the caller has to act on.
+            var cause = opened.Error is null ? string.Empty
+                : $": {opened.Error.Code}: {opened.Error.Message}";
+            return new ReassignResult(false, $"копия вложенной сборки не открылась{cause}", null);
         }
 
         var copyDocumentId = JsonScalars.ReadString(opened.Result?["document_id"])

@@ -925,6 +925,10 @@ RUN_GROUPS = (
      "Приёмка SC: ограниченный сценарий kompas_run_scenario - цепочка шагов со ссылками назад, "
      "повтор с тем же operation_id без эффекта, остановка на отказе с partial_effects, "
      "восстановление из контрольной точки и отказы до выполнения (наряд SCENARIO_RUN, контракт §2.9)"),
+    ("asm_checkpoint", "asm-checkpoint", "asm-checkpoint-acceptance.json",
+     "Приёмка ASC: контрольная точка сборки - копия графа зависимостей, ссылки перечитаны из заново "
+     "открытой копии, файлы клиента не изменены, режим read_only назван, чертёж отказывает "
+     "(наряд ASSEMBLY_CHECKPOINT, спека §1.9)"),
     ("flat_part", "flat-part", "flat-part-acceptance.json",
      "Приёмка FLT: DXF контура плоской детали - вид по оси нормали, петли и габарит, отверстие и "
      "скругления, площадь контура против площади грани, сторонний разбор ezdxf, отказы по плоскости "
@@ -995,6 +999,8 @@ ALL_GROUPS_EXTRA = (
     ("update", ["--update-only"]),
     # Группа SC строит свои детали и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("scenario", ["--scenario-only"]),
+    # Группа ASC строит свои детали и двухуровневую сборку сама, общий сеанс ей не нужен.
+    ("asm_checkpoint", ["--asm-checkpoint-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
     # Группа OPS ведёт свой Хост со своим журналом и малым бюджетом синхронизации: состояния
@@ -2178,6 +2184,7 @@ FLAGS = (
     ("--sections-only", False, "группа SEC: динамическое сечение модели"),
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
     ("--scenario-only", False, "группа SC: ограниченный сценарий kompas_run_scenario"),
+    ("--asm-checkpoint-only", False, "группа ASC: контрольная точка сборки - копия графа"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
@@ -14886,6 +14893,314 @@ IGES_REFERENCE = {
 }
 
 
+def assembly_checkpoint_checks(client, rep, app_id, workdir):
+    """ASC.* — контрольная точка СБОРКИ: копия графа зависимостей (наряд ASSEMBLY_CHECKPOINT).
+
+    ЗАЧЕМ ЭТА ГРУППА. Спека §1.9: обычный SaveAs сборки не гарантирует копию вложенных деталей.
+    Строки сравнивают ЗНАЧЕНИЯ, а не «вызов прошёл»: совпадение sha256 файлов копии с источниками,
+    ссылки, перечитанные ИЗ ЗАНОВО ОТКРЫТОЙ КОПИИ, и хеши файлов клиента до и после снятия.
+
+    ЧЕГО ЗДЕСЬ НЕТ (наряд §4): независимость копии от изменённой детали (ASC.03), восстановление
+    (ASC.06), отказы по отсутствующему файлу и несохранённому компоненту (ASC.07), чужой открытый
+    документ (ASC.08) и одноимённые файлы из разных каталогов (ASC.09) — их пишет следующий запуск.
+    """
+    import hashlib
+    import json
+    import os as _os
+
+    def call(tool, args, timeout=600):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def err_details(env):
+        err = (env or {}).get("error") or {}
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def sha(path):
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+
+    def new_document(kind, name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": kind, "name": name})
+        return doc_of(env), code, emsg(env)
+
+    def make_part(name, path, width, height, depth):
+        doc, code, message = new_document("part", name)
+        if not doc:
+            return None, f"документ не создан: {code} {message}"
+        rect = [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                 "width_mm": width, "height_mm": height}]
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": name + "-profile"})
+        sketch = result(env).get("id")
+        if not sketch:
+            return doc, f"эскиз не создан: {code} {emsg(env)}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": rect})
+        if code:
+            return doc, f"правка эскиза: {code} {emsg(env)}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": depth, "direction": "positive"})
+        if code:
+            return doc, f"выдавливание: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
+        if code:
+            return doc, f"сохранение: {code} {emsg(env)}"
+        return doc, None
+
+    def insert(doc, source):
+        env, code = call("kompas_insert_component", {
+            "document_id": doc, "expected_revision": current_rev(doc), "source_path": source})
+        return code, emsg(env)
+
+    def save_as(doc, path):
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
+        return code, emsg(env)
+
+    def run(doc, steps, policy="document_copy", external_parts=None, on_error="restore_checkpoint"):
+        # Контрольная точка снимается ТОЛЬКО при on_error=restore_checkpoint: восстанавливать нечего,
+        # если восстановление не заказано. Умолчание группы поэтому restore_checkpoint, а не stop.
+        payload = {
+            "scenario_version": 1,
+            "document_id": doc,
+            "operation_id": str(uuid.uuid4()),
+            "on_error": on_error,
+            "checkpoint_policy": policy,
+            "steps": steps,
+        }
+        if external_parts is not None:
+            payload["external_parts"] = external_parts
+        return call("kompas_run_scenario", payload, timeout=600)
+
+    def rebuild_step(revision):
+        # `kompas_rebuild` объявляет ТОЛЬКО `document_id`: ревизию шаг не передаёт, иначе сценарий
+        # отверг бы аргумент как неизвестное поле (измерено: VERIFICATION_FAILED на шаге s1).
+        return [{"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}}]
+
+    def links_of(doc):
+        _e, env, _r = client.tool("kompas_list_components",
+                                  {"document_id": doc, "recursive": True})
+        return (result(env).get("components") or [])
+
+    folder = _os.path.join(workdir, "asc-checkpoint")
+    _os.makedirs(folder, exist_ok=True)
+    part_a = _os.path.join(folder, "part-a.m3d")
+    part_b = _os.path.join(folder, "part-b.m3d")
+    sub_path = _os.path.join(folder, "sub.m3d")
+    top_path = _os.path.join(folder, "top.m3d")
+
+    # ── Построение источников: две детали и двухуровневая сборка ────────────────────────────────
+    doc_a, error_a = make_part("asc-part-a", part_a, 40.0, 30.0, 20.0)
+    doc_b, error_b = make_part("asc-part-b", part_b, 20.0, 20.0, 10.0)
+    sub_doc = top_doc = None
+    error_sub = error_top = None
+    if doc_a and doc_b:
+        sub_doc, code, message = new_document("assembly", "asc-sub")
+        if sub_doc:
+            code_i, message_i = insert(sub_doc, part_a)
+            if not code_i:
+                code_s, message_s = save_as(sub_doc, sub_path)
+                error_sub = None if not code_s else f"сохранение подсборки: {code_s} {message_s}"
+            else:
+                error_sub = f"вставка детали в подсборку: {code_i} {message_i}"
+        else:
+            error_sub = f"подсборка не создана: {code} {message}"
+
+        top_doc, code, message = new_document("assembly", "asc-top")
+        if top_doc:
+            code_s, message_s = insert(top_doc, sub_path)
+            if code_s:
+                error_top = f"вставка подсборки: {code_s} {message_s}"
+            else:
+                code_b, message_b = insert(top_doc, part_b)
+                if code_b:
+                    error_top = f"вставка детали: {code_b} {message_b}"
+                else:
+                    code_v, message_v = save_as(top_doc, top_path)
+                    error_top = None if not code_v else f"сохранение сборки: {code_v} {message_v}"
+        else:
+            error_top = f"сборка не создана: {code} {message}"
+
+    built = doc_a and doc_b and sub_doc and top_doc and not error_sub and not error_top
+    failure = error_a or error_b or error_sub or error_top or "источники не построены"
+
+    # ── ASC.01 копия графа ──────────────────────────────────────────────────────────────────────
+    checkpoint = {}
+    manifest = {}
+    manifest_path = None
+    if built:
+        sources = {"part-a.m3d": part_a, "part-b.m3d": part_b, "sub.m3d": sub_path}
+        env, code = run(top_doc, rebuild_step(current_rev(top_doc)))
+        answer = result(env)
+        checkpoint = answer.get("checkpoint") or {}
+        manifest_path = checkpoint.get("manifest_path")
+        if manifest_path and _os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        rows = manifest.get("files") or []
+        by_name = {_os.path.basename(row.get("source_path") or ""): row for row in rows}
+        hashes_ok = all(
+            name in by_name and by_name[name].get("sha256") == sha(path)
+            for name, path in sources.items())
+        copy_inside = all(
+            row.get("copy_path") and
+            _os.path.abspath(row["copy_path"]).startswith(_os.path.abspath(_os.path.dirname(manifest_path)))
+            for row in rows)
+        copy_ok = (
+            code is None
+            and checkpoint.get("taken") is True
+            and manifest.get("format") == "assembly-copy-v1"
+            and manifest.get("verified") is True
+            and len(rows) == len(sources)
+            and hashes_ok
+            and copy_inside
+            and _os.path.exists(checkpoint.get("path") or ""))
+        rep.add("ASC.01.graph_copy",
+                "copy: файлы деталей и подсборка скопированы, manifest совпал с графом, sha256 копий "
+                "равны sha256 источников",
+                "PASS" if copy_ok else "FAIL",
+                f"code={code} taken={checkpoint.get('taken')} format={manifest.get('format')} "
+                f"verified={manifest.get('verified')} rows={len(rows)} (ждали {len(sources)}) "
+                f"hashes={hashes_ok} inside={copy_inside} path={checkpoint.get('path')} "
+                f"err={emsg(env)}")
+
+        # ── ASC.02 ссылки перечитаны из заново открытой копии ──────────────────────────────────
+        opened, code_open = call("kompas_open_document", {
+            "path": checkpoint.get("path") or top_path, "access": "read_only"})
+        copy_doc = doc_of(opened)
+        links = links_of(copy_doc) if copy_doc else []
+        copy_root = _os.path.abspath(_os.path.dirname(checkpoint.get("path") or top_path))
+        inside = [row for row in links
+                  if _os.path.abspath(row.get("source_path") or "").startswith(copy_root)]
+        refs_ok = (
+            bool(copy_doc) and len(links) == 2 and len(inside) == len(links)
+            and all(row.get("depth") == 0 for row in inside))
+        rep.add("ASC.02.refs_inside_copy",
+                "ссылки перечитаны из заново открытой копии: все ведут внутрь каталога копии, "
+                "число компонентов совпало с исходным",
+                "PASS" if refs_ok else "FAIL",
+                f"open={code_open} links={[row.get('source_path') for row in links]} "
+                f"inside={len(inside)} root={copy_root}")
+        close(copy_doc)
+    else:
+        rep.add("ASC.01.graph_copy", "copy: копия графа сборки", "FAIL", failure)
+        rep.add("ASC.02.refs_inside_copy", "ссылки из заново открытой копии", "FAIL", failure)
+
+    # ── ASC.04 файлы клиента не изменены ───────────────────────────────────────────────────────
+    if built:
+        # Хеши сняты ДО серии: строка 01 их уже изменила бы, поэтому сравнение идёт с manifest,
+        # который записан при снятии копии, и с текущими файлами клиента.
+        rows = {_os.path.basename(row.get("source_path") or ""): row
+                for row in (manifest.get("files") or [])}
+        untouched = all(
+            rows.get(name, {}).get("sha256") == sha(path)
+            for name, path in (("part-a.m3d", part_a), ("part-b.m3d", part_b), ("sub.m3d", sub_path)))
+        top_untouched = _os.path.exists(top_path) and all(
+            row.get("copy_path") != top_path for row in (manifest.get("files") or []))
+        source_ok = untouched and top_untouched
+        rep.add("ASC.04.source_untouched",
+                "sha256 файлов клиента до и после снятия копии равны: ни деталь, ни подсборка, ни "
+                "верхняя сборка не перезаписаны",
+                "PASS" if source_ok else "FAIL",
+                f"parts_untouched={untouched} top_not_a_copy_target={top_untouched} "
+                f"top_exists={_os.path.exists(top_path)}")
+    else:
+        rep.add("ASC.04.source_untouched", "файлы клиента не изменены", "FAIL", failure)
+
+    # ── ASC.05 read_only ───────────────────────────────────────────────────────────────────────
+    if built:
+        opened, _code = call("kompas_open_document", {"path": top_path, "access": "edit"})
+        read_doc = doc_of(opened)
+        if read_doc:
+            env, code = run(read_doc, rebuild_step(current_rev(read_doc)),
+                            external_parts="read_only")
+            answer = result(env)
+            checkpoint_ro = answer.get("checkpoint") or {}
+            path_ro = checkpoint_ro.get("manifest_path")
+            manifest_ro = {}
+            if path_ro and _os.path.exists(path_ro):
+                with open(path_ro, "r", encoding="utf-8") as handle:
+                    manifest_ro = json.load(handle)
+            rows_ro = manifest_ro.get("files") or []
+            no_copies = all(row.get("copy_path") is None for row in rows_ro)
+            modes_named = all(row.get("mode") == "read_only" for row in rows_ro)
+            note_named = "не защищает" in (checkpoint_ro.get("note") or "")
+            read_only_ok = (
+                code is None and bool(rows_ro) and no_copies and modes_named and note_named
+                and checkpoint_ro.get("read_only_not_restored") == len(rows_ro))
+            rep.add("ASC.05.read_only_mode",
+                    "read_only: компонент не скопирован, ссылка на исходный файл, режим назван в "
+                    "manifest и в ответе (контрольная точка его не защищает)",
+                    "PASS" if read_only_ok else "FAIL",
+                    f"code={code} rows={len(rows_ro)} copy_path_null={no_copies} "
+                    f"modes={modes_named} note={note_named} "
+                    f"read_only_not_restored={checkpoint_ro.get('read_only_not_restored')} "
+                    f"err={emsg(env)}")
+            close(read_doc)
+        else:
+            rep.add("ASC.05.read_only_mode", "read_only: компонент не скопирован", "FAIL",
+                    "исходная сборка не открылась")
+    else:
+        rep.add("ASC.05.read_only_mode", "read_only: компонент не скопирован", "FAIL", failure)
+
+    # ── ASC.10 чертёж по-прежнему отказывает ──────────────────────────────────────────────────
+    drawing_doc, code_d, message_d = new_document("drawing", "asc-drawing")
+    if drawing_doc:
+        revision_before = current_rev(drawing_doc)
+        env, code = run(drawing_doc, rebuild_step(revision_before))
+        answer = result(env)
+        details = err_details(env)
+        drawing_ok = (
+            "чертёж не входит в политику document_copy" in (emsg(env) or "")
+            and answer.get("checkpoint", {}).get("taken") is False
+            and answer.get("status") == "failed"
+            and current_rev(drawing_doc) == revision_before)
+        rep.add("ASC.10.drawing_refused",
+                "чертёж отказывает по-прежнему: контрольная точка не снята, отказ назван, ни один "
+                "шаг не выполнен, ревизия не изменилась",
+                "PASS" if drawing_ok else "FAIL",
+                f"code={code} reason={details.get('reason')} taken="
+                f"{answer.get('checkpoint', {}).get('taken')} status={answer.get('status')} "
+                f"revision={revision_before}->{current_rev(drawing_doc)} err={emsg(env)}")
+        close(drawing_doc)
+    else:
+        rep.add("ASC.10.drawing_refused", "чертёж отказывает по-прежнему", "FAIL",
+                f"документ не создан: {code_d} {message_d}")
+
+    close(doc_a)
+    close(doc_b)
+    close(sub_doc)
+    close(top_doc)
+
+
 def scenario_checks(client, rep, app_id, workdir):
     """SC.* — ограниченный сценарий `kompas_run_scenario` (наряд SCENARIO_RUN, контракт §2.9).
 
@@ -18064,6 +18379,8 @@ def main():
     flat_part_only = "--flat-part-only" in sys.argv
     # Блок SC (ограниченный сценарий): группа SC на своём сеансе, строки `SC.<NN>.<действие>`.
     scenario_only = "--scenario-only" in sys.argv
+    # Блок ASC (контрольная точка сборки): группа на своём сеансе, строки `ASC.<NN>.<действие>`.
+    asm_checkpoint_only = "--asm-checkpoint-only" in sys.argv
 
     # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
     # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
@@ -18227,6 +18544,7 @@ def main():
         "r1": r1_only,
         "iges": iges_only,
         "scenario": scenario_only,
+        "asm_checkpoint": asm_checkpoint_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -18963,6 +19281,14 @@ def main():
 
         if scenario_only:
             scenario_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if asm_checkpoint_only:
+            assembly_checkpoint_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -57231,6 +57557,7 @@ EXTRA_GROUP_CHECKS = {
     # исполняемому файлу и конфигурация, а не app_id общего сеанса.
     "ops": lambda c, r, a, w, v, p: ops_checks(c.host_exe, c.config, w, r),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
+    "asm_checkpoint": lambda c, r, a, w, v, p: assembly_checkpoint_checks(c, r, a, w),
 }
 
 

@@ -1180,3 +1180,13 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 проверка плоскости и постоянной толщины, слой `CUT`, проверки файла, сторонний разбор `ezdxf` в приборе; первым
 шагом - страницы справки каждого звена, без них - BLOCKED). Очередь: `DXF_FLAT_PART` (выдан) -> `OPS_CONTRACT` ->
 `ASSEMBLY_CHECKPOINT` -> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 30.10.2026, пятьдесят седьмая (`DXF_FLAT_PART` принят; выдан `OPS_CONTRACT`).**
+
+`DXF_FLAT_PART` принят попыткой 3: `kompas_export_flat_dxf` - контур из вида конечного тела, проверка плоскости и
+постоянной толщины, слой `CUT`, сторонний разбор `ezdxf`; зачётный `--all` на `2bcb48a` - 2034 PASS, FAIL 0, новые
+строки `FLT.07`/`FLT.08` проверены группой. Выдан `OPS_CONTRACT`: `kompas_operation_status`, `kompas_operation_cancel`,
+`kompas_operation_reconcile` по §2.4 `docs/02_TOOL_CONTRACTS.md`, состояния `queued`/`running`/`cancelled`, метка
+`needs_reconciliation`, новых маршрутов API нет. Умолчание `sync_budget_ms` 40 000 остаётся (решение заказчика
+15.10.2026); §1.8 п.7 - вопрос заказчику на стоп-докладе выпуска. Очередь: `OPS_CONTRACT` (выдан) ->
+`ASSEMBLY_CHECKPOINT` -> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.

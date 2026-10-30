@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 125.
+Всего инструментов: 128.
 
 | Инструмент | Путь вызова | Назначение | Что делает |
 |---|---|---|---|
@@ -17,6 +17,9 @@
 | `kompas_session_status` | direct | Состояние сеанса | Кто владеет сеансом КОМПАС и можно ли его занять. |
 | `kompas_acquire_session` | direct | Занять сеанс | Явный захват CAD-сеанса. |
 | `kompas_release_session` | direct | Освободить сеанс | Отдать CAD-сеанс другому чату, не завершая приложение-клиент. |
+| `kompas_operation_status` | run | Состояние операции | Состояние одной операции по её operation_id: queued (стоит в очереди Хоста и в Worker не уходила), running (передана в Worker), succeeded, failed, cancelled, outcome_unknown. |
+| `kompas_operation_cancel` | run | Отменить операцию | Просит прекратить операцию по operation_id. |
+| `kompas_operation_reconcile` | run | Согласовать исход операции | Определяет фактический исход операции, у которой он неизвестен (outcome_unknown): сравнивает записанные в журнале документ и исходную ревизию с текущей ревизией документа. |
 | `kompas_connect` | direct | Подключиться к КОМПАС | attach - подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION; при НУЛЕ кандидатов код APPLICATION_DISCONNECTED с причиной reason: kompas_process_not_running - процесс не запущен,… |
 | `kompas_disconnect` | direct | Отсоединиться | По умолчанию только отсоединяет сервер. close_owned_application закрывает тот экземпляр, который сервер запустил сам; пользовательский КОМПАС не завершается никогда. |
 | `kompas_create_document` | direct | Создать документ | Новый несохранённый документ с UUID. |

@@ -65,6 +65,20 @@ CONFIG_INVALID.
 от `PATH_NOT_ALLOWED` тем, что говорит о ПРОЦЕССЕ, а не об одном пути одного вызова: лечится файлом
 конфигурации, а не другим путём.
 
+Два кода добавлены 30.10.2026 нарядом `OPS_CONTRACT` и говорят о состоянии ОПЕРАЦИИ, а не о вызове:
+
+- `OPERATION_NOT_FOUND` - в журнале нет записи с таким `operation_id` (`kompas_operation_status`,
+  `kompas_operation_cancel`, `kompas_operation_reconcile`). Отличается от `INVALID_ARGUMENT` тем, что
+  id корректен по форме, а лечится не правкой поля, а чтением id из ответа, который выдал операцию.
+- `OPERATION_NOT_APPLIED` - согласование доказало, что команда следа не оставила: ревизия документа
+  равна записанной в журнале перед вызовом. Отличается от `OUTCOME_UNKNOWN` тем, что исход теперь
+  ИЗВЕСТЕН, и повтор с тем же `operation_id` допустим (`retry_policy: same_operation_id`).
+
+Метка `needs_reconciliation` видна снаружи в трёх местах: в `error.details.needs_reconciliation`
+конверта отказа (вместе с `retry_policy: after_reconciliation`), полем `needs_reconciliation` в ответе
+`kompas_operation_status` и счётчиком `operations_needing_reconciliation` в
+`kompas_session_status`.
+
 Четыре последних добавлены 04.10.2026 нарядом `MCP_SESSION_RELEASE_DEVELOPER_PROMPT.md` и описывают
 владение CAD-сеансом, а не отказ запуска:
 

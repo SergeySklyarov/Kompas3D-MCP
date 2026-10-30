@@ -36,6 +36,8 @@ public static class CompactCatalog
         ["kompas_health"] = "session", ["kompas_connect"] = "session",
         ["kompas_session_status"] = "session", ["kompas_acquire_session"] = "session",
         ["kompas_release_session"] = "session", ["kompas_disconnect"] = "session",
+        ["kompas_operation_status"] = "session", ["kompas_operation_cancel"] = "session",
+        ["kompas_operation_reconcile"] = "session",
         ["kompas_create_document"] = "document", ["kompas_open_document"] = "document",
         ["kompas_close_document"] = "document", ["kompas_save_document"] = "document",
         ["kompas_get_context"] = "document", ["kompas_list_documents"] = "document",

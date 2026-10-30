@@ -37,6 +37,24 @@ public sealed class ToolInvoker : IAsyncDisposable
     private readonly PathPolicy _pathPolicy;
     private readonly HostLog _log;
     private readonly ConcurrentDictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
+
+    /// <summary>Whether the command of an admitted operation has already left the Host for the Worker.
+    /// The difference IS the answer: <c>queued</c> means it still waits its turn, <c>running</c> means it
+    /// was handed over. INVARIANT: the flag flips under <see cref="_cadGate"/>, which admits one CAD
+    /// command at a time, so "handed over" and "executing" cannot overlap with a second mutation.</summary>
+    /// <remarks>LIMIT: a cold Worker start happens inside the send, after the flip, and is therefore
+    /// reported as <c>running</c>; the Host has no observable boundary between the two.</remarks>
+    private readonly ConcurrentDictionary<string, bool> _dispatched = new(StringComparer.Ordinal);
+
+    /// <summary>Operations whose cancellation was requested while they were already executing. COM is
+    /// never interrupted (spec 1.8), so the flag only names the request.</summary>
+    private readonly ConcurrentDictionary<string, bool> _cancelRequested = new(StringComparer.Ordinal);
+
+    /// <summary>Admits one CAD command at a time. KOMPAS executes on a single apartment, so parallel
+    /// commands would be serialised by COM anyway — with no way for the Host to tell which one waits.
+    /// With the gate the waiting command is visibly <c>queued</c> (spec 1.8).</summary>
+    private readonly SemaphoreSlim _cadGate = new(1, 1);
+
     private readonly JsonNode _schemaRoot;
 
     public ToolInvoker(HostOptions options, WorkerSupervisor worker, OperationJournal journal, HostLog log)
@@ -672,6 +690,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             return Replayed(tool, existing, arguments);
         }
 
+        _dispatched[operationId] = false;
         var execution = ExecuteAsync(tool, arguments, operationId, cancellationToken);
         if (!_inFlight.TryAdd(operationId, execution))
         {
@@ -686,25 +705,36 @@ public sealed class ToolInvoker : IAsyncDisposable
         var completed = await Task.WhenAny(execution, Task.Delay(_options.SyncBudgetMs, CancellationToken.None)).ConfigureAwait(false);
         if (completed == execution)
         {
-            _inFlight.TryRemove(operationId, out _);
+            Forget(operationId);
             return await execution.ConfigureAwait(false);
         }
 
         _ = execution.ContinueWith(t =>
         {
-            _inFlight.TryRemove(operationId, out _);
+            Forget(operationId);
             _ = t;
         }, TaskScheduler.Default);
 
-        return Envelope(OperationStatus.Running, tool, operationId, null, arguments,
+        // A command still waiting its turn is `queued`, not `running`: the two answer different
+        // questions (did it reach KOMPAS or not), and only the first allows a confirmed cancellation.
+        var phase = _dispatched.TryGetValue(operationId, out var dispatched) && dispatched
+            ? OperationStatus.Running
+            : OperationStatus.Queued;
+
+        return Envelope(phase, tool, operationId, null, arguments,
             warnings: new[]
             {
                 // Polling is a repeat of the SAME call with the SAME operation_id: the journal replays
-                // the recorded outcome (see Replayed), and an unfinished operation answers Running.
-                // History: docs/decisions/host.md#running-poll
-                $"Операция не завершилась за {_options.SyncBudgetMs / 1000} с и продолжает выполняться; " +
-                "повторите тот же вызов с тем же operation_id — журнал вернёт записанный исход, " +
-                "пока операция идёт, статус остаётся running.",
+                // the recorded outcome (see Replayed), and an unfinished operation answers queued or
+                // running. History: docs/decisions/host.md#running-poll
+                $"Операция не завершилась за {_options.SyncBudgetMs / 1000} с: она "
+                + (phase == OperationStatus.Queued
+                    ? "стоит в очереди Хоста и ещё не передана в Worker (queued)"
+                    : "выполняется в Worker (running)")
+                + $". Состояние даёт kompas_operation_status с operation_id {operationId}; повтор того же "
+                + "вызова с тем же operation_id вернёт записанный исход, когда он появится. Отмена "
+                + "очередной операции подтверждается, отмена выполняющейся - только запросом: COM не "
+                + "прерывается.",
             });
     }
 
@@ -728,38 +758,51 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         try
         {
-            // The same shared budget as reads: the Host waits longer than the Worker (see the comment
-            // in RunReadAsync), else its "giving up" is not a timeout observation but a self-refusal.
-            var timeout = TimeSpan.FromMilliseconds(BudgetFor(tool));
-            var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(tool, arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
-
-            if (frame.Error is null)
+            // INVARIANT: one CAD command at a time leaves this Host. A command waiting here is
+            // `queued` (see _dispatched); the flag flips the moment the turn comes, so the answer
+            // names what actually happened rather than guessing from the elapsed time.
+            await _cadGate.WaitAsync(cancellation.Token).ConfigureAwait(false);
+            try
             {
-                var result = frame.Payload;
-                var recorded = _journal.Complete(operationId, result?.ToJsonString());
-                return Envelope(OperationStatus.Succeeded, tool, operationId, result, arguments,
-                    warnings: recorded ? null : new[] { TerminalWriteNotDurable });
-            }
+                _dispatched[operationId] = true;
 
-            bool terminalRecorded;
-            if (frame.Error.Code == ErrorCodes.OutcomeUnknown)
-            {
-                terminalRecorded = _journal.MarkUnknown(operationId, frame.Error.Message);
-            }
-            else
-            {
-                terminalRecorded = _journal.Fail(operationId, frame.Error);
-            }
+                // The same shared budget as reads: the Host waits longer than the Worker (see the comment
+                // in RunReadAsync), else its "giving up" is not a timeout observation but a self-refusal.
+                var timeout = TimeSpan.FromMilliseconds(BudgetFor(tool));
+                var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(tool, arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
 
-            // INVARIANT: a failed terminal write after a completed mutation is not a normal refusal.
-            // The outcome is known only to this process while the durable line says `in_flight`, so the
-            // error must not carry the "retry as is" policy — a retry after restart would apply the
-            // mutation twice. The policy becomes "after reconciliation", named in a warning.
-            // History: docs/decisions/host.md#terminal-write
-            var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
-            return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
-                tool, operationId, null, arguments, error,
-                warnings: terminalRecorded ? null : new[] { TerminalWriteNotDurable });
+                if (frame.Error is null)
+                {
+                    var result = frame.Payload;
+                    var recorded = _journal.Complete(operationId, result?.ToJsonString());
+                    return Envelope(OperationStatus.Succeeded, tool, operationId, result, arguments,
+                        warnings: recorded ? null : new[] { TerminalWriteNotDurable });
+                }
+
+                bool terminalRecorded;
+                if (frame.Error.Code == ErrorCodes.OutcomeUnknown)
+                {
+                    terminalRecorded = _journal.MarkUnknown(operationId, frame.Error.Message);
+                }
+                else
+                {
+                    terminalRecorded = _journal.Fail(operationId, frame.Error);
+                }
+
+                // INVARIANT: a failed terminal write after a completed mutation is not a normal refusal.
+                // The outcome is known only to this process while the durable line says `in_flight`, so the
+                // error must not carry the "retry as is" policy — a retry after restart would apply the
+                // mutation twice. The policy becomes "after reconciliation", named in a warning.
+                // History: docs/decisions/host.md#terminal-write
+                var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
+                return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
+                    tool, operationId, null, arguments, error,
+                    warnings: terminalRecorded ? null : new[] { TerminalWriteNotDurable });
+            }
+            finally
+            {
+                _cadGate.Release();
+            }
         }
         catch (KompasContractException contract) when (contract.Code == ErrorCodes.QueueFull)
         {
@@ -921,6 +964,7 @@ public sealed class ToolInvoker : IAsyncDisposable
     {
         var merged = details?.DeepClone() as JsonObject ?? new JsonObject();
         merged["terminal_journal_write_failed"] = true;
+        merged["needs_reconciliation"] = true;
         return merged;
     }
 
@@ -1043,16 +1087,273 @@ public sealed class ToolInvoker : IAsyncDisposable
     private static int? ReadInt(JsonNode? node, string key) =>
         node is JsonObject obj ? JsonScalars.ReadInt(obj[key]) : null;
 
-    /// <summary>Cancellation of a queued command; a started one cannot be aborted here.</summary>
-    public bool TryCancel(string operationId)
+    // ---- Operation control: status, cancel, reconcile ----
+
+    /// <summary>The state one operation is in right now, from the durable journal plus the Host's own
+    /// phase. <c>null</c> when the journal never saw this id.</summary>
+    public JsonObject? OperationStatusPayload(string operationId)
     {
-        if (_queue.TryCancelQueued(operationId))
+        if (!_journal.TryGet(operationId, out var record) || record is null)
         {
-            _journal.Cancel(operationId);
-            return true;
+            return null;
         }
 
-        return _inFlight.TryGetValue(operationId, out var task) && !task.IsCompleted;
+        var status = StateOf(record, _dispatched.TryGetValue(operationId, out var d1) && d1);
+        var node = new JsonObject
+        {
+            ["operation_id"] = record.OperationId,
+            ["status"] = Wire(status),
+            ["tool"] = record.Tool,
+            ["document_id"] = record.DocumentId,
+            ["revision_before"] = record.BaseRevision,
+            ["needs_reconciliation"] = record.NeedsReconciliation,
+            ["cancel_requested"] = _cancelRequested.ContainsKey(operationId),
+            ["started_utc"] = record.StartedUtc,
+            ["finished_utc"] = record.FinishedUtc,
+        };
+
+        if (record.ResultJson is { Length: > 0 } json)
+        {
+            try
+            {
+                node["result"] = JsonNode.Parse(json);
+            }
+            catch (JsonException)
+            {
+                node["result_unreadable"] = true;
+            }
+        }
+
+        if (record.Error is { } error)
+        {
+            node["error"] = JsonSerializer.SerializeToNode(error, KompJson.Options);
+            node["partial_effects"] = error.PartialEffects;
+        }
+
+        return node;
+    }
+
+    /// <summary>Ask to stop an operation. A queued command is removed before it reaches the Worker, so the
+    /// answer is a confirmed cancellation; an executing one only records the request, because COM is never
+    /// interrupted (spec 1.8). <c>null</c> when the journal never saw this id.</summary>
+    public JsonObject? CancelOperationPayload(string operationId)
+    {
+        if (!_journal.TryGet(operationId, out var record) || record is null)
+        {
+            return null;
+        }
+
+        var status = StateOf(record, _dispatched.TryGetValue(operationId, out var dispatched) && dispatched);
+        var confirmed = false;
+        if (status == OperationStatus.Queued && _queue.TryCancelQueued(operationId))
+        {
+            _journal.Cancel(operationId);
+            status = OperationStatus.Cancelled;
+            confirmed = true;
+        }
+        else if (status == OperationStatus.Running)
+        {
+            _cancelRequested[operationId] = true;
+        }
+
+        return new JsonObject
+        {
+            ["operation_id"] = operationId,
+            ["status"] = Wire(status),
+            ["cancel_requested"] = _cancelRequested.ContainsKey(operationId),
+            ["confirmed"] = confirmed,
+            ["reason"] = CancelReason(status),
+            ["document_id"] = record.DocumentId,
+            ["needs_reconciliation"] = record.NeedsReconciliation,
+        };
+    }
+
+    /// <summary>The wording of a cancellation answer, chosen by the state the operation is in AFTER the
+    /// request: a confirmed cancellation and a request COM will never honour must not read alike.</summary>
+    internal static string CancelReason(OperationStatus status) => status switch
+    {
+        OperationStatus.Cancelled => "Команда снята из очереди Хоста и в Worker не уходила.",
+        OperationStatus.Running => "Команда уже в Worker: отмена записана, COM не прерывается, итог "
+            + "будет тем, который реально вышел.",
+        _ => "Операция уже завершена: состояние не меняется.",
+    };
+
+    /// <summary>Compare one unknown outcome with the document itself. Three answers only: applied, proven
+    /// not applied, or undetermined with a reason. The command is NEVER re-sent (spec 1.8).</summary>
+    /// <remarks>MEASURED: the revision is the one observable that every journaled mutation moves, so the
+    /// comparison needs no per-tool knowledge. LIMIT: a revision that grew is attributed to this operation
+    /// only when the journal holds no other record for the same document started later — two mutations in
+    /// the same window cannot be told apart, and the answer says so instead of guessing.
+    /// History: docs/decisions/host.md#reconcile-evidence</remarks>
+    public async Task<JsonObject?> ReconcilePayloadAsync(string operationId, CancellationToken cancellationToken)
+    {
+        if (!_journal.TryGet(operationId, out var record) || record is null)
+        {
+            return null;
+        }
+
+        var status = StateOf(record, _dispatched.TryGetValue(operationId, out var d2) && d2);
+        if (status != OperationStatus.OutcomeUnknown)
+        {
+            return new JsonObject
+            {
+                ["operation_id"] = operationId,
+                ["status"] = Wire(status),
+                ["outcome"] = "not_needed",
+                ["needs_reconciliation"] = record.NeedsReconciliation,
+                ["reason"] = "Согласовывать нечего: исход операции определён.",
+            };
+        }
+
+        if (record.DocumentId is not { Length: > 0 } documentId || record.BaseRevision is not { } baseRevision)
+        {
+            return Undetermined(operationId, record, "Журнал не записал документ или исходную ревизию: "
+                + "сравнивать не с чем, исход остаётся неизвестным.");
+        }
+
+        var contextTool = ToolCatalog.All.FirstOrDefault(t => string.Equals(t.Name, "kompas_get_context", StringComparison.Ordinal));
+        if (contextTool is null)
+        {
+            return Undetermined(operationId, record, "Чтение контекста недоступно в этой сборке.");
+        }
+
+        var read = await RunReadAsync(contextTool, new JsonObject { ["document_id"] = documentId }, cancellationToken).ConfigureAwait(false);
+        if (read.Status != OperationStatus.Succeeded || ReadLong(read.Result, "revision") is not { } revisionNow)
+        {
+            return Undetermined(operationId, record, "Ревизию документа прочитать не удалось: "
+                + (read.Error?.Message ?? "ответ без поля revision") + " Исход остаётся неизвестным.");
+        }
+
+        // A revision that grew says SOMETHING changed. It is this operation's change only when the
+        // journal holds no other record for the same document started later: otherwise two mutations
+        // share the window and no observation separates them.
+        var others = _journal.Recent(int.MaxValue).Count(r =>
+            !string.Equals(r.OperationId, operationId, StringComparison.Ordinal)
+            && string.Equals(r.DocumentId, documentId, StringComparison.Ordinal)
+            && r.StartedUtc >= record.StartedUtc);
+
+        switch (DecideReconcile(baseRevision, revisionNow, others))
+        {
+            case ReconcileVerdict.NotApplied:
+            {
+                var error = new ErrorDto(
+                    ErrorCodes.OperationNotApplied,
+                    $"Согласование: ревизия документа осталась {revisionNow}, записанной до вызова, — команда "
+                    + "следа не оставила. Повтор с тем же operation_id допустим.",
+                    RetryPolicy.SameOperationId,
+                    null,
+                    false,
+                    new JsonObject { ["reconciled"] = "not_applied", ["revision_before"] = baseRevision, ["revision_now"] = revisionNow });
+
+                var recorded = _journal.Fail(operationId, error);
+                return new JsonObject
+                {
+                    ["operation_id"] = operationId,
+                    ["status"] = Wire(OperationStatus.Failed),
+                    ["outcome"] = "not_applied",
+                    ["needs_reconciliation"] = !recorded,
+                    ["revision_before"] = baseRevision,
+                    ["revision_now"] = revisionNow,
+                    ["reason"] = "Документ не изменился после базовой ревизии: команда не применилась.",
+                };
+            }
+
+            case ReconcileVerdict.Undetermined:
+                return Undetermined(operationId, record, revisionNow < baseRevision
+                    ? $"Ревизия документа ({revisionNow}) МЕНЬШЕ записанной ({baseRevision}): документ заменён "
+                        + "или переоткрыт, приписать изменение операции нельзя."
+                    : $"Ревизия выросла до {revisionNow}, но после этой записи по тому же документу начато "
+                        + $"ещё операций: {others}. Приписать изменение одной из них нечем — исход остаётся "
+                        + "неизвестным.");
+
+            default:
+            {
+                var evidence = new JsonObject
+                {
+                    ["reconciled"] = "applied",
+                    ["revision_before"] = baseRevision,
+                    ["revision_now"] = revisionNow,
+                    ["other_operations_on_document"] = 0,
+                };
+                var completed = _journal.Complete(operationId, evidence.ToJsonString());
+                return new JsonObject
+                {
+                    ["operation_id"] = operationId,
+                    ["status"] = Wire(completed ? OperationStatus.Succeeded : OperationStatus.OutcomeUnknown),
+                    ["outcome"] = "applied",
+                    ["needs_reconciliation"] = !completed,
+                    ["revision_before"] = baseRevision,
+                    ["revision_now"] = revisionNow,
+                    ["reason"] = "Ревизия документа выросла после базовой, и других операций по этому документу "
+                        + "в том же окне журнал не знает: изменение принадлежит этой команде.",
+                };
+            }
+        }
+    }
+
+    private JsonObject Undetermined(string operationId, JournalRecord record, string reason) => new()
+    {
+        ["operation_id"] = operationId,
+        ["status"] = Wire(OperationStatus.OutcomeUnknown),
+        ["outcome"] = "undetermined",
+        ["needs_reconciliation"] = record.NeedsReconciliation,
+        ["revision_before"] = record.BaseRevision,
+        ["document_id"] = record.DocumentId,
+        ["reason"] = reason,
+    };
+
+    /// <summary>Journal outcome plus the Host phase, in one place: every reader of a state must agree.</summary>
+    /// <param name="dispatched">Whether the command already left the Host for the Worker.</param>
+    internal static OperationStatus StateOf(JournalRecord record, bool dispatched) => record.Outcome switch
+    {
+        // A terminal write that did not land leaves the record `succeeded` with the flag set: the
+        // outcome is known to this process only, so the honest state is "unknown".
+        JournalOutcome.Succeeded => record.NeedsReconciliation ? OperationStatus.OutcomeUnknown : OperationStatus.Succeeded,
+        JournalOutcome.Failed => OperationStatus.Failed,
+        JournalOutcome.Cancelled => OperationStatus.Cancelled,
+        JournalOutcome.OutcomeUnknown => OperationStatus.OutcomeUnknown,
+        _ => dispatched ? OperationStatus.Running : OperationStatus.Queued,
+    };
+
+    /// <summary>What the comparison of the journal's base revision with the document's current one proves.</summary>
+    public enum ReconcileVerdict
+    {
+        /// <summary>The revision grew and no other operation shared the window.</summary>
+        Applied,
+
+        /// <summary>The revision equals the base: nothing changed, so the command left no trace.</summary>
+        NotApplied,
+
+        /// <summary>Nothing follows from the observation; the outcome stays unknown.</summary>
+        Undetermined,
+    }
+
+    /// <summary>The three-outcome rule, kept pure so it can be tested without a Worker.</summary>
+    /// <param name="others">Operations on the same document recorded after this one; a non-zero count
+    /// makes the attribution impossible rather than merely uncertain.</param>
+    internal static ReconcileVerdict DecideReconcile(long baseRevision, long revisionNow, int others) =>
+        revisionNow == baseRevision ? ReconcileVerdict.NotApplied
+        : revisionNow < baseRevision ? ReconcileVerdict.Undetermined
+        : others > 0 ? ReconcileVerdict.Undetermined
+        : ReconcileVerdict.Applied;
+
+    internal static string Wire(OperationStatus status) => status switch
+    {
+        OperationStatus.Queued => "queued",
+        OperationStatus.Running => "running",
+        OperationStatus.Succeeded => "succeeded",
+        OperationStatus.Failed => "failed",
+        OperationStatus.Cancelled => "cancelled",
+        _ => "outcome_unknown",
+    };
+
+    /// <summary>Drop the in-memory bookkeeping of a finished operation. The journal keeps the durable
+    /// record; these maps only describe what THIS process is doing.</summary>
+    private void Forget(string operationId)
+    {
+        _inFlight.TryRemove(operationId, out _);
+        _dispatched.TryRemove(operationId, out _);
+        _cancelRequested.TryRemove(operationId, out _);
     }
 
     public JournalRecord? Status(string operationId)
@@ -1060,6 +1361,9 @@ public sealed class ToolInvoker : IAsyncDisposable
         _journal.TryGet(operationId, out var record);
         return record;
     }
+
+    /// <summary>Operations whose outcome still needs reconciliation: the counter a client sees.</summary>
+    public int CountNeedingReconciliation() => _journal.CountNeedingReconciliation();
 
     public IReadOnlyDictionary<string, long> QueueStatistics() => _queue.Statistics();
 

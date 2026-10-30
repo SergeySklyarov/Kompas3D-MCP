@@ -20,10 +20,16 @@ public sealed class HostSession : IAsyncDisposable
     public const string StatusCommand = "session.status";
     public const string AcquireCommand = "session.acquire";
     public const string ReleaseCommand = "session.release";
+    public const string OperationStatusCommand = "operation.status";
+    public const string OperationCancelCommand = "operation.cancel";
+    public const string OperationReconcileCommand = "operation.reconcile";
 
     public const string StatusTool = "kompas_session_status";
     public const string AcquireTool = "kompas_acquire_session";
     public const string ReleaseTool = "kompas_release_session";
+    public const string OperationStatusTool = "kompas_operation_status";
+    public const string OperationCancelTool = "kompas_operation_cancel";
+    public const string OperationReconcileTool = "kompas_operation_reconcile";
     public const string CapabilitiesTool = "kompas_capabilities";
     public const string HealthTool = "kompas_health";
 
@@ -142,6 +148,14 @@ public sealed class HostSession : IAsyncDisposable
                 return await AcquireAsync(cancellationToken).ConfigureAwait(false);
             case ReleaseCommand:
                 return await ReleaseAsync(arguments, cancellationToken).ConfigureAwait(false);
+            // Operation control answers from the journal and the Host's own phase: it takes no session,
+            // starts no Worker and touches no COM, so it works while the CAD lane is busy (spec 1.8).
+            case OperationStatusCommand:
+                return OperationStatusAnswer(arguments);
+            case OperationCancelCommand:
+                return OperationCancelAnswer(arguments);
+            case OperationReconcileCommand:
+                return await OperationReconcileAnswerAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
         // Diagnostics do NOT take the session: health and capabilities answer even when another chat
@@ -500,6 +514,9 @@ public sealed class HostSession : IAsyncDisposable
             ["requires_explicit_acquire"] = probe.RequiresExplicitAcquire,
             ["reason"] = probe.Reason,
             ["journal_path"] = _options.JournalPath,
+            // The count answers "is there anything to reconcile at all": a client that never saw the
+            // refusal still learns that the journal holds an unknown outcome.
+            ["operations_needing_reconciliation"] = _journal?.CountNeedingReconciliation() ?? 0,
             ["ownership_record"] = _ownership.RecordPath,
             ["owner"] = OwnerNode(probe),
             ["this_host"] = new JsonObject
@@ -544,6 +561,74 @@ public sealed class HostSession : IAsyncDisposable
         _log.Write("info", "session status", new { state, can_acquire = probe.CanAcquire, owner_pid = probe.OwnerPid });
         return Succeeded(node, warnings, caveats: new[] { "server_state_only" });
     }
+
+    // ---- kompas_operation_status / cancel / reconcile ----
+
+    /// <summary>Durable state of one operation. Reads the journal and the Host's phase only: no COM, no
+    /// Worker wait, so it answers while the CAD lane is busy.</summary>
+    private ResultEnvelope<JsonNode?> OperationStatusAnswer(JsonObject arguments)
+    {
+        var invoker = _invoker;
+        if (invoker is null)
+        {
+            return NoJournal();
+        }
+
+        var operationId = JsonScalars.ReadString(arguments["operation_id"]) ?? string.Empty;
+        var payload = invoker.OperationStatusPayload(operationId);
+        return payload is null
+            ? OperationNotFound(operationId)
+            : Succeeded(payload, caveats: new[] { "server_state_only", "no_effect_on_model" });
+    }
+
+    private ResultEnvelope<JsonNode?> OperationCancelAnswer(JsonObject arguments)
+    {
+        var invoker = _invoker;
+        if (invoker is null)
+        {
+            return NoJournal();
+        }
+
+        var operationId = JsonScalars.ReadString(arguments["operation_id"]) ?? string.Empty;
+        var payload = invoker.CancelOperationPayload(operationId);
+        return payload is null
+            ? OperationNotFound(operationId)
+            : Succeeded(payload, caveats: new[] { "no_effect_on_model" });
+    }
+
+    /// <summary>Reconcile one unknown outcome against the document. It READS the document, so it needs the
+    /// Worker — unlike status and cancel, which answer from the journal alone.</summary>
+    private async Task<ResultEnvelope<JsonNode?>> OperationReconcileAnswerAsync(JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var invoker = _invoker;
+        if (invoker is null)
+        {
+            return NoJournal();
+        }
+
+        var operationId = JsonScalars.ReadString(arguments["operation_id"]) ?? string.Empty;
+        var payload = await invoker.ReconcilePayloadAsync(operationId, cancellationToken).ConfigureAwait(false);
+        return payload is null
+            ? OperationNotFound(operationId)
+            : Succeeded(payload, caveats: new[] { "model_state_read", "command_not_resent" });
+    }
+
+    /// <summary>No journal in this process means no operation history at all: "unknown id" and "no journal"
+    /// must not look alike, else a client would rewrite a valid id.</summary>
+    private static ResultEnvelope<JsonNode?> NoJournal() => Refusal(
+        ErrorCodes.SessionNotAcquired,
+        "Журнал операций в этом процессе не открыт: Хост не владеет сеансом, поэтому истории операций нет.",
+        RetryPolicy.Never,
+        null,
+        remedy: "Вызовите kompas_acquire_session: журнал открывается вместе с владением сеансом.");
+
+    private static ResultEnvelope<JsonNode?> OperationNotFound(string operationId) => Refusal(
+        ErrorCodes.OperationNotFound,
+        $"В журнале операций нет записи с operation_id {operationId}. Это не ошибка аргумента: id "
+        + "приходит в ответе, который выдал операцию, и должен быть передан без изменений.",
+        RetryPolicy.Never,
+        new JsonObject { ["operation_id"] = operationId },
+        remedy: "Возьмите operation_id из ответа со статусом running/queued или из отказа операции.");
 
     // ---- kompas_acquire_session ----
 

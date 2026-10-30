@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Schema;
+using KompasMcp.Host;
 using KompasMcp.Host.Catalog;
 using Xunit;
 
@@ -61,12 +62,15 @@ public class ToolCatalogTests
         // INVARIANT (rule refined, not weakened): the sign is not "declared or not" but "declared only if the
         // tool ITSELF replays the outcome of a repeat". <c>kompas_release_session</c> must declare the field
         // (row S03b for destructiveHint=true) but writes no journal.
+        // The three operation-control tools name ANOTHER operation in that field (docs/02 §2.4): the id is
+        // the SUBJECT of the query, not the key of this call, so the rule about replay does not reach them.
+        string[] subjects = { HostSession.OperationStatusTool, HostSession.OperationCancelTool, HostSession.OperationReconcileTool };
         foreach (var tool in ToolCatalog.All.Where(t => !t.IsMutation))
         {
             var properties = tool.InputSchema["properties"] as JsonObject;
             var advertises = properties?.ContainsKey("operation_id") == true;
             Assert.True(
-                !advertises || tool.Behaviour.ReplaysOperationId,
+                !advertises || tool.Behaviour.ReplaysOperationId || subjects.Contains(tool.Name),
                 $"{tool.Name}: не мутация, но схема обещает operation_id — поле, которое клиент может " +
                 "прислать, а журнал его не записывает и инструмент его не воспроизводит.");
         }

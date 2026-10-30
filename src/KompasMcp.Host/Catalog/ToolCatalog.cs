@@ -212,6 +212,44 @@ public static class ToolCatalog
                 destructive: true,
                 replaysOperationId: true),
 
+            // Operation control answers from the durable journal and the Host's own phase: it never waits
+            // for the Worker and never touches COM, so it works while the CAD lane is busy (spec 1.8).
+            // History: docs/decisions/host.md#operation-control
+            Control(HostSession.OperationStatusTool, "Состояние операции",
+                "Состояние одной операции по её operation_id: queued (стоит в очереди Хоста и в Worker не "
+                + "уходила), running (передана в Worker), succeeded, failed, cancelled, outcome_unknown. "
+                + "Отвечает из журнала операций и фазы Хоста: к COM не обращается, Worker не ждёт, поэтому "
+                + "работает и при занятом CAD-канале. Поля: tool, document_id, revision_before (исходная "
+                + "ревизия), needs_reconciliation (исход неизвестен и требует согласования), "
+                + "cancel_requested, result завершённой операции, error и partial_effects. Неизвестный "
+                + "operation_id даёт OPERATION_NOT_FOUND: это не ошибка аргумента, id берётся из ответа, "
+                + "который выдал операцию.",
+                Sch.Props(("operation_id", Sch.Described(Sch.Ref("#/$defs/operation_id"), OperationIdField))),
+                HostSession.OperationStatusCommand),
+
+            Control(HostSession.OperationCancelTool, "Отменить операцию",
+                "Просит прекратить операцию по operation_id. Очередная (queued) снимается из очереди Хоста "
+                + "до отправки в Worker: ответ несёт status=cancelled и confirmed=true, документ не "
+                + "менялся. Выполняющаяся (running) НЕ прерывается: COM-поток не обрывается насильно "
+                + "(спец. 1.8), ответ несёт cancel_requested=true и статус running, а итог будет тем, "
+                + "который реально вышел. Завершённая операция не меняется, ответ называет её состояние. "
+                + "Неизвестный operation_id даёт OPERATION_NOT_FOUND.",
+                Sch.Props(("operation_id", Sch.Described(Sch.Ref("#/$defs/operation_id"), OperationIdField))),
+                HostSession.OperationCancelCommand),
+
+            Control(HostSession.OperationReconcileTool, "Согласовать исход операции",
+                "Определяет фактический исход операции, у которой он неизвестен (outcome_unknown): "
+                + "сравнивает записанные в журнале документ и исходную ревизию с текущей ревизией "
+                + "документа. Три ответа: applied (ревизия выросла, и других операций по этому документу "
+                + "в том же окне журнал не знает — запись получает итог, метка снимается), not_applied "
+                + "(ревизия равна исходной — команда следа не оставила, запись получает отказ "
+                + "OPERATION_NOT_APPLIED и метка снимается), undetermined (доказать нельзя: две операции "
+                + "в одном окне, документ заменён, ревизия не читается — запись остаётся outcome_unknown "
+                + "с причиной). Команда НЕ повторяется ни в одном из исходов. Ответ несёт status "
+                + "операции, outcome, needs_reconciliation, revision_before, revision_now и reason.",
+                Sch.Props(("operation_id", Sch.Described(Sch.Ref("#/$defs/operation_id"), OperationIdField))),
+                HostSession.OperationReconcileCommand),
+
             Mutation("kompas_connect", "Подключиться к КОМПАС",
                 "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION; при НУЛЕ кандидатов код APPLICATION_DISCONNECTED с причиной reason: kompas_process_not_running — процесс не запущен, kompas_process_not_in_rot — запущен, но не зарегистрирован в ROT, rot_empty — перечисление ROT пусто; в details приходят kompas_process_ids, rot_entries_matching_kompas, rot_total_entries и rot_other_entries — СЧЁТЧИК прочих записей ROT; имена чужих документов в отказе не выдаются вовсе); launch — запустить собственный. Обычные инструменты новое приложение не создают. КАНДИДАТЫ attach — экземпляры, зарегистрированные в Running Object Table (ROT) под ProgID КОМПАС, а НЕ все процессы KOMPAS.exe: процесс без записи в ROT кандидатом не является, поэтому running_instances и rot_kompas_entries в kompas_capabilities — разные числа. При нескольких кандидатах нужен явный process_id: выбор «первого попавшегося» запрещён.",
                 Sch.Props(

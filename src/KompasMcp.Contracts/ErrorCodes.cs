@@ -141,6 +141,16 @@ public static class ErrorCodes
     /// <see cref="PathNotAllowed"/>: that one is about ONE path of ONE call, this one is about the whole
     /// process and its remedy is the configuration file, not another path.</summary>
     public const string ConfigInvalid = "CONFIG_INVALID";
+
+    /// <summary>The journal holds no record with this <c>operation_id</c>. A separate code, not
+    /// <see cref="InvalidArgument"/>: the id is well formed and the caller's remedy is to read the id from the
+    /// answer that issued it, not to fix a field.</summary>
+    public const string OperationNotFound = "OPERATION_NOT_FOUND";
+
+    /// <summary>Reconciliation proved the command left NO effect: the document revision equals the one the
+    /// journal recorded before the call. A separate code, not <see cref="OutcomeUnknown"/>: the outcome IS
+    /// known now, and the same <c>operation_id</c> may be sent again.</summary>
+    public const string OperationNotApplied = "OPERATION_NOT_APPLIED";
 }
 
 /// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
@@ -237,6 +247,12 @@ public static class ErrorMessages
             "Конфигурация Хоста негодна: корень записи не канонизируется либо лежит внутри " +
             "только-для-чтения. Вызов отклонён до журнала операций и до COM; перечень проблем - в " +
             "details.problems и в kompas_health (поле config_errors).",
+        [ErrorCodes.OperationNotFound] =
+            "В журнале операций нет записи с таким operation_id: id приходит в ответе, который выдал " +
+            "операцию (status, running или отказ), и переписывать его нельзя.",
+        [ErrorCodes.OperationNotApplied] =
+            "Согласование доказало, что команда не оставила следа: ревизия документа равна той, что " +
+            "записана в журнале перед вызовом. Повтор с тем же operation_id допустим.",
     };
 
     public static string For(string code) =>

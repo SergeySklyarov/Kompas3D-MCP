@@ -395,7 +395,7 @@ public sealed class OperationJournal : IDisposable
         RetryPolicy.AfterReconciliation,
         null,
         true,
-        new JsonObject { ["reconciliation_required"] = true });
+        new JsonObject { ["reconciliation_required"] = true, ["needs_reconciliation"] = true });
 
     private bool Finish(string operationId, JournalOutcome outcome, string? resultJson, ErrorDto? error, bool needsReconciliation)
     {

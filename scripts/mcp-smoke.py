@@ -52324,6 +52324,11 @@ def ops_checks(host, config, workdir, rep):
         статус самого вызова там всегда `succeeded`."""
         return (result(env) or {}).get("status")
 
+    def op_err(env):
+        """Код отказа ОПЕРАЦИИ в ответе status: он лежит в `result.error`, а не в конверте вызова."""
+        error = (result(env) or {}).get("error")
+        return (error or {}).get("code") if isinstance(error, dict) else None
+
     def err_of(env):
         error = (env or {}).get("error")
         return (error or {}).get("code") if isinstance(error, dict) else None
@@ -52597,7 +52602,7 @@ def ops_checks(host, config, workdir, rep):
         # ТОЧНЫЙ итог второй операции, а не «что-нибудь из двух»: прирост 1 означает, что документ
         # изменён один раз, а `delta in (1, 2)` принимал бы и двойное применение.
         delta = (rev_after_dep - (rev_before_dep or 0)) if rev_after_dep is not None else None
-        second_code = err_of(dep_final) or err_of(second_env)
+        second_code = op_err(dep_final) or err_of(second_env)
         rep.add("OPS.10.dependent_step",
                 "вторая мутация того же документа не выполняется поверх первой: отказ по устаревшей ревизии, документ изменён ровно один раз",
                 "PASS" if (status_of(second_env) == "queued"
@@ -52746,16 +52751,29 @@ def ops_checks(host, config, workdir, rep):
             other = call(probe_rec, "kompas_set_variable", {
                 "operation_id": str(uuid.uuid4()), "document_id": other_doc,
                 "expected_revision": 1, "name": "OPS_BLOCK"})
+            # Вторую мутацию обязательно дождаться: она уходит в Worker, и незавершённая операция
+            # заняла бы сеанс следующей строке (`OPS.09` открывает свой Хост на этом же журнале).
+            other_op = (other or {}).get("operation_id")
+            other_final = poll_until_done(probe_rec, other_op) if other_op else {}
             blocked_details = err_details(blocked)
+            # Различие доказывается ЖУРНАЛОМ: отклонённая мутация в него не попала (её id неизвестен),
+            # а мутация другого документа попала и получила свой итог.
+            blocked_known = err_of(call(probe_rec, "kompas_operation_status",
+                                        {"operation_id": (blocked or {}).get("operation_id")}))
+            other_known = op_status(call(probe_rec, "kompas_operation_status",
+                                         {"operation_id": other_op})) if other_op else None
             rep.add("OPS.12.blocked_mutation",
                     "мутация документа с несогласованной операцией отклонена до журнала и до Worker, "
                     "details.operation_id назван; другой документ запретом не затронут",
                     "PASS" if (err_of(blocked) == "DOCUMENT_NEEDS_RECONCILIATION"
                                and blocked_details.get("operation_id") == stale_op
-                               and err_of(other) != "DOCUMENT_NEEDS_RECONCILIATION") else "FAIL",
+                               and blocked_known == "OPERATION_NOT_FOUND"
+                               and other_known in ("failed", "succeeded")) else "FAIL",
                     f"тот же документ: код={err_of(blocked)} "
-                    f"details.operation_id={blocked_details.get('operation_id')} (ожидался {stale_op}); "
-                    f"другой документ: код={err_of(other)} (запрет не должен срабатывать)")
+                    f"details.operation_id={blocked_details.get('operation_id')} (ожидался {stale_op}), "
+                    f"в журнале={blocked_known} (ожидалось OPERATION_NOT_FOUND: до журнала не дошло); "
+                    f"другой документ: в журнале={other_known}, итог={op_status(other_final)} "
+                    f"код={op_err(other_final) or err_of(other)} (запрет не должен срабатывать)")
         finally:
             close_host(probe_rec)
 

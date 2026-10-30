@@ -693,7 +693,10 @@ public sealed class ToolInvoker : IAsyncDisposable
         // refused BEFORE the journal and BEFORE the Worker. Its effect on the model is unknown, so the
         // next command would be applied on top of an unknown state — the double application the
         // `after_reconciliation` policy exists to prevent. Reads and other documents are unaffected.
+        // A retry of the SAME operation_id is not a new command: the journal replays its recorded
+        // outcome, so the refusal must not swallow that path.
         if (ReadString(arguments, "document_id") is { Length: > 0 } targetDocument
+            && !_journal.TryGet(operationId, out _)
             && _journal.NeedsReconciliationFor(targetDocument) is { } blocking)
         {
             throw new KompasContractException(

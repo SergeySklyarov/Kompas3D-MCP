@@ -1674,7 +1674,9 @@ public sealed partial class Api5Session : IDisposable
             case CloseAction.Refuse:
                 throw new KompasContractException(
                     ErrorCodes.DocumentDirty,
-                    "Документ изменён и не сохранён; закрытие отклонено.",
+                    "Документ изменён и не сохранён; закрытие отклонено. Выход: dirty_policy=discard - "
+                    + "закрыть без сохранения (несохранённые изменения теряются), либо kompas_save_document "
+                    + "и затем закрытие.",
                     RetryPolicy.Never,
                     details: new Dictionary<string, object?>
                     {

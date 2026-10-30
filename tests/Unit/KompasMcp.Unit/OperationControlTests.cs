@@ -1,6 +1,7 @@
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Journaling;
 using KompasMcp.Host;
+using KompasMcp.Host.Catalog;
 using Xunit;
 
 namespace KompasMcp.Unit;
@@ -125,5 +126,21 @@ public sealed class OperationControlTests
         Assert.Equal(
             ToolInvoker.ReconcileVerdict.Undetermined,
             ToolInvoker.DecideReconcile(baseRevision: 3, revisionNow: 4, others: 0, commandLeftHost: true, partialEffects: true));
+    }
+
+    /// <summary>INVARIANT: the ban has exactly one way out, and it does not write the file. Closing
+    /// without saving ends this session's hold on the unknown state; saving it to the client's file
+    /// would make the unknown state permanent.</summary>
+    [Theory]
+    [InlineData("kompas_close_document", null, true)]
+    [InlineData("kompas_close_document", "refuse", true)]
+    [InlineData("kompas_close_document", "discard", true)]
+    [InlineData("kompas_close_document", "save", false)]
+    [InlineData("kompas_save_document", null, false)]
+    [InlineData("kompas_extrude", null, false)]
+    public void PassesReconciliationBan_OnlyClosesWithoutWritingTheFile(string tool, string? dirtyPolicy, bool expected)
+    {
+        var definition = ToolCatalog.All.Single(t => t.Name == tool);
+        Assert.Equal(expected, definition.PassesReconciliationBan(dirtyPolicy));
     }
 }

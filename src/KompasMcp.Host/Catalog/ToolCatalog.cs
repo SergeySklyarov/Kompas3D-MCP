@@ -23,6 +23,16 @@ public sealed record ToolDefinition(
 
     /// <summary>Handled by the Host itself, without Worker and without the operation journal.</summary>
     public bool IsHostLocal => Behaviour.HostLocal;
+
+    /// <summary>Whether this call may pass the reconciliation ban while its document still has an
+    /// operation with an unknown outcome.</summary>
+    /// <remarks>INVARIANT: only closing a document passes, and only without writing the file: <c>refuse</c>
+    /// and <c>discard</c> end this session's hold on the unknown state, while <c>save</c> would write that
+    /// unknown state into the client's file and stays banned. The command, not the tool name, is the
+    /// fact: a second tool closing documents would be covered without editing the rule.
+    /// History: docs/decisions/host.md#operation-control</remarks>
+    public bool PassesReconciliationBan(string? dirtyPolicy) =>
+        WorkerCommand == WorkerCommands.CloseDocument && dirtyPolicy is null or "refuse" or "discard";
 }
 
 /// <summary>Tool behaviour: what it does to the model and what it requires of the client.</summary>

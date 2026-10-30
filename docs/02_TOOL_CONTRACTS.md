@@ -81,7 +81,15 @@ CONFIG_INVALID.
   `retry_policy: after_reconciliation`. Отличается от `OUTCOME_UNKNOWN` тем, что исход отклонённого
   вызова известен (ничего не произошло), а лечение - `kompas_operation_reconcile` либо закрытие и
   повторное открытие документа (новый `document_id` снимает запрет). Чтение и мутации других
-  документов не блокируются.
+  документов не блокируются. Запрет пропускает ровно один вызов мутации: `kompas_close_document` с
+  `dirty_policy` `refuse` (по умолчанию) или `discard` - закрытие без сохранения прекращает держать
+  неизвестное состояние в сеансе, и несохранённые изменения при `discard` теряются. `dirty_policy=save`
+  и `kompas_save_document` остаются под запретом: это запись неизвестного состояния в файл клиента.
+  **Граница:** запрет и согласование работают только у мутаций с аргументом `document_id`; у 16
+  инструментов его нет (`kompas_extrude`, `kompas_fillet`, `kompas_chamfer`, `kompas_hole`,
+  `kompas_sweep`, `kompas_rib`, `kompas_rotated`, `kompas_edit_sketch`, `kompas_update_feature`,
+  `kompas_delete_feature` и подобные), они адресуют документ через ссылки, и у них остаётся только
+  `expected_revision`. Разрыв - долг 84 `docs/status/TECH_DEBT.md`.
 
 Метка `needs_reconciliation` видна снаружи в трёх местах: в `error.details.needs_reconciliation`
 конверта отказа (вместе с `retry_policy: after_reconciliation`), полем `needs_reconciliation` в ответе

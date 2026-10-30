@@ -697,16 +697,19 @@ public sealed class ToolInvoker : IAsyncDisposable
         // outcome, so the refusal must not swallow that path.
         if (ReadString(arguments, "document_id") is { Length: > 0 } targetDocument
             && !_journal.TryGet(operationId, out _)
-            && _journal.NeedsReconciliationFor(targetDocument) is { } blocking)
+            && _journal.NeedsReconciliationFor(targetDocument) is { } blocking
+            && !tool.PassesReconciliationBan(ReadString(arguments, "dirty_policy")))
         {
             throw new KompasContractException(
                 ErrorCodes.DocumentNeedsReconciliation,
                 $"У документа {targetDocument} операция {blocking.OperationId} ({blocking.Tool}) имеет "
                 + "неопределённый исход: её эффект неизвестен, и новая мутация того же документа "
                 + "применилась бы поверх неизвестного состояния. Вызов отклонён до журнала и до Worker. "
-                + "Выход: kompas_run с tool=kompas_operation_reconcile и этим operation_id, либо закрытие "
-                + "и повторное открытие документа (новый document_id снимает запрет). Чтение и мутации "
-                + "других документов не блокируются.",
+                + "Выход: kompas_run с tool=kompas_operation_reconcile и этим operation_id, либо "
+                + "kompas_close_document с dirty_policy=discard (документ закрывается без сохранения, "
+                + "несохранённые изменения теряются) и повторное открытие - новый document_id снимает "
+                + "запрет. dirty_policy=save и kompas_save_document запрещены: это запись неизвестного "
+                + "состояния в файл. Чтение и мутации других документов не блокируются.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: false,
                 hresult: null,

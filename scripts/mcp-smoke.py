@@ -52183,7 +52183,7 @@ def catalog_checks(host, config, workdir, rep):
 
 
 def ops_checks(host, config, workdir, rep):
-    """OPS.01…OPS.12 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
+    """OPS.01…OPS.14 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
 
     ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Длинная мутация, не уложившаяся в бюджет синхронизации, отвечает
     `running` с `operation_id`; вторая мутация того же документа, пока первая не закончилась, отвечает
@@ -52774,6 +52774,52 @@ def ops_checks(host, config, workdir, rep):
                     f"в журнале={blocked_known} (ожидалось OPERATION_NOT_FOUND: до журнала не дошло); "
                     f"другой документ: в журнале={other_known}, итог={op_status(other_final)} "
                     f"код={op_err(other_final) or err_of(other)} (запрет не должен срабатывать)")
+
+            # ── OPS.13.close_escape: закрытие проходит запрет, запись файла - нет ────────
+            # Запись та же, что у OPS.08, и документ в ней не жив: дойти до модели закрытие не может
+            # и не должно. Различие доказывает КОД отказа, а не успех: `DOCUMENT_NOT_FOUND` значит
+            # «запрет пропущен, документ неизвестен сеансу», `DOCUMENT_NEEDS_RECONCILIATION` -
+            # «запрет сработал». Так выход из запрета отличается от отказа, не заглядывая в код.
+            def close_with(policy):
+                return call(probe_rec, "kompas_close_document", {
+                    "operation_id": str(uuid.uuid4()), "document_id": stale_doc,
+                    "dirty_policy": policy})
+
+            discard_close = close_with("discard")
+            refuse_close = close_with("refuse")
+            save_close = close_with("save")
+            save_document = call(probe_rec, "kompas_save_document", {
+                "operation_id": str(uuid.uuid4()), "document_id": stale_doc, "expected_revision": 7})
+            rep.add("OPS.13.close_escape",
+                    "под запретом закрытие с refuse и discard доходит до Worker, с save отклоняется; "
+                    "сохранение отклоняется",
+                    "PASS" if (err_of(discard_close) == "DOCUMENT_NOT_FOUND"
+                               and err_of(refuse_close) == "DOCUMENT_NOT_FOUND"
+                               and err_of(save_close) == "DOCUMENT_NEEDS_RECONCILIATION"
+                               and err_of(save_document) == "DOCUMENT_NEEDS_RECONCILIATION") else "FAIL",
+                    f"close(discard)={err_of(discard_close)}, close(refuse)={err_of(refuse_close)} "
+                    f"(ожидалось DOCUMENT_NOT_FOUND: запрет пропущен, документ неизвестен сеансу); "
+                    f"close(save)={err_of(save_close)}, save_document={err_of(save_document)} "
+                    f"(ожидалось DOCUMENT_NEEDS_RECONCILIATION: запись неизвестного состояния в файл)")
+
+            # ── OPS.14.close_escape_live: живой документ под запретом ───────────────────
+            # Полный сценарий замечания (закрытие проходит, повторное открытие даёт новый
+            # document_id, мутация нового проходит) требует записи, привязанной к ЖИВОМУ документу.
+            # Такую запись получить нечем: `outcome_unknown` на живом документе даёт только истечение
+            # бюджета Worker - не меньше 120 с реальной работы (`CommandBudgets.DefaultMs`), - либо
+            # обрыв канала, после которого документ живым уже не считается. Измеряется первая
+            # половина причины: у записи OPS.08 документа в этом сеансе нет, закрывать нечего.
+            # Правило держит модульный тест `PassesReconciliationBan_OnlyClosesWithoutWritingTheFile`.
+            live_document = call(probe_rec, "kompas_get_context",
+                                 {"document_id": stale_doc, "detail": "minimal"})
+            rep.add("OPS.14.close_escape_live",
+                    "закрытие под запретом на ЖИВОМ документе: закрытие проходит, повторное открытие "
+                    "даёт новый document_id, мутация нового проходит",
+                    "NAMED" if err_of(live_document) == "DOCUMENT_NOT_FOUND" else "FAIL",
+                    f"документ записи в сеансе: kompas_get_context -> {err_of(live_document)}; запись с "
+                    "живым документом не получена (нужен outcome_unknown при живом сеансе, такого "
+                    "маршрута в бюджете строки нет). Сторона «запрет пропускает» измерена в OPS.13, "
+                    "правило - модульным тестом")
         finally:
             close_host(probe_rec)
 

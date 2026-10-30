@@ -10,9 +10,9 @@ public sealed record FlatPartView(int Flag, string Name, string Axis);
 /// «Сверху - Горизонтальная плоскость» (XY), «Слева - Профильная плоскость» (YZ).
 /// INVARIANT: only the six axis directions are projected. A tilted normal is refused by name, because the
 /// shipped v24 type library has no documented route to a view normal to an arbitrary direction.
-/// MEASURED: the API5 bit mask (0x4, 0x20) does NOT select a view here — 0x20 fell outside the enum and
-/// the kernel built «Спереди», so the numbers are the API7 ordinals. The sign of the normal only picks the
-/// opposite view of the same axis and does not change the contour.
+/// MEASURED: the list takes the <c>ksViewProjectionType</c> ordinals (1..6), not the mask, and a side view
+/// is built only next to the main «Спереди» one — the caller adds it. The sign of the normal only picks
+/// the opposite view of the same axis and does not change the contour.
 /// History: docs/decisions/flat-part.md#view-choice</remarks>
 public static class FlatPartProjection
 {

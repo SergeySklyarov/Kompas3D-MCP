@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -155,8 +155,10 @@ public partial class Api5Session
                 // DOC: the second argument is «имя проекции (из списка проекций в документе источнике)»,
                 // so it names the same orientation the mask asks for; both are given, because the mask
                 // alone is what the kernel honours for the views measured so far.
+                // DOC: the list holds standard-view types (ksviewprojectiontype.html: 1 - Спереди,
+                // 2 - Сзади, 3 - Сверху, 4 - Снизу, 5 - Слева, 6 - Справа).
                 accepted = views.AddStandartViews(
-                    document.Path, view.Name, new object[] { view.Flag }, 100d, 100d, 1d, 10d, 10d);
+                    document.Path, view.Name, FlatPartViewList(view.Flag), 100d, 100d, 1d, 10d, 10d);
             }
             catch (COMException ex)
             {
@@ -187,8 +189,18 @@ public partial class Api5Session
 
             // INVARIANT: the contour is the outline of the body, so hidden edges stay out — a hole's far
             // rim would otherwise arrive as a second, coincident circle.
-            ApplyFlatView(views, created[0], unverified);
-            frame = ReadGabaritOfView(drawing5, document, created[0]);
+            // INVARIANT: the exported contour is the view whose frame is the flat face, never the main
+            // view that the group builds alongside it.
+            var target = PickFlatView(drawing5, document, created, gabarit, view.Axis)
+                ?? throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    "Среди построенных видов нет вида по нормали «" + view.Name + "»: ни одна рамка не "
+                    + "совпала с размером плоской грани, выгрузка отменена, чтобы не опубликовать контур "
+                    + "чужой грани.",
+                    RetryPolicy.SameOperationId);
+
+            ApplyFlatView(views, target, unverified);
+            frame = ReadGabaritOfView(drawing5, document, target);
             if (frame is null)
             {
                 unverified.Add("view_frame_not_read — рамка вида не прочитана (ksGetObjGabaritRect): "
@@ -362,6 +374,75 @@ public partial class Api5Session
     /// свойства которого были изменены». MEASURED: without the flag the far rim of a through hole arrives
     /// as a second circle, and the contour check sees a duplicate.
     /// History: docs/decisions/flat-part.md#contour-check</remarks>
+    /// <summary>Type of the group's main view: <c>ksViewProjectionType.ksVPFront</c> = 1.</summary>
+    private const int MainViewFlag = 1;
+
+    /// <summary>Difference allowed between a view's frame and the flat face's size, in millimetres.</summary>
+    /// <remarks>MEASURED: the frame is the view's bounding rectangle, so line widths add a fraction of a
+    /// millimetre; the faces of a flat part differ by whole millimetres, so this separates them.
+    /// History: docs/decisions/flat-part.md#view-choice</remarks>
+    private const double FrameToleranceMm = 0.5d;
+
+    /// <summary>The view list to ask for: the wanted view plus the main one it is built against.</summary>
+    /// <remarks>MEASURED: a dependent view asked without «Спереди» is silently replaced by the front view,
+    /// so the main view is always in the list. History: docs/decisions/flat-part.md#view-choice</remarks>
+    private static object[] FlatPartViewList(int flag) =>
+        flag == MainViewFlag ? new object[] { flag } : new object[] { MainViewFlag, flag };
+
+    /// <summary>The created view whose frame has the flat face's size, or <c>null</c> when none has.</summary>
+    /// <remarks>MEASURED: neither the number nor the projection name identifies the view — the kernel numbers
+    /// the main view first for one set of types and last for another, and the dependent view's name is not
+    /// reliably empty. INVARIANT: the view is chosen by its measured frame, because the flat face of a
+    /// constant-thickness part spans the body's two extents across the normal; no such view means a named
+    /// refusal instead of the first view in the list.
+    /// History: docs/decisions/flat-part.md#view-choice</remarks>
+    private int? PickFlatView(ksDocument2D? editor, DocumentEntry document, int[] created,
+        IReadOnlyList<double>? extents, string axis)
+    {
+        var expected = ExpectedFaceSize(extents, axis);
+        if (expected is null)
+        {
+            return created.Length == 1 ? created[0] : null;
+        }
+
+        var matches = new List<int>();
+        foreach (var number in created)
+        {
+            if (ReadGabaritOfView(editor, document, number) is not { Count: 4 } frame)
+            {
+                continue;
+            }
+
+            var size = new[] { Math.Abs(frame[2] - frame[0]), Math.Abs(frame[3] - frame[1]) };
+            Array.Sort(size);
+            if (Math.Abs(size[0] - expected[0]) <= FrameToleranceMm
+                && Math.Abs(size[1] - expected[1]) <= FrameToleranceMm)
+            {
+                matches.Add(number);
+            }
+        }
+
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    /// <summary>The two body extents across the normal, ascending; <c>null</c> when they are unknown.</summary>
+    private static double[]? ExpectedFaceSize(IReadOnlyList<double>? extents, string axis)
+    {
+        if (extents is not { Count: 3 })
+        {
+            return null;
+        }
+
+        var size = axis switch
+        {
+            "X" => new[] { extents[1], extents[2] },
+            "Y" => new[] { extents[0], extents[2] },
+            _ => new[] { extents[0], extents[1] },
+        };
+        Array.Sort(size);
+        return size;
+    }
+
     private static void ApplyFlatView(IViews views, int number, List<string> unverified)
     {
         if (FindViewByNumber(views, number) is not IAssociationView association)

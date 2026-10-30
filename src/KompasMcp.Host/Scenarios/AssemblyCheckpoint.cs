@@ -94,6 +94,18 @@ internal sealed class AssemblyCheckpoint
             return Refuse(report, plan.Refusal!.Reason, plan.Refusal.Message, plan.Refusal.Files);
         }
 
+        var dirty = await DirtySourcesAsync(plan.Entries, applicationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (dirty.Count > 0)
+        {
+            return Refuse(report, "component_dirty",
+                "У компонента есть несохранённые изменения: "
+                + string.Join(", ", dirty.Take(5))
+                + ". Копия с диска их не содержит, поэтому контрольная точка не снимается: сохраните "
+                + "или закройте эти документы.",
+                dirty);
+        }
+
         // ---- Everything above changed nothing; the first write is the folder below. ----
         var created = false;
         try
@@ -344,6 +356,44 @@ internal sealed class AssemblyCheckpoint
             .ToArray();
 
         return new GraphRead(true, string.Empty, links, rows.Length);
+    }
+
+    /// <summary>Source files whose open document reports unsaved changes.</summary>
+    /// <remarks>INVARIANT: a copy is taken from the FILE, so an unsaved edit of a component would be absent
+    /// from the copy and the restore would silently roll the client back further than the scenario.
+    /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    private async Task<IReadOnlyList<string>> DirtySourcesAsync(
+        IReadOnlyList<AssemblyCopyEntry> entries, string? applicationId, CancellationToken cancellationToken)
+    {
+        var sources = entries.Select(entry => entry.SourcePath).ToArray();
+        var documents = await ListDocumentsAsync(applicationId, cancellationToken).ConfigureAwait(false);
+        var dirty = new List<string>();
+        foreach (var row in documents)
+        {
+            var path = JsonScalars.ReadString(row["path"]);
+            if (path is null || !sources.Contains(path, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var id = JsonScalars.ReadString(row["id"]);
+            if (id is null)
+            {
+                continue;
+            }
+
+            var context = await _invoke("kompas_get_context", new JsonObject
+            {
+                ["document_id"] = id,
+                ["detail"] = "minimal",
+            }, cancellationToken).ConfigureAwait(false);
+            if (context.Result?["dirty"]?.GetValue<bool>() == true)
+            {
+                dirty.Add(path);
+            }
+        }
+
+        return dirty;
     }
 
     // ---- Reassignment inside the copies ----

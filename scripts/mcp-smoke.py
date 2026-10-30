@@ -14948,6 +14948,8 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         return doc_of(env), code, emsg(env)
 
     def make_part(name, path, width, height, depth):
+        # SaveAs не создаёт каталог назначения (измерено): он готовится до сохранения.
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
         doc, code, message = new_document("part", name)
         if not doc:
             return None, f"документ не создан: {code} {message}"
@@ -15048,6 +15050,12 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                     error_top = None if not code_v else f"сохранение сборки: {code_v} {message_v}"
         else:
             error_top = f"сборка не создана: {code} {message}"
+
+    # Источники после сохранения нужны только файлами: открытая деталь, изменённая строкой ASC.03,
+    # выглядела бы как «несохранённые изменения» и запрещала копию в строках ниже.
+    close(doc_a)
+    close(doc_b)
+    close(sub_doc)
 
     built = doc_a and doc_b and sub_doc and top_doc and not error_sub and not error_top
     failure = error_a or error_b or error_sub or error_top or "источники не построены"
@@ -15200,6 +15208,218 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
     else:
         rep.add("ASC.10.drawing_refused", "чертёж отказывает по-прежнему", "FAIL",
                 f"документ не создан: {code_d} {message_d}")
+
+
+    # -- ASC.03 копия не зависит от изменённого источника --------------------------------------
+    def gabarit(doc):
+        """Габарит всего документа (detail=full): меняется, когда меняется вставленная деталь."""
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "full"})
+        box = ((result(env).get("gabarit") or {}).get("full") or {})
+        return box.get("max_mm"), box.get("min_mm")
+
+    if built and checkpoint.get("path") and _os.path.exists(checkpoint["path"]):
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": checkpoint["path"], "access": "read_only"})
+        copy_doc = doc_of(opened)
+        before_copy = gabarit(copy_doc) if copy_doc else (None, None)
+        close(copy_doc)
+
+        # Исходная деталь меняется и СОХРАНЯЕТСЯ: она становится выше вдвое.
+        changed, error_change = make_part("asc-part-a-changed", part_a, 40.0, 30.0, 40.0)
+        close(changed)
+
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": checkpoint["path"], "access": "read_only"})
+        copy_doc = doc_of(opened)
+        after_copy = gabarit(copy_doc) if copy_doc else (None, None)
+        close(copy_doc)
+
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": top_path, "access": "read_only"})
+        source_doc = doc_of(opened)
+        after_source = gabarit(source_doc) if source_doc else (None, None)
+        close(source_doc)
+
+        independent = (
+            error_change is None
+            and before_copy[0] is not None and before_copy == after_copy
+            and after_source[0] is not None and after_source != before_copy)
+        rep.add("ASC.03.independent",
+                "исходная деталь изменена и сохранена: габарит копии прежний, габарит исходной "
+                "сборки изменился",
+                "PASS" if independent else "FAIL",
+                f"copy {before_copy} -> {after_copy}; source now {after_source}; "
+                f"change={error_change}")
+    else:
+        rep.add("ASC.03.independent", "копия не зависит от источника", "FAIL", failure)
+
+    # -- ASC.06 восстановление из копии --------------------------------------------------------
+    if built:
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": top_path, "access": "edit"})
+        restore_doc = doc_of(opened)
+        if restore_doc:
+            revision_before = current_rev(restore_doc)
+            components_before = len(links_of(restore_doc))
+            box_before = gabarit(restore_doc)
+            failing = [
+                {"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}},
+                {"step_id": "s2", "tool": "kompas_delete_component",
+                 "arguments": {"component_ref": "00000000-0000-0000-0000-000000000000"}},
+            ]
+            env, code = run(restore_doc, failing)
+            answer = result(env)
+            restore = answer.get("restore") or {}
+            after_doc = restore.get("document_id_after")
+            components_after = len(links_of(after_doc)) if after_doc else None
+            box_after = gabarit(after_doc) if after_doc else (None, None)
+            restore_ok = (
+                code is not None
+                and answer.get("status") == "failed"
+                and restore.get("attempted") is True
+                and restore.get("succeeded") is True
+                and bool(after_doc) and after_doc != restore_doc
+                and components_after == components_before
+                and box_after == box_before
+                and restore.get("revision_after") is not None)
+            rep.add("ASC.06.restore",
+                    "шаг сценария отказал: restore_checkpoint дал новый document_id, новую ревизию, "
+                    "компоненты и габарит как до серии",
+                    "PASS" if restore_ok else "FAIL",
+                    f"code={code} status={answer.get('status')} restore={restore.get('succeeded')} "
+                    f"doc {restore_doc} -> {after_doc} components {components_before}->{components_after} "
+                    f"box {box_before}->{box_after} rev {revision_before}->{restore.get('revision_after')} "
+                    f"err={emsg(env)}")
+        else:
+            rep.add("ASC.06.restore", "восстановление из копии", "FAIL",
+                    "исходная сборка не открылась")
+    else:
+        rep.add("ASC.06.restore", "восстановление из копии", "FAIL", failure)
+
+    # -- ASC.07 отказы до первого шага ---------------------------------------------------------
+    if built:
+        scenario_root = _os.path.join(workdir, "control-copies", "scenario")
+
+        def folders():
+            return set(_os.listdir(scenario_root)) if _os.path.isdir(scenario_root) else set()
+
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": top_path, "access": "edit"})
+        refusal_doc = doc_of(opened)
+        before_folders = folders()
+
+        # (а) файла компонента нет на диске
+        hidden = part_b + ".hidden"
+        _os.rename(part_b, hidden)
+        env_missing, code_missing = run(refusal_doc, rebuild_step(1))
+        missing_details = err_details(env_missing)
+        _os.rename(hidden, part_b)
+        missing_ok = (
+            code_missing is not None
+            and "не найдены" in (emsg(env_missing) or "")
+            and "part-b" in (emsg(env_missing) or "")
+            and folders() == before_folders)
+
+        # (б) у компонента есть несохранённые изменения: он открыт и изменён без сохранения
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": part_b, "access": "edit"})
+        dirty_doc = doc_of(opened)
+        if dirty_doc:
+            # Изменение БЕЗ сохранения: только оно и делает документ «несохранённым».
+            call("kompas_create_sketch", {
+                "document_id": dirty_doc, "expected_revision": current_rev(dirty_doc),
+                "plane": {"base": "xy", "offset_mm": 0.0}, "name": "asc-dirty"})
+        env_dirty, code_dirty = run(refusal_doc, rebuild_step(1))
+        dirty_ok = (
+            code_dirty is not None and "несохран" in (emsg(env_dirty) or "")
+            and "part-b" in (emsg(env_dirty) or ""))
+        close(dirty_doc)
+        close(refusal_doc)
+        rep.add("ASC.07.refusals",
+                "нет файла компонента и несохранённый компонент: отказ до первого шага, перечень в "
+                "details, каталога копии не появилось",
+                "PASS" if (missing_ok and dirty_ok) else "FAIL",
+                f"missing={code_missing} err_missing={emsg(env_missing)} "
+                f"folder_new={sorted(folders() - before_folders)} dirty={code_dirty} "
+                f"err_dirty={emsg(env_dirty)}")
+    else:
+        rep.add("ASC.07.refusals", "отказы до первого шага", "FAIL", failure)
+
+    # -- ASC.08 чужой открытый документ остаётся открытым --------------------------------------
+    if built:
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": part_a, "access": "edit"})
+        foreign_doc = doc_of(opened)
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": top_path, "access": "edit"})
+        host_doc = doc_of(opened)
+        env, code = run(host_doc, rebuild_step(1))
+        still_open = None
+        if foreign_doc:
+            _e, env_ctx, _r = client.tool("kompas_get_context", {
+                "document_id": foreign_doc, "detail": "minimal"})
+            still_open = ((env_ctx or {}).get("result") or {}).get("id")
+        foreign_ok = bool(foreign_doc) and still_open == foreign_doc
+        rep.add("ASC.08.foreign_document_open",
+                "компонент, открытый клиентом отдельным окном, после снятия копии остался открытым "
+                "и с тем же document_id",
+                "PASS" if foreign_ok else "FAIL",
+                f"code={code} foreign={foreign_doc} still={still_open} err={emsg(env)}")
+        close(host_doc)
+        close(foreign_doc)
+    else:
+        rep.add("ASC.08.foreign_document_open", "чужой документ остался открытым", "FAIL", failure)
+
+    # -- ASC.09 одноимённые файлы из разных каталогов ------------------------------------------
+    twin_a = _os.path.join(folder, "left", "bracket.m3d")
+    twin_b = _os.path.join(folder, "right", "bracket.m3d")
+    twin_top = _os.path.join(folder, "twin-top.m3d")
+    doc_ta, error_ta = make_part("asc-twin-a", twin_a, 30.0, 20.0, 10.0)
+    doc_tb, error_tb = make_part("asc-twin-b", twin_b, 10.0, 10.0, 5.0)
+    twin_doc = None
+    error_twin = error_ta or error_tb
+    if doc_ta and doc_tb:
+        twin_doc, code, message = new_document("assembly", "asc-twin-top")
+        if twin_doc:
+            for source in (twin_a, twin_b, twin_b):
+                code_i, message_i = insert(twin_doc, source)
+                if code_i:
+                    error_twin = f"вставка {source}: {code_i} {message_i}"
+                    break
+            if not error_twin:
+                code_s, message_s = save_as(twin_doc, twin_top)
+                error_twin = None if not code_s else f"сохранение: {code_s} {message_s}"
+    if twin_doc and not error_twin:
+        env, code = run(twin_doc, rebuild_step(1))
+        answer = result(env)
+        checkpoint_twin = answer.get("checkpoint") or {}
+        path_twin = checkpoint_twin.get("manifest_path")
+        manifest_twin = {}
+        if path_twin and _os.path.exists(path_twin):
+            with open(path_twin, "r", encoding="utf-8") as handle:
+                manifest_twin = json.load(handle)
+        rows_twin = [row for row in (manifest_twin.get("files") or [])
+                     if _os.path.basename(row.get("source_path") or "").lower() == "bracket.m3d"]
+        copies = {row.get("copy_path") for row in rows_twin}
+        insertions = sorted(row.get("insertions") for row in rows_twin)
+        same_name_ok = (
+            code is None
+            and len(rows_twin) == 2
+            and len(copies) == 2
+            and None not in copies
+            and insertions[0] == 1 and insertions[1] >= 2)
+        rep.add("ASC.09.same_name",
+                "одноимённые файлы из разных каталогов не столкнулись; файл с двумя вставками "
+                "скопирован один раз",
+                "PASS" if same_name_ok else "FAIL",
+                f"code={code} rows={len(rows_twin)} copies={len(copies)} insertions={insertions} "
+                f"err={emsg(env)}")
+        close(twin_doc)
+    else:
+        rep.add("ASC.09.same_name", "одноимённые файлы из разных каталогов", "FAIL",
+                error_twin or "сборка не построена")
+    close(doc_ta)
+    close(doc_tb)
 
     close(doc_a)
     close(doc_b)

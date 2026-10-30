@@ -98,8 +98,10 @@ public static class AssemblyCopyPlan
         {
             return new AssemblyCopyPlanResult(Array.Empty<AssemblyCopyEntry>(), new AssemblyCopyRefusal(
                 "component_file_missing",
-                $"Файлы компонентов не найдены на диске ({missing.Length}): контрольная точка не снимается, "
-                + "потому что копия графа без них не была бы копией сборки.",
+                $"Файлы компонентов не найдены на диске ({missing.Length}): "
+                + string.Join(", ", missing.Take(5))
+                + ". Контрольная точка не снимается, потому что копия графа без них не была бы "
+                + "копией сборки.",
                 missing));
         }
 

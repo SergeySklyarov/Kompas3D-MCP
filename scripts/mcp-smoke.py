@@ -15269,7 +15269,7 @@ def flat_part_checks(client, rep, app_id, workdir):
                                 "direction": "positive"})
         return doc
 
-    def through_hole(doc, diameter_mm, base, offset_mm, depth_mm):
+    def through_hole(doc, diameter_mm, base, offset_mm, depth_mm, body_ref):
         """Отверстие насквозь: круг в плоскости base на высоте offset_mm, вырез в материал."""
         env, _code = call("kompas_create_sketch", {
             "document_id": doc, "expected_revision": current_rev(doc),
@@ -15284,7 +15284,8 @@ def flat_part_checks(client, rep, app_id, workdir):
         call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": True})
         _env, code = call("kompas_extrude", {
             "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "cut",
-            "depth_mm": depth_mm, "direction": "positive", "end_condition": "blind"})
+            "depth_mm": depth_mm, "direction": "negative", "end_condition": "blind",
+            "target_body_ref": body_ref})
         return (not code), code or emsg(_env)
 
     def main_body(doc):
@@ -15329,13 +15330,18 @@ def flat_part_checks(client, rep, app_id, workdir):
     if os.path.exists(schema_path):
         with open(schema_path, "r", encoding="utf-8") as handle:
             published_schema = json.load(handle)
-    schema_ok = entry is not None and published_schema is not None and entry["inputSchema"] == published_schema
+    schema_ok = (entry is not None and published_schema is not None
+                 and entry["inputSchema"] == {k: v for k, v in published_schema.items() if k != "$schema"})
     rep.add("FLT.01.discover",
             "kompas_export_flat_dxf в tools/list, его inputSchema совпадает с "
             "schemas/kompas_export_flat_dxf.json",
             "PASS" if schema_ok else "FAIL",
             "запись=" + str(entry is not None) + " схема_файла=" + str(published_schema is not None)
-            + " совпала=" + str(schema_ok))
+            + " совпала=" + str(schema_ok) + " ключи_ответа="
+            + str(sorted((entry or {}).get("inputSchema") or {})) + " ключи_файла="
+            + str(sorted(published_schema or {})) + " свойства_ответа="
+            + str(sorted(((entry or {}).get("inputSchema") or {}).get("properties") or {}))
+            + " свойства_файла=" + str(sorted((published_schema or {}).get("properties") or {})))
 
     # ── FLT.02: пластина с отверстием и скруглениями, нормаль по Z ────────────────────────────────
     width_mm, height_mm, thickness_mm, hole_d_mm, fillet_mm = 40.0, 30.0, 20.0, 10.0, 5.0
@@ -15345,7 +15351,7 @@ def flat_part_checks(client, rep, app_id, workdir):
                 "деталь не создана")
         return
     body = main_body(doc)
-    hole_ok, hole_code = through_hole(doc, hole_d_mm, "xy", 0.0, thickness_mm + 5.0)
+    hole_ok, hole_code = through_hole(doc, hole_d_mm, "xy", 0.0, thickness_mm + 5.0, body)
     vertical = [edge.get("edge_ref") for edge in edges_of(doc, body)
                 if edge.get("curve_type") == "line" and near(edge.get("length_mm"), thickness_mm, 0.01)]
     fillet_ok, fillet_code = False, None
@@ -15365,7 +15371,7 @@ def flat_part_checks(client, rep, app_id, workdir):
     contour = got.get("contour") or {}
     checks = {row.get("name"): row.get("passed")
               for row in ((got.get("verification") or {}).get("checks") or [])}
-    counts = got.get("entity_counts") or {}
+    counts = {str(key).upper(): value for key, value in (got.get("entity_counts") or {}).items()}
     layers = layers_of(path) if os.path.exists(path) else []
     circles = [(float(dict(entity["values"])[10]), float(dict(entity["values"])[20]),
                 float(dict(entity["values"])[40]))
@@ -15473,7 +15479,8 @@ def flat_part_checks(client, rep, app_id, workdir):
             call("kompas_finish_sketch", {"sketch_ref": boss, "require_closed_profile": True})
             _env_boss, code_boss = call("kompas_extrude", {
                 "sketch_ref": boss, "expected_revision": current_rev(step),
-                "operation": "boss", "depth_mm": 10.0, "direction": "positive"})
+                "operation": "boss", "depth_mm": 10.0, "direction": "positive",
+                "target_body_ref": main_body(step)})
         call("kompas_save_document", {
             "document_id": step, "expected_revision": current_rev(step),
             "target_path": os.path.join(workdir, "flt-step.m3d")})

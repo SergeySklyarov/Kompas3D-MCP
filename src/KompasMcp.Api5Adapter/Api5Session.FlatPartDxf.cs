@@ -152,10 +152,11 @@ public partial class Api5Session
             bool accepted;
             try
             {
-                // DOC: the second argument is the model orientation name, and an empty name is the
-                // document's own; the view is chosen by the standard-view mask, not by that name.
+                // DOC: the second argument is «имя проекции (из списка проекций в документе источнике)»,
+                // so it names the same orientation the mask asks for; both are given, because the mask
+                // alone is what the kernel honours for the views measured so far.
                 accepted = views.AddStandartViews(
-                    document.Path, string.Empty, new object[] { view.Flag }, 100d, 100d, 1d, 10d, 10d);
+                    document.Path, view.Name, new object[] { view.Flag }, 100d, 100d, 1d, 10d, 10d);
             }
             catch (COMException ex)
             {

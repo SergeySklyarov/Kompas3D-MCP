@@ -11,8 +11,10 @@ public sealed record FlatPartView(int Flag, string Name, string Axis);
 /// INVARIANT: only the six axis directions are projected. A tilted normal is refused by name, because the
 /// shipped v24 type library has no documented route to a view normal to an arbitrary direction.
 /// MEASURED: the list takes the <c>ksViewProjectionType</c> ordinals (1..6), not the mask, and a side view
-/// is built only next to the main «Спереди» one — the caller adds it. The sign of the normal only picks
-/// the opposite view of the same axis and does not change the contour.
+/// is built only next to the main «Спереди» one — the caller adds it. The sign of the normal picks the view
+/// of the opposite side, and that side sees the face mirrored; the box is the same for both sides, so the
+/// frame cannot tell them apart. Which side is taken comes from the face order, not from the geometry:
+/// extruding the same plate the other way kept the normal sign.
 /// History: docs/decisions/flat-part.md#view-choice</remarks>
 public static class FlatPartProjection
 {

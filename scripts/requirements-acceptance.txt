@@ -1,0 +1,6 @@
+# Third-party modules of the ACCEPTANCE INSTRUMENTS only - they never enter the product.
+# Install for the service Python that runs the instruments:
+#   "<python>" -m pip install --user -r scripts/requirements-acceptance.txt
+# A module is pinned exactly: the FLT.03 row compares the installed version with the pin below,
+# so a silent upgrade cannot change what the acceptance run measured.
+ezdxf==1.4.5

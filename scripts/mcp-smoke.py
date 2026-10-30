@@ -15243,6 +15243,22 @@ def flat_part_checks(client, rep, app_id, workdir):
         with open(path, "rb") as handle:
             return hashlib.sha256(handle.read()).hexdigest()
 
+    def edetails(env):
+        err = (env or {}).get("error")
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def pinned_ezdxf():
+        """Версия ezdxf из файла зависимости прибора: сверяется установленная, а не «любая»."""
+        path = os.path.join(ROOT, "scripts", "requirements-acceptance.txt")
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.split("#", 1)[0].strip()
+                if line.lower().startswith("ezdxf=="):
+                    return line.split("==", 1)[1].strip()
+        return None
+
     def new_part(name):
         env, _code = call("kompas_create_document",
                           {"application_id": app_id, "kind": "part", "name": name})
@@ -15408,10 +15424,14 @@ def flat_part_checks(client, rep, app_id, workdir):
             + " " + str(emsg(env) or ""))
 
     # ── FLT.03: сторонний разбор того же файла ───────────────────────────────────────────────────
+    # INVARIANT: сравнивается УСТАНОВЛЕННАЯ версия с закреплённой в scripts/requirements-acceptance.txt:
+    # иначе «ezdxf есть» ничего не доказывает - другая версия читает DXF по-своему.
+    pinned = pinned_ezdxf()
     try:
         import ezdxf
         from ezdxf import recover
 
+        installed = getattr(ezdxf, "__version__", None)
         document = ezdxf.readfile(path)
         auditor = document.audit()
         audit_errors = len(auditor.errors)
@@ -15423,17 +15443,22 @@ def flat_part_checks(client, rep, app_id, workdir):
                 and kinds.get("ARC", 0) == (counts.get("ARC") or 0)
                 and kinds.get("LINE", 0) == (counts.get("LINE") or 0))
         layers_ext = sorted({entity.dxf.layer for entity in model})
-        ok03 = (audit_errors == 0 and same and layers_ext == ["CUT"]
+        version_ok = pinned is not None and installed == pinned
+        ok03 = (version_ok and audit_errors == 0 and same and layers_ext == ["CUT"]
                 and kinds.get("CIRCLE", 0) == 1 and kinds.get("ARC", 0) == 4)
-        detail03 = ("ezdxf=" + ezdxf.__version__ + " ошибок_аудита=" + str(audit_errors)
+        detail03 = ("ezdxf=" + str(installed) + " закреплено=" + str(pinned)
+                    + " ошибок_аудита=" + str(audit_errors)
                     + " сущности_стороннего=" + str(kinds) + " сущности_ответа=" + str(counts)
                     + " слои=" + str(layers_ext))
     except Exception as exc:  # noqa: BLE001 - сторонний разбор обязан назвать причину, а не упасть
         ok03 = False
-        detail03 = "ezdxf не прочитал файл: " + type(exc).__name__ + ": " + str(exc)
+        detail03 = ("ezdxf не прочитал файл: " + type(exc).__name__ + ": " + str(exc)
+                    + "; закреплено=" + str(pinned) + "; установка: "
+                    + "\"<python>\" -m pip install --user -r scripts/requirements-acceptance.txt")
     rep.add("FLT.03.ezdxf_audit",
-            "тот же файл читает ezdxf (1.4.5, только в приборе) без ошибок аудита; число и тип "
-            "сущностей совпадают с ответом инструмента; слой один - CUT",
+            "тот же файл читает ezdxf версии, закреплённой в scripts/requirements-acceptance.txt "
+            "(1.4.5, только в приборе), без ошибок аудита; число и тип сущностей совпадают с ответом "
+            "инструмента; слой один - CUT",
             "PASS" if ok03 else "FAIL", detail03)
 
     # ── FLT.04: нормаль по X - вид выбирается осью, а не «Спереди» по умолчанию ──────────────────
@@ -15513,14 +15538,184 @@ def flat_part_checks(client, rep, app_id, workdir):
     dirty = plate("FLT-dirty", "xy", 20.0, 20.0, 5.0)
     dirty_path = os.path.join(workdir, "flt-dirty.dxf")
     env_d, code_d = export(dirty, main_body(dirty), dirty_path) if dirty else ({}, None)
-    ok06 = (bool(code_o) and before is not None and before == after
+    ok06 = (code_o == "PATH_NOT_ALLOWED" and before is not None and before == after
             and code_d == "DOCUMENT_DIRTY" and not os.path.exists(dirty_path))
     rep.add("FLT.06.overwrite_and_dirty",
-            "overwrite=false при существующем файле - отказ, файл прежний (sha256); несохранённый "
-            "документ - DOCUMENT_DIRTY до COM, файла нет",
+            "overwrite=false при существующем файле - отказ PATH_NOT_ALLOWED, файл прежний (sha256); "
+            "несохранённый документ - DOCUMENT_DIRTY до COM, файла нет",
             "PASS" if ok06 else "FAIL",
             "перезапись=" + str(code_o) + " sha256 до=" + str(before)[:16] + " после="
             + str(after)[:16] + " несохранённый=" + str(code_d))
+
+    # ── FLT.07: наклонная нормаль - отказ по имени, файла нет ────────────────────────────────────
+    # Деталь: прямоугольник 5x40, повёрнутый в плоскости эскиза на 30°, выдавлен на 30 мм. Пара
+    # наибольших граней (40x30) наклонена к осям на 30°, поэтому толщина постоянна (5 мм), а нормаль
+    # не по оси: отказ обязан прийти по нормали, а не по толщине.
+    tilt_deg, tilt_length_mm, tilt_width_mm, tilt_height_mm = 30.0, 40.0, 5.0, 30.0
+    tilt_angle = math.radians(tilt_deg)
+    tilt_path = os.path.join(workdir, "flt-tilt.dxf")
+    tilt = new_part("FLT-tilt")
+    tilt_env, code_t, tilt_normal, tilt_thickness = {}, None, None, None
+    if tilt:
+        env_k, _code_k = call("kompas_create_sketch", {
+            "document_id": tilt, "expected_revision": current_rev(tilt),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "tilt-sketch"})
+        tilt_sketch = result(env_k).get("id")
+        if tilt_sketch:
+            half_width, half_length = tilt_width_mm / 2.0, tilt_length_mm / 2.0
+            corners = [[dx * math.cos(tilt_angle) - dy * math.sin(tilt_angle),
+                        dx * math.sin(tilt_angle) + dy * math.cos(tilt_angle)]
+                       for dx, dy in ((-half_width, -half_length), (half_width, -half_length),
+                                      (half_width, half_length), (-half_width, half_length))]
+            call("kompas_edit_sketch", {
+                "sketch_ref": tilt_sketch, "expected_revision": current_rev(tilt), "mode": "append",
+                "entities": [{"kind": "polyline", "points_mm": corners, "closed": True}]})
+            call("kompas_finish_sketch", {"sketch_ref": tilt_sketch, "require_closed_profile": True})
+            call("kompas_extrude", {
+                "sketch_ref": tilt_sketch, "expected_revision": current_rev(tilt),
+                "operation": "base", "depth_mm": tilt_height_mm, "direction": "positive"})
+            call("kompas_save_document", {
+                "document_id": tilt, "expected_revision": current_rev(tilt),
+                "target_path": os.path.join(workdir, "flt-tilt.m3d")})
+            tilt_env, code_t = export(tilt, main_body(tilt), tilt_path)
+            tilt_details = edetails(tilt_env)
+            tilt_normal = tilt_details.get("normal")
+            tilt_thickness = tilt_details.get("thickness_mm")
+    tilt_expected = [math.cos(tilt_angle), math.sin(tilt_angle), 0.0]
+    normal_ok = (isinstance(tilt_normal, list) and len(tilt_normal) == 3
+                 and all(abs(abs(tilt_normal[i]) - abs(tilt_expected[i])) <= 1e-3
+                         for i in range(3)))
+    ok07 = (code_t == "FLAT_NORMAL_NOT_AXIS" and normal_ok
+            and near(tilt_thickness, tilt_width_mm, 0.01) and not os.path.exists(tilt_path))
+    rep.add("FLT.07.tilted_normal",
+            "плита 5x40x30 с поворотом 30° в плоскости эскиза: наибольшие грани наклонены, толщина "
+            "постоянна - отказ FLAT_NORMAL_NOT_AXIS, нормаль в details совпадает с (cos30, sin30, 0) "
+            "по модулю компонент с допуском 1e-3, толщина 5 мм, файла нет",
+            "PASS" if ok07 else "FAIL",
+            "code=" + str(code_t) + " нормаль=" + str(tilt_normal) + " ожидалось="
+            + str([round(value, 4) for value in tilt_expected]) + " толщина=" + str(tilt_thickness)
+            + " файл=" + str(os.path.exists(tilt_path)) + " " + str(emsg(tilt_env) or ""))
+
+    # ── FLT.08: зеркальность контура - несимметричная плита с нормалью по X ─────────────────────
+    # ДВА отверстия разного радиуса со смещением от центра контура по обеим осям. Одно отверстие
+    # зеркало от поворота не отличает: оба переворачивают один и тот же вектор. Два вектора задают
+    # ориентацию, и знак определителя найденного преобразования отвечает на вопрос прямо: +1 -
+    # контур получен поворотом (ориентация сохранена), -1 - зеркалом. Плита строится по обе стороны
+    # оси X, потому что вопрос техлида - про вид с ДРУГОЙ стороны грани.
+    asym_holes = [(12.0, -6.0, 4.0), (-6.0, 9.0, 3.0)]
+    asym_model = [(y, z) for y, z, _r in asym_holes]
+
+    def asym_plate(name, direction):
+        """Плита 40x30x20 в плоскости YZ, выдавленная вдоль X; сторона - direction."""
+        doc = new_part(name)
+        if not doc:
+            return None
+        env_r, _code_r = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "yz", "offset_mm": 0}, "name": name + "-sketch"})
+        sketch_r = result(env_r).get("id")
+        if not sketch_r:
+            return None
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch_r, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [-width_mm / 2.0, -height_mm / 2.0],
+                          "width_mm": width_mm, "height_mm": height_mm}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch_r, "require_closed_profile": True})
+        call("kompas_extrude", {
+            "sketch_ref": sketch_r, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": thickness_mm, "direction": direction})
+        return doc
+
+    def asym_measure(name, direction):
+        """Экспорт плиты со сквозными отверстиями: смещения отверстий и ориентация контура."""
+        doc = asym_plate(name, direction)
+        path_a = os.path.join(workdir, name + ".dxf")
+        if not doc:
+            return {"doc": None, "path": path_a, "code": None, "env": {}, "contour": {},
+                    "offsets": {}, "radii": [], "normal": None}
+        body_a = main_body(doc)
+        env_h, _code_h = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "yz", "offset_mm": 0}, "name": name + "-holes"})
+        sketch_h = result(env_h).get("id")
+        if sketch_h:
+            call("kompas_edit_sketch", {
+                "sketch_ref": sketch_h, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "circle", "center_mm": [y, z], "radius_mm": r}
+                             for y, z, r in asym_holes]})
+            call("kompas_finish_sketch", {"sketch_ref": sketch_h, "require_closed_profile": True})
+            call("kompas_extrude", {
+                "sketch_ref": sketch_h, "expected_revision": current_rev(doc),
+                "operation": "cut", "end_condition": "through", "direction": "symmetric",
+                "target_body_ref": body_a})
+        call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "target_path": os.path.join(workdir, name + ".m3d")})
+        env_a, code_a = export(doc, body_a, path_a)
+        contour_a = (result(env_a) or {}).get("contour") or {}
+        circles_a = [(float(dict(entity["values"])[10]), float(dict(entity["values"])[20]),
+                      float(dict(entity["values"])[40]))
+                     for entity in (dxf_entities(path_a) if os.path.exists(path_a) else [])
+                     if entity["type"] == "CIRCLE"]
+        offsets = {}
+        if contour_a.get("width_mm") is not None:
+            centre_x = contour_a["min_x_mm"] + contour_a["width_mm"] / 2.0
+            centre_y = contour_a["min_y_mm"] + contour_a["height_mm"] / 2.0
+            for cx, cy, radius in circles_a:
+                offsets[round(radius, 3)] = (cx - centre_x, cy - centre_y)
+        return {"doc": doc, "path": path_a, "code": code_a, "env": env_a,
+                "contour": contour_a, "offsets": offsets, "radii": sorted(offsets),
+                "normal": (result(env_a) or {}).get("normal")}
+
+    def asym_transform(offsets):
+        """Каким из восьми отражений/поворотов получены смещения; det +1 - поворот, -1 - зеркало."""
+        for swap in (False, True):
+            for su in (1, -1):
+                for sv in (1, -1):
+                    mapped = []
+                    for y, z in asym_model:
+                        u, v = (z, y) if swap else (y, z)
+                        mapped.append((su * u, sv * v))
+                    if all(round(radius, 3) in offsets
+                           and near(offsets[round(radius, 3)][0], mapped[index][0], 0.01)
+                           and near(offsets[round(radius, 3)][1], mapped[index][1], 0.01)
+                           for index, (_y, _z, radius) in enumerate(asym_holes)):
+                        determinant = (su * sv) * (-1 if swap else 1)
+                        return determinant, ("U<-Z, V<-Y" if swap else "U<-Y, V<-Z")
+        return None, None
+
+    sides = [("FLT-asym-pos", "positive"), ("FLT-asym-neg", "negative")]
+    measured = []
+    for name_a, direction_a in sides:
+        got_a = asym_measure(name_a, direction_a)
+        determinant, axes = asym_transform(got_a["offsets"])
+        got_a["determinant"] = determinant
+        got_a["axes"] = axes
+        got_a["ok"] = (not got_a["code"] and os.path.exists(got_a["path"])
+                       and determinant is not None and len(got_a["radii"]) == 2
+                       and near(got_a["contour"].get("width_mm"), width_mm, 0.01)
+                       and near(got_a["contour"].get("height_mm"), height_mm, 0.01))
+        measured.append(got_a)
+    mirror_sides = [name_a for got_a, (name_a, _d) in zip(measured, sides)
+                    if got_a["determinant"] == -1]
+    ok08 = all(got_a["ok"] for got_a in measured)
+    rep.add("FLT.08.asymmetric_side",
+            "плита 40x30x20 с нормалью по X и двумя отверстиями R4 (12, -6) и R3 (-6, 9): смещения "
+            "CIRCLE от центра габарита совпадают с заданными (допуск 0,01 мм) после одного из восьми "
+            "отражений/поворотов, габарит 40x30; знак определителя найденного преобразования назван - "
+            "он и есть ответ про зеркальность. Плита строится по обе стороны оси X: сторона "
+            "выдавливания выбранный вид не меняет (измерено), поэтому строка называет это, а не "
+            "выдаёт один и тот же вид за два разных",
+            "PASS" if ok08 else "FAIL",
+            " | ".join(
+                name_a + ": code=" + str(got_a["code"]) + " оси=" + str(got_a["axes"])
+                + " det=" + str(got_a["determinant"]) + " смещения="
+                + str({radius: (round(offset[0], 4), round(offset[1], 4))
+                       for radius, offset in got_a["offsets"].items()})
+                + " контур=" + str(got_a["contour"].get("width_mm")) + "x"
+                + str(got_a["contour"].get("height_mm")) + " нормаль=" + str(got_a["normal"])
+                for got_a, (name_a, _direction) in zip(measured, sides))
+            + " | зеркало: " + (", ".join(mirror_sides) if mirror_sides else "нет ни на одной стороне"))
 
 
 def iges_checks(client, rep, app_id, workdir):

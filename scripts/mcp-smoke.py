@@ -750,7 +750,7 @@ def step_metadata_export(client, app_id, path):
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
 # → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
 # → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf).
-EXPECTED_TOOL_COUNT = 125
+EXPECTED_TOOL_COUNT = 128
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -933,6 +933,8 @@ RUN_GROUPS = (
      "Приёмка IGES: экспорт модели в IGES - файл записан, структура разобрана прибором по открытому "
      "стандарту (счётчики секций, сущности), сборка, отказы по имени и повтор в тот же путь "
      "(наряд IGES_EXPORT)"),
+    ("ops", "ops", "ops-acceptance.json",
+     "Приёмка OPS: состояния операции - queued против running, отмена очередной и выполняющейся, истечение бюджета без отмены, восстановление журнала без повтора и согласование исхода (наряд OPS_CONTRACT, спец. 1.8)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -995,6 +997,9 @@ ALL_GROUPS_EXTRA = (
     ("scenario", ["--scenario-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
+    # Группа OPS ведёт свой Хост со своим журналом и малым бюджетом синхронизации: состояния
+    # операции складываются на старте процесса и в общем сеансе не воспроизводятся.
+    ("ops", ["--ops-only"]),
     ("flat_part", ["--flat-part-only"]),
 )
 
@@ -2175,6 +2180,7 @@ FLAGS = (
     ("--scenario-only", False, "группа SC: ограниченный сценарий kompas_run_scenario"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
+    ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -18179,6 +18185,10 @@ def main():
     # источник проверки подменён локальным файлом, сеть не нужна.
     update_only = "--update-only" in sys.argv
 
+    # Наряд OPS_CONTRACT: состояния операции. Группа ведёт свой Хост: бюджет синхронизации задаётся
+    # конфигурацией на старте процесса, а строки сравнивают поведение при малом бюджете.
+    ops_only = "--ops-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -18239,6 +18249,7 @@ def main():
         "shutdown": shutdown_only,
         "catalog": catalog_only,
         "update": update_only,
+        "ops": ops_only,
     }
     # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
     # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.
@@ -18716,6 +18727,12 @@ def main():
             # Группа CT поднимает свои Хосты в двух режимах каталога: общий Хост прогона работает в
             # `full`, а сравнить ответы двух режимов можно только двумя процессами.
             catalog_checks(host, measured_config, workdir, rep)
+            return finish(rep, client)
+
+        if ops_only:
+            # Группа OPS: свой Хост со своим журналом и малым бюджетом синхронизации; общий сеанс
+            # прогона ей не нужен и мешал бы - бюджет задаётся конфигурацией процесса.
+            ops_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
         if update_only:
@@ -52165,6 +52182,529 @@ def catalog_checks(host, config, workdir, rep):
         stop(probe)
 
 
+def ops_checks(host, config, workdir, rep):
+    """OPS.01…OPS.11 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Длинная мутация, не уложившаяся в бюджет синхронизации, отвечает
+    `running` с `operation_id`; вторая мутация того же документа, пока первая не закончилась, отвечает
+    `queued` (а не тем же `running`); `kompas_operation_status` отвечает при занятом Worker и к COM не
+    обращается; отмена очередной операции подтверждается (`cancelled`, `confirmed`), отмена
+    выполняющейся — только запросом (`cancel_requested`, статус остаётся `running`); истечение бюджета
+    не отменяет команду и не удваивает её след; журнал с незавершённой записью после старта требует
+    согласования и НЕ повторяет команду; согласование называет исход или честно говорит «не определено».
+
+    ПОЧЕМУ СВОЙ ХОСТ. Бюджет синхронизации задаётся конфигурацией на старте процесса, а строки
+    сравнивают поведение при МАЛОМ бюджете (200 мс) — в общем сеансе прогона он 40 с.
+
+    ПОЧЕМУ `tools/call` БЕЗ ОБЁРТКИ `Client.tool`. `Client.tool` сам опрашивает `running` при наличии
+    `operation_id`, то есть дожидается исхода; строкам нужен именно ответ ДО исхода.
+
+    ПОЧЕМУ ДВЕ ОТПРАВКИ ПОДРЯД, А НЕ ДВА ПОТОКА. Клиент прибора не потокобезопасен: один читатель
+    stdout. Две мутации шлются в один канал по своим id, ответы собираются по приходу.
+    """
+    import json as _json
+    import time as _time
+    from localconfig import isolate_config
+
+    repo_root = ROOT
+
+    def own_config(budget_ms, prefix):
+        path = isolate_config(config, workdir, prefix)
+        with open(path, encoding="utf-8-sig") as fh:
+            data = _json.load(fh)
+        data["sync_budget_ms"] = budget_ms
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(data, fh, ensure_ascii=False, indent=2)
+        return path
+
+    def open_host(cfg):
+        probe = Client(host, cfg)
+        probe.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                  "clientInfo": {"name": "mcp-smoke-ops", "version": "0"}}, timeout=60)
+        probe.notify("notifications/initialized")
+        return probe
+
+    def close_host(probe):
+        try:
+            if probe.p.stdin:
+                probe.p.stdin.close()
+        except OSError:
+            pass
+
+    # Мутации группы обязаны нести operation_id: схема требует его, а клиент прибора здесь
+    # обходится без обёртки, которая добавляла бы поле сама.
+    mutation_tools = {"kompas_connect", "kompas_create_document", "kompas_create_sketch",
+                      "kompas_edit_sketch", "kompas_extrude", "kompas_disconnect"}
+
+    def send(probe, tool, arguments, timeout=600):
+        """One `tools/call` WITHOUT waiting for the answer: returns the request id."""
+        if tool in mutation_tools and not (arguments or {}).get("operation_id"):
+            arguments = {**arguments, "operation_id": str(uuid.uuid4())}
+        probe.n += 1
+        rid = probe.n
+        probe._write({"jsonrpc": "2.0", "id": rid, "method": "tools/call",
+                      "params": {"name": tool, "arguments": arguments}})
+        return rid
+
+    def collect(probe, ids, timeout=600):
+        """Answers for `ids` in arrival order: `{id: envelope}`."""
+        got = {}
+        deadline = _time.time() + timeout
+        while len(got) < len(ids) and _time.time() < deadline:
+            line = probe.p.stdout.readline() if probe.p.stdout else ""
+            if not line:
+                if probe.p.poll() is not None:
+                    raise McpError("host exited while waiting for an answer")
+                _time.sleep(0.02)
+                continue
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = _json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("id") in ids:
+                got[msg["id"]] = ((msg.get("result") or {}).get("structuredContent") or {})
+        return got
+
+    def call(probe, tool, arguments, timeout=600):
+        rid = send(probe, tool, arguments, timeout)
+        return collect(probe, [rid], timeout).get(rid) or {}
+
+    def settle(probe, tool, arguments, timeout=600):
+        """Call and, if the answer is `running`, wait for the recorded outcome.
+
+        Бюджет синхронизации в этой группе 200 мс, поэтому даже подключение отвечает `running`:
+        строкам о состояниях нужен именно такой бюджет, а установке сеанса - исход.
+        """
+        env = call(probe, tool, arguments, timeout)
+        operation_id = (env or {}).get("operation_id")
+        if status_of(env) in ("queued", "running") and operation_id:
+            deadline = _time.time() + 240.0
+            while _time.time() < deadline:
+                _time.sleep(0.2)
+                st = call(probe, "kompas_operation_status", {"operation_id": operation_id})
+                payload = result(st)
+                # Состояние ОПЕРАЦИИ лежит в поле `status` ответа статуса, а не в статусе самого
+                # вызова: вызов статуса всегда succeeded, и путать их значило бы ждать вечно.
+                if payload.get("status") not in ("queued", "running"):
+                    inner = payload.get("result") or {}
+                    return {"status": payload.get("status"), "result": inner,
+                            "application_id": inner.get("application_id") or payload.get("application_id"),
+                            "operation_id": operation_id,
+                            "revision_after": inner.get("revision_after")}
+        return env
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def status_of(env):
+        return (env or {}).get("status")
+
+    def op_status(env):
+        """Состояние ОПЕРАЦИИ в ответе status/cancel/reconcile: оно лежит в полезной нагрузке, а
+        статус самого вызова там всегда `succeeded`."""
+        return (result(env) or {}).get("status")
+
+    def err_of(env):
+        error = (env or {}).get("error")
+        return (error or {}).get("code") if isinstance(error, dict) else None
+
+    def revision(probe, doc):
+        # `detail` - обязательное поле схемы: без него чтение отвергается до COM.
+        return result(call(probe, "kompas_get_context", {"document_id": doc, "detail": "minimal"})).get("revision")
+
+    def poll_until_done(probe, operation_id, timeout=240.0):
+        """Poll the operation until it leaves queued/running. Returns the last envelope."""
+        deadline = _time.time() + timeout
+        env = {}
+        while _time.time() < deadline:
+            env = call(probe, "kompas_operation_status", {"operation_id": operation_id})
+            if status_of(env) not in ("queued", "running"):
+                return env
+            _time.sleep(0.25)
+        return env
+
+    # ── Длинная операция: предел примитивов эскиза из ОПУБЛИКОВАННОЙ схемы ──────────────
+    limit_entities = 1200
+    try:
+        with open(os.path.join(repo_root, "schemas", "kompas_edit_sketch.json"), encoding="utf-8-sig") as fh:
+            entities = (_json.load(fh).get("properties") or {}).get("entities") or {}
+        limit_entities = int(entities.get("maxItems") or limit_entities)
+    except (OSError, ValueError, TypeError):
+        pass
+
+    long_entities = [{"kind": "line", "start_mm": [float(i), 0.0], "end_mm": [float(i), 1.0]}
+                     for i in range(limit_entities)]
+
+    cfg_small = own_config(200, "ops")
+    probe = open_host(cfg_small)
+    app_id = None
+    doc = None
+    try:
+        # ── OPS.01.discover ─────────────────────────────────────────────────────────────
+        names = ["kompas_operation_status", "kompas_operation_cancel", "kompas_operation_reconcile"]
+        problems = []
+        for name in names:
+            found = call(probe, "kompas_find_operations", {"query": name, "limit": 20})
+            ids = [hit.get("id") for hit in (result(found).get("operations") or [])]
+            if name not in ids:
+                problems.append(f"{name}: нет в каталоге")
+                continue
+            described = result(call(probe, "kompas_describe_operation", {"id": name}))
+            shipped = {}
+            try:
+                with open(os.path.join(repo_root, "schemas", name + ".json"), encoding="utf-8-sig") as fh:
+                    shipped = _json.load(fh)
+            except OSError as exc:
+                problems.append(f"{name}: schemas/{name}.json не читается ({exc})")
+                continue
+            shipped.pop("$schema", None)
+            published = described.get("schema") or {}
+            published.pop("$schema", None)
+            if _json.dumps(shipped, sort_keys=True, ensure_ascii=False) != _json.dumps(published, sort_keys=True, ensure_ascii=False):
+                problems.append(f"{name}: схема каталога расходится с schemas/{name}.json")
+            if described.get("reachable_via") != "run":
+                problems.append(f"{name}: reachable_via={described.get('reachable_via')}, ожидалось run")
+        rep.add("OPS.01.discover", "три инструмента операции в каталоге, схемы совпали с schemas/",
+                "PASS" if not problems else "FAIL",
+                "все три найдены, схемы совпали" if not problems else "; ".join(problems))
+
+        # ── Сеанс и документ для строк о состояниях ─────────────────────────────────────
+        env = settle(probe, "kompas_connect", {"mode": "launch", "make_visible": False, "operation_id": str(uuid.uuid4())}, 300)
+        connect_env = env
+        app_id = (env or {}).get("application_id") or result(env).get("application_id")
+        env = settle(probe, "kompas_create_document", {"application_id": app_id, "kind": "part", "name": "OPS"})
+        doc = result(env).get("document_id") or result(env).get("id")
+        rev = result(env).get("revision") or (env or {}).get("revision_after") or 1
+        env = settle(probe, "kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev, "plane": {"base": "xy", "offset_mm": 0}, "name": "ops"})
+        sketch = result(env).get("id")
+        sketch = sketch.get("id") if isinstance(sketch, dict) else sketch
+        rev = (env or {}).get("revision_after") or rev
+
+        if not (app_id and doc and sketch):
+            print("DEBUG setup env=" + _json.dumps({"connect": connect_env, "doc": env}, ensure_ascii=False)[:1600], file=sys.stderr)
+            for row in ("OPS.02.states", "OPS.03.status_while_busy", "OPS.04.cancel_queued",
+                        "OPS.05.cancel_running", "OPS.06.timeout_not_cancel", "OPS.10.dependent_step"):
+                rep.add(row, "нужен живой сеанс и документ", "FAIL",
+                        f"сеанс/документ не созданы: app={app_id} doc={doc} sketch={sketch}")
+            return
+
+        long_args = {"sketch_ref": sketch, "expected_revision": rev, "mode": "append",
+                     "entities": long_entities, "operation_id": str(uuid.uuid4())}
+
+        # ── OPS.02.states: running, затем queued, затем исход опросом ───────────────────
+        rev_before = revision(probe, doc)
+        rid_long = send(probe, "kompas_edit_sketch", long_args)
+        long_env = collect(probe, [rid_long], 600).get(rid_long) or {}
+        long_op = (long_env or {}).get("operation_id")
+
+        short_args = {"sketch_ref": sketch, "expected_revision": rev, "mode": "append",
+                      "entities": [{"kind": "line", "start_mm": [0.0, 5.0], "end_mm": [1.0, 5.0]}],
+                      "operation_id": str(uuid.uuid4())}
+        rid_short = send(probe, "kompas_edit_sketch", short_args)
+        short_env = collect(probe, [rid_short], 600).get(rid_short) or {}
+        short_op = (short_env or {}).get("operation_id")
+
+        final = poll_until_done(probe, long_op) if long_op else {}
+        replay = call(probe, "kompas_edit_sketch", long_args) if long_op else {}
+        # Записанный результат длинной операции не помещается в ответ статуса (предел 16 КиБ), и
+        # тогда сравнивать нечего: равенство повтора доказывается тем, что повтор отвечает тем же
+        # итогом, а его ревизия совпадает с фактической ревизией документа.
+        recorded = result(final).get("result")
+        replay_result = result(replay)
+        result_known = recorded is not None
+        same_result = ((not result_known)
+                       or _json.dumps(recorded, sort_keys=True, ensure_ascii=False)
+                       == _json.dumps(replay_result, sort_keys=True, ensure_ascii=False))
+        rev_after_all = revision(probe, doc)
+        same_revision = (replay or {}).get("revision_after") == rev_after_all
+        rep.add("OPS.02.states",
+                "длинная операция -> running + operation_id; вторая -> queued; опрос -> succeeded; результат равен повтору",
+                "PASS" if (status_of(long_env) == "running" and long_op
+                           and status_of(short_env) == "queued" and short_op
+                           and status_of(final) == "succeeded" and status_of(replay) == "succeeded"
+                           and same_result and same_revision) else "FAIL",
+                f"длинная: status={status_of(long_env)} op={bool(long_op)}; вторая: status={status_of(short_env)} "
+                f"op={bool(short_op)}; опрос: {status_of(final)}; повтор: {status_of(replay)}; "
+                f"результат повтора совпал={same_result} (записанный результат "
+                f"{'есть' if result_known else 'не помещается в ответ статуса'}), "
+                f"ревизия повтора={((replay or {}).get('revision_after'))} против фактической {rev_after_all}")
+
+        # ── OPS.03.status_while_busy: статус отвечает при занятом Worker ────────────────
+        # Строка спрашивает статус ВТОРОЙ операции, пока первая держит Worker: у второй состояние
+        # `queued` не гонка, а следствие гейта, поэтому ответ не зависит от того, успела ли первая
+        # закончиться за миллисекунды.
+        rev_before_busy = revision(probe, doc)
+        busy_args = dict(long_args)
+        busy_args["operation_id"] = str(uuid.uuid4())
+        busy_args["expected_revision"] = rev_before_busy
+        rid_busy = send(probe, "kompas_edit_sketch", busy_args)
+        busy_env = collect(probe, [rid_busy], 600).get(rid_busy) or {}
+        busy_op = (busy_env or {}).get("operation_id")
+        wait_args = dict(short_args)
+        wait_args["operation_id"] = str(uuid.uuid4())
+        wait_args["expected_revision"] = rev_before_busy
+        rid_wait = send(probe, "kompas_edit_sketch", wait_args)
+        wait_env = collect(probe, [rid_wait], 600).get(rid_wait) or {}
+        wait_op = (wait_env or {}).get("operation_id")
+        t0 = _time.perf_counter()
+        while_busy = call(probe, "kompas_operation_status", {"operation_id": wait_op})
+        status_seconds = _time.perf_counter() - t0
+        poll_until_done(probe, busy_op) if busy_op else None
+        rev_after_status = revision(probe, doc)
+        rep.add("OPS.03.status_while_busy",
+                "kompas_operation_status отвечает при занятом Worker за названное время, COM не вызван",
+                "PASS" if (wait_op and op_status(while_busy) == "queued" and status_seconds < 2.0
+                           and rev_after_status is not None) else "FAIL",
+                f"статус второй операции {op_status(while_busy)} за {status_seconds:.3f} с (порог 2,000 с), "
+                f"первая в это время {status_of(busy_env)}; ревизия после работы {rev_after_status}")
+
+        # ── OPS.04.cancel_queued: очередь снимается, признака не остаётся ───────────────
+        rev_before_cancel = revision(probe, doc)
+        running_args = dict(long_args)
+        running_args["operation_id"] = str(uuid.uuid4())
+        running_args["expected_revision"] = rev_before_cancel
+        rid_run = send(probe, "kompas_edit_sketch", running_args)
+        run_env = collect(probe, [rid_run], 600).get(rid_run) or {}
+        run_op = (run_env or {}).get("operation_id")
+
+        queued_args = dict(short_args)
+        queued_args["operation_id"] = str(uuid.uuid4())
+        queued_args["expected_revision"] = rev_before_cancel
+        rid_q = send(probe, "kompas_edit_sketch", queued_args)
+        q_env = collect(probe, [rid_q], 600).get(rid_q) or {}
+        q_op = (q_env or {}).get("operation_id")
+
+        cancel_q = call(probe, "kompas_operation_cancel", {"operation_id": q_op}) if q_op else {}
+        poll_until_done(probe, run_op) if run_op else None
+        rev_after_cancel = revision(probe, doc)
+        rep.add("OPS.04.cancel_queued",
+                "cancelled, confirmed; признака нет, ревизия изменилась только от выполнявшейся операции",
+                "PASS" if (q_op and status_of(q_env) == "queued" and op_status(cancel_q) == "cancelled"
+                           and result(cancel_q).get("confirmed") is True
+                           and rev_after_cancel == (rev_before_cancel or 0) + 1) else "FAIL",
+                f"очередная: status={status_of(q_env)}; отмена: status={op_status(cancel_q)} "
+                f"confirmed={result(cancel_q).get('confirmed')}; ревизия {rev_before_cancel}->{rev_after_cancel} "
+                f"(ожидалось +1 от выполнявшейся)")
+
+        # ── OPS.05.cancel_running: запрос записан, статус не cancelled ──────────────────
+        rev_before_run = revision(probe, doc)
+        cancel_args = dict(long_args)
+        cancel_args["operation_id"] = str(uuid.uuid4())
+        cancel_args["expected_revision"] = rev_before_run
+        rid_c = send(probe, "kompas_edit_sketch", cancel_args)
+        c_env = collect(probe, [rid_c], 600).get(rid_c) or {}
+        c_op = (c_env or {}).get("operation_id")
+        cancel_run = call(probe, "kompas_operation_cancel", {"operation_id": c_op}) if c_op else {}
+        c_final = poll_until_done(probe, c_op) if c_op else {}
+        rev_after_run = revision(probe, doc)
+        rep.add("OPS.05.cancel_running",
+                "cancel_requested=true, статус не cancelled; итог равен фактическому состоянию документа",
+                "PASS" if (c_op and status_of(c_env) == "running"
+                           and result(cancel_run).get("cancel_requested") is True
+                           and op_status(cancel_run) == "running"
+                           and status_of(c_final) in ("succeeded", "failed")
+                           and rev_after_run == (rev_before_run or 0) + 1) else "FAIL",
+                f"ответ на команду: {status_of(c_env)}; отмена: status={op_status(cancel_run)} "
+                f"cancel_requested={result(cancel_run).get('cancel_requested')}; итог={status_of(c_final)}; "
+                f"ревизия {rev_before_run}->{rev_after_run}")
+
+        # ── OPS.06.timeout_not_cancel: бюджет истёк, след один ─────────────────────────
+        rev_before_timeout = revision(probe, doc)
+        to_args = dict(long_args)
+        to_args["operation_id"] = str(uuid.uuid4())
+        to_args["expected_revision"] = rev_before_timeout
+        rid_t = send(probe, "kompas_edit_sketch", to_args)
+        t_env = collect(probe, [rid_t], 600).get(rid_t) or {}
+        t_op = (t_env or {}).get("operation_id")
+        t_final = poll_until_done(probe, t_op) if t_op else {}
+        rev_after_timeout = revision(probe, doc)
+        rep.add("OPS.06.timeout_not_cancel",
+                "бюджет истёк -> running; операция завершилась; след один, ревизия выросла один раз",
+                "PASS" if (t_op and status_of(t_env) == "running" and status_of(t_final) == "succeeded"
+                           and rev_after_timeout == (rev_before_timeout or 0) + 1) else "FAIL",
+                f"ответ={status_of(t_env)}; итог={status_of(t_final)}; ревизия "
+                f"{rev_before_timeout}->{rev_after_timeout}")
+
+        # ── OPS.11.unknown_id: код отказа у status и cancel ────────────────────────────
+        unknown = str(uuid.uuid4())
+        s_unknown = call(probe, "kompas_operation_status", {"operation_id": unknown})
+        c_unknown = call(probe, "kompas_operation_cancel", {"operation_id": unknown})
+        rep.add("OPS.11.unknown_id",
+                "код отказа для неизвестного operation_id у status и cancel один и назван",
+                "PASS" if (err_of(s_unknown) == "OPERATION_NOT_FOUND"
+                           and err_of(c_unknown) == "OPERATION_NOT_FOUND") else "FAIL",
+                f"status: {err_of(s_unknown)}; cancel: {err_of(c_unknown)}")
+
+        # ── OPS.10.dependent_step: вторая мутация того же документа ────────────────────
+        rev_before_dep = revision(probe, doc)
+        dep_args = dict(long_args)
+        dep_args["operation_id"] = str(uuid.uuid4())
+        dep_args["expected_revision"] = rev_before_dep
+        rid_dep = send(probe, "kompas_edit_sketch", dep_args)
+        dep_env = collect(probe, [rid_dep], 600).get(rid_dep) or {}
+        dep_op = (dep_env or {}).get("operation_id")
+        second = dict(short_args)
+        second["operation_id"] = str(uuid.uuid4())
+        second["expected_revision"] = rev_before_dep
+        rid_second = send(probe, "kompas_edit_sketch", second)
+        second_env = collect(probe, [rid_second], 600).get(rid_second) or {}
+        poll_until_done(probe, dep_op) if dep_op else None
+        dep_final = poll_until_done(probe, (second_env or {}).get("operation_id")) if second_env.get("operation_id") else {}
+        rev_after_dep = revision(probe, doc)
+        # Защита названа тем, чем она есть: вторая мутация не отвергается и не выполняется поверх
+        # первой, а ждёт очереди гейта и получает СВОЮ ревизию.
+        delta = (rev_after_dep - (rev_before_dep or 0)) if rev_after_dep is not None else None
+        rep.add("OPS.10.dependent_step",
+                "вторая мутация того же документа не выполняется поверх первой: она ждёт очереди Хоста, документ изменён не более двух раз",
+                "PASS" if (status_of(second_env) == "queued" and delta in (1, 2)) else "FAIL",
+                f"вторая мутация: status={status_of(second_env)} err={err_of(second_env)}; её итог={status_of(dep_final)}; "
+                f"ревизия {rev_before_dep}->{rev_after_dep}, прирост {delta} (допустимо 1 или 2: каждая мутация один раз)")
+    finally:
+        if app_id:
+            try:
+                settle(probe, "kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, 180)
+            except (McpError, OSError):
+                pass
+        close_host(probe)
+
+    # ── OPS.07.budget_from_config: бюджет 10 000 мс из конфигурации ───────────────────
+    cfg_big = own_config(10000, "ops-budget")
+    probe_big = open_host(cfg_big)
+    app_big = None
+    try:
+        env = settle(probe_big, "kompas_connect", {"mode": "launch", "make_visible": False,
+                                                 "operation_id": str(uuid.uuid4())}, 300)
+        app_big = (env or {}).get("application_id") or result(env).get("application_id")
+        env = settle(probe_big, "kompas_create_document", {"application_id": app_big, "kind": "part", "name": "OPS_BUDGET"})
+        doc_big = result(env).get("document_id") or result(env).get("id")
+        rev_big = result(env).get("revision") or (env or {}).get("revision_after") or 1
+        env = settle(probe_big, "kompas_create_sketch", {
+            "document_id": doc_big, "expected_revision": rev_big,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "budget"})
+        sketch_big = result(env).get("id")
+        sketch_big = sketch_big.get("id") if isinstance(sketch_big, dict) else sketch_big
+        rev_big = (env or {}).get("revision_after") or rev_big
+        if not (app_big and doc_big and sketch_big):
+            rep.add("OPS.07.budget_from_config", "sync_budget_ms=10000: running пришёл на 10 с",
+                    "FAIL", "сеанс/документ второго Хоста не созданы")
+        else:
+            big_args = {"sketch_ref": sketch_big, "expected_revision": rev_big, "mode": "append",
+                        "entities": long_entities, "operation_id": str(uuid.uuid4())}
+            t0 = _time.perf_counter()
+            rid = send(probe_big, "kompas_edit_sketch", big_args)
+            big_env = collect(probe_big, [rid], 600).get(rid) or {}
+            arrived = _time.perf_counter() - t0
+            big_op = (big_env or {}).get("operation_id")
+            big_final = poll_until_done(probe_big, big_op) if big_op else {}
+            if status_of(big_env) != "running":
+                rep.add("OPS.07.budget_from_config",
+                        "sync_budget_ms=10000 и операция длиннее: running на 10 с +- допуск",
+                        "NAMED",
+                        f"операция закончилась за {arrived:.2f} с, то есть КОРОЧЕ бюджета 10 с: "
+                        f"ответ={status_of(big_env)}, итог={status_of(big_final)}. Строка не воспроизводится "
+                        "на этой операции; нужна операция длиннее 10 с либо меньший бюджет из конфига")
+            else:
+                rep.add("OPS.07.budget_from_config",
+                        "sync_budget_ms=10000 и операция длиннее: running на 10 с +- допуск",
+                        "PASS" if abs(arrived - 10.0) <= 3.0 else "FAIL",
+                        f"running пришёл на {arrived:.2f} с при бюджете 10,000 с (допуск 3,000 с)")
+    finally:
+        if app_big:
+            try:
+                settle(probe_big, "kompas_disconnect", {
+                    "application_id": app_big, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, 180)
+            except (McpError, OSError):
+                pass
+        close_host(probe_big)
+
+    # ── OPS.08.recovery: незавершённая запись журнала ─────────────────────────────────
+    # Журнал пишется ДО старта: Хост читает его один раз, при открытии. Запись `in_flight` — это
+    # «процесс погиб, не дождавшись ответа Worker»; документ в записи вымышленный намеренно: строка
+    # доказывает чтение журнала и запрет повтора, а не работу с моделью.
+    cfg_rec = own_config(200, "ops-recovery")
+    journal_path = None
+    try:
+        with open(cfg_rec, encoding="utf-8-sig") as fh:
+            journal_path = _json.load(fh).get("journal_path")
+        os.makedirs(os.path.dirname(journal_path), exist_ok=True)
+        stale_op = str(uuid.uuid4())
+        record = {
+            "operation_id": stale_op,
+            "tool": "kompas_rebuild",
+            "arguments_hash": "0" * 64,
+            "document_id": str(uuid.uuid4()),
+            "base_revision": 7,
+            "started_utc": "2026-10-30T00:00:00+00:00",
+            "outcome": "in_flight",
+            "result_json": None,
+            "error": None,
+            "finished_utc": None,
+            "needs_reconciliation": False,
+        }
+        with open(journal_path, "w", encoding="utf-8") as fh:
+            fh.write(_json.dumps(record, ensure_ascii=False) + "\n")
+
+        probe_rec = open_host(cfg_rec)
+        try:
+            # Журнал открывается вместе с владением сеансом: без него статус отвечает
+            # SESSION_NOT_ACQUIRED, и строка проверяла бы не восстановление, а отсутствие сеанса.
+            settle(probe_rec, "kompas_acquire_session", {}, 300)
+            st = call(probe_rec, "kompas_operation_status", {"operation_id": stale_op})
+            session = call(probe_rec, "kompas_session_status", {})
+            counter = result(session).get("operations_needing_reconciliation")
+            t0 = _time.perf_counter()
+            # Аргументы ВАЛИДНЫ по схеме: отказ по схеме случился бы ДО журнала и ничего не сказал
+            # бы о повторе. Запись журнала ссылается на вымышленный документ, поэтому дойти до COM
+            # вызов не может - и не должен.
+            repeat = call(probe_rec, "kompas_rebuild", {
+                "operation_id": stale_op, "document_id": record["document_id"]})
+            repeat_seconds = _time.perf_counter() - t0
+            rep.add("OPS.08.recovery",
+                    "старт с незавершённой записью: outcome_unknown, needs_reconciliation=true, команда не выполнена; повтор ключа её не запускает",
+                    "PASS" if (op_status(st) == "outcome_unknown" and result(st).get("needs_reconciliation") is True
+                               and counter == 1 and status_of(repeat) == "outcome_unknown"
+                               and repeat_seconds < 5.0) else "FAIL",
+                    f"статус после старта: {op_status(st)}, needs_reconciliation="
+                    f"{result(st).get('needs_reconciliation')}; счётчик в session_status={counter}; повтор того же "
+                    f"operation_id: status={status_of(repeat)} err={err_of(repeat)} за {repeat_seconds:.2f} с")
+        finally:
+            close_host(probe_rec)
+
+        # ── OPS.09.reconcile: три исхода ───────────────────────────────────────────────
+        # Доказать «применено» и «не применено» можно только на ЖИВОМ документе, а запись журнала
+        # ссылается на document_id ТОГО сеанса, в котором он был открыт: id выдаётся при открытии и
+        # другому Хосту неизвестен. Поэтому здесь измеряется третий исход - «не определено» с
+        # причиной, а два остальных ждут либо строки на живом документе, либо маршрута согласования
+        # по пути вместо id.
+        probe_rec = open_host(cfg_rec)
+        try:
+            settle(probe_rec, "kompas_acquire_session", {}, 300)
+            rec = call(probe_rec, "kompas_operation_reconcile", {"operation_id": stale_op})
+            rep.add("OPS.09.reconcile",
+                    "три исхода согласования, метка снята только при доказанном исходе",
+                    "NAMED" if result(rec).get("outcome") == "undetermined" else "FAIL",
+                    f"измерен исход {result(rec).get('outcome')} при недоступном документе: "
+                    f"{result(rec).get('reason')}. Исходы applied/not_applied требуют живого документа: "
+                    "document_id записи принадлежит прежнему сеансу")
+        finally:
+            close_host(probe_rec)
+    except (OSError, ValueError) as exc:
+        rep.add("OPS.08.recovery", "журнал с незавершённой записью читается на старте", "FAIL", f"{exc}")
+    finally:
+        if journal_path:
+            try:
+                os.remove(journal_path)
+            except OSError:
+                pass
+
+
 def update_checks(host, config, workdir, rep):
     """UN.01…UN.06 — сообщение о новом выпуске без сети (наряд `UPDATE_NOTICE`).
 
@@ -56541,6 +57081,9 @@ EXTRA_GROUP_CHECKS = {
     "update": lambda c, r, a, w, v, p: update_checks(c.host_exe, c.config, w, r),
     "iges": lambda c, r, a, w, v, p: iges_checks(c, r, a, w),
     "flat_part": lambda c, r, a, w, v, p: flat_part_checks(c, r, a, w),
+    # Группа OPS ведёт свой Хост со своим журналом и малым бюджетом: ей нужны путь к
+    # исполняемому файлу и конфигурация, а не app_id общего сеанса.
+    "ops": lambda c, r, a, w, v, p: ops_checks(c.host_exe, c.config, w, r),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
 }
 

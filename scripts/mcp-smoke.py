@@ -52311,17 +52311,26 @@ def ops_checks(host, config, workdir, rep):
         error = (env or {}).get("error")
         return (error or {}).get("code") if isinstance(error, dict) else None
 
+    def err_msg(env):
+        error = (env or {}).get("error")
+        return (error or {}).get("message") if isinstance(error, dict) else None
+
     def revision(probe, doc):
         # `detail` - обязательное поле схемы: без него чтение отвергается до COM.
         return result(call(probe, "kompas_get_context", {"document_id": doc, "detail": "minimal"})).get("revision")
 
     def poll_until_done(probe, operation_id, timeout=240.0):
-        """Poll the operation until it leaves queued/running. Returns the last envelope."""
+        """Poll the operation until it leaves queued/running. Returns the last envelope.
+
+        Сравнивать надо состояние ОПЕРАЦИИ (`op_status`), а не вызова: у `kompas_operation_status`
+        статус вызова всегда `succeeded`, поэтому по нему цикл выходил на первом же ответе и строки
+        читали незавершённую операцию.
+        """
         deadline = _time.time() + timeout
         env = {}
         while _time.time() < deadline:
             env = call(probe, "kompas_operation_status", {"operation_id": operation_id})
-            if status_of(env) not in ("queued", "running"):
+            if op_status(env) not in ("queued", "running"):
                 return env
             _time.sleep(0.25)
         return env
@@ -52425,10 +52434,10 @@ def ops_checks(host, config, workdir, rep):
                 "длинная операция -> running + operation_id; вторая -> queued; опрос -> succeeded; результат равен повтору",
                 "PASS" if (status_of(long_env) == "running" and long_op
                            and status_of(short_env) == "queued" and short_op
-                           and status_of(final) == "succeeded" and status_of(replay) == "succeeded"
+                           and op_status(final) == "succeeded" and status_of(replay) == "succeeded"
                            and same_result and same_revision) else "FAIL",
                 f"длинная: status={status_of(long_env)} op={bool(long_op)}; вторая: status={status_of(short_env)} "
-                f"op={bool(short_op)}; опрос: {status_of(final)}; повтор: {status_of(replay)}; "
+                f"op={bool(short_op)}; опрос: {op_status(final)}; повтор: {status_of(replay)}; "
                 f"результат повтора совпал={same_result} (записанный результат "
                 f"{'есть' if result_known else 'не помещается в ответ статуса'}), "
                 f"ревизия повтора={((replay or {}).get('revision_after'))} против фактической {rev_after_all}")
@@ -52594,6 +52603,14 @@ def ops_checks(host, config, workdir, rep):
             rep.add("OPS.07.budget_from_config", "sync_budget_ms=10000: running пришёл на 10 с",
                     "FAIL", "сеанс/документ второго Хоста не созданы")
         else:
+            # Один вызов на 1200 сущностей укладывается в бюджет 10 с, поэтому операция удлиняется
+            # разогревом: перестройка эскиза растёт с числом сущностей в нём, и третий такой вызов
+            # по эскизу на 2400 сущностей бюджета уже не укладывается. Разогрев не измеряется.
+            for _ in range(2):
+                warm_args = {"sketch_ref": sketch_big, "expected_revision": rev_big, "mode": "append",
+                             "entities": long_entities, "operation_id": str(uuid.uuid4())}
+                warm = settle(probe_big, "kompas_edit_sketch", warm_args, 600)
+                rev_big = (warm or {}).get("revision_after") or rev_big
             big_args = {"sketch_ref": sketch_big, "expected_revision": rev_big, "mode": "append",
                         "entities": long_entities, "operation_id": str(uuid.uuid4())}
             t0 = _time.perf_counter()
@@ -52607,7 +52624,7 @@ def ops_checks(host, config, workdir, rep):
                         "sync_budget_ms=10000 и операция длиннее: running на 10 с +- допуск",
                         "NAMED",
                         f"операция закончилась за {arrived:.2f} с, то есть КОРОЧЕ бюджета 10 с: "
-                        f"ответ={status_of(big_env)}, итог={status_of(big_final)}. Строка не воспроизводится "
+                        f"ответ={status_of(big_env)}, итог={op_status(big_final)}. Строка не воспроизводится "
                         "на этой операции; нужна операция длиннее 10 с либо меньший бюджет из конфига")
             else:
                 rep.add("OPS.07.budget_from_config",
@@ -52635,11 +52652,18 @@ def ops_checks(host, config, workdir, rep):
             journal_path = _json.load(fh).get("journal_path")
         os.makedirs(os.path.dirname(journal_path), exist_ok=True)
         stale_op = str(uuid.uuid4())
+        # Схема требует document_id из 32 hex БЕЗ дефисов: UUID с дефисами отвергается ещё на
+        # проверке аргументов, до журнала, и строка тогда проверяет схему, а не восстановление.
+        stale_doc = uuid.uuid4().hex
+        # Ключ идемпотентности - SHA-256 канонической записи аргументов (ключи по порядку, без
+        # пробелов): с другим хешем повтор отвергается OPERATION_ID_CONFLICT и до журнала не доходит.
+        canonical = _json.dumps({"document_id": stale_doc, "operation_id": stale_op},
+                                sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         record = {
             "operation_id": stale_op,
             "tool": "kompas_rebuild",
-            "arguments_hash": "0" * 64,
-            "document_id": str(uuid.uuid4()),
+            "arguments_hash": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            "document_id": stale_doc,
             "base_revision": 7,
             "started_utc": "2026-10-30T00:00:00+00:00",
             "outcome": "in_flight",
@@ -52664,7 +52688,7 @@ def ops_checks(host, config, workdir, rep):
             # бы о повторе. Запись журнала ссылается на вымышленный документ, поэтому дойти до COM
             # вызов не может - и не должен.
             repeat = call(probe_rec, "kompas_rebuild", {
-                "operation_id": stale_op, "document_id": record["document_id"]})
+                "operation_id": stale_op, "document_id": stale_doc})
             repeat_seconds = _time.perf_counter() - t0
             rep.add("OPS.08.recovery",
                     "старт с незавершённой записью: outcome_unknown, needs_reconciliation=true, команда не выполнена; повтор ключа её не запускает",
@@ -52673,7 +52697,8 @@ def ops_checks(host, config, workdir, rep):
                                and repeat_seconds < 5.0) else "FAIL",
                     f"статус после старта: {op_status(st)}, needs_reconciliation="
                     f"{result(st).get('needs_reconciliation')}; счётчик в session_status={counter}; повтор того же "
-                    f"operation_id: status={status_of(repeat)} err={err_of(repeat)} за {repeat_seconds:.2f} с")
+                    f"operation_id: status={status_of(repeat)} err={err_of(repeat)} "
+                    f"({str(err_msg(repeat))[:160]}) за {repeat_seconds:.2f} с")
         finally:
             close_host(probe_rec)
 

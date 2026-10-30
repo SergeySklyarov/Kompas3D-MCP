@@ -59,6 +59,41 @@ public static class AssemblyCopyPlan
 
     public const string ModeReadOnly = "read_only";
 
+    /// <summary>Free space left on the volume after a copy, below which the checkpoint is refused.</summary>
+    /// <remarks>INVARIANT: a copy that fills the volume would fail halfway and leave the client's own
+    /// document without the space it needs. 64 MiB is enough for the client's next save of a graph at the
+    /// 500-file limit. History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    public const long DiskReserveBytes = 64L * 1024 * 1024;
+
+    /// <summary>The volume a copy folder lives on, and whether it can hold <paramref name="entries"/>.</summary>
+    /// <remarks>INVARIANT: the sum of the graph's file sizes plus the reserve must fit the volume BEFORE the
+    /// first write, so "not enough space" is a refusal and not a half-written folder.
+    /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    public static (bool Fits, long NeededBytes, long AvailableBytes) Space(
+        IReadOnlyList<AssemblyCopyEntry> entries, string copyFolder)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentException.ThrowIfNullOrWhiteSpace(copyFolder);
+
+        var needed = entries.Where(e => e.CopyPath is not null).Sum(e => e.SizeBytes) + DiskReserveBytes;
+        var root = Path.GetPathRoot(Path.GetFullPath(copyFolder));
+        if (string.IsNullOrEmpty(root))
+        {
+            return (false, needed, 0);
+        }
+
+        try
+        {
+            var available = new DriveInfo(root).AvailableFreeSpace;
+            return (available >= needed, needed, available);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            // An unreadable volume is not a proven shortage: the copy attempt reports its own failure.
+            return (true, needed, 0);
+        }
+    }
+
     /// <summary>Plan the copies of <paramref name="links"/> below <paramref name="copyFolder"/>.</summary>
     /// <remarks>INVARIANT: the plan is decided before anything is written, so every refusal (missing file,
     /// too large graph) is reported with the full list of names and no folder is created.
@@ -183,22 +218,28 @@ public static class AssemblyCopyPlan
 
     /// <summary>Compare the links read back from the copy with the plan.</summary>
     /// <remarks>INVARIANT: a link is checked against the COPY FOLDER, not against the plan's string: a copy
-    /// that points outside it is a broken checkpoint even when the plan said "copy".
+    /// that points outside it is a broken checkpoint even when the plan said "copy". INVARIANT: the check
+    /// runs BOTH ways — a link the plan never named is a mismatch too, else a copy that kept a link to the
+    /// client's file passes whenever the component count happens to match.
     /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
     public static (bool Passed, IReadOnlyList<string> Mismatches) Verify(
         IReadOnlyList<AssemblyCopyEntry> entries, string copyFolder,
         IReadOnlyList<AssemblyComponentLink> readBack, int expectedComponents)
     {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(readBack);
+        ArgumentException.ThrowIfNullOrWhiteSpace(copyFolder);
+
         var mismatches = new List<string>();
         var inside = Path.GetFullPath(copyFolder) + Path.DirectorySeparatorChar;
+        var readOnlySources = entries
+            .Where(entry => entry.Mode == ModeReadOnly)
+            .Select(entry => Path.GetFullPath(entry.SourcePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
         {
-            var observed = readBack
-                .Where(link => string.Equals(link.SourcePath, entry.SourcePath, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(link.SourcePath, entry.CopyPath, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
+            var observed = LinksOf(entry, readBack);
             if (observed.Length == 0)
             {
                 mismatches.Add($"файл «{Path.GetFileName(entry.SourcePath)}» не найден среди ссылок копии");
@@ -210,7 +251,7 @@ public static class AssemblyCopyPlan
                 var path = link.SourcePath;
                 if (entry.Mode == ModeCopy)
                 {
-                    if (!path.StartsWith(inside, StringComparison.OrdinalIgnoreCase))
+                    if (!Path.GetFullPath(path).StartsWith(inside, StringComparison.OrdinalIgnoreCase))
                     {
                         mismatches.Add($"ссылка «{path}» ведёт вне каталога копии");
                     }
@@ -220,6 +261,27 @@ public static class AssemblyCopyPlan
                     mismatches.Add($"read_only-ссылка «{path}» не совпала с исходным файлом");
                 }
             }
+
+            var insertions = observed.Sum(link => Math.Max(1, link.Insertions));
+            if (insertions != entry.Insertions)
+            {
+                mismatches.Add($"файл «{Path.GetFileName(entry.SourcePath)}» вставлен {insertions} раз, "
+                    + $"в исходной сборке {entry.Insertions}");
+            }
+        }
+
+        // The other direction: nothing in the copy may point at a file this plan does not know.
+        foreach (var link in readBack)
+        {
+            var full = Path.GetFullPath(link.SourcePath);
+            if (full.StartsWith(inside, StringComparison.OrdinalIgnoreCase)
+                || readOnlySources.Contains(full))
+            {
+                continue;
+            }
+
+            mismatches.Add($"ссылка «{link.SourcePath}» ведёт вне каталога копии и не входит в read_only "
+                + "этого плана");
         }
 
         var total = readBack.Count;
@@ -228,8 +290,24 @@ public static class AssemblyCopyPlan
             mismatches.Add($"число компонентов в копии {total}, в исходной сборке {expectedComponents}");
         }
 
+        // A refusal names what was actually read back: without it the caller sees "did not match" and has
+        // no way to tell a dropped instance from a link that stayed on the client's file.
+        if (mismatches.Count > 0)
+        {
+            mismatches.Add("прочитано: " + string.Join(", ", readBack.Take(6).Select(link =>
+                Path.GetFileName(link.SourcePath) + "×" + Math.Max(1, link.Insertions))));
+        }
+
         return (mismatches.Count == 0, mismatches);
     }
+
+    /// <summary>The links a read-back graph reports for one planned file: its source, or its copy.</summary>
+    private static AssemblyComponentLink[] LinksOf(
+        AssemblyCopyEntry entry, IReadOnlyList<AssemblyComponentLink> readBack) => readBack
+        .Where(link => string.Equals(link.SourcePath, entry.SourcePath, StringComparison.OrdinalIgnoreCase)
+            || (entry.CopyPath is not null
+                && string.Equals(link.SourcePath, entry.CopyPath, StringComparison.OrdinalIgnoreCase)))
+        .ToArray();
 
     private static string Sha256Of(string path)
     {

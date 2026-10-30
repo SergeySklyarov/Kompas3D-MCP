@@ -235,6 +235,10 @@ internal sealed class ScenarioRunner
             ["scenario_version"] = ScenarioVersion,
             ["document_id"] = documentId,
             ["document_id_after"] = effectiveDocumentId,
+            // The plan works in the COPY after a checkpoint, so the answer has to name that file next to the
+            // id: a client that only reads the id would look for its result in its own file and not find it.
+            ["document_path"] = JsonScalars.ReadString(checkpoint["document_path"])
+                ?? JsonScalars.ReadString(checkpoint["path"]),
             ["operation_id"] = parentOperationId,
             ["on_error"] = onError,
             ["status"] = failedStep is null ? "succeeded" : "failed",
@@ -246,6 +250,25 @@ internal sealed class ScenarioRunner
             ["atomicity"] = "не транзакция: успешные шаги до отказавшего остаются в модели, "
                 + "если восстановление не выполнялось или не удалось",
         };
+
+        // INVARIANT: the cause of a refused checkpoint and the files it names reach the CLIENT at the top
+        // level too, not only inside the step report: a client reads the envelope's error, and a cause
+        // buried one level deeper is a cause it never sees.
+        var failureDetails = new JsonObject
+        {
+            ["failed_step"] = failedStep,
+            ["step_error"] = failedError?.DeepClone(),
+            ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)!).ToArray()),
+            ["restore_attempted"] = JsonScalars.ReadBool(restore["attempted"]) ?? false,
+            ["restored"] = JsonScalars.ReadBool(restore["succeeded"]) ?? false,
+        };
+        if (failedError?["details"] is JsonObject stepDetails)
+        {
+            foreach (var pair in stepDetails)
+            {
+                failureDetails["checkpoint_" + pair.Key] = pair.Value?.DeepClone();
+            }
+        }
 
         return new ResultEnvelope<JsonNode?>
         {
@@ -270,14 +293,7 @@ internal sealed class ScenarioRunner
                     RetryPolicy.Never,
                     null,
                     mutated.Count > 0,
-                    new JsonObject
-                    {
-                        ["failed_step"] = failedStep,
-                        ["step_error"] = failedError?.DeepClone(),
-                        ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)!).ToArray()),
-                        ["restore_attempted"] = JsonScalars.ReadBool(restore["attempted"]) ?? false,
-                        ["restored"] = JsonScalars.ReadBool(restore["succeeded"]) ?? false,
-                    }),
+                    failureDetails),
         };
     }
 
@@ -595,7 +611,8 @@ internal sealed class ScenarioRunner
                 ["details"] = new JsonObject
                 {
                     ["field"] = "checkpoint_policy",
-                    ["document_kind"] = "drawing",
+                    ["cause"] = "drawing_not_in_policy",
+                    ["files"] = new JsonArray(),
                 },
             });
         }
@@ -637,8 +654,13 @@ internal sealed class ScenarioRunner
 
         report["taken"] = true;
         report["path"] = path;
+        report["document_path"] = path;
         report["revision"] = revision.Value;
         report["application_id"] = context.ApplicationId;
+        // A detail has no dependency graph, so the mode changes nothing here — but it is named, not ignored:
+        // the client asked for it and has to see that the answer honoured the request.
+        report["notes"] = "external_parts=" + externalParts + " на детали поведение не меняет: у детали нет "
+            + "графа зависимостей. Правки идут в копию в каталоге контрольной точки, файл клиента не изменён.";
         // SaveAs reports the id of the document it wrote: a different one means the plan has to continue on
         // the copy, not on the id it started with.
         if (JsonScalars.ReadString(saved.Result?["context"]?["id"]) is { Length: > 0 } savedId)

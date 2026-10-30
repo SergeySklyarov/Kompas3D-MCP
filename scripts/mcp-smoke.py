@@ -14896,13 +14896,9 @@ IGES_REFERENCE = {
 def assembly_checkpoint_checks(client, rep, app_id, workdir):
     """ASC.* — контрольная точка СБОРКИ: копия графа зависимостей (наряд ASSEMBLY_CHECKPOINT).
 
-    ЗАЧЕМ ЭТА ГРУППА. Спека §1.9: обычный SaveAs сборки не гарантирует копию вложенных деталей.
-    Строки сравнивают ЗНАЧЕНИЯ, а не «вызов прошёл»: совпадение sha256 файлов копии с источниками,
-    ссылки, перечитанные ИЗ ЗАНОВО ОТКРЫТОЙ КОПИИ, и хеши файлов клиента до и после снятия.
-
-    ЧЕГО ЗДЕСЬ НЕТ (наряд §4): независимость копии от изменённой детали (ASC.03), восстановление
-    (ASC.06), отказы по отсутствующему файлу и несохранённому компоненту (ASC.07), чужой открытый
-    документ (ASC.08) и одноимённые файлы из разных каталогов (ASC.09) — их пишет следующий запуск.
+    WHY THIS GROUP. Spec §1.9: a plain SaveAs of an assembly does not carry nested parts. The rows compare
+    VALUES, not "the call returned": the sha256 of a detail's copy against its source, the links re-read
+    FROM THE REOPENED COPY, the client's file hashes before and after, and the manifest against the graph.
     """
     import hashlib
     import json
@@ -15066,6 +15062,9 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
     manifest_path = None
     if built:
         sources = {"part-a.m3d": part_a, "part-b.m3d": part_b, "sub.m3d": sub_path}
+        # Файлы ДЕТАЛЕЙ копируются байтами, поэтому их копии обязаны совпасть с источником по sha256.
+        # Подсборка переназначена (в ней записан fileName), её файл сравнивается только существованием.
+        details = ("part-a.m3d", "part-b.m3d")
         env, code = run(top_doc, rebuild_step(current_rev(top_doc)))
         answer = result(env)
         checkpoint = answer.get("checkpoint") or {}
@@ -15075,12 +15074,22 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 manifest = json.load(handle)
         rows = manifest.get("files") or []
         by_name = {_os.path.basename(row.get("source_path") or ""): row for row in rows}
+        copy_root = _os.path.abspath(_os.path.dirname(manifest_path or "")) + _os.sep
+        # sha256 в manifest описывает ИСТОЧНИК; копия детали обязана совпасть и с ним, и с файлом на диске.
         hashes_ok = all(
-            name in by_name and by_name[name].get("sha256") == sha(path)
-            for name, path in sources.items())
+            name in by_name
+            and by_name[name].get("sha256") == sha(path)
+            and by_name[name].get("copy_path")
+            and _os.path.exists(by_name[name]["copy_path"])
+            and sha(by_name[name]["copy_path"]) == sha(path)
+            for name, path in ((n, sources[n]) for n in details))
+        assembly_copied = (
+            "sub.m3d" in by_name
+            and by_name["sub.m3d"].get("copy_path")
+            and _os.path.exists(by_name["sub.m3d"]["copy_path"]))
         copy_inside = all(
             row.get("copy_path") and
-            _os.path.abspath(row["copy_path"]).startswith(_os.path.abspath(_os.path.dirname(manifest_path)))
+            _os.path.abspath(row["copy_path"]).startswith(copy_root)
             for row in rows)
         copy_ok = (
             code is None
@@ -15089,17 +15098,18 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             and manifest.get("verified") is True
             and len(rows) == len(sources)
             and hashes_ok
+            and assembly_copied
             and copy_inside
             and _os.path.exists(checkpoint.get("path") or ""))
         rep.add("ASC.01.graph_copy",
-                "copy: файлы деталей и подсборка скопированы, manifest совпал с графом, sha256 копий "
-                "равны sha256 источников",
+                "copy: файлы деталей скопированы байтами (sha256 копии равен sha256 источника), "
+                "подсборка скопирована, manifest совпал с графом, все копии внутри каталога копии",
                 "PASS" if copy_ok else "FAIL",
                 f"code={code} taken={checkpoint.get('taken')} format={manifest.get('format')} "
                 f"verified={manifest.get('verified')} rows={len(rows)} (ждали {len(sources)}) "
-                f"hashes={hashes_ok} inside={copy_inside} path={checkpoint.get('path')} "
-                f"doc_after={checkpoint.get('document_id_after')} "
-                f"docs={checkpoint.get('session_documents')} err={emsg(env)}")
+                f"hashes={hashes_ok} assembly={assembly_copied} inside={copy_inside} "
+                f"path={checkpoint.get('path')} doc_after={checkpoint.get('document_id_after')} "
+                f"document_path={checkpoint.get('document_path')} err={emsg(env)}")
 
         # ── ASC.02 ссылки перечитаны из заново открытой копии ──────────────────────────────────
         # `application_id` обязателен в контракте open: без него отказ INVALID_ARGUMENT, а не открытие.
@@ -15108,7 +15118,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             "path": checkpoint.get("path") or top_path, "access": "read_only"})
         copy_doc = doc_of(opened)
         links = links_of(copy_doc) if copy_doc else []
-        copy_root = _os.path.abspath(_os.path.dirname(checkpoint.get("path") or top_path))
+        copy_root = _os.path.abspath(_os.path.dirname(checkpoint.get("path") or top_path)) + _os.sep
         inside = [row for row in links
                   if _os.path.abspath(row.get("source_path") or "").startswith(copy_root)]
         # Обход рекурсивный: вложенная деталь подсборки тоже в перечне, поэтому число ссылок сверяется
@@ -15166,7 +15176,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             rows_ro = manifest_ro.get("files") or []
             no_copies = all(row.get("copy_path") is None for row in rows_ro)
             modes_named = all(row.get("mode") == "read_only" for row in rows_ro)
-            note_named = "не защищает" in (checkpoint_ro.get("note") or "")
+            note_named = "не защищает" in (checkpoint_ro.get("notes") or "")
             read_only_ok = (
                 code is None and bool(rows_ro) and no_copies and modes_named and note_named
                 and checkpoint_ro.get("read_only_not_restored") == len(rows_ro))
@@ -15194,14 +15204,15 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         details = err_details(env)
         drawing_ok = (
             "чертёж не входит в политику document_copy" in (emsg(env) or "")
+            and details.get("checkpoint_cause") == "drawing_not_in_policy"
             and answer.get("checkpoint", {}).get("taken") is False
             and answer.get("status") == "failed"
             and current_rev(drawing_doc) == revision_before)
         rep.add("ASC.10.drawing_refused",
-                "чертёж отказывает по-прежнему: контрольная точка не снята, отказ назван, ни один "
-                "шаг не выполнен, ревизия не изменилась",
+                "чертёж отказывает по-прежнему: контрольная точка не снята, отказ назван "
+                "(details.cause=drawing_not_in_policy), ни один шаг не выполнен, ревизия не изменилась",
                 "PASS" if drawing_ok else "FAIL",
-                f"code={code} reason={details.get('reason')} taken="
+                f"code={code} cause={details.get('checkpoint_cause')} taken="
                 f"{answer.get('checkpoint', {}).get('taken')} status={answer.get('status')} "
                 f"revision={revision_before}->{current_rev(drawing_doc)} err={emsg(env)}")
         close(drawing_doc)
@@ -15259,36 +15270,89 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             "application_id": app_id, "path": top_path, "access": "edit"})
         restore_doc = doc_of(opened)
         if restore_doc:
+            links_before = links_of(restore_doc)
+            refs_before = [row.get("component_ref") for row in links_before]
             revision_before = current_rev(restore_doc)
-            components_before = len(links_of(restore_doc))
+            components_before = len(links_before)
             box_before = gabarit(restore_doc)
+            # s1 - НАСТОЯЩАЯ правка: удаление компонента. Без неё «как до серии» совпало бы и без
+            # восстановления, и строка проходила бы впустую. `expected_revision` шагу сценарий не
+            # подставляет, а контрольная точка ревизию подняла, поэтому ревизия берётся ссылкой на
+            # прочитанный шагом s0 контекст.
+            # Ссылка на компонент, прочитанная ДО контрольной точки, в копии уже недействительна (SaveAs
+            # выдал новые), поэтому настоящая правка - вставка компонента: ей ссылка не нужна.
             failing = [
-                {"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}},
-                {"step_id": "s2", "tool": "kompas_delete_component",
-                 "arguments": {"component_ref": "00000000-0000-0000-0000-000000000000"}},
+                {"step_id": "s0", "tool": "kompas_get_context",
+                 "arguments": {"detail": "minimal"}},
+                {"step_id": "s1", "tool": "kompas_insert_component",
+                 "arguments": {"source_path": part_b,
+                               "expected_revision": {"from_step": "s0", "field": "revision.after"}}},
+                {"step_id": "s2", "tool": "kompas_insert_component",
+                 "arguments": {"source_path": part_b + ".absent",
+                               "expected_revision": {"from_step": "s1", "field": "revision.after"}}},
             ]
             env, code = run(restore_doc, failing)
             answer = result(env)
             restore = answer.get("restore") or {}
+            steps = answer.get("steps") or []
             after_doc = restore.get("document_id_after")
             components_after = len(links_of(after_doc)) if after_doc else None
             box_after = gabarit(after_doc) if after_doc else (None, None)
-            restore_ok = (
+            revision_after_doc = current_rev(after_doc) if after_doc else None
+            # «Правка применилась до отказа»: шаг s1 отчитался успехом и назван в partial_effects.
+            s1_applied = (len(steps) > 1 and steps[1].get("step_id") == "s1"
+                          and steps[1].get("status") == "succeeded"
+                          and "s1" in (answer.get("partial_effects") or []))
+            copy_restore_ok = (
                 code is not None
                 and answer.get("status") == "failed"
                 and restore.get("attempted") is True
                 and restore.get("succeeded") is True
                 and bool(after_doc) and after_doc != restore_doc
+                and s1_applied
+                and restore.get("read_only_not_restored") == 0
                 and components_after == components_before
                 and box_after == box_before
-                and restore.get("revision_after") is not None)
+                and restore.get("revision_after") is not None
+                and restore.get("revision_after") == revision_after_doc)
+
+            # read_only: компоненты контрольная точка не защищала, и это число названо ответом.
+            opened, _c = call("kompas_open_document", {
+                "application_id": app_id, "path": top_path, "access": "edit"})
+            ro_doc = doc_of(opened)
+            ro_ok = False
+            ro_seen = None
+            ro_files = None
+            if ro_doc:
+                ro_refs = [row.get("component_ref") for row in links_of(ro_doc)]
+                env_ro, code_ro = run(ro_doc, [
+                    {"step_id": "s0", "tool": "kompas_get_context",
+                     "arguments": {"detail": "minimal"}},
+                    {"step_id": "s1", "tool": "kompas_insert_component",
+                     "arguments": {"source_path": part_b,
+                                   "expected_revision": {"from_step": "s0", "field": "revision.after"}}},
+                    {"step_id": "s2", "tool": "kompas_insert_component",
+                     "arguments": {"source_path": part_b + ".absent",
+                                   "expected_revision": {"from_step": "s1", "field": "revision.after"}}},
+                ], external_parts="read_only")
+                answer_ro = result(env_ro)
+                restore_ro = answer_ro.get("restore") or {}
+                ro_seen = restore_ro.get("read_only_not_restored")
+                ro_files = (answer_ro.get("checkpoint") or {}).get("file_count")
+                ro_ok = (code_ro is not None and restore_ro.get("succeeded") is True
+                         and isinstance(ro_seen, int) and ro_seen > 0 and ro_seen == ro_files)
+                close(answer_ro.get("document_id_after"))
             rep.add("ASC.06.restore",
-                    "шаг сценария отказал: restore_checkpoint дал новый document_id, новую ревизию, "
-                    "компоненты и габарит как до серии",
-                    "PASS" if restore_ok else "FAIL",
+                    "шаг сценария отказал: restore_checkpoint дал новый document_id, ревизия равна "
+                    "прочитанной из него, компоненты и габарит как до серии (правка s1 применилась до "
+                    "отказа); на copy read_only_not_restored=0, на read_only он равен числу файлов",
+                    "PASS" if (copy_restore_ok and ro_ok) else "FAIL",
                     f"code={code} status={answer.get('status')} restore={restore.get('succeeded')} "
-                    f"doc {restore_doc} -> {after_doc} components {components_before}->{components_after} "
-                    f"box {box_before}->{box_after} rev {revision_before}->{restore.get('revision_after')} "
+                    f"s1_applied={s1_applied} doc {restore_doc} -> {after_doc} "
+                    f"components {components_before}->{components_after} box {box_before}->{box_after} "
+                    f"rev {restore.get('revision_after')} vs doc {revision_after_doc} "
+                    f"read_only_not_restored={restore.get('read_only_not_restored')} "
+                    f"ro: code={code_ro} value={ro_seen} files={ro_files} "
                     f"err={emsg(env)}")
         else:
             rep.add("ASC.06.restore", "восстановление из копии", "FAIL",
@@ -15303,22 +15367,39 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         def folders():
             return set(_os.listdir(scenario_root)) if _os.path.isdir(scenario_root) else set()
 
+        def checkpoint_cause(env):
+            """Причина отказа контрольной точки: reason один, конкретика - в details.cause."""
+            details = err_details(env)
+            files = details.get("checkpoint_files") or []
+            return details.get("checkpoint_cause"), [str(name) for name in files]
+
+        def no_step_result(env):
+            """Первый шаг не выполнен: отказ назван на нём, шаг помечен skipped, эффектов нет."""
+            answer = result(env)
+            steps = answer.get("steps") or []
+            return (answer.get("failed_step") == "s1"
+                    and bool(steps) and steps[0].get("status") == "skipped"
+                    and not (answer.get("partial_effects") or []))
+
         opened, _c = call("kompas_open_document", {
             "application_id": app_id, "path": top_path, "access": "edit"})
         refusal_doc = doc_of(opened)
-        before_folders = folders()
 
         # (а) файла компонента нет на диске
+        before_folders = folders()
         hidden = part_b + ".hidden"
         _os.rename(part_b, hidden)
         env_missing, code_missing = run(refusal_doc, rebuild_step(1))
-        missing_details = err_details(env_missing)
         _os.rename(hidden, part_b)
+        cause_missing, files_missing = checkpoint_cause(env_missing)
         missing_ok = (
             code_missing is not None
             and "не найдены" in (emsg(env_missing) or "")
             and "part-b" in (emsg(env_missing) or "")
-            and folders() == before_folders)
+            and cause_missing == "component_file_missing"
+            and any("part-b.m3d" in name for name in files_missing)
+            and folders() == before_folders
+            and no_step_result(env_missing))
 
         # (б) у компонента есть несохранённые изменения: он открыт и изменён без сохранения
         opened, _c = call("kompas_open_document", {
@@ -15329,19 +15410,28 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             call("kompas_create_sketch", {
                 "document_id": dirty_doc, "expected_revision": current_rev(dirty_doc),
                 "plane": {"base": "xy", "offset_mm": 0.0}, "name": "asc-dirty"})
+        before_dirty_folders = folders()
         env_dirty, code_dirty = run(refusal_doc, rebuild_step(1))
+        cause_dirty, files_dirty = checkpoint_cause(env_dirty)
         dirty_ok = (
             code_dirty is not None and "несохран" in (emsg(env_dirty) or "")
-            and "part-b" in (emsg(env_dirty) or ""))
+            and "part-b" in (emsg(env_dirty) or "")
+            and cause_dirty == "component_dirty"
+            and any("part-b.m3d" in name for name in files_dirty)
+            and folders() == before_dirty_folders
+            and no_step_result(env_dirty))
         close(dirty_doc)
         close(refusal_doc)
         rep.add("ASC.07.refusals",
-                "нет файла компонента и несохранённый компонент: отказ до первого шага, перечень в "
-                "details, каталога копии не появилось",
+                "нет файла компонента и несохранённый компонент: отказ до первого шага "
+                "(failed_step=s1, шаг skipped, эффектов нет), причина в details.cause, имя файла в "
+                "details.files, каталог копии не появился и не изменился",
                 "PASS" if (missing_ok and dirty_ok) else "FAIL",
-                f"missing={code_missing} err_missing={emsg(env_missing)} "
+                f"missing={code_missing} cause={cause_missing} files={files_missing} "
                 f"folder_new={sorted(folders() - before_folders)} dirty={code_dirty} "
-                f"err_dirty={emsg(env_dirty)}")
+                f"cause_dirty={cause_dirty} files_dirty={files_dirty} "
+                f"folder_new_dirty={sorted(folders() - before_dirty_folders)} "
+                f"err_missing={emsg(env_missing)} err_dirty={emsg(env_dirty)}")
     else:
         rep.add("ASC.07.refusals", "отказы до первого шага", "FAIL", failure)
 
@@ -15353,19 +15443,46 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         opened, _c = call("kompas_open_document", {
             "application_id": app_id, "path": top_path, "access": "edit"})
         host_doc = doc_of(opened)
-        env, code = run(host_doc, rebuild_step(1))
+        host_refs = [row.get("component_ref") for row in links_of(host_doc)] if host_doc else []
+        # Отказ после контрольной точки: проверяются ОБА состояния §2 п.7 - после снятия копии и после
+        # восстановления. Без требования taken=true строка проходила бы и на отказе контрольной точки,
+        # а без настоящей правки s1 - и без снятой копии.
+        env, code = run(host_doc, [
+            {"step_id": "s0", "tool": "kompas_get_context", "arguments": {"detail": "minimal"}},
+            {"step_id": "s1", "tool": "kompas_insert_component",
+             "arguments": {"source_path": part_b,
+                           "expected_revision": {"from_step": "s0", "field": "revision.after"}}},
+            {"step_id": "s2", "tool": "kompas_insert_component",
+             "arguments": {"source_path": part_b + ".absent",
+                           "expected_revision": {"from_step": "s1", "field": "revision.after"}}},
+        ])
+        answer = result(env)
+        restore = answer.get("restore") or {}
+        steps = answer.get("steps") or []
+        applied = (len(steps) > 1 and steps[1].get("step_id") == "s1"
+                   and steps[1].get("status") == "succeeded"
+                   and "s1" in (answer.get("partial_effects") or []))
         still_open = None
         if foreign_doc:
             _e, env_ctx, _r = client.tool("kompas_get_context", {
                 "document_id": foreign_doc, "detail": "minimal"})
             still_open = ((env_ctx or {}).get("result") or {}).get("id")
-        foreign_ok = bool(foreign_doc) and still_open == foreign_doc
+        foreign_ok = (
+            bool(foreign_doc)
+            and still_open == foreign_doc
+            and applied
+            and (answer.get("checkpoint") or {}).get("taken") is True
+            and restore.get("succeeded") is True
+            and restore.get("document_id_after") not in (None, host_doc))
         rep.add("ASC.08.foreign_document_open",
-                "компонент, открытый клиентом отдельным окном, после снятия копии остался открытым "
-                "и с тем же document_id",
+                "компонент, открытый клиентом отдельным окном, остался открытым и с тем же document_id "
+                "и после снятия копии, и после восстановления (правка s1 применилась, контрольная точка "
+                "снята, восстановление произошло)",
                 "PASS" if foreign_ok else "FAIL",
-                f"code={code} foreign={foreign_doc} still={still_open} err={emsg(env)}")
-        close(host_doc)
+                f"code={code} applied={applied} taken={(answer.get('checkpoint') or {}).get('taken')} "
+                f"restored={restore.get('succeeded')} doc {host_doc}->{restore.get('document_id_after')} "
+                f"foreign={foreign_doc} still={still_open} err={emsg(env)}")
+        close(restore.get("document_id_after"))
         close(foreign_doc)
     else:
         rep.add("ASC.08.foreign_document_open", "чужой документ остался открытым", "FAIL", failure)
@@ -15393,6 +15510,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         env, code = run(twin_doc, rebuild_step(1))
         answer = result(env)
         checkpoint_twin = answer.get("checkpoint") or {}
+        twin_current = answer.get("document_id_after") or twin_doc
         path_twin = checkpoint_twin.get("manifest_path")
         manifest_twin = {}
         if path_twin and _os.path.exists(path_twin):
@@ -15402,19 +15520,64 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                      if _os.path.basename(row.get("source_path") or "").lower() == "bracket.m3d"]
         copies = {row.get("copy_path") for row in rows_twin}
         insertions = sorted(row.get("insertions") for row in rows_twin)
+        # Фикстура вставляет правый bracket ДВА раза, левый - один: число вставок сверяется с ним,
+        # а не с «не меньше двух».
         same_name_ok = (
             code is None
             and len(rows_twin) == 2
             and len(copies) == 2
             and None not in copies
-            and insertions[0] == 1 and insertions[1] >= 2)
+            and insertions == [1, 2])
         rep.add("ASC.09.same_name",
                 "одноимённые файлы из разных каталогов не столкнулись; файл с двумя вставками "
-                "скопирован один раз",
+                "скопирован один раз и назван в manifest с числом вставок 2",
                 "PASS" if same_name_ok else "FAIL",
                 f"code={code} rows={len(rows_twin)} copies={len(copies)} insertions={insertions} "
-                f"err={emsg(env)}")
-        close(twin_doc)
+                f"(ждали [1, 2]) err={emsg(env)}")
+
+        # -- ASC.11 успешный шаг идёт в КОПИЮ, и ответ это называет ----------------------------
+        # §2 п.5 наряда и п.3 замечаний: план продолжается на копии, поэтому правка обязана быть в копии,
+        # путь копии - в ответе и совпадать с контекстом документа, а файл клиента - прежним побайтно.
+        links_twin = links_of(twin_current) if twin_current else []
+        refs_twin = [row.get("component_ref") for row in links_twin]
+        client_sha_before = sha(twin_top)
+        if refs_twin:
+            env, code = run(twin_current, [{
+                "step_id": "s1", "tool": "kompas_delete_component",
+                "arguments": {"component_ref": refs_twin[0]}}])
+            answer = result(env)
+            cp_success = answer.get("checkpoint") or {}
+            doc_copy = answer.get("document_id_after")
+            _e, env_ctx, _r = client.tool("kompas_get_context", {
+                "document_id": doc_copy, "detail": "minimal"})
+            ctx_copy = (env_ctx or {}).get("result") or {}
+            copy_path = cp_success.get("document_path")
+            copy_root = _os.path.join(workdir, "control-copies", "scenario") + _os.sep
+            in_copies = bool(copy_path) and _os.path.abspath(copy_path).startswith(
+                _os.path.abspath(copy_root))
+            components_copy = len(links_of(doc_copy)) if doc_copy else None
+            copy_ok = (
+                code is None
+                and answer.get("status") == "succeeded"
+                and cp_success.get("taken") is True
+                and in_copies
+                and copy_path == cp_success.get("path")
+                and ctx_copy.get("path") == copy_path
+                and components_copy == len(refs_twin) - 1
+                and sha(twin_top) == client_sha_before)
+            rep.add("ASC.11.success_on_copy",
+                    "успешный изменяющий шаг: ответ называет копию (document_path = checkpoint.path), "
+                    "путь сходится с kompas_get_context, изменение есть в копии, sha256 файла клиента прежний",
+                    "PASS" if copy_ok else "FAIL",
+                    f"code={code} status={answer.get('status')} taken={cp_success.get('taken')} "
+                    f"document_path={copy_path} context_path={ctx_copy.get('path')} in_copies={in_copies} "
+                    f"components {len(refs_twin)}->{components_copy} "
+                    f"client_sha_same={sha(twin_top) == client_sha_before} err={emsg(env)}")
+            twin_current = doc_copy
+        else:
+            rep.add("ASC.11.success_on_copy", "успешный шаг идёт в копию", "FAIL",
+                    "у сборки-близнеца не прочитаны компоненты")
+        close(twin_current)
     else:
         rep.add("ASC.09.same_name", "одноимённые файлы из разных каталогов", "FAIL",
                 error_twin or "сборка не построена")

@@ -237,4 +237,79 @@ public class AssemblyCopyPlanTests : IDisposable
         Assert.True(passed);
         Assert.Empty(mismatches);
     }
+
+    [Fact]
+    public void Verify_RejectsALinkThePlanNeverNamed()
+    {
+        var part = File("part-a.m3d");
+        var stranger = File("stranger.m3d");
+        var folder = Path.Combine(_directory, "copy");
+        var plan = AssemblyCopyPlan.Build(
+            new[] { new AssemblyComponentLink(part, null, false, 1) }, folder, AssemblyCopyPlan.ModeCopy);
+        Assert.True(plan.Ok);
+
+        // The plan's own file is where it promised, and the COUNT matches — only the other direction can
+        // see that the copy kept a link to a file this checkpoint never copied.
+        var readBack = new[]
+        {
+            new AssemblyComponentLink(plan.Entries[0].CopyPath!, null, false, 1),
+            new AssemblyComponentLink(stranger, null, false, 1),
+        };
+        var (passed, mismatches) = AssemblyCopyPlan.Verify(plan.Entries, folder, readBack, expectedComponents: 2);
+
+        Assert.False(passed);
+        Assert.Contains(mismatches, text => text.Contains("не входит в read_only"));
+    }
+
+    [Fact]
+    public void Verify_RejectsADifferentInsertionCount()
+    {
+        var part = File("part-a.m3d");
+        var folder = Path.Combine(_directory, "copy");
+        var plan = AssemblyCopyPlan.Build(
+            new[] { new AssemblyComponentLink(part, null, false, 2) }, folder, AssemblyCopyPlan.ModeCopy);
+        Assert.True(plan.Ok);
+        Assert.Equal(2, plan.Entries[0].Insertions);
+
+        var readBack = new[] { new AssemblyComponentLink(plan.Entries[0].CopyPath!, null, false, 1) };
+        var (passed, mismatches) = AssemblyCopyPlan.Verify(plan.Entries, folder, readBack, expectedComponents: 1);
+
+        Assert.False(passed);
+        Assert.Contains(mismatches, text => text.Contains("вставлен 1 раз"));
+    }
+
+    [Fact]
+    public void Space_RefusesAGraphLargerThanTheVolumeCanHold()
+    {
+        var part = File("part-a.m3d");
+        var folder = Path.Combine(_directory, "copy");
+        var plan = AssemblyCopyPlan.Build(
+            new[] { new AssemblyComponentLink(part, null, false, 1) }, folder, AssemblyCopyPlan.ModeCopy);
+        Assert.True(plan.Ok);
+
+        var huge = new[]
+        {
+            plan.Entries[0] with { SizeBytes = 1_000_000_000_000_000_000L },
+        };
+        var (fits, needed, available) = AssemblyCopyPlan.Space(huge, folder);
+
+        Assert.False(fits);
+        Assert.True(needed > available);
+        Assert.Equal(1_000_000_000_000_000_000L + AssemblyCopyPlan.DiskReserveBytes, needed);
+    }
+
+    [Fact]
+    public void Space_AcceptsAGraphThatFits()
+    {
+        var part = File("part-a.m3d");
+        var folder = Path.Combine(_directory, "copy");
+        var plan = AssemblyCopyPlan.Build(
+            new[] { new AssemblyComponentLink(part, null, false, 1) }, folder, AssemblyCopyPlan.ModeCopy);
+        Assert.True(plan.Ok);
+
+        var (fits, needed, _) = AssemblyCopyPlan.Space(plan.Entries, folder);
+
+        Assert.True(fits);
+        Assert.Equal(AssemblyCopyPlan.DiskReserveBytes + plan.Entries[0].SizeBytes, needed);
+    }
 }

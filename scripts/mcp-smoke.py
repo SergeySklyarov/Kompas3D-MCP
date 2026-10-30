@@ -15512,12 +15512,17 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
     in_memory = None
     if twin_doc and not error_twin:
         in_memory = len(links_of(twin_doc))
+        # Файл нельзя открыть на чтение, пока на нём открыт документ на запись: сначала закрываем свой.
+        close(twin_doc)
         _e, env_saved, _r = client.tool("kompas_open_document", {
             "application_id": app_id, "path": twin_top, "access": "read_only"})
         saved_doc = doc_of(env_saved)
         if saved_doc:
             saved_links = len(links_of(saved_doc))
             close(saved_doc)
+        opened, _c = call("kompas_open_document", {
+            "application_id": app_id, "path": twin_top, "access": "edit"})
+        twin_doc = doc_of(opened)
 
     if twin_doc and not error_twin:
         env, code = run(twin_doc, rebuild_step(1))

@@ -46,6 +46,7 @@ internal sealed class ScenarioRunner
     internal static readonly string[] CheckpointPolicies = { "document_copy", "none" };
 
     private readonly string _controlCopyDirectory;
+    private readonly AssemblyCheckpoint _assembly;
     private readonly Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invoke;
 
     internal ScenarioRunner(
@@ -53,6 +54,7 @@ internal sealed class ScenarioRunner
         Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> invoke)
     {
         _controlCopyDirectory = controlCopyDirectory;
+        _assembly = new AssemblyCheckpoint(controlCopyDirectory, invoke);
         _invoke = invoke;
     }
 
@@ -63,6 +65,8 @@ internal sealed class ScenarioRunner
         var documentId = JsonScalars.ReadString(arguments["document_id"]);
         var onError = JsonScalars.ReadString(arguments["on_error"]) ?? "stop";
         var policy = JsonScalars.ReadString(arguments["checkpoint_policy"]) ?? "document_copy";
+        var externalParts = JsonScalars.ReadString(arguments["external_parts"])
+            ?? AssemblyCheckpoint.ExternalPartsCopy;
 
         if (string.IsNullOrWhiteSpace(parentOperationId) || !Guid.TryParse(parentOperationId, out _))
         {
@@ -86,6 +90,15 @@ internal sealed class ScenarioRunner
         {
             return Refuse($"Неизвестное значение checkpoint_policy: {policy}.",
                 "checkpoint_policy", "checkpoint_policy_unknown");
+        }
+
+        // A mode the server does not know is refused, not silently read as "copy": the answer promises what
+        // the copy folder contains, and an unknown mode would make that promise untrue.
+        if (!AssemblyCheckpoint.ExternalPartsModes.Contains(externalParts, StringComparer.Ordinal))
+        {
+            return Refuse($"Неизвестное значение external_parts: {externalParts}. Допустимо: "
+                + string.Join(", ", AssemblyCheckpoint.ExternalPartsModes) + ".",
+                "external_parts", "external_parts_unknown");
         }
 
         if (onError == "restore_checkpoint" && policy == "none")
@@ -132,7 +145,8 @@ internal sealed class ScenarioRunner
             if (step.Tool.IsMutation && onError == "restore_checkpoint"
                 && checkpoint["taken"]!.GetValue<bool>() == false)
             {
-                var taken = await TakeCheckpointAsync(parentOperationId, effectiveDocumentId, cancellationToken)
+                var taken = await TakeCheckpointAsync(
+                        parentOperationId, effectiveDocumentId, externalParts, cancellationToken)
                     .ConfigureAwait(false);
                 checkpoint = taken.Report;
                 if (!taken.Ok)
@@ -198,7 +212,9 @@ internal sealed class ScenarioRunner
         {
             var restored = await RestoreAsync(parentOperationId, effectiveDocumentId,
                 JsonScalars.ReadString(checkpoint["path"]),
-                JsonScalars.ReadString(checkpoint["application_id"]), cancellationToken).ConfigureAwait(false);
+                JsonScalars.ReadString(checkpoint["application_id"]),
+                JsonScalars.ReadInt(checkpoint["read_only_not_restored"]) ?? 0,
+                cancellationToken).ConfigureAwait(false);
             restore = restored;
             if (restored["document_id_after"] is JsonValue after
                 && after.TryGetValue<string>(out var reopened))
@@ -513,7 +529,8 @@ internal sealed class ScenarioRunner
     private sealed record CheckpointOutcome(bool Ok, JsonObject Report, JsonObject? Error);
 
     private async Task<CheckpointOutcome> TakeCheckpointAsync(
-        string parentOperationId, string documentId, CancellationToken cancellationToken)
+        string parentOperationId, string documentId, string externalParts,
+        CancellationToken cancellationToken)
     {
         var report = new JsonObject
         {
@@ -540,6 +557,40 @@ internal sealed class ScenarioRunner
                 ["reason"] = "revision_not_read",
                 ["context_status"] = context.Status.ToString(),
                 ["context_error"] = ErrorOf(context)?.DeepClone(),
+            });
+        }
+
+        // INVARIANT: an assembly is copied as a GRAPH, not as one file — a plain SaveAs does not carry its
+        // nested parts. DOC: docs/01_TECHNICAL_SPEC.md §1.9.
+        var kind = JsonScalars.ReadString(context.Result?["kind"]);
+        if (kind == "assembly")
+        {
+            var assembly = await _assembly.TakeAsync(
+                parentOperationId, documentId, context.Result as JsonObject ?? new JsonObject(),
+                externalParts, cancellationToken)
+                .ConfigureAwait(false);
+            if (!assembly.Ok)
+            {
+                return new CheckpointOutcome(false, assembly.Report, assembly.Error);
+            }
+
+            return new CheckpointOutcome(true, assembly.Report, null);
+        }
+
+        if (kind == "drawing")
+        {
+            // A drawing has no dependency graph; the refusal it had before the assembly route existed stays.
+            return new CheckpointOutcome(false, report, new JsonObject
+            {
+                ["code"] = "CHECKPOINT_FAILED",
+                ["message"] = "Копия чертежа контрольной точкой не снимается: чертёж не входит в политику "
+                    + "document_copy.",
+                ["reason"] = "copy_not_written",
+                ["details"] = new JsonObject
+                {
+                    ["field"] = "checkpoint_policy",
+                    ["document_kind"] = "drawing",
+                },
             });
         }
 
@@ -572,7 +623,7 @@ internal sealed class ScenarioRunner
             {
                 ["code"] = "CHECKPOINT_FAILED",
                 ["message"] = "Копия документа не снята: документ не сохранён документированным SaveAs "
-                    + "(сборка и чертёж копией одного файла не восстанавливаются).",
+                    + "(копией одного файла восстанавливается только деталь).",
                 ["reason"] = "copy_not_written",
                 ["step_error"] = ErrorOf(saved)?.DeepClone(),
             });
@@ -587,7 +638,7 @@ internal sealed class ScenarioRunner
 
     private async Task<JsonObject> RestoreAsync(
         string parentOperationId, string documentId, string? copyPath, string? applicationId,
-        CancellationToken cancellationToken)
+        int readOnlyNotRestored, CancellationToken cancellationToken)
     {
         var restore = new JsonObject
         {
@@ -596,6 +647,9 @@ internal sealed class ScenarioRunner
             ["copy_path"] = copyPath,
             ["document_id_after"] = null,
             ["revision_after"] = null,
+            // How many components the checkpoint never protected: a read_only component still points at the
+            // client's file, so restoring the copy does not roll it back.
+            ["read_only_not_restored"] = readOnlyNotRestored,
             ["checks"] = new JsonArray(),
         };
 

@@ -15424,8 +15424,8 @@ def flat_part_checks(client, rep, app_id, workdir):
             + " " + str(emsg(env) or ""))
 
     # ── FLT.03: сторонний разбор того же файла ───────────────────────────────────────────────────
-    # INVARIANT: сравнивается УСТАНОВЛЕННАЯ версия с закреплённой в scripts/requirements-acceptance.txt:
-    # иначе «ezdxf есть» ничего не доказывает - другая версия читает DXF по-своему.
+    # INVARIANT: the INSTALLED version is compared with the pin in scripts/requirements-acceptance.txt:
+    # a mere import proves nothing, since another version may parse the DXF differently.
     pinned = pinned_ezdxf()
     try:
         import ezdxf
@@ -15548,9 +15548,9 @@ def flat_part_checks(client, rep, app_id, workdir):
             + str(after)[:16] + " несохранённый=" + str(code_d))
 
     # ── FLT.07: наклонная нормаль - отказ по имени, файла нет ────────────────────────────────────
-    # Деталь: прямоугольник 5x40, повёрнутый в плоскости эскиза на 30°, выдавлен на 30 мм. Пара
-    # наибольших граней (40x30) наклонена к осям на 30°, поэтому толщина постоянна (5 мм), а нормаль
-    # не по оси: отказ обязан прийти по нормали, а не по толщине.
+    # INVARIANT: the refusal must come from the normal, not from the thickness: a 5x40 rectangle turned
+    # 30 degrees in the sketch plane and extruded 30 mm has constant thickness and tilted large faces.
+    # LIMIT: the normal is compared by component modulus, because its sign comes from the face order.
     tilt_deg, tilt_length_mm, tilt_width_mm, tilt_height_mm = 30.0, 40.0, 5.0, 30.0
     tilt_angle = math.radians(tilt_deg)
     tilt_path = os.path.join(workdir, "flt-tilt.dxf")
@@ -15597,11 +15597,11 @@ def flat_part_checks(client, rep, app_id, workdir):
             + " файл=" + str(os.path.exists(tilt_path)) + " " + str(emsg(tilt_env) or ""))
 
     # ── FLT.08: зеркальность контура - несимметричная плита с нормалью по X ─────────────────────
-    # ДВА отверстия разного радиуса со смещением от центра контура по обеим осям. Одно отверстие
-    # зеркало от поворота не отличает: оба переворачивают один и тот же вектор. Два вектора задают
-    # ориентацию, и знак определителя найденного преобразования отвечает на вопрос прямо: +1 -
-    # контур получен поворотом (ориентация сохранена), -1 - зеркалом. Плита строится по обе стороны
-    # оси X, потому что вопрос техлида - про вид с ДРУГОЙ стороны грани.
+    # INVARIANT: two holes of different radii, offset along both axes: one vector cannot tell a mirror
+    # from a rotation, two vectors fix the orientation. The determinant sign of the found transform is
+    # the answer: +1 is a rotation, -1 is a mirror. The plate is extruded both ways along X to record
+    # whether the extrusion side changes the view.
+    # History: docs/decisions/flat-part.md#view-choice
     asym_holes = [(12.0, -6.0, 4.0), (-6.0, 9.0, 3.0)]
     asym_model = [(y, z) for y, z, _r in asym_holes]
 

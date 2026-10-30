@@ -597,11 +597,14 @@ internal sealed class AssemblyCheckpoint
 
         var current = revision;
         var planned = (int?)null;
-        var done = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // INVARIANT: the component list is re-read before EVERY replacement. The replace route bumps the
         // revision and invalidates every ref of the document, so a list read once is stale after the first
         // success — a stale ref is refused, and the copy would keep the client's file in every later link.
-        for (var pass = 0; pass <= copyBySource.Count; pass++)
+        // INVARIANT: a file inserted several times is copied once but REPOINTED in every insertion. The
+        // loop therefore advances by the row's source, not by a set of sources already touched: one
+        // replacement leaves the other insertions of the same file on the client's file.
+        var reassignments = 0;
+        while (true)
         {
             var listed = await _invoke("kompas_list_components", new JsonObject
             {
@@ -619,7 +622,7 @@ internal sealed class AssemblyCheckpoint
             var row = rows.FirstOrDefault(candidate =>
             {
                 var path = JsonScalars.ReadString(candidate["source_path"]);
-                return path is not null && !done.Contains(path) && copyBySource.ContainsKey(path);
+                return path is not null && copyBySource.ContainsKey(path);
             });
             if (row is null)
             {
@@ -656,7 +659,15 @@ internal sealed class AssemblyCheckpoint
                     current);
             }
 
-            done.Add(source);
+            // LIMIT: the loop is bounded by the number of components read first; a route that stops
+            // advancing would otherwise spin. Reaching the bound is a refusal, never a silent success.
+            reassignments++;
+            if (reassignments > (planned ?? rows.Length))
+            {
+                return new ReassignResult(false,
+                    "переназначение не сходится: замен больше, чем компонентов в копии", current);
+            }
+
             current = replaced.RevisionAfter ?? current;
 
             // INVARIANT: a replace that changed the number of components has dropped or duplicated
@@ -670,8 +681,6 @@ internal sealed class AssemblyCheckpoint
                     + $"{dropped.Observed} (ждали {dropped.Expected})", current);
             }
         }
-
-        return new ReassignResult(true, string.Empty, current);
     }
 
     // ---- Verification ----

@@ -15510,11 +15510,14 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
     # так, вставки теряет сохранение/перечитывание, а не переназначение копии.
     saved_links = None
     in_memory = None
+    code_saved = None
     if twin_doc and not error_twin:
         in_memory = len(links_of(twin_doc))
         # Файл нельзя открыть на чтение, пока на нём открыт документ на запись: сначала закрываем свой.
+        # Открытие идёт через call(), а не client.tool(): operation_id обязателен в схеме инструмента,
+        # и прямой вызов без него отвергается, оставляя сверку без числа.
         close(twin_doc)
-        _e, env_saved, _r = client.tool("kompas_open_document", {
+        env_saved, code_saved = call("kompas_open_document", {
             "application_id": app_id, "path": twin_top, "access": "read_only"})
         saved_doc = doc_of(env_saved)
         if saved_doc:
@@ -15555,7 +15558,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 "PASS" if same_name_ok else "FAIL",
                 f"code={code} rows={len(rows_twin)} copies={len(copies)} insertions={insertions} "
                 f"(ждали [1, 2]) components in memory={in_memory} in saved file={saved_links} "
-                f"err={emsg(env)}")
+                f"saved_open={code_saved} err={emsg(env)}")
 
         # -- ASC.11 успешный шаг идёт в КОПИЮ, и ответ это называет ----------------------------
         # §2 п.5 наряда и п.3 замечаний: план продолжается на копии, поэтому правка обязана быть в копии,

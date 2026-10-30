@@ -42,9 +42,10 @@ internal sealed class AssemblyCheckpoint
         _controlCopyDirectory, "control-copies", "scenario", $"{parentOperationId}-r{revision}");
 
     internal async Task<AssemblyCheckpointOutcome> TakeAsync(
-        string parentOperationId, string documentId, JsonObject context, string externalParts,
-        CancellationToken cancellationToken)
+        string parentOperationId, string documentId, ResultEnvelope<JsonNode?> context,
+        string externalParts, CancellationToken cancellationToken)
     {
+        var document = context.Result as JsonObject ?? new JsonObject();
         var report = new JsonObject
         {
             ["policy"] = "document_copy",
@@ -54,14 +55,32 @@ internal sealed class AssemblyCheckpoint
             ["external_parts"] = externalParts,
         };
 
-        var revision = JsonScalars.ReadLong(context["revision"]);
-        var sourcePath = JsonScalars.ReadString(context["path"]);
+        var revision = JsonScalars.ReadLong(document["revision"]);
+        var sourcePath = JsonScalars.ReadString(document["path"]);
         if (revision is null || string.IsNullOrWhiteSpace(sourcePath))
         {
             return Refuse(report, "revision_not_read", "Ревизия или путь сборки не прочитаны: контрольная "
                 + "точка не снята.", Array.Empty<string>());
         }
 
+        // The open of a copy names the application the plan works in: it is mandatory in that tool's
+        // contract and was read from the document's context.
+        // The open of a copy names the application, and that field is mandatory. It is read from the
+        // envelope first, then from the body, and finally from the document list: an empty id made every
+        // open of a copy fail for a missing field.
+        var applicationId = context.ApplicationId
+            ?? JsonScalars.ReadString(document["application_id"]);
+        if (string.IsNullOrWhiteSpace(applicationId))
+        {
+            var listed = await _invoke("kompas_list_documents", new JsonObject(), cancellationToken)
+                .ConfigureAwait(false);
+            applicationId = (listed.Result as JsonArray ?? new JsonArray())
+                .OfType<JsonObject>()
+                .Where(row => JsonScalars.ReadString(row["id"]) == documentId
+                    || JsonScalars.ReadString(row["document_id"]) == documentId)
+                .Select(row => JsonScalars.ReadString(row["application_id"]))
+                .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+        }
         var folder = FolderFor(parentOperationId, revision.Value);
         var graph = await ReadGraphAsync(documentId, cancellationToken).ConfigureAwait(false);
         if (!graph.Ok)
@@ -116,7 +135,8 @@ internal sealed class AssemblyCheckpoint
         foreach (var nested in AssemblyCopyPlan.BottomUp(plan.Entries))
         {
             var reassigned = await ReassignAsync(
-                parentOperationId, nested.CopyPath!, plan.Entries, externalParts, cancellationToken)
+                parentOperationId, nested.CopyPath!, plan.Entries, externalParts, applicationId,
+                cancellationToken)
                 .ConfigureAwait(false);
             if (!reassigned.Ok)
             {
@@ -149,9 +169,16 @@ internal sealed class AssemblyCheckpoint
                 + "документированным SaveAs.", Array.Empty<string>());
         }
 
+        // SaveAs leaves the copy under a NEW id: the plan's own id would address nothing afterwards. The id
+        // is taken from the session's document list BY PATH, because the save result names the id it wrote
+        // only when the session re-registered the document, and a guess here costs every later step.
+        var copyDocumentId = await ResolveDocumentIdAsync(topCopy, applicationId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? JsonScalars.ReadString(saved.Result?["context"]?["id"])
+            ?? documentId;
         var revisionNow = saved.RevisionAfter ?? revision.Value;
         var topReassigned = await ReassignDocumentAsync(
-            parentOperationId, documentId, revisionNow, plan.Entries, externalParts, cancellationToken)
+            parentOperationId, copyDocumentId, revisionNow, plan.Entries, externalParts, cancellationToken)
             .ConfigureAwait(false);
         if (!topReassigned.Ok)
         {
@@ -164,7 +191,7 @@ internal sealed class AssemblyCheckpoint
         {
             var resaved = await _invoke("kompas_save_document", new JsonObject
             {
-                ["document_id"] = documentId,
+                ["document_id"] = copyDocumentId,
                 ["expected_revision"] = afterReassign,
                 ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "checkpoint-resave"),
             }, cancellationToken).ConfigureAwait(false);
@@ -184,7 +211,8 @@ internal sealed class AssemblyCheckpoint
         var manifestWritten = TryWriteAtomic(manifestPath, manifest, out var manifestReason);
 
         var verification = await VerifyAsync(
-            parentOperationId, topCopy, plan.Entries, graph.ComponentCount, cancellationToken)
+            parentOperationId, topCopy, plan.Entries, graph.ComponentCount, applicationId,
+            cancellationToken)
             .ConfigureAwait(false);
 
         if (manifestWritten && verification.Mismatches.Count == 0)
@@ -211,8 +239,9 @@ internal sealed class AssemblyCheckpoint
 
         report["taken"] = true;
         report["path"] = topCopy;
+        report["document_id_after"] = copyDocumentId;
         report["revision"] = revision.Value;
-        report["application_id"] = context["application_id"]?.DeepClone();
+        report["application_id"] = applicationId;
         report["manifest_path"] = manifestPath;
         report["file_count"] = plan.Entries.Count;
         report["copied"] = plan.Entries.Count(e => e.Mode == AssemblyCopyPlan.ModeCopy);
@@ -229,6 +258,28 @@ internal sealed class AssemblyCheckpoint
     }
 
     // ---- Graph ----
+
+    /// <summary>The id the session has for a path, or <c>null</c> when the path is not registered.</summary>
+    private async Task<string?> ResolveDocumentIdAsync(
+        string path, string? applicationId, CancellationToken cancellationToken)
+    {
+        // DOC: kompas_list_documents answers with an ARRAY of document contexts and filters by
+        // application_id, so the id is passed here rather than read from the answer.
+        var arguments = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(applicationId))
+        {
+            arguments["application_id"] = applicationId;
+        }
+
+        var listed = await _invoke("kompas_list_documents", arguments, cancellationToken)
+            .ConfigureAwait(false);
+        return (listed.Result as JsonArray ?? new JsonArray())
+            .OfType<JsonObject>()
+            .Where(row => string.Equals(JsonScalars.ReadString(row["path"]), path,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(row => JsonScalars.ReadString(row["id"]) ?? JsonScalars.ReadString(row["document_id"]))
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+    }
 
     private sealed record GraphRead(bool Ok, string Message, IReadOnlyList<AssemblyComponentLink> Links, int ComponentCount);
 
@@ -279,14 +330,21 @@ internal sealed class AssemblyCheckpoint
     /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
     private async Task<ReassignResult> ReassignAsync(
         string parentOperationId, string copyPath, IReadOnlyList<AssemblyCopyEntry> entries,
-        string externalParts, CancellationToken cancellationToken)
+        string externalParts, string? applicationId, CancellationToken cancellationToken)
     {
-        var opened = await _invoke("kompas_open_document", new JsonObject
+        var openArguments = new JsonObject
         {
             ["path"] = copyPath,
             ["access"] = "edit",
             ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "copy-open-" + StableKey(copyPath)),
-        }, cancellationToken).ConfigureAwait(false);
+        };
+        if (!string.IsNullOrWhiteSpace(applicationId))
+        {
+            openArguments["application_id"] = applicationId;
+        }
+
+        var opened = await _invoke("kompas_open_document", openArguments, cancellationToken)
+            .ConfigureAwait(false);
 
         if (opened.Status != OperationStatus.Succeeded)
         {
@@ -414,14 +472,21 @@ internal sealed class AssemblyCheckpoint
     /// was checked. History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
     private async Task<VerifyResult> VerifyAsync(
         string parentOperationId, string topCopy, IReadOnlyList<AssemblyCopyEntry> entries,
-        int expectedComponents, CancellationToken cancellationToken)
+        int expectedComponents, string? applicationId, CancellationToken cancellationToken)
     {
-        var opened = await _invoke("kompas_open_document", new JsonObject
+        var openArguments = new JsonObject
         {
             ["path"] = topCopy,
             ["access"] = "read_only",
             ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "verify-open"),
-        }, cancellationToken).ConfigureAwait(false);
+        };
+        if (!string.IsNullOrWhiteSpace(applicationId))
+        {
+            openArguments["application_id"] = applicationId;
+        }
+
+        var opened = await _invoke("kompas_open_document", openArguments, cancellationToken)
+            .ConfigureAwait(false);
 
         if (opened.Status != OperationStatus.Succeeded)
         {

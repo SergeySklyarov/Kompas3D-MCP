@@ -15090,7 +15090,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 f"code={code} taken={checkpoint.get('taken')} format={manifest.get('format')} "
                 f"verified={manifest.get('verified')} rows={len(rows)} (ждали {len(sources)}) "
                 f"hashes={hashes_ok} inside={copy_inside} path={checkpoint.get('path')} "
-                f"err={emsg(env)}")
+                f"doc_after={checkpoint.get('document_id_after')} err={emsg(env)}")
 
         # ── ASC.02 ссылки перечитаны из заново открытой копии ──────────────────────────────────
         opened, code_open = call("kompas_open_document", {

@@ -159,6 +159,13 @@ internal sealed class ScenarioRunner
                         null, null, null, taken.Error));
                     continue;
                 }
+
+                // A copy taken through SaveAs is a DIFFERENT document: the plan continues on the copy, else
+                // every following step addresses an id the session no longer has.
+                if (JsonScalars.ReadString(checkpoint["document_id_after"]) is { Length: > 0 } checkpointId)
+                {
+                    effectiveDocumentId = checkpointId;
+                }
             }
 
             var stepArguments = ResolveArguments(step.Arguments, results, out var resolveError, out var resolvePath);
@@ -566,8 +573,7 @@ internal sealed class ScenarioRunner
         if (kind == "assembly")
         {
             var assembly = await _assembly.TakeAsync(
-                parentOperationId, documentId, context.Result as JsonObject ?? new JsonObject(),
-                externalParts, cancellationToken)
+                parentOperationId, documentId, context, externalParts, cancellationToken)
                 .ConfigureAwait(false);
             if (!assembly.Ok)
             {
@@ -633,6 +639,13 @@ internal sealed class ScenarioRunner
         report["path"] = path;
         report["revision"] = revision.Value;
         report["application_id"] = context.ApplicationId;
+        // SaveAs reports the id of the document it wrote: a different one means the plan has to continue on
+        // the copy, not on the id it started with.
+        if (JsonScalars.ReadString(saved.Result?["context"]?["id"]) is { Length: > 0 } savedId)
+        {
+            report["document_id_after"] = savedId;
+        }
+
         return new CheckpointOutcome(true, report, null);
     }
 

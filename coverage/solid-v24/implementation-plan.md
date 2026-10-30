@@ -1171,3 +1171,12 @@ IGES -> `RELEASE_0_13_0`. Закрытие `save_reopen` строк переме
 зарегистрированных инструментов, новых маршрутов API нет; `restore_checkpoint` для сборки - отказ до
 `ASSEMBLY_CHECKPOINT`). Очередь: `SCENARIO_RUN` (выдан) -> `DXF_FLAT_PART` -> `OPS_CONTRACT` -> `ASSEMBLY_CHECKPOINT`
 -> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 30.10.2026, пятьдесят шестая (`SCENARIO_RUN` принят; выдан `DXF_FLAT_PART`).**
+
+`SCENARIO_RUN` принят попыткой 1: `kompas_run_scenario` - операция реестра, шаги через тот же путь вызова, ссылки
+назад, предел 100 шагов, производный `operation_id`, `checkpoint_policy` `document_copy|none`; зачётный `--all` на
+`32f1781` - 2028 PASS, FAIL 0. Выдан `DXF_FLAT_PART` (`kompas_export_flat_dxf`: контур из вида конечного тела,
+проверка плоскости и постоянной толщины, слой `CUT`, проверки файла, сторонний разбор `ezdxf` в приборе; первым
+шагом - страницы справки каждого звена, без них - BLOCKED). Очередь: `DXF_FLAT_PART` (выдан) -> `OPS_CONTRACT` ->
+`ASSEMBLY_CHECKPOINT` -> `DIAG_PACKAGE` -> `EVENTS_FINGERPRINT` -> `V1_PROOF_ROWS_2` -> `RELEASE_0_13_0`.

@@ -65,7 +65,26 @@ public sealed partial class Api5Session : IDisposable
                 });
         }
 
+        ApplyExternalChangeMark(document);
         return document;
+    }
+
+    /// <summary>Applies the mark the event handler raised, if there is one to apply.</summary>
+    /// <remarks>INVARIANT: one burst of events bumps the revision by one and makes the save state an external
+    /// change, exactly like the fingerprint path; old references stop resolving because the revision moved.
+    /// MEASURED: our own rebuild raises the same event, so a mark inside the own window is consumed and
+    /// dropped. History: docs/decisions/adapter-core.md#document-events</remarks>
+    private void ApplyExternalChangeMark(DocumentEntry document)
+    {
+        if (!document.Events.TryTake(Environment.TickCount64))
+        {
+            return;
+        }
+
+        BumpRevision(document, "external.events", invalidateAll: true);
+
+        // After BumpRevision, which names an ordinary mutation: what arrived here came from outside.
+        document.SaveState = DocumentSaveTracking.AfterExternalChange();
     }
 
     public DocumentEntry TryFindDocumentByPath(string normalizedPath)
@@ -1225,7 +1244,36 @@ public sealed partial class Api5Session : IDisposable
             : DocumentSaveTracking.AfterOpen();
 
         _documents[entry.Id] = entry;
+
+        // Events are the documented way to learn about a rebuild that did not pass through this server.
+        // DOC: ksdocs3dnotify_events.html - the interface carries Rebuild, and nothing about a save.
+        if (document is not null)
+        {
+            entry.EventsSubscription = DocumentEventSubscription.TrySubscribe(
+                SafeNotifySource(document), entry.Events, out _);
+            if (entry.EventsSubscription is not null)
+            {
+                entry.ExternalChangeDetection = ExternalChangeDetection.Reliable;
+            }
+        }
+
         return entry;
+    }
+
+    /// <summary>The event source of a model document, or null when KOMPAS did not give one.</summary>
+    /// <remarks>DOC: <c>ksdocument3d_getdocument3dnotify.html</c>. A drawing has no model notifications and
+    /// stays on the fingerprint, which is why the failure is not an error.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    private static object? SafeNotifySource(ksDocument3D document)
+    {
+        try
+        {
+            return document.GetDocument3DNotify();
+        }
+        catch (COMException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Document that owns a minted reference, without resolving or validating it.</summary>
@@ -1292,6 +1340,7 @@ public sealed partial class Api5Session : IDisposable
             // what it could not confirm without adding a field to the published result.
             unverified.AddRange(extraUnverified);
         }
+
         return new DocumentContextDto
         {
             Id = document.Id,
@@ -1315,8 +1364,7 @@ public sealed partial class Api5Session : IDisposable
             DocumentVisible = document.Visible,
             DocumentsVisibleMode = document.DocumentsVisible,
             DocumentActiveReported = document.ActiveReported,
-            // KOMPAS events are not wired in this build: a UI edit is caught only by the pre-mutation check.
-            ExternalChangeDetection = ExternalChangeDetection.Conservative,
+            ExternalChangeDetection = document.ExternalChangeDetection,
         };
     }
 
@@ -1346,10 +1394,13 @@ public sealed partial class Api5Session : IDisposable
         return document.SaveState;
     }
 
-    /// <summary>Cheap state digest used because KOMPAS change events are not subscribed in this build.
-    /// Deliberately coarse: its job is to catch "the user changed the model", not to identify which
-    /// feature moved, and it is NOT evidence that the file on disk is current (that is
+    /// <summary>Cheap state digest that backs the events: it catches an edit the events cannot report, and it
+    /// runs before every mutation. Deliberately coarse: its job is to catch "the user changed the model", not
+    /// to identify which feature moved, and it is NOT evidence that the file on disk is current (that is
     /// <see cref="DocumentSaveState"/>).</summary>
+    /// <remarks>INVARIANT: the events and the fingerprint are both kept - the events report a rebuild, the
+    /// digest reports a change that never rebuilt.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public string ComputeFingerprint(DocumentEntry document)
     {
         try
@@ -1661,6 +1712,9 @@ public sealed partial class Api5Session : IDisposable
         document.Fingerprint = ComputeFingerprint(document);
         document.LastRevisionReason = reason;
 
+        // Our own rebuild raises the same event as a foreign one: the window keeps it from bumping twice.
+        document.Events.OpenOwnWindow(Environment.TickCount64);
+
         // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
         // confirmed write to file (SaveDocument); doing it here would defeat both close guards.
         document.SaveState = DocumentSaveTracking.AfterMutation();
@@ -1702,6 +1756,12 @@ public sealed partial class Api5Session : IDisposable
     {
         References.InvalidateDocument(document.Id);
         _documents.Remove(document.Id);
+
+        // The subscription belongs to the document that is leaving. DOC: ksdocsfilenotify_closedocument.html -
+        // "при обработке закрытия необходимо отписаться от всех событий". A document already closed answers
+        // the release with an error, which is why the release itself never throws.
+        document.EventsSubscription?.Dispose();
+        document.EventsSubscription = null;
         try
         {
             if (alreadyClosed)
@@ -2109,6 +2169,21 @@ public sealed class DocumentEntry
     /// <summary>Fingerprint of the last OBSERVATION of the model: it catches an edit made outside MCP. It is
     /// not a savedness flag — <see cref="SaveState"/> handles that.</summary>
     public string? Fingerprint { get; set; }
+
+    /// <summary>How a change made outside MCP is noticed for THIS document: events when the subscription
+    /// succeeded, the pre-mutation fingerprint check otherwise.</summary>
+    /// <remarks>INVARIANT: <c>Reliable</c> is only claimed for a document the subscription really covers; a
+    /// failed subscription leaves the document working exactly as before.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    public ExternalChangeDetection ExternalChangeDetection { get; set; } = ExternalChangeDetection.Conservative;
+
+    /// <summary>Marks raised by the event handler, applied before the next command.</summary>
+    public DocumentEventMark Events { get; } = new();
+
+    /// <summary>The subscription itself, released when the document leaves the session.</summary>
+    public DocumentEventSubscription? EventsSubscription { get; set; }
+
+
 
     /// <summary>Savedness state: whether a write to file confirmed the current model is on disk.</summary>
     public DocumentSaveState SaveState { get; set; } = DocumentSaveState.Unknown;

@@ -11,8 +11,9 @@ namespace KompasMcp.Domain.Documents;
 public sealed class DocumentEventMark
 {
     /// <summary>How many events one own action may raise. Measured: one or two, never three.</summary>
-    /// <remarks>LIMIT: a foreign rebuild that lands between our own events of the same burst is taken for
-    /// ours; the fingerprint check before the next mutation still sees the change.
+    /// <remarks>LIMIT: the allowance this counter leaves unused absorbs a foreign rebuild that arrives
+    /// before the next command; the fingerprint check before the next mutation sees that change only if
+    /// the fingerprint itself changed.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public const int OwnBurst = 2;
 

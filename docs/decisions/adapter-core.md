@@ -788,8 +788,8 @@ DOC: `eventscommon.html` - для Automation события идут станд�
 (`IConnectionPoint::Advise`/`Unadvise`), отписка - обязанность подписчика;
 `ksdocument3d_getdocument3dnotify.html` - источник подписки даёт `ksDocument3D::GetDocument3DNotify`;
 `ksdocument3dnotify_events.html` - у `IDocument3DNotify` ровно 21 событие, и ни одно из них не
-называется «документ изменился»; `ksdocumentfilenotify_closedocument.html` - при обработке закрытия
-«необходимо отписаться от всех событий». Перечень снят в
+называется «документ изменился»; `ksdocumentfilenotify_closedocument.html` - «При обработке данного
+события необходимо отписаться от всех событий, связанных с закрываемым документом.». Перечень снят в
 `reference/kompas-sdk-v24/docs-wire-20261031-events/` (130 страниц, отрицательный контроль: имена
 `ksdocument3dnotify_modelchanged`/`_changed`/`_documentchanged`/`_onchange` дают 404).
 

@@ -59,8 +59,6 @@ public sealed class CommandDispatcher
         _log = log;
         _controlCopies = new DocumentControlCopies(controlCopyDirectory);
 
-        // The session closes its own-event burst inside the command that caused it, and needs the apartment's
-        // queue for that. The pump is the one the STA thread already runs between commands.
         // A refused event release is the one fact about the subscription that no answer carries.
         _session.Warn = message => log.Write("warn", message, new { source = "document-events" });
 

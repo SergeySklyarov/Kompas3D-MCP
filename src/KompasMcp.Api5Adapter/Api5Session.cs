@@ -1772,9 +1772,10 @@ public sealed partial class Api5Session : IDisposable
         References.InvalidateDocument(document.Id);
         _documents.Remove(document.Id);
 
-        // The subscription belongs to the document that is leaving. DOC: ksdocsfilenotify_closedocument.html -
-        // "при обработке закрытия необходимо отписаться от всех событий". A document already closed answers
-        // the release with an error, which is why the release itself never throws.
+        // The subscription belongs to the document that is leaving. DOC: ksdocsfilenotify_closedocument.html
+        // - "При обработке данного события необходимо отписаться от всех событий, связанных с закрываемым
+        // документом." A document already closed answers the release with an error, which is why the
+        // release itself never throws.
         document.EventsSubscription?.Dispose();
         document.EventsSubscription = null;
         try

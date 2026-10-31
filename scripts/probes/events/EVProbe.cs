@@ -12,7 +12,7 @@ namespace EVProbe;
 /// model document's events, and which event answers which action.</summary>
 /// <remarks>WHY A PROBE AND NOT A TEST: the product subscribes to nothing yet, so the only thing that can be
 /// measured is what KOMPAS itself delivers to a ConnectionPoint subscriber outside the application.
-/// DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2; the events pages of the v24 help mirror
+/// DOC: the events pages of the v24 help mirror. The probe and its modes are the order's §2.
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 internal sealed class EVProbe : IDisposable
 {

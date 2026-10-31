@@ -4,7 +4,8 @@
     Research probe for the EVENTS_FINGERPRINT order (external change seen through KOMPAS events).
     INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
     the shipping graph could not be used to argue about what the product does.
-    DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2; reference/kompas-sdk-v24/docs-wire-20261031-events/
+    DOC: the events pages under reference/kompas-sdk-v24/docs-wire-20261031-events/; the probe's modes
+    are the order's §2.
     History: docs/decisions/adapter-core.md#document-events
   -->
   <PropertyGroup>

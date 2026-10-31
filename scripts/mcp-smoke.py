@@ -58354,7 +58354,7 @@ EV_PROBE_EXE = os.path.join(ROOT, "scripts", "probes", "events", "bin", "x64", "
 def ev_probe_run(mode, doc_path, timeout=240):
     """Change the document from ANOTHER process: that is what an external change means here.
 
-    DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2 (the probe and its modes).
+    The probe and its modes are defined in the order, EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2.
     History: docs/decisions/adapter-core.md#document-events
     """
     if not os.path.exists(EV_PROBE_EXE):
@@ -58458,7 +58458,7 @@ def events_checks(client, rep, app_id, workdir):
 
     Every row compares VALUES, not the presence of an answer: a revision that must move by exactly
     one, a fingerprint that must stay the same while the revision moves, a reference that must be
-    rejected. DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §4.
+    rejected. The rows are the order's §4.
     History: docs/decisions/adapter-core.md#document-events
     """
     # The probe attaches to the ACTIVE document of the instance, so the drawing is created first and
@@ -58545,9 +58545,10 @@ def events_checks(client, rep, app_id, workdir):
             f"err={error_code(s_env)}")
 
     # ── EV.external.after_own: the ordinary order - our mutation, then a foreign one ─────────────
-    # INVARIANT: the own burst is closed inside the command that caused it, so a foreign rebuild that
-    # arrives BEFORE the next command still reaches the revision. The fingerprint cannot show it: the
-    # probe renames the part and rebuilds, `тело:признаки:габарит` stays the same.
+    # INVARIANT: own mutation gives +1, and a foreign rebuild with no command between them gives another
+    # +1 only if a boundary exists - an absorbed one is NAMED by LIMIT document-events, not FAIL. The
+    # fingerprint cannot show it: the probe renames the part and rebuilds, `тело:признаки:габарит` stays
+    # the same.
     ao_before, _e10 = ev_context(client, doc)
     r_ao = ao_before.get("revision")
     _e, ao_env, _ = client.tool("kompas_rebuild", {

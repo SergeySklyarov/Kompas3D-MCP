@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Research probe for the EVENTS_FINGERPRINT order (external change seen through KOMPAS events).
+    INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
+    the shipping graph could not be used to argue about what the product does.
+    DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2; reference/kompas-sdk-v24/docs-wire-20261031-events/
+    History: docs/decisions/adapter-core.md#document-events
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EVProbe</RootNamespace>
+    <AssemblyName>EVProbe</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Vendor interop is referenced, never copied (build/KompasInterop.props convention). -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasInteropDir" Value="$(KompasInteropDir)" />
+  </ItemGroup>
+
+  <Target Name="ThrowWhenInteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.Kompas6API5.dll')"
+           Text="Не найден Interop.Kompas6API5.dll в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=..." />
+  </Target>
+
+</Project>

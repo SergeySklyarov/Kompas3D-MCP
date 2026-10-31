@@ -111,7 +111,7 @@ internal static class Program
         var client = keepSourceOpen ? Open(top) : null;
         try
         {
-            foreach (var route in new[] { "A", "B", "R" })
+            foreach (var route in new[] { "A", "B", "R", "P" })
             {
                 if (only is not null && route != only)
                 {
@@ -204,8 +204,9 @@ internal static class Program
         string name, string route, string top, string[] sources, int expected, bool stepwise)
     {
         var folder = Path.Combine(Work, $"{name}-{route}{(stepwise ? "-stepwise" : string.Empty)}");
-        Directory.CreateDirectory(folder);
-        var copyTop = Path.Combine(folder, "top.m3d");
+        var topFolder = route == "P" ? Path.Combine(folder, "preflight") : folder;
+        Directory.CreateDirectory(topFolder);
+        var copyTop = Path.Combine(topFolder, "top.m3d");
         var files = Path.Combine(folder, "files");
         Directory.CreateDirectory(files);
         File.Copy(top, copyTop, overwrite: true);
@@ -291,7 +292,7 @@ internal static class Program
     private static string? ReplaceNext(
         ksDocument3D document, string route, Dictionary<string, string> copyBySource)
     {
-        if (route is "A" or "R")
+        if (route is "A" or "R" or "P")
         {
             foreach (var part in Components(document))
             {
@@ -300,7 +301,7 @@ internal static class Program
                 {
                     part.fileName = copy;
                     part.Update();
-                    if (route == "R")
+                    if (route is "R" or "P")
                     {
                         // R = A plus the rebuild the product's replace route runs after every replacement.
                         document.RebuildDocument();

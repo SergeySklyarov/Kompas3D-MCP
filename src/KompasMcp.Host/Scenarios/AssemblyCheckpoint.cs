@@ -597,13 +597,12 @@ internal sealed class AssemblyCheckpoint
 
         var current = revision;
         var planned = (int?)null;
-        // INVARIANT: the component list is re-read before EVERY replacement. The replace route bumps the
-        // revision and invalidates every ref of the document, so a list read once is stale after the first
-        // success — a stale ref is refused, and the copy would keep the client's file in every later link.
-        // INVARIANT: a file inserted several times is copied once but REPOINTED in every insertion. The
-        // loop therefore advances by the row's source, not by a set of sources already touched: one
-        // replacement leaves the other insertions of the same file on the client's file.
-        var reassignments = 0;
+        // MEASURED: after a successful replace the structure read still reports the OLD source_path of the
+        // replaced component, so "the next row that still names a client file" is the same row again and
+        // the loop never reaches the others. Progress is therefore tracked by the REFS already replaced,
+        // while the copy for each component is still chosen by its own source — the stale read can only
+        // repeat a row, never mis-address one.
+        var done = new HashSet<string>(StringComparer.Ordinal);
         while (true)
         {
             var listed = await _invoke("kompas_list_components", new JsonObject
@@ -622,7 +621,9 @@ internal sealed class AssemblyCheckpoint
             var row = rows.FirstOrDefault(candidate =>
             {
                 var path = JsonScalars.ReadString(candidate["source_path"]);
-                return path is not null && copyBySource.ContainsKey(path);
+                var candidateRef = JsonScalars.ReadString(candidate["component_ref"]);
+                return path is not null && candidateRef is not null && !done.Contains(candidateRef)
+                    && copyBySource.ContainsKey(path);
             });
             if (row is null)
             {
@@ -630,14 +631,13 @@ internal sealed class AssemblyCheckpoint
             }
 
             var source = JsonScalars.ReadString(row["source_path"])!;
-            var componentRef = JsonScalars.ReadString(row["component_ref"]);
-            if (componentRef is null || current is null)
+            var componentRef = JsonScalars.ReadString(row["component_ref"])!;
+            if (current is null)
             {
-                return new ReassignResult(false, "ссылка или ревизия копии не прочитаны перед переназначением",
-                    null);
+                return new ReassignResult(false, "ревизия копии не прочитана перед переназначением", null);
             }
 
-            var replaced = await _invoke("kompas_replace_component", new JsonObject
+            var replacedEnvelope = await _invoke("kompas_replace_component", new JsonObject
             {
                 ["document_id"] = documentId,
                 ["expected_revision"] = current.Value,
@@ -647,33 +647,33 @@ internal sealed class AssemblyCheckpoint
                     parentOperationId, "copy-reassign-" + componentRef),
             }, cancellationToken).ConfigureAwait(false);
 
-            if (replaced.Status != OperationStatus.Succeeded)
+            if (replacedEnvelope.Status != OperationStatus.Succeeded)
             {
                 // The route's own code and message are passed on: a cause invented here would send the
                 // caller after a library component even when the refusal was, say, a stale revision.
-                var refusal = replaced.Error is null
+                var refusal = replacedEnvelope.Error is null
                     ? "маршрут замены источника отказал без кода"
-                    : $"{replaced.Error.Code}: {replaced.Error.Message}";
+                    : $"{replacedEnvelope.Error.Code}: {replacedEnvelope.Error.Message}";
                 return new ReassignResult(false,
                     $"компонент «{JsonScalars.ReadString(row["name"]) ?? source}» не переназначен: {refusal}",
                     current);
             }
 
-            // LIMIT: the loop is bounded by the number of components read first; a route that stops
-            // advancing would otherwise spin. Reaching the bound is a refusal, never a silent success.
-            reassignments++;
-            if (reassignments > (planned ?? rows.Length))
+            done.Add(componentRef);
+            current = replacedEnvelope.RevisionAfter ?? current;
+
+            // LIMIT: one replacement per component; a listing that never stops naming a client file is a
+            // refusal, not a silent half-reassigned copy.
+            if (done.Count > planned.Value)
             {
                 return new ReassignResult(false,
                     "переназначение не сходится: замен больше, чем компонентов в копии", current);
             }
 
-            current = replaced.RevisionAfter ?? current;
-
             // INVARIANT: a replace that changed the number of components has dropped or duplicated
             // instances, and the copy no longer matches the graph it was planned from. The route reports
             // this itself; it is refused here rather than left for the verification to notice.
-            if (replaced.Verification?.Checks?.FirstOrDefault(check =>
+            if (replacedEnvelope.Verification?.Checks?.FirstOrDefault(check =>
                     check.Name == "component_count_unchanged" && !check.Passed) is { } dropped)
             {
                 return new ReassignResult(false,

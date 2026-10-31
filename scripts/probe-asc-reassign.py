@@ -251,9 +251,9 @@ def save_in_place(session, document):
     return envelope
 
 
-def close(session, document):
+def close(session, document, policy="discard"):
     if document:
-        session.tool("kompas_close_document", {"document_id": document, "dirty_policy": "discard"})
+        session.tool("kompas_close_document", {"document_id": document, "dirty_policy": policy})
 
 
 def open_document(session, app_id, path, access):
@@ -313,10 +313,20 @@ def replace_stepwise(session, app_id, top, copies):
                 "source_path": copies[row["source_path"]]})
             code = code_of(replaced)
             in_memory = len(links(session, document))
+            single = "--single-save" in sys.argv
+            if single:
+                steps.append({"stage": "step-%d" % step, "replaced": row.get("source_path"),
+                              "code": code, "in_memory": in_memory})
+                print("шаг %d (без сохранения): %s -> %s code=%s memory=%s"
+                      % (step, row.get("source_path"), copies[row["source_path"]], code, in_memory),
+                      flush=True)
+                if code is not None:
+                    break
+                continue
             inplace = "--inplace" in sys.argv
             target = top if inplace else os.path.join(WORK, "step-%d.m3d" % step)
             saved = save_in_place(session, document) if inplace else save_as(session, document, target)
-            close(session, document)
+            close(session, document, "save" if "--saveclose" in sys.argv else "discard")
             in_file = count_file(session, app_id, target)
             steps.append({"stage": "step-%d" % step, "replaced": row.get("source_path"),
                           "code": code, "message": message_of(replaced),
@@ -333,6 +343,13 @@ def replace_stepwise(session, app_id, top, copies):
             document, _c = open_document(session, app_id, top, "edit")
             if not document:
                 break
+        if "--single-save" in sys.argv and document:
+            final_doc = document
+            save_in_place(session, final_doc)
+            close(session, final_doc, "save")
+            document = None
+            final = count_file(session, app_id, top)
+            print("после единственного сохранения: в файле=%s" % final, flush=True)
     finally:
         close(session, document)
     return None, steps, final

@@ -15506,16 +15506,18 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
             if not error_twin:
                 code_s, message_s = save_as(twin_doc, twin_top)
                 error_twin = None if not code_s else f"сохранение: {code_s} {message_s}"
-    # Сохранённый файл обязан содержать столько же компонентов, сколько документ в памяти. Если это не
-    # так, вставки теряет сохранение/перечитывание, а не переназначение копии.
+    # INVARIANT: the saved file must hold as many components as the document in memory; otherwise the
+    # insertion is lost by saving/re-reading, not by reassigning the copy. A failed read is a FAIL, never a
+    # pass: an absent number is not a matching number.
     saved_links = None
     in_memory = None
     code_saved = None
     if twin_doc and not error_twin:
         in_memory = len(links_of(twin_doc))
-        # Файл нельзя открыть на чтение, пока на нём открыт документ на запись: сначала закрываем свой.
-        # Открытие идёт через call(), а не client.tool(): operation_id обязателен в схеме инструмента,
-        # и прямой вызов без него отвергается, оставляя сверку без числа.
+        # INVARIANT: a file cannot be opened read-only while a document on it is open for edit, so the
+        # fixture's own document is closed first.
+        # TEST: the open goes through call(), not client.tool(): operation_id is mandatory in the tool
+        # schema, and a direct call without it is refused, leaving the check without a number.
         close(twin_doc)
         env_saved, code_saved = call("kompas_open_document", {
             "application_id": app_id, "path": twin_top, "access": "read_only"})
@@ -15541,17 +15543,16 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                      if _os.path.basename(row.get("source_path") or "").lower() == "bracket.m3d"]
         copies = {row.get("copy_path") for row in rows_twin}
         insertions = sorted(row.get("insertions") for row in rows_twin)
-        # Фикстура вставляет правый bracket ДВА раза, левый - один: число вставок сверяется с ним,
-        # а не с «не меньше двух».
+        # INVARIANT: the fixture inserts the right bracket TWICE and the left one once, so the insertion
+        # counts are compared with that, not with "at least two".
         same_name_ok = (
             code is None
             and len(rows_twin) == 2
             and len(copies) == 2
             and None not in copies
             and insertions == [1, 2]
-            # Файл нельзя открыть, пока документ открыт на запись: тогда сверка числа компонентов
-            # недоступна и строка её не требует (но и не выдаёт отсутствие за совпадение).
-            and (saved_links is None or saved_links == in_memory))
+            # INVARIANT: an unread number of components is a FAIL: an absent number is not a match.
+            and saved_links == in_memory)
         rep.add("ASC.09.same_name",
                 "одноимённые файлы из разных каталогов не столкнулись; файл с двумя вставками "
                 "скопирован один раз и назван в manifest с числом вставок 2",
@@ -15560,9 +15561,9 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 f"(ждали [1, 2]) components in memory={in_memory} in saved file={saved_links} "
                 f"saved_open={code_saved} err={emsg(env)}")
 
-        # -- ASC.11 успешный шаг идёт в КОПИЮ, и ответ это называет ----------------------------
-        # §2 п.5 наряда и п.3 замечаний: план продолжается на копии, поэтому правка обязана быть в копии,
-        # путь копии - в ответе и совпадать с контекстом документа, а файл клиента - прежним побайтно.
+        # -- ASC.11 a successful step goes into the COPY, and the answer says so ---------------------
+        # INVARIANT: the plan continues on the copy, so the edit must land in the copy, the copy path must be
+        # in the answer and match the document context, and the client's file must stay byte-identical.
         links_twin = links_of(twin_current) if twin_current else []
         refs_twin = [row.get("component_ref") for row in links_twin]
         client_sha_before = sha(twin_top)

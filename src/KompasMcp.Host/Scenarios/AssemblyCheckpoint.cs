@@ -175,45 +175,14 @@ internal sealed class AssemblyCheckpoint
                 + string.Join("; ", failures), failures);
         }
 
-        // INVARIANT: the whole route — open a copy, reassign it, save it, read the links back from the FILE —
-        // is proven on a copy of the top file taken from disk BEFORE the live document is moved. A route that
-        // fails here refuses while the client's document is still its own file.
+        // MEASURED: a byte copy of the top file, opened while the client's own document of that file is
+        // open, reads back as ONE component instead of the graph's count — a copy КОМПАС did not write
+        // itself has no identity of its own. A preflight on such a copy therefore refused every assembly
+        // checkpoint. The route is proven on the copy КОМПАС writes (the SaveAs below) and read from the
+        // FILE after the document is closed, which is the same evidence without the unreliable read.
+        // LIMIT: a failed verification here leaves the folder and the moved document, and the refusal names
+        // that state; nothing is written to the client's files.
         var topCopy = Path.Combine(folder, Path.GetFileName(sourcePath));
-        var preflight = Path.Combine(folder, "preflight");
-        var preflightTop = Path.Combine(preflight, Path.GetFileName(sourcePath));
-        try
-        {
-            Directory.CreateDirectory(preflight);
-            File.Copy(sourcePath, preflightTop, overwrite: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            DeleteFolderIfCreated(folder, created);
-            return Refuse(report, "top_file_not_copied",
-                $"Верхний файл сборки не скопирован для предварительного прогона: {ex.GetType().Name}: "
-                + ex.Message, new[] { sourcePath });
-        }
-
-        var preflightTopReassigned = await ReassignAsync(
-            parentOperationId, preflightTop, plan.Entries, externalParts, applicationId, cancellationToken)
-            .ConfigureAwait(false);
-        var preflightVerified = preflightTopReassigned.Ok
-            ? await VerifyAsync(
-                    parentOperationId, preflightTop, plan.Entries, graph.ComponentCount, applicationId,
-                    folder, "preflight", cancellationToken)
-                .ConfigureAwait(false)
-            : new VerifyResult(new[] { preflightTopReassigned.Message });
-
-        DeleteFolder(preflight);
-
-        if (preflightVerified.Mismatches.Count > 0)
-        {
-            DeleteFolderIfCreated(folder, created);
-            return Refuse(report, "copy_not_verified",
-                "Предварительный прогон копии не сошёлся с графом, живой документ не тронут: "
-                + string.Join("; ", preflightVerified.Mismatches),
-                preflightVerified.Mismatches);
-        }
 
         // The top file goes through the SAME route as a detail: SaveAs, so unsaved edits of the top assembly
         // are inside the copy. The live document becomes the copy; the client's own file is not written.
@@ -429,7 +398,11 @@ internal sealed class AssemblyCheckpoint
                     ? parentPath
                     : null,
                 IsAssembly: row["is_detail"]?.GetValue<bool>() == false,
-                Insertions: JsonScalars.ReadInt(row["instance_count"]) ?? 1,
+                // MEASURED: the structure read answers ONE ROW PER INSERTION, and `instance_count` is the
+                // number of insertions of that file in its parent — the same number on every row of that
+                // file. Summing the field therefore doubled it (two rows of two insertions read as four);
+                // the count of rows is the count of insertions.
+                Insertions: 1,
                 Depth: JsonScalars.ReadInt(row["depth"]) ?? 0))
             .ToArray();
 
@@ -536,7 +509,7 @@ internal sealed class AssemblyCheckpoint
             ? await CountComponentsAsync(copyDocumentId, cancellationToken).ConfigureAwait(false)
             : null;
 
-        await _invoke("kompas_close_document", new JsonObject
+        var closed = await _invoke("kompas_close_document", new JsonObject
         {
             ["document_id"] = copyDocumentId,
             ["dirty_policy"] = "save",
@@ -560,20 +533,34 @@ internal sealed class AssemblyCheckpoint
                 + $"{planned}", null);
         }
 
+        // INVARIANT: an unclosed copy makes every later read of it a read of memory, so the close result is
+        // named here instead of being dropped.
+        if (closed.Status != OperationStatus.Succeeded)
+        {
+            var cause = closed.Error is null ? string.Empty
+                : $": {closed.Error.Code}: {closed.Error.Message}";
+            return new ReassignResult(false,
+                $"копия «{Path.GetFileName(copyPath)}» не закрыта после сохранения{cause}", null);
+        }
+
         return new ReassignResult(true, string.Empty, saved?.RevisionAfter ?? reassigned.Revision);
     }
 
-    /// <summary>How many components the document reports, or <c>null</c> when the read failed.</summary>
-    private async Task<int?> CountComponentsAsync(string documentId, CancellationToken cancellationToken)
+    /// <summary>The copy's component rows, or <c>null</c> when the read failed.</summary>
+    private async Task<JsonObject[]?> ListRowsAsync(string documentId, CancellationToken cancellationToken)
     {
         var listed = await _invoke("kompas_list_components", new JsonObject
         {
             ["document_id"] = documentId,
         }, cancellationToken).ConfigureAwait(false);
         return listed.Status == OperationStatus.Succeeded
-            ? (listed.Result?["components"] as JsonArray ?? new JsonArray()).Count
+            ? (listed.Result?["components"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToArray()
             : null;
     }
+
+    /// <summary>How many components the document reports, or <c>null</c> when the read failed.</summary>
+    private async Task<int?> CountComponentsAsync(string documentId, CancellationToken cancellationToken) =>
+        (await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false))?.Length;
 
     /// <summary>Point every component of one document at its copy, by the documented source replacement.</summary>
     /// <remarks>DOC: kspart_setfilename.html — «Метод используется для компонентов, вставленных в сборку»;
@@ -596,42 +583,47 @@ internal sealed class AssemblyCheckpoint
             .ToDictionary(entry => entry.SourcePath, entry => entry.CopyPath!, StringComparer.OrdinalIgnoreCase);
 
         var current = revision;
-        var planned = (int?)null;
-        // MEASURED: after a successful replace the structure read still reports the OLD source_path of the
-        // replaced component, so "the next row that still names a client file" is the same row again and
-        // the loop never reaches the others. Progress is therefore tracked by the REFS already replaced,
-        // while the copy for each component is still chosen by its own source — the stale read can only
-        // repeat a row, never mis-address one.
-        var done = new HashSet<string>(StringComparer.Ordinal);
-        while (true)
+        // MEASURED: a replace revokes the references of the document and a re-read hands out NEW ones, so a
+        // row cannot be remembered between reads. The copy is therefore chosen by the row's POSITION, and the
+        // list is re-read before every replace because the replace revokes the refs read before it.
+        var first = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
+        if (first is null)
         {
-            var listed = await _invoke("kompas_list_components", new JsonObject
+            return new ReassignResult(false, "компоненты копии не прочитаны", current);
+        }
+
+        var planned = first
+            .Select(row => JsonScalars.ReadString(row["source_path"]))
+            .ToArray();
+        for (var index = 0; index < planned.Length; index++)
+        {
+            var source = planned[index];
+            if (source is null || !copyBySource.TryGetValue(source, out var copyPath))
             {
-                ["document_id"] = documentId,
-            }, cancellationToken).ConfigureAwait(false);
-            if (listed.Status != OperationStatus.Succeeded)
+                continue;
+            }
+
+            var rows = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
+            if (rows is null)
             {
                 return new ReassignResult(false, "компоненты копии не прочитаны", current);
             }
 
-            var rows = (listed.Result?["components"] as JsonArray ?? new JsonArray())
-                .OfType<JsonObject>()
-                .ToArray();
-            planned ??= rows.Length;
-            var row = rows.FirstOrDefault(candidate =>
+            if (index >= rows.Length)
             {
-                var path = JsonScalars.ReadString(candidate["source_path"]);
-                var candidateRef = JsonScalars.ReadString(candidate["component_ref"]);
-                return path is not null && candidateRef is not null && !done.Contains(candidateRef)
-                    && copyBySource.ContainsKey(path);
-            });
-            if (row is null)
-            {
-                return new ReassignResult(true, string.Empty, current, planned);
+                // The order moved between reads: addressing by position would replace a foreign component.
+                return new ReassignResult(false,
+                    $"порядок строк копии изменился: строк {rows.Length} при {planned.Length} прочитанных",
+                    current);
             }
 
-            var source = JsonScalars.ReadString(row["source_path"])!;
-            var componentRef = JsonScalars.ReadString(row["component_ref"])!;
+            var componentRef = JsonScalars.ReadString(rows[index]["component_ref"]);
+            if (componentRef is null)
+            {
+                return new ReassignResult(false,
+                    $"ссылка компонента в строке {index + 1} копии не прочитана", current);
+            }
+
             if (current is null)
             {
                 return new ReassignResult(false, "ревизия копии не прочитана перед переназначением", null);
@@ -642,7 +634,7 @@ internal sealed class AssemblyCheckpoint
                 ["document_id"] = documentId,
                 ["expected_revision"] = current.Value,
                 ["component_ref"] = componentRef,
-                ["source_path"] = copyBySource[source],
+                ["source_path"] = copyPath,
                 ["operation_id"] = ScenarioRunner.ChildOperationId(
                     parentOperationId, "copy-reassign-" + componentRef),
             }, cancellationToken).ConfigureAwait(false);
@@ -655,20 +647,11 @@ internal sealed class AssemblyCheckpoint
                     ? "маршрут замены источника отказал без кода"
                     : $"{replacedEnvelope.Error.Code}: {replacedEnvelope.Error.Message}";
                 return new ReassignResult(false,
-                    $"компонент «{JsonScalars.ReadString(row["name"]) ?? source}» не переназначен: {refusal}",
-                    current);
+                    $"компонент «{JsonScalars.ReadString(rows[index]["name"]) ?? source}» не переназначен: "
+                    + refusal, current);
             }
 
-            done.Add(componentRef);
             current = replacedEnvelope.RevisionAfter ?? current;
-
-            // LIMIT: one replacement per component; a listing that never stops naming a client file is a
-            // refusal, not a silent half-reassigned copy.
-            if (done.Count > planned.Value)
-            {
-                return new ReassignResult(false,
-                    "переназначение не сходится: замен больше, чем компонентов в копии", current);
-            }
 
             // INVARIANT: a replace that changed the number of components has dropped or duplicated
             // instances, and the copy no longer matches the graph it was planned from. The route reports
@@ -681,6 +664,8 @@ internal sealed class AssemblyCheckpoint
                     + $"{dropped.Observed} (ждали {dropped.Expected})", current);
             }
         }
+
+        return new ReassignResult(true, string.Empty, current, planned.Length);
     }
 
     // ---- Verification ----
@@ -784,21 +769,6 @@ internal sealed class AssemblyCheckpoint
         {
             // A folder that cannot be deleted is left with its own name; the refusal still says the
             // checkpoint was not taken, and the path is visible to the client.
-        }
-    }
-
-    private static void DeleteFolder(string folder)
-    {
-        try
-        {
-            if (Directory.Exists(folder))
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            // A folder that cannot be deleted keeps its own name; the answer still names the state.
         }
     }
 

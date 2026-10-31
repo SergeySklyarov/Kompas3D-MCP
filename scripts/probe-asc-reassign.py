@@ -152,14 +152,24 @@ def main():
             print("kompas_connect не вернул application_id: %s" % connected)
             return 1
 
-        left = make_part(session, app_id, os.path.join(WORK, "left", "bracket.m3d"), 30.0, 20.0, 10.0)
-        right = make_part(session, app_id, os.path.join(WORK, "right", "bracket.m3d"), 10.0, 10.0, 5.0)
+        # S1: the fixture keeps the source part documents open (its make_part does not close them), while
+        # this probe closed them. The flag reproduces that factor alone.
+        parts_open = "--parts-open" in sys.argv
+        left = make_part(session, app_id, os.path.join(WORK, "left", "bracket.m3d"), 30.0, 20.0, 10.0,
+                         keep_open=parts_open)
+        right = make_part(session, app_id, os.path.join(WORK, "right", "bracket.m3d"), 10.0, 10.0, 5.0,
+                          keep_open=parts_open)
         if not left or not right:
             print("детали не построены")
             return 1
 
         nested = "--nested" in sys.argv
-        top = os.path.join(WORK, "preflight" if nested else "", "top.m3d")
+        top_open = "--top-open" in sys.argv
+        # S1 decision row: the copy gets a name of its own, so it no longer collides with the open client
+        # document of the same name.
+        unique = "--unique-name" in sys.argv
+        top_name = "top-cp.m3d" if (top_open and unique) else "top.m3d"
+        top = os.path.join(WORK, "preflight" if nested or top_open else "", top_name)
         os.makedirs(os.path.dirname(top), exist_ok=True)
         assembly = new_document(session, app_id, "assembly", "asc-m5")
         if not assembly:
@@ -170,19 +180,30 @@ def main():
             if code:
                 print("вставка отвергнута: %s" % code)
                 return 1
-        code = save_as(session, assembly, top)
+        # S1: the fixture saves the client's assembly, then takes the copy from disk while that same
+        # document stays OPEN and the copy carries the same file name in a `preflight/` subfolder.
+        client_top = os.path.join(WORK, "top.m3d") if top_open else top
+        code = save_as(session, assembly, client_top)
         if code:
             print("сохранение отвергнуто: %s" % code)
             return 1
         in_memory = len(links(session, assembly))
-        close(session, assembly)
+        if top_open:
+            os.makedirs(os.path.dirname(top), exist_ok=True)
+            with open(client_top, "rb") as reader, open(top, "wb") as writer:
+                writer.write(reader.read())
+        else:
+            close(session, assembly)
         rows.append({"stage": "saved", "in_memory": in_memory,
-                     "in_file": count_file(session, app_id, top)})
+                     "in_file": count_file(session, app_id, top),
+                     "paths": [item.get("source_path") for item in links_read(session, app_id, top)]})
 
         copies = copy_graph(left, right)
         code, steps, final = replace_stepwise(session, app_id, top, copies)
         rows.extend(steps)
         print("итог M5: code=%s в файле=%s" % (code, final))
+        if top_open:
+            close(session, assembly)
     finally:
         session.close()
 
@@ -192,7 +213,7 @@ def main():
     return 0
 
 
-def make_part(session, app_id, path, width, height, depth):
+def make_part(session, app_id, path, width, height, depth, keep_open=False):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     created = session.tool("kompas_create_document", {"application_id": app_id, "kind": "part"})
     document = doc_of(created)
@@ -215,7 +236,8 @@ def make_part(session, app_id, path, width, height, depth):
     saved = session.tool("kompas_save_document", {
         "document_id": document, "expected_revision": revision_of(session, document),
         "target_path": path})
-    close(session, document)
+    if not keep_open:
+        close(session, document)
     return path if code_of(saved) is None else None
 
 

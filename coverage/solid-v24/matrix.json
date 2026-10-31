@@ -103,6 +103,34 @@
         "artifact": "coverage/solid-v24/release-profiles/direct-faces-v1.json",
         "title": "Прямое моделирование v24: грани тела без дерева построения",
         "plan": "coverage/solid-v24/implementation-plan.md (блок E5)"
+      },
+      "bom-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/bom-minimal-v1.json",
+        "title": "BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл"
+      },
+      "dismantle-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/dismantle-minimal-v1.json",
+        "title": "Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента"
+      },
+      "master-geometry-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/master-geometry-minimal-v1.json",
+        "title": "Мастер-геометрия v24: копия геометрии из файла другой детали и синхронизация по источнику"
+      },
+      "rib-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/rib-v1.json",
+        "title": "Рёбра жёсткости v24: ребро по разомкнутой цепочке эскиза"
+      },
+      "sections-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/sections-minimal-v1.json",
+        "title": "Динамическое сечение модели v24: шаг смещённой плоскостью, режим отображения и доказательство снимком"
+      },
+      "sheet-metal-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/sheet-metal-minimal-v1.json",
+        "title": "Листовое тело v24: создание из эскиза, чтение состояния, правка, сгиб и отверстие"
+      },
+      "threads-minimal-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/threads-minimal-v1.json",
+        "title": "Условное изображение резьбы v24: внешняя по ребру, внутренняя по грани, авто, правая/левая"
       }
     },
     "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -1817,7 +1845,7 @@
     {
       "operation_id": "SM-07.native_hole.blind_sphere",
       "kind": "profile_mode",
-      "profile": "mechanical-core-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "E4",
       "context": "part",
@@ -2011,7 +2039,7 @@
     {
       "operation_id": "SM-07.native_hole.through_conic",
       "kind": "profile_mode",
-      "profile": "mechanical-core-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "E4",
       "context": "part",
@@ -2064,7 +2092,7 @@
     {
       "operation_id": "SM-07.native_hole.through_counterdrill",
       "kind": "profile_mode",
-      "profile": "mechanical-core-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "E4",
       "context": "part",
@@ -15908,7 +15936,7 @@
     {
       "operation_id": "SMB-06.cut.create",
       "kind": "profile_mode",
-      "profile": "sheet-metal-minimal-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "SM",
       "context": "part",
@@ -15958,7 +15986,7 @@
     {
       "operation_id": "SMB-07.unfold.set",
       "kind": "profile_mode",
-      "profile": "sheet-metal-minimal-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "SM",
       "context": "part",
@@ -16007,7 +16035,7 @@
     {
       "operation_id": "SMB-08.unfold.read",
       "kind": "profile_mode",
-      "profile": "sheet-metal-minimal-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "SM",
       "context": "part",
@@ -16050,7 +16078,7 @@
     {
       "operation_id": "SMB-09.flat_dxf.export",
       "kind": "profile_mode",
-      "profile": "sheet-metal-minimal-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "SM",
       "context": "part",
@@ -16372,7 +16400,7 @@
         "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции перемещения граней тоже нет, удалять с зависимостями нечего."
       }
     },
-        {
+    {
       "operation_id": "SM-24.move_faces.tangent_group",
       "kind": "profile_mode",
       "context": "part.single_body",
@@ -16413,7 +16441,7 @@
         "Одиночный режим на грани с касательными соседями отказывает по арифметике V + d·A (измерено 6000 против 4800), хотя ход выполнен: касательные двигаются неявно, а признака для этого в API нет. Это долг, а не заслуга - строка E5.TAN.single_on_tangent названа, а не засчитана успехом.",
         "Границы измеренного: одно тело с историей построения, плоская грань бруска со скруглением; цилиндрическая грань скругления в режиме касательных ведёт себя как плоская (измерено), но отдельной строкой не проверялась."
       ],
-      "profile": "direct-faces-v1",
+      "profile": null,
       "priority": "practical_required",
       "queue": "E5",
       "depends_on": [
@@ -16426,7 +16454,7 @@
         "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции перемещения граней тоже нет, удалять с зависимостями нечего."
       }
     },
-        {
+    {
       "operation_id": "SM-24.delete_faces.open_shell",
       "kind": "profile_mode",
       "context": "part.single_body",
@@ -16479,7 +16507,7 @@
         "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции удаления граней тоже нет."
       }
     },
-        {
+    {
       "operation_id": "SM-24.delete_faces.keep_body",
       "kind": "profile_mode",
       "context": "part.single_body",
@@ -16526,7 +16554,7 @@
         "delete_dependencies": "Та же причина: признака нет, зависимых признаков у операции удаления граней тоже нет."
       }
     },
-        {
+    {
       "operation_id": "SM-24.restore_faces.by_face",
       "kind": "profile_mode",
       "context": "part.single_body",
@@ -16617,7 +16645,11 @@
         "suppress_restore": "У зависимости нет признака в дереве, подавлять нечего.",
         "delete_dependencies": "У зависимости нет признака и зависимых признаков.",
         "geometry_validation": "Геометрию проверяет операция, а не условие входа."
-      }
+      },
+      "required_actions": [
+        "discover",
+        "read"
+      ]
     },
     {
       "operation_id": "dep.refs.faces_body",
@@ -16658,7 +16690,12 @@
         "suppress_restore": "У зависимости нет признака в дереве, подавлять нечего.",
         "delete_dependencies": "У зависимости нет признака и зависимых признаков.",
         "geometry_validation": "Геометрию проверяет операция, а не условие входа."
-      }
+      },
+      "required_actions": [
+        "discover",
+        "read",
+        "negative_tests"
+      ]
     }
   ],
   "pending_families": [

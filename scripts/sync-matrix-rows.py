@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Разворачивает строки матрицы для профилей выпуска и сверяет ссылки (шаг A.2/A.3 плана).
+"""Creates the matrix rows a release profile asks for and checks its references (plan A.2/A.3).
 
-Знаменатель — каталог: `matrix.json` хранит только строки, по которым есть что сказать
-(доказательства, тесты, ограничения), а `scripts\\emit-coverage-matrix.py` достраивает отсутствующие
-режимы каталога как `not_started`. Так «не сделано» видно в метрике, но не превращается в
-ручную работу по ведению двухсот строк.
+The denominator is the catalog: `matrix.json` holds only the rows that have something to say
+(evidence, tests, limitations), and `scripts\\emit-coverage-matrix.py` adds the missing catalog modes
+as `not_started`. So "not done" shows in the metric without turning into manual upkeep of 200 rows.
 
-Что делает этот скрипт:
-1. проверяет, что каждая `modes[].ref` и каждая `catalog_refs[]` профиля существуют в каталоге
-   (профиль не имеет права ссылаться на режим, которого нет: ссылка «на глаз» — это потерянное
-   сопоставление);
-2. создаёт или обновляет строки матрицы для режимов профиля, проставляя `profile`, `priority`,
-   `queue`, `depends_on` — приоритет отдельно от уровня доказательства (план §6);
-3. НЕ поднимает статусы: строка получает `not_started` везде, кроме уже существующей строки с
-   доказательством. Уровень каталога сам по себе основанием `verified` не считается;
-4. идемпотентен: повторный запуск не меняет файл.
+What this instrument does:
+1. checks that every `modes[].ref` and every `catalog_refs[]` of a profile exists in the catalog;
+2. creates matrix rows for profile modes and fills `profile`, `priority`, `queue`, `depends_on`;
+3. never raises a status: a new row is `not_started` everywhere, and a catalog level alone is no
+   ground for `verified`;
+4. never overwrites what a row already says. A profile is a QUEUE, a row is the RECORD of proof;
+   several profiles name the same dependency or mode, so "the last profile wins" would make the file
+   depend on file order and would wipe `acceptance`, `required_actions`, `required_of`, `title`,
+   `catalog_ref` and `depends_on` of the fuller declaration;
+5. is idempotent: a second run does not change the file.
 
-Запуск: python scripts\\sync-matrix-rows.py [--dry-run]
+Usage: python scripts\\sync-matrix-rows.py [--dry-run] [--self-test]
 """
 import json
 import os
@@ -86,23 +86,54 @@ def row_for(ref, entry, family_id, kind, profile_id):
     return row
 
 
-def write_matrix(path, matrix):
-    """Write `matrix.json` in the FILE's own form: its BOM, its indent, its line endings.
+def file_form(path):
+    """The file's own writing form: BOM, indent width, line terminator."""
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    text = raw.decode("utf-8-sig")
+    indent = 1
+    for line in text.splitlines():
+        body = line.lstrip(" ")
+        if body and len(body) != len(line):
+            indent = len(line) - len(body)
+            break
+    return raw.startswith(b"\xef\xbb\xbf"), indent, "\r\n" if b"\r\n" in raw else "\n"
 
-    DOC: scripts/record-b2-rows.py - "a writing instrument PRESERVES the file's encoding", and
-    scripts/emit-coverage-matrix.py - another indent "would rewrite all 7 400 lines" of a file the
-    run never touched. INVARIANT: the BOM stays when the file had one, the indent stays 1, and the
-    line endings follow `.gitattributes` (`*.json text eol=crlf`).
-    History: docs/decisions/api-audit.md#matrix-profile-sync
+
+def carries_proof(row):
+    """A row that keeps its own evidence: a test, or any action that left `not_started`."""
+    return bool(row.get("tests")) or any(v != "not_started" for v in row["actions"].values())
+
+
+def fill(row, key, value):
+    """Set a content field only where the row has nothing yet. A profile is a queue, not the record.
+
+    LIMIT: a later profile edit to an already filled field does not reach the row; such a divergence
+    is found by comparing the profile with the row and fixed by an order, not by this instrument.
     """
-    raw = open(path, "rb").read(3) if os.path.exists(path) else b""
-    with open(path, "w", encoding="utf-8-sig" if raw == b"\xef\xbb\xbf" else "utf-8") as handle:
-        json.dump(matrix, handle, ensure_ascii=False, indent=1)
-        handle.write("\n")
+    if not value or row.get(key):
+        return False
+    row[key] = value
+    return True
 
 
-def main():
-    dry = "--dry-run" in sys.argv
+def write_matrix(path, matrix):
+    """Write `matrix.json` in the FILE's own form: its BOM, its indent, its line terminators.
+
+    INVARIANT: a run that changes a few rows must not restyle the rest of the file, so the form is
+    read from the bytes on disk. A literal indent or a text-mode open rewrites every line the run
+    never touched. `.gitattributes` is not the source either: it asks for CRLF on `*.json` while the
+    tracked file is LF.
+    History: docs/decisions/api-audit.md#matrix-profile-sync-write
+    """
+    bom, indent, eol = file_form(path)
+    text = json.dumps(matrix, ensure_ascii=False, indent=indent).replace("\n", eol) + eol
+    with open(path, "w", encoding="utf-8-sig" if bom else "utf-8", newline="") as handle:
+        handle.write(text)
+
+
+def main(argv):
+    dry = "--dry-run" in argv
     catalog = load(os.path.join(COVERAGE, "catalog.json"))
     matrix_path = os.path.join(COVERAGE, "matrix.json")
     matrix = load(matrix_path)
@@ -119,15 +150,12 @@ def main():
     for name in profiles:
         profile = load(os.path.join(PROFILE_DIR, name))
         profile_id = profile["meta"]["profile_id"]
-        matrix["meta"].setdefault("profiles", {})[profile_id] = {
-            "artifact": os.path.relpath(os.path.join(PROFILE_DIR, name), ROOT).replace("\\", "/"),
-            "title": profile["meta"]["title"],
-            # `plan` есть не у каждого профиля: минимальные профили (mates-minimal-v1,
-            # variables-material-minimal-v1) заведены без него, и прямое обращение к ключу валило
-            # прибор `KeyError` — то есть проверка падала на ВАЛИДНОМ профиле, а не находила
-            # расхождение. Отсутствие называется None, а не подставляется чужим планом.
-            "plan": profile["meta"].get("plan"),
-        }
+        # The profile file owns `artifact` and `title`; `plan` is not in every profile's meta, and a
+        # minimal profile without it must not blank the pointer the matrix already keeps.
+        entry = matrix["meta"].setdefault("profiles", {}).setdefault(profile_id, OrderedDict())
+        entry["artifact"] = os.path.relpath(os.path.join(PROFILE_DIR, name), ROOT).replace("\\", "/")
+        entry["title"] = profile["meta"]["title"]
+        fill(entry, "plan", profile["meta"].get("plan"))
 
         for entry in profile.get("modes") or []:
             ref = entry["ref"]
@@ -160,11 +188,13 @@ def main():
             # норма. Опаснее всего то, что откат не был заметен: обе записи звучат правдоподобно.
             changed = False
             for key, value in (("profile", profile_id), ("priority", entry.get("priority")),
-                               ("queue", entry.get("queue")),
-                               ("depends_on", entry.get("depends_on") or [])):
+                               ("queue", entry.get("queue"))):
                 if value is not None and existing.get(key) != value:
                     existing[key] = value
                     changed = True
+            # `depends_on` belongs to the queue, but a row shared by two profiles holds one list:
+            # filling it only where it is empty keeps the file independent of profile order.
+            changed = fill(existing, "depends_on", entry.get("depends_on") or []) or changed
             if "kind" not in existing:
                 existing["kind"] = "profile_mode" if kind == "mode" else "profile_operation"
                 changed = True
@@ -216,17 +246,12 @@ def main():
                 order.append(dep_id)
                 touched.append(dep_id)
             if existing is not None:
-                changed = False
-                if existing.get("catalog_ref") != family_ref:
-                    existing["catalog_ref"] = family_ref
-                    changed = True
+                changed = fill(existing, "catalog_ref", family_ref)
                 for key, value in (("acceptance", dep.get("acceptance") or []),
                                    ("required_of", dep.get("required_of") or []),
                                    ("required_actions", dep.get("required_actions") or []),
                                    ("title", dep.get("title"))):
-                    if existing.get(key) != value:
-                        existing[key] = value
-                        changed = True
+                    changed = fill(existing, key, value) or changed
                 (touched if changed else skipped).append(dep_id)
 
         # Режимы профиля с priority != practical_required не обязаны иметь строку матрицы,
@@ -245,7 +270,7 @@ def main():
         row = rows_by_id[ref]
         if ref in referenced or not row.get("profile"):
             continue
-        if row.get("tests") or any(v != "not_started" for v in row["actions"].values()):
+        if carries_proof(row):
             problems.append(f"{ref}: строка профиля больше не упоминается, но в ней есть "
                             f"доказательство — снимите её вручную, а не молча")
             continue
@@ -282,5 +307,79 @@ def main():
     return 0
 
 
+def self_test():
+    """Proves the writing form and the refusal on temporary files: the repository matrix is not read."""
+    import io
+    import tempfile
+    from contextlib import redirect_stdout
+    global COVERAGE, PROFILE_DIR
+
+    failures, checks = [], 0
+
+    def check(ok, message):
+        nonlocal checks
+        checks += 1
+        if not ok:
+            failures.append(message)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sample = {"rows": [], "meta": {"schema_version": "1.0"}}
+        for bom in (False, True):
+            for indent in (1, 2):
+                for eol in ("\n", "\r\n"):
+                    label = f"BOM={bom}, отступ={indent}, конец строки={eol!r}"
+                    head = b"\xef\xbb\xbf" if bom else b""
+                    text = json.dumps(sample, ensure_ascii=False, indent=indent).replace("\n", eol) + eol
+                    path = os.path.join(tmp, "form.json")
+                    with open(path, "wb") as handle:
+                        handle.write(head + text.encode("utf-8"))
+                    write_matrix(path, load(path))
+                    first = open(path, "rb").read()
+                    check(first == head + text.encode("utf-8"), f"{label}: форма файла не сохранена")
+                    write_matrix(path, load(path))
+                    check(open(path, "rb").read() == first, f"{label}: повторная запись изменила байты")
+
+        coverage = os.path.join(tmp, "coverage", "solid-v24")
+        profile_dir = os.path.join(coverage, "release-profiles")
+        os.makedirs(profile_dir)
+        matrix_path = os.path.join(coverage, "matrix.json")
+        catalog = {"families": [{"id": "F1", "operations": [
+            {"id": "F1.op", "modes": [{"id": "F1.op.m"}]}]}]}
+        row = {"operation_id": "F1.op.m", "kind": "profile_mode", "profile": "p1",
+               "priority": "practical_required", "queue": None, "catalog_ref": "F1",
+               "actions": {a: "verified" for a in ACTIONS}, "tests": ["T.1"],
+               "evidence": [], "limitations": [], "depends_on": []}
+        for name, payload in (("catalog.json", catalog),
+                              ("matrix.json", {"meta": {"schema_version": "1.1"}, "rows": [row],
+                                               "pending_families": []})):
+            with open(os.path.join(coverage, name), "w", encoding="utf-8", newline="") as handle:
+                handle.write(json.dumps(payload, ensure_ascii=False, indent=1) + "\n")
+        profile_path = os.path.join(profile_dir, "p1.json")
+
+        def run(profile):
+            with open(profile_path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(json.dumps(profile, ensure_ascii=False, indent=1) + "\n")
+            with redirect_stdout(io.StringIO()):
+                return main([])
+
+        saved = COVERAGE, PROFILE_DIR
+        COVERAGE, PROFILE_DIR = coverage, profile_dir
+        try:
+            before = open(matrix_path, "rb").read()
+            code = run({"meta": {"profile_id": "p1", "title": "t"}, "modes": []})
+            check(code == 1, f"строка с доказательством без упоминания дала код {code}, а не 1")
+            check(open(matrix_path, "rb").read() == before, "отказ записал matrix.json")
+            code = run({"meta": {"profile_id": "p1", "title": "t"},
+                        "modes": [{"ref": "F1.op.m", "priority": "practical_required"}]})
+            check(code == 0, f"строка, названная профилем, дала код {code}, а не 0")
+        finally:
+            COVERAGE, PROFILE_DIR = saved
+
+    print(f"самопроверка: проверок {checks}, провалов {len(failures)}")
+    for item in failures:
+        print("  -", item)
+    return 1 if failures else 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(self_test() if "--self-test" in sys.argv else main(sys.argv[1:]))

@@ -158,7 +158,9 @@ def main():
             print("детали не построены")
             return 1
 
-        top = os.path.join(WORK, "top.m3d")
+        nested = "--nested" in sys.argv
+        top = os.path.join(WORK, "preflight" if nested else "", "top.m3d")
+        os.makedirs(os.path.dirname(top), exist_ok=True)
         assembly = new_document(session, app_id, "assembly", "asc-m5")
         if not assembly:
             print("сборка не создана")
@@ -242,6 +244,13 @@ def save_as(session, document, path):
     return code_of(envelope)
 
 
+def save_in_place(session, document):
+    """Сохранение В ТОТ ЖЕ ФАЙЛ: ровно то, что делает контрольная точка на копии."""
+    envelope = session.tool("kompas_save_document", {
+        "document_id": document, "expected_revision": revision_of(session, document)})
+    return envelope
+
+
 def close(session, document):
     if document:
         session.tool("kompas_close_document", {"document_id": document, "dirty_policy": "discard"})
@@ -304,8 +313,9 @@ def replace_stepwise(session, app_id, top, copies):
                 "source_path": copies[row["source_path"]]})
             code = code_of(replaced)
             in_memory = len(links(session, document))
-            target = os.path.join(WORK, "step-%d.m3d" % step)
-            saved = save_as(session, document, target)
+            inplace = "--inplace" in sys.argv
+            target = top if inplace else os.path.join(WORK, "step-%d.m3d" % step)
+            saved = save_in_place(session, document) if inplace else save_as(session, document, target)
             close(session, document)
             in_file = count_file(session, app_id, target)
             steps.append({"stage": "step-%d" % step, "replaced": row.get("source_path"),

@@ -750,7 +750,7 @@ def step_metadata_export(client, app_id, path):
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
 # → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
 # → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf).
-EXPECTED_TOOL_COUNT = 128
+EXPECTED_TOOL_COUNT = 129
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -937,6 +937,8 @@ RUN_GROUPS = (
      "Приёмка IGES: экспорт модели в IGES - файл записан, структура разобрана прибором по открытому "
      "стандарту (счётчики секций, сущности), сборка, отказы по имени и повтор в тот же путь "
      "(наряд IGES_EXPORT)"),
+    ("diag", "diag", "diag-acceptance.json",
+     "Приёмка DG: диагностический пакет без содержимого моделей (наряд DIAG_PACKAGE, спец. 1.4.10 и 1.12)"),
     ("ops", "ops", "ops-acceptance.json",
      "Приёмка OPS: состояния операции - queued против running, отмена очередной и выполняющейся, истечение бюджета без отмены, восстановление журнала без повтора и согласование исхода (наряд OPS_CONTRACT, спец. 1.8)"),
 )
@@ -980,6 +982,9 @@ ALL_GROUPS_EXTRA = (
     # Группа DC ЗАВЕРШАЕТ процесс своего КОМПАС: общий сеанс после неё недействителен, поэтому идёт
     # в своём свежем сеансе, как `client_bugs_20261010` (см. run_extra_group_fresh).
     ("disconnect", ["--disconnect-only"]),
+    # Группа DG собирает пакет диагностики и завершает Worker своего сеанса: свежий сеанс ей нужен,
+    # чтобы канарейка стояла в живом документе, а shutdown остаётся последней.
+    ("diag", ["--diag-only"]),
     # Группа SD ведёт свои процессы Хоста и не пользуется свежим общим сеансом: см. ветку `shutdown`
     # в run_extra_group_fresh. Последняя, чтобы её собственные процессы были единственными.
     ("shutdown", ["--shutdown-only"]),
@@ -2187,6 +2192,7 @@ FLAGS = (
     ("--asm-checkpoint-only", False, "группа ASC: контрольная точка сборки - копия графа"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
+    ("--diag-only", False, "группа DG: диагностический пакет без содержимого моделей"),
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
@@ -18796,6 +18802,7 @@ def main():
     r1_only = "--r1-only" in sys.argv
     # Блок IGES (экспорт модели в IGES): группа IGES на своём сеансе, строки `IGES.<NN>.<действие>`.
     iges_only = "--iges-only" in sys.argv
+    diag_only = "--diag-only" in sys.argv
     # Блок FLT (DXF контура плоской детали): группа FLT на своём сеансе, строки `FLT.<NN>.<действие>`.
     flat_part_only = "--flat-part-only" in sys.argv
     # Блок SC (ограниченный сценарий): группа SC на своём сеансе, строки `SC.<NN>.<действие>`.
@@ -18964,6 +18971,7 @@ def main():
         "e5": e5_only,
         "r1": r1_only,
         "iges": iges_only,
+        "diag": diag_only,
         "scenario": scenario_only,
         "asm_checkpoint": asm_checkpoint_only,
         "sketch_bulk": sketch_bulk_only,
@@ -19718,6 +19726,14 @@ def main():
 
         if flat_part_only:
             flat_part_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if diag_only:
+            diag_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -57937,6 +57953,198 @@ def r1_checks(client, rep, app_id, workdir):
         close(two_doc)
 
 
+def diag_checks(client, rep, app_id, workdir, process_id=None):
+    """DG.* - диагностический пакет (наряд DIAG_PACKAGE, спец. 1.4.10 и 1.12).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Пакет не содержит значений пользователя, а не «не содержит файлов»:
+    канарейка стоит ОДНОЙ строкой в каталоге, имени файла, имени документа, переменной, тексте
+    технических требований чертежа и в сообщении отказа, и после распаковки не встречается ни в одном
+    файле ни в одном регистре - как и имя пользователя Windows и абсолютный путь к проекту.
+    Положительный контроль обязателен: без него канарейка прошла бы на пустом пакете, поэтому
+    `operations.jsonl` обязан содержать operation_id операции этого прогона, а `sha256` манифеста -
+    совпадать с байтами файлов. Отдельно: сборка при МЁРТВОМ Worker, ключ `--diagnostic-package` при
+    ЖИВОМ Host (пакет записан, Host отвечает, журнал дописывается) и два отказа - существующий файл и
+    путь вне разрешённого корня.
+    """
+    import os
+    import json as _json
+    import hashlib
+    import zipfile
+    import subprocess as _subprocess
+
+    canary = "KANAR" + uuid.uuid4().hex[:10].upper()
+    folder = os.path.join(workdir, canary)
+    os.makedirs(folder, exist_ok=True)
+    project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def revision(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env).get("revision") or 1
+
+    # ── постановка с канарейкой: каталог, имя файла, имя документа, переменная, текст чертежа ──
+    env, code = call("kompas_create_document",
+                     {"application_id": app_id, "kind": "part", "name": canary})
+    part = doc_of(env)
+    if not part:
+        rep.add("DG.canary.setup", f"канарейка {canary}: деталь не создана", "FAIL",
+                f"kompas_create_document: {code}")
+        return
+
+    target_file = os.path.join(folder, canary + ".m3d")
+    env, save_code = call("kompas_save_document",
+                          {"document_id": part, "expected_revision": revision(part),
+                           "target_path": target_file})
+    saved_op = (env or {}).get("operation_id")
+
+    call("kompas_create_variable",
+         {"document_id": part, "expected_revision": revision(part), "name": canary,
+          "value": 1.0, "note": canary})
+
+    env, _ = call("kompas_create_document",
+                  {"application_id": app_id, "kind": "drawing", "name": canary})
+    drawing = doc_of(env)
+    if drawing:
+        call("kompas_set_technical_demand",
+             {"document_id": drawing, "expected_revision": revision(drawing), "text": canary})
+
+    # Отказ, в сообщении которого стоит канарейка: путь берётся несуществующий, но с тем же словом.
+    _env, refusal_code = call("kompas_open_document",
+                              {"path": os.path.join(folder, "absent_" + canary + ".m3d")})
+    rep.add("DG.canary.setup",
+            f"канарейка {canary}: деталь, файл, переменная, чертёж, отказ",
+            "PASS" if refusal_code else "FAIL",
+            f"save={save_code or 'succeeded'}; отказ открытия={refusal_code}")
+
+    # ── пакет инструментом ──
+    target = os.path.join(workdir, "diag-" + canary + ".zip")
+    env, code = call("kompas_diagnostic_package", {"output_path": target})
+    if code or not os.path.exists(target):
+        rep.add("DG.package.built", "пакет инструментом", "FAIL", f"код={code}; файла нет")
+        return
+
+    answer = result(env)
+    with zipfile.ZipFile(target) as zf:
+        raw = {name: zf.read(name) for name in zf.namelist()}
+    names = sorted(raw)
+
+    # ── канарейка: сравнивается ЗНАЧЕНИЕ, а не наличие файла ──
+    needles = [n for n in (canary.lower(), user.lower(), project.lower(),
+                           project.lower().replace("\\", "/")) if n]
+    hits = []
+    for needle in needles:
+        for name in names:
+            if needle in raw[name].decode("utf-8", "replace").lower():
+                hits.append(f"{needle!r} в {name}")
+    rep.add("DG.canary.clean",
+            "канарейка, имя пользователя и путь проекта не встречаются в пакете",
+            "PASS" if not hits else "FAIL",
+            f"файлов={len(names)} ({', '.join(names)}); совпадений={len(hits)}"
+            + (f": {hits[:4]}" if hits else ""))
+
+    # ── манифест: sha256 совпадает с байтами ──
+    manifest = _json.loads(raw["manifest.json"].decode("utf-8")) if "manifest.json" in raw else {}
+    mismatched = []
+    for entry in manifest.get("files") or []:
+        name = entry.get("name")
+        data = raw.get(name)
+        if data is None:
+            mismatched.append(str(name) + ": нет в пакете")
+        elif hashlib.sha256(data).hexdigest() != entry.get("sha256"):
+            mismatched.append(str(name) + ": sha256")
+    rep.add("DG.manifest.sha256", "sha256 манифеста совпадает с файлами пакета",
+            "PASS" if names and not mismatched else "FAIL",
+            f"файлов в манифесте={len(manifest.get('files') or [])}; расхождений={mismatched[:4]}")
+
+    # ── положительный контроль: операции этого прогона в хвосте журнала ──
+    operations = raw.get("operations.jsonl", b"").decode("utf-8", "replace")
+    lines = [line for line in operations.splitlines() if line.strip()]
+    rep.add("DG.positive.operations",
+            "operations.jsonl содержит operation_id операции этого прогона",
+            "PASS" if saved_op and saved_op in operations else "FAIL",
+            f"operation_id={saved_op}; записей в хвосте={len(lines)}; save={save_code or 'succeeded'}")
+
+    # ── ключ при ЖИВОМ Host: пакет записан, Host отвечает, журнал дописывается ──
+    with open(client.config, encoding="utf-8-sig") as fh:
+        cfg = _json.load(fh)
+    journal_path = cfg.get("journal_path")
+    cfg_cli = isolate_config(client.config, workdir, "diag-cli")
+    cli_target = os.path.join(workdir, "diag-cli-" + canary + ".zip")
+    done = _subprocess.run(
+        [client.host_exe, "--config", cfg_cli, "--diagnostic-package", cli_target],
+        capture_output=True, text=True, timeout=300)
+    size_before = os.path.getsize(journal_path) if journal_path and os.path.exists(journal_path) else 0
+    _env, live_code = call("kompas_create_variable",
+                           {"document_id": part, "expected_revision": revision(part),
+                            "name": canary + "B", "value": 2.0})
+    size_after = os.path.getsize(journal_path) if journal_path and os.path.exists(journal_path) else 0
+    _e, health_env, _r = client.tool("kompas_health", {"detail": "minimal"})
+    rep.add("DG.cli.alive_host",
+            "ключ --diagnostic-package при живом Host: пакет, ответ Host, дописанный журнал",
+            "PASS" if (done.returncode == 0 and os.path.exists(cli_target)
+                       and (health_env or {}).get("status") == "succeeded"
+                       and size_after > size_before) else "FAIL",
+            f"rc={done.returncode}; файл={os.path.exists(cli_target)}; "
+            f"health={(health_env or {}).get('status')}; журнал {size_before}->{size_after}; "
+            f"stderr={(done.stderr or '').strip()[:160]!r}; variable={live_code}")
+
+    # ── Worker мёртв: пакет собирается, ответ годный ──
+    _e, health_env, _r = client.tool("kompas_health", {"detail": "minimal"})
+    health_result = result(health_env)
+    worker_pid = health_result.get("worker_pid") or (health_result.get("this_host") or {}).get("worker_pid")
+    killed = False
+    if worker_pid:
+        _subprocess.run(["taskkill", "/PID", str(worker_pid), "/F"], capture_output=True, text=True)
+        killed = True
+    dead_target = os.path.join(workdir, "diag-dead-" + canary + ".zip")
+    env_dead, code_dead = call("kompas_diagnostic_package", {"output_path": dead_target})
+    dead_answer = result(env_dead)
+    rep.add("DG.worker_dead",
+            "пакет собран при завершённом Worker",
+            "PASS" if (killed and not code_dead and os.path.exists(dead_target)
+                       and dead_answer.get("sha256")) else "FAIL",
+            f"worker_pid={worker_pid}; убит={killed}; код={code_dead}; "
+            f"size={dead_answer.get('size_bytes')}; sha256={dead_answer.get('sha256')}")
+
+    # ── отказы: существующий файл и путь вне разрешённого корня ──
+    _env, exists_code = call("kompas_diagnostic_package", {"output_path": target})
+    rep.add("DG.refuse.exists", "существующий файл без overwrite - отказ",
+            "PASS" if exists_code in ("FILE_EXISTS", "PATH_NOT_ALLOWED") else "FAIL",
+            f"код={exists_code}")
+
+    outside = os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, "Windows", "Temp",
+                           "diag-" + canary + ".zip")
+    _env, outside_code = call("kompas_diagnostic_package", {"output_path": outside})
+    rep.add("DG.refuse.outside_root", "путь вне разрешённого корня - отказ PATH_NOT_ALLOWED",
+            "PASS" if outside_code == "PATH_NOT_ALLOWED" else "FAIL",
+            f"путь={outside}; код={outside_code}")
+
+    # ── ответ инструмента: путь, размер, sha256 и числа по файлам, без содержимого ──
+    files = answer.get("files") or []
+    rep.add("DG.answer.shape",
+            "ответ называет путь, размер, sha256, captured_at и числа по файлам; пакет не вложен",
+            "PASS" if (answer.get("path") == target and answer.get("sha256")
+                       and answer.get("captured_at") and files
+                       and all("records_kept" in f for f in files)
+                       and "content" not in answer) else "FAIL",
+            f"файлов={len(files)}; size={answer.get('size_bytes')}; "
+            f"truncated={[f.get('name') for f in files if f.get('truncated')]}")
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -57979,6 +58187,8 @@ EXTRA_GROUP_CHECKS = {
     "ops": lambda c, r, a, w, v, p: ops_checks(c.host_exe, c.config, w, r),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
     "asm_checkpoint": lambda c, r, a, w, v, p: assembly_checkpoint_checks(c, r, a, w),
+    # Группа DG собирает пакет из журнала и лога своего сеанса: свежий сеанс ей нужен, чтобы канарейка стояла в живом документе.
+    "diag": lambda c, r, a, w, v, p: diag_checks(c, r, a, w, p),
 }
 
 

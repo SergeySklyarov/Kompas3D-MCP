@@ -34,10 +34,12 @@ public static class Program
     {
         string? configPath;
         string? schemaOnlyDirectory;
+        string? diagnosticPath;
         try
         {
             configPath = Argument(args, "--config");
             schemaOnlyDirectory = Argument(args, "--emit-schemas");
+            diagnosticPath = Argument(args, "--diagnostic-package");
         }
         catch (ArgumentException ex)
         {
@@ -101,6 +103,14 @@ public static class Program
         foreach (var problem in options.Validate())
         {
             StderrWriter.WriteLine("конфигурация: " + problem.Message);
+        }
+
+        // The same builder the tool uses, reachable when the client cannot connect and the tool cannot
+        // be called. It starts no Worker and no MCP loop, and it opens no Host log: the log it packs is
+        // the one already on disk. History: docs/decisions/diagnostics.md#cli-key
+        if (diagnosticPath is not null)
+        {
+            return WriteDiagnosticPackage(options, diagnosticPath);
         }
 
         using var log = HostLog.Open(options.LogPath);
@@ -386,6 +396,32 @@ public static class Program
         {
             StderrWriter.WriteLine(ex.Message);
             return 1;
+        }
+    }
+
+    /// <summary>Builds the package for the <c>--diagnostic-package</c> key: the same builder the tool
+    /// uses, without a client, a Worker or an MCP loop.</summary>
+    /// <remarks>Exit codes: 0 written, 64 bad argument, 73 write refused — path policy, existing file or
+    /// medium. The messages go to stderr, never to stdout, which carries MCP frames.
+    /// History: docs/decisions/diagnostics.md#cli-key</remarks>
+    private static int WriteDiagnosticPackage(HostOptions options, string destination)
+    {
+        try
+        {
+            var package = Diagnostics.DiagnosticPackage.Build(options, destination, allowOverwrite: false);
+            StderrWriter.WriteLine(
+                $"Пакет диагностики записан: {package.Path}, {package.SizeBytes} байт, sha256 {package.Sha256}");
+            return 0;
+        }
+        catch (KompasContractException ex)
+        {
+            StderrWriter.WriteLine(ex.Message);
+            return ex.Code == ErrorCodes.InvalidArgument ? 64 : 73;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            StderrWriter.WriteLine($"Пакет диагностики не записан: {ex.Message}");
+            return 73;
         }
     }
 

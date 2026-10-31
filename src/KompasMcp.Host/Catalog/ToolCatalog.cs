@@ -2,6 +2,7 @@
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Contracts.Schema;
+using KompasMcp.Host.Diagnostics;
 
 namespace KompasMcp.Host.Catalog;
 
@@ -150,6 +151,23 @@ public static class ToolCatalog
                 + "вызов, кроме этого, отвечает CONFIG_INVALID до журнала и до COM; config_warnings вызовы не блокирует.",
                 Sch.Props(("detail", Sch.Enum("minimal — только состояния; diagnostic — добавает статистику COM-фильтра и окружение.", "minimal", "diagnostic"))),
                 WorkerCommands.Ping),
+
+            // Built in the Host with no COM and no Worker, so it works exactly when the CAD lane is dead
+            // - which is when an operator needs it. History: docs/decisions/diagnostics.md#package
+            Control("kompas_diagnostic_package", "Диагностический пакет",
+                "Собирает zip для разбора неполадки: манифест, окружение, процессы КОМПАС и сервера, хвосты "
+                + "журнала операций и журнала Хоста. К COM не обращается и Worker не запускает, поэтому "
+                + "отвечает и при мёртвом Worker. В пакет попадает только перечень разрешённых полей: "
+                + "аргументы вызовов, имена документов и деталей, тексты чертежей, сообщения об ошибках, "
+                + "переменные окружения, буфер обмена и окна не читаются. Любой путь заменяется меткой "
+                + "path:… с солью пакета. Хвост - не больше 2000 записей на файл, пакет - не больше 8 МиБ; "
+                + "срезанное названо в манифесте полем truncated. Ответ называет путь, размер, sha256 и "
+                + "числа по каждому файлу; сам пакет в ответ не вкладывается. "
+                + "LIMIT: режима «с содержимым моделей» нет: это отдельная граница безопасности.",
+                Sch.Props(
+                    ("output_path", Sch.Str("Абсолютный путь файла .zip внутри разрешённого корня экспорта.")),
+                    ("overwrite", Sch.Nullable(Sch.Bool("Перезаписать существующий файл. По умолчанию false.", false)))),
+                DiagnosticPackage.Command),
 
             ReadOnly("kompas_capabilities", "Что реально поддержано",
                 "Перечень инструментов ЭТОЙ сборки (те же имена, что в tools/list), версия сервера "

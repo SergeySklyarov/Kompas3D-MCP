@@ -156,6 +156,10 @@ public sealed class HostSession : IAsyncDisposable
                 return OperationCancelAnswer(arguments);
             case OperationReconcileCommand:
                 return await OperationReconcileAnswerAsync(arguments, cancellationToken).ConfigureAwait(false);
+            // The diagnostic package takes no session and no Worker: it is built from the journal and
+            // the log alone, so it answers while the CAD lane is dead. History: docs/decisions/diagnostics.md#package
+            case Diagnostics.DiagnosticPackage.Command:
+                return DiagnosticPackageAnswer(arguments);
         }
 
         // Diagnostics do NOT take the session: health and capabilities answer even when another chat
@@ -560,6 +564,46 @@ public sealed class HostSession : IAsyncDisposable
 
         _log.Write("info", "session status", new { state, can_acquire = probe.CanAcquire, owner_pid = probe.OwnerPid });
         return Succeeded(node, warnings, caveats: new[] { "server_state_only" });
+    }
+
+    // ---- kompas_diagnostic_package ----
+
+    /// <summary>Builds the package and answers with the file's numbers, never with its content.</summary>
+    private ResultEnvelope<JsonNode?> DiagnosticPackageAnswer(JsonObject arguments)
+    {
+        var outputPath = JsonScalars.ReadString(arguments["output_path"]);
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return Refusal(
+                ErrorCodes.InvalidArgument,
+                "kompas_diagnostic_package требует output_path: абсолютный путь файла .zip внутри "
+                + "разрешённого корня экспорта.",
+                RetryPolicy.Never,
+                new JsonObject { ["field"] = "output_path" },
+                remedy: "Укажите output_path, например <export_root>/diagnostics.zip.");
+        }
+
+        try
+        {
+            var package = Diagnostics.DiagnosticPackage.Build(
+                _options, outputPath, JsonScalars.ReadBool(arguments["overwrite"]) ?? false);
+            _log.Write("info", "diagnostic package built", new { size_bytes = package.SizeBytes, files = package.Files.Count });
+            return Succeeded(package.ToJson(), caveats: new[] { "no_effect_on_model", "server_state_only" });
+        }
+        catch (KompasContractException contract)
+        {
+            _log.Write("warn", "diagnostic package refused", new { code = contract.Code });
+            return Refusal(contract.Code, contract.Message, contract.RetryPolicy, null, remedy: null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Refusal(
+                ErrorCodes.ExportFailed,
+                $"Пакет диагностики не записан: {ex.Message}",
+                RetryPolicy.Never,
+                null,
+                remedy: "Проверьте права на каталог назначения.");
+        }
     }
 
     // ---- kompas_operation_status / cancel / reconcile ----

@@ -538,13 +538,16 @@ set_transform не считается успешным по одному воз�
 
 **Отказ контрольной точки.** Причина у всех отказов одна: `reason = copy_not_written`. Конкретика —
 в `details.cause` (`component_file_missing`, `component_dirty`, `graph_too_large`, `disk_space`,
-`copy_not_verified`, `manifest_not_written`, `drawing_not_in_policy`, `top_file_not_copied`,
+`copy_not_verified`, `manifest_not_written`, `drawing_not_in_policy`,
 `reopen_failed`, `graph_not_read`, `copy_folder_unavailable`, `copy_not_saved`,
 `top_refs_not_reassigned`, `revision_not_read`), поимённый перечень — в `details.files`. Причина и
 перечень доходят до клиента и в отчёте шага, и на верхнем уровне ответа (поля `checkpoint_cause`,
 `checkpoint_files` в `error.details`). Отказ, случившийся ДО `SaveAs` живого документа, каталога не
 оставляет; отказ ПОСЛЕ него каталог не удаляет и называет состояние: `document_id_after`, путь копии
-и прямую фразу, что документ теперь на копии, а файл клиента не изменён.
+и прямую фразу, что документ теперь на копии, а файл клиента не изменён. `copy_not_verified`
+наступает ПОСЛЕ `SaveAs`: копия снята, документ остался на копии, каталог остался, файл клиента
+прежний; `document_id_after` в этом ответе — идентификатор документа, открытого на копии после
+проверки (на `reopen_failed` его нет вовсе: документ закрыт).
 
 Параметрические циклы можно добавить позже как декларативный bounded repeat с явным верхним
 пределом. Не начинать с execute_python_script или универсальной строки COM-кода.

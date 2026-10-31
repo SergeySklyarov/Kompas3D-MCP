@@ -175,13 +175,14 @@ internal sealed class AssemblyCheckpoint
                 + string.Join("; ", failures), failures);
         }
 
-        // MEASURED: a byte copy of the top file, opened while the client's own document of that file is
-        // open, reads back as ONE component instead of the graph's count — a copy КОМПАС did not write
-        // itself has no identity of its own. A preflight on such a copy therefore refused every assembly
-        // checkpoint. The route is proven on the copy КОМПАС writes (the SaveAs below) and read from the
-        // FILE after the document is closed, which is the same evidence without the unreliable read.
-        // LIMIT: a failed verification here leaves the folder and the moved document, and the refusal names
-        // that state; nothing is written to the client's files.
+        // MEASURED: a byte copy of the top file is read back with ONE component per FILE NAME an open
+        // client document already holds: with the client's assembly open, a copy carrying the same
+        // component names read 1 of 2, copies carrying distinct names read 2 of 2 and 3 of 3, and the
+        // same copy read 3 of 3 once nothing else was open, whatever the insert count.
+        // The route is proven on the copy КОМПАС writes (the SaveAs below) and read from the FILE after
+        // the document is closed: same evidence without the unreliable read.
+        // LIMIT: a failed verification here leaves the folder and the moved document, and the refusal
+        // names that state; nothing is written to the client's files.
         var topCopy = Path.Combine(folder, Path.GetFileName(sourcePath));
 
         // The top file goes through the SAME route as a detail: SaveAs, so unsaved edits of the top assembly
@@ -259,9 +260,26 @@ internal sealed class AssemblyCheckpoint
         {
             var cause = closed.Error is null ? string.Empty
                 : $": {closed.Error.Code}: {closed.Error.Message}";
+            // INVARIANT: the state names an id only when that document is open. A failed close usually
+            // leaves the document open, but the answer is read from the session's list, not assumed.
+            var stillOpen = (await ListDocumentsAsync(applicationId, cancellationToken).ConfigureAwait(false))
+                .Any(row => string.Equals(JsonScalars.ReadString(row["id"]), copyDocumentId,
+                    StringComparison.Ordinal));
+            var closeState = new JsonObject
+            {
+                ["path"] = topCopy,
+                ["notes"] = stillOpen
+                    ? "Документ копии остался открыт: правки идут в копию, файл клиента не изменён."
+                    : "Документ копии закрыт, шаги не выполнялись: копию нужно открыть заново.",
+            };
+            if (stillOpen)
+            {
+                closeState["document_id_after"] = copyDocumentId;
+            }
+
             return Refuse(report, "copy_not_closed",
                 "Копия снята, но закрыть её документ перед проверкой не удалось" + cause,
-                Array.Empty<string>(), moved);
+                Array.Empty<string>(), closeState);
         }
 
         var verification = await VerifyAsync(
@@ -275,10 +293,23 @@ internal sealed class AssemblyCheckpoint
             parentOperationId, topCopy, applicationId, cancellationToken).ConfigureAwait(false);
         if (reopened is null)
         {
+            // INVARIANT: the copy is closed at this point, so no id of it may be offered as a live document.
+            var closedState = new JsonObject
+            {
+                ["path"] = topCopy,
+                ["notes"] = "Копия снята, но её документ закрыт: шаги не выполнялись, копию нужно открыть "
+                    + "заново.",
+            };
             return Refuse(report, "reopen_failed",
                 "Копия снята, но заново открыть её для плана не удалось: документ закрыт, шаги не выполнялись.",
-                Array.Empty<string>(), moved);
+                Array.Empty<string>(), closedState);
         }
+
+        // The plan continues on the REOPENED document, so every later refusal names its id — the id from
+        // before the close addresses nothing.
+        moved["document_id_after"] = reopened;
+        moved["notes"] = "Документ теперь открыт из копии в каталоге контрольной точки: правки идут в копию, "
+            + "файл клиента не изменён.";
 
         // The manifest names every file of the graph; a read_only row has no copy path, so a reader cannot
         // mistake the client's own file for a protected copy.
@@ -609,11 +640,25 @@ internal sealed class AssemblyCheckpoint
                 return new ReassignResult(false, "компоненты копии не прочитаны", current);
             }
 
-            if (index >= rows.Length)
+            // INVARIANT: the row at this position is still the row the plan was built for. The replace is
+            // addressed by position, so a reordered list would put a copy on a foreign component while the
+            // count and the folder both still matched — a silent swap of the copy's geometry.
+            // MEASURED: the list keeps answering the PREVIOUS source_path of a replaced row until the
+            // document is saved in place, so an already-reassigned row legitimately still names its source.
+            if (rows.Length != planned.Length || index >= rows.Length)
             {
-                // The order moved between reads: addressing by position would replace a foreign component.
                 return new ReassignResult(false,
                     $"порядок строк копии изменился: строк {rows.Length} при {planned.Length} прочитанных",
+                    current);
+            }
+
+            var sourceNow = JsonScalars.ReadString(rows[index]["source_path"]);
+            if (!string.Equals(sourceNow, planned[index], StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(sourceNow, copyPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ReassignResult(false,
+                    $"порядок строк копии изменился: строка {index + 1} ведёт на "
+                    + $"«{sourceNow ?? "(путь не прочитан)"}» вместо «{planned[index]}» или «{copyPath}»",
                     current);
             }
 

@@ -272,7 +272,12 @@ public partial class Api5Session
             flatBox?.Height,
             isFlat,
             level,
-            new VerificationDto(level, checks, unverified));
+            new VerificationDto(level, checks, unverified))
+        {
+            // INVARIANT: the file exists and was judged, so the unfold it carries is the kernel's own
+            // projection — the only kind this route builds.
+            UnfoldKind = "native_sheet_metal",
+        };
     }
 
     /// <summary>The body to export: the one named by <c>body_ref</c>, or the only sheet-metal body.</summary>

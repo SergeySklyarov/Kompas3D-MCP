@@ -476,4 +476,13 @@ public sealed record ExportSheetMetalFlatDxfResult(
     /// all — a sheet-metal body without bends IS its own flat pattern.</summary>
     bool? BodyUnfolded,
     VerificationLevel ReachedLevel,
-    VerificationDto Verification);
+    VerificationDto Verification)
+{
+    /// <summary>Which kind of unfold the file carries: <c>native_sheet_metal</c> — the kernel's own unfold
+    /// projection. <c>null</c> only when the export did not reach a file.</summary>
+    /// <remarks>INVARIANT: the product builds no calculated prototype, so the other kind the spec names
+    /// (<c>calculated_prototype</c>) is never reported here — it would claim a computation nobody ran.
+    /// DOC: <c>iassociationview_unfold.html</c> — «Листовая деталь в разогнутом виде» (BOOL).
+    /// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
+    public string? UnfoldKind { get; init; }
+}

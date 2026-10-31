@@ -941,6 +941,11 @@ RUN_GROUPS = (
      "Приёмка DG: диагностический пакет без содержимого моделей (наряд DIAG_PACKAGE, спец. 1.4.10 и 1.12)"),
     ("ops", "ops", "ops-acceptance.json",
      "Приёмка OPS: состояния операции - queued против running, отмена очередной и выполняющейся, истечение бюджета без отмены, восстановление журнала без повтора и согласование исхода (наряд OPS_CONTRACT, спец. 1.8)"),
+    ("events", "events", "events-acceptance.json",
+     "Приёмка EV: внешнее изменение документа-модели по событиям - режим обнаружения по видам "
+     "документа, чужая мутация без переоткрытия, положительный контроль по отпечатку, своя мутация "
+     "ровно +1, отписка при закрытии и восстановление после убитого Worker "
+     "(наряд EVENTS_FINGERPRINT, спец. 1.7)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -1012,6 +1017,10 @@ ALL_GROUPS_EXTRA = (
     # операции складываются на старте процесса и в общем сеансе не воспроизводятся.
     ("ops", ["--ops-only"]),
     ("flat_part", ["--flat-part-only"]),
+    # Группа EV строит свои документы и меняет их из ЧУЖОГО процесса (прибор `scripts/probes/events/`).
+    # Свежий сеанс ей подходит: проба привязывается к АКТИВНОМУ документу единственного экземпляра,
+    # а второй живой КОМПАС ломает привязку (измерено пробой).
+    ("events", ["--events-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -2235,6 +2244,7 @@ FLAGS = (
     ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
     ("--diag-only", False, "группа DG: диагностический пакет без содержимого моделей"),
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
+    ("--events-only", False, "группа EV: внешнее изменение документа по событиям модели"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -18844,6 +18854,8 @@ def main():
     # Блок IGES (экспорт модели в IGES): группа IGES на своём сеансе, строки `IGES.<NN>.<действие>`.
     iges_only = "--iges-only" in sys.argv
     diag_only = "--diag-only" in sys.argv
+    # Блок EV (внешнее изменение по событиям): группа на своём сеансе, строки `EV.*`.
+    events_only = "--events-only" in sys.argv
     # Блок FLT (DXF контура плоской детали): группа FLT на своём сеансе, строки `FLT.<NN>.<действие>`.
     flat_part_only = "--flat-part-only" in sys.argv
     # Блок SC (ограниченный сценарий): группа SC на своём сеансе, строки `SC.<NN>.<действие>`.
@@ -19013,6 +19025,7 @@ def main():
         "r1": r1_only,
         "iges": iges_only,
         "diag": diag_only,
+        "events": events_only,
         "scenario": scenario_only,
         "asm_checkpoint": asm_checkpoint_only,
         "sketch_bulk": sketch_bulk_only,
@@ -19783,6 +19796,14 @@ def main():
 
         if iges_only:
             iges_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if events_only:
+            events_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -58326,6 +58347,252 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             f"truncated={[f.get('name') for f in files if f.get('truncated')]}")
 
 
+EV_PROBE_EXE = os.path.join(ROOT, "scripts", "probes", "events", "bin", "x64", "Release",
+                            "net10.0-windows", "EVProbe.exe")
+
+
+def ev_probe_run(mode, doc_path, timeout=240):
+    """Change the document from ANOTHER process: that is what an external change means here.
+
+    DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2 (the probe and its modes).
+    History: docs/decisions/adapter-core.md#document-events
+    """
+    if not os.path.exists(EV_PROBE_EXE):
+        return None, "EVProbe.exe не собран: " + EV_PROBE_EXE
+    try:
+        done = subprocess.run([EV_PROBE_EXE, mode, doc_path], capture_output=True,
+                              timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, f"{mode}: проба не ответила за {timeout} с"
+
+    def decoded(raw):
+        for codec in ("utf-8", "cp866"):
+            try:
+                return (raw or b"").decode(codec).strip()
+            except UnicodeDecodeError:
+                continue
+        return (raw or b"").decode("utf-8", "replace").strip()
+
+    out = decoded(done.stdout)
+    if decoded(done.stderr):
+        out += " | " + decoded(done.stderr)
+    return done.returncode, out
+
+
+def ev_context(client, doc_id):
+    """The fields the EV rows compare: revision, fingerprint, dirty flag, detection mode."""
+    _e, env, _r = client.tool("kompas_get_context", {"document_id": doc_id, "detail": "full"},
+                              timeout=120)
+    return ((env or {}).get("result") or {}), error_code(env)
+
+
+def ev_build_box(client, app_id, name, height_mm=20):
+    """Part with one extrusion: the probe's `--mutate` needs a feature it can edit."""
+    c_err, c_env, _ = client.tool("kompas_create_document", {
+        "application_id": app_id, "kind": "part", "name": name,
+        "operation_id": str(uuid.uuid4())})
+    doc = ((c_env or {}).get("result") or {}).get("document_id") or (c_env or {}).get("document_id")
+    if not doc:
+        return None, f"документ не создан: {error_code(c_env)}"
+    prev = (c_env or {}).get("revision_after") or 1
+    s_err, s_env, _ = client.tool("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": prev, "plane": {"base": "xy", "offset_mm": 0},
+        "name": name + "_sk", "operation_id": str(uuid.uuid4())})
+    sk = ((s_env or {}).get("result") or {}).get("id")
+    prev = (s_env or {}).get("revision_after") or prev
+    if not sk:
+        return doc, f"эскиз не создан: {error_code(s_env)}"
+    e_err, e_env, _ = client.tool("kompas_edit_sketch", {
+        "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+        "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 40, "height_mm": 30}],
+        "operation_id": str(uuid.uuid4())})
+    prev = (e_env or {}).get("revision_after") or prev
+    f_err, f_env, _ = client.tool("kompas_finish_sketch", {
+        "sketch_ref": sk, "require_closed_profile": False, "operation_id": str(uuid.uuid4())})
+    prev = (f_env or {}).get("revision_after") or prev
+    x_err, x_env, _ = client.tool("kompas_extrude", {
+        "sketch_ref": sk, "expected_revision": prev, "operation": "base", "depth_mm": height_mm,
+        "direction": "positive", "operation_id": str(uuid.uuid4())}, timeout=240)
+    if error_code(x_env):
+        return doc, f"выдавливание отказало: {error_code(x_env)}"
+    return doc, None
+
+
+def ev_body_ref(client, doc_id):
+    _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc_id})
+    rows = (env or {}).get("result")
+    return rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+
+
+def ev_save(client, doc_id, path):
+    """Save under a known path: the probe attaches to the ACTIVE document of the same instance."""
+    ctx, _err = ev_context(client, doc_id)
+    _e, env, _r = client.tool("kompas_save_document", {
+        "document_id": doc_id, "expected_revision": ctx.get("revision") or 1,
+        "target_path": path, "operation_id": str(uuid.uuid4())}, timeout=180)
+    return os.path.isfile(path), error_code(env)
+
+
+def events_checks(client, rep, app_id, workdir):
+    """EV group: the model document's own events as the external-change signal (order §4).
+
+    Every row compares VALUES, not the presence of an answer: a revision that must move by exactly
+    one, a fingerprint that must stay the same while the revision moves, a reference that must be
+    rejected. DOC: EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §4.
+    History: docs/decisions/adapter-core.md#document-events
+    """
+    # The probe attaches to the ACTIVE document of the instance, so the drawing is created first and
+    # the part last: otherwise the part is not active and the probe has nothing to change.
+    _e, d_env, _r = client.tool("kompas_create_document", {
+        "application_id": app_id, "kind": "drawing", "name": "EV_drawing",
+        "operation_id": str(uuid.uuid4())})
+    drawing = ((d_env or {}).get("result") or {}).get("document_id") or (d_env or {}).get("document_id")
+    drawing_mode = ""
+    if drawing:
+        dctx, _derr = ev_context(client, drawing)
+        drawing_mode = str(dctx.get("external_change_detection") or "").lower()
+
+    doc, err = ev_build_box(client, app_id, "EV_main")
+    if not doc or err:
+        rep.add("EV.subscribed", "деталь отвечает reliable, чертёж - conservative", "FAIL",
+                err or "документ не создан")
+        return
+
+    # ── EV.subscribed: the value the caller reads, per document kind ──────────────────────────────
+    ctx, ctx_err = ev_context(client, doc)
+    part_mode = str(ctx.get("external_change_detection") or "").lower()
+    rep.add("EV.subscribed", "у детали external_change_detection=reliable, у чертежа conservative",
+            "PASS" if (part_mode == "reliable" and drawing_mode == "conservative") else "FAIL",
+            f"деталь={part_mode or 'нет'} (err={ctx_err}); чертёж={drawing_mode or 'нет'}")
+
+    path = os.path.join(workdir, "ev-external.m3d")
+    saved, save_err = ev_save(client, doc, path)
+
+    # ── EV.external.revision: another process changed the saved part ──────────────────────────────
+    before, _e1 = ev_context(client, doc)
+    r0 = before.get("revision")
+    bref = ev_body_ref(client, doc)
+    code, out = ev_probe_run("--mutate", path)
+    after, after_err = ev_context(client, doc)
+    r1 = after.get("revision")
+    _m_e, m_env, _m_r = client.tool("kompas_measure", {"target_ref": bref, "properties": ["bbox"]}) \
+        if bref else (None, None, None)
+    stale = error_code(m_env) if bref else "нет ссылки на тело"
+    again, _e2 = ev_context(client, doc)
+    rep.add("EV.external.revision",
+            "чужая мутация без переоткрытия: ревизия +1, документ изменён, старая ссылка отвергнута "
+            "STALE_REFERENCE, повтор чтения ревизию не двигает",
+            "PASS" if (code == 0 and isinstance(r0, int) and r1 == r0 + 1
+                       and after.get("dirty") is True and stale == "STALE_REFERENCE"
+                       and again.get("revision") == r1) else "FAIL",
+            f"проба={code} «{out[:90]}»; ревизия {r0}->{r1}; dirty={after.get('dirty')}; "
+            f"старая ссылка={stale}; повторное чтение={again.get('revision')}; "
+            f"save={saved} ({save_err}); err={after_err}")
+
+    # ── EV.external.fingerprint_blind: the positive control ───────────────────────────────────────
+    blind_before, _e3 = ev_context(client, doc)
+    fp0 = blind_before.get("fingerprint")
+    rb = blind_before.get("revision")
+    code2, out2 = ev_probe_run("--rename-rebuild", path)
+    blind_after, _e4 = ev_context(client, doc)
+    fp1 = blind_after.get("fingerprint")
+    ra = blind_after.get("revision")
+    rep.add("EV.external.fingerprint_blind",
+            "положительный контроль: изменение, при котором отпечаток НЕ меняется, поймано "
+            "событием (ревизия +1, отпечаток тот же)",
+            "PASS" if (code2 == 0 and bool(fp0) and fp1 == fp0
+                       and isinstance(rb, int) and ra == rb + 1) else "FAIL",
+            f"проба={code2} «{out2[:90]}»; отпечаток {str(fp0)[:16]}->{str(fp1)[:16]} "
+            f"тот же={fp1 == fp0}; ревизия {rb}->{ra}")
+
+    # ── EV.own.single_bump: own mutation, including the delayed delivery ─────────────────────────
+    # INVARIANT: one command is one revision. The row counts a SINGLE command, so a burst that
+    # arrives after the answer must not add another bump.
+    own_before, _e5 = ev_context(client, doc)
+    r_own = own_before.get("revision")
+    s_err, s_env, _ = client.tool("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": r_own, "plane": {"base": "xy", "offset_mm": 0},
+        "name": "EV_own_sk", "operation_id": str(uuid.uuid4())})
+    r_sk = (s_env or {}).get("revision_after")
+    time.sleep(3.0)
+    own_after, _e6 = ev_context(client, doc)
+    rep.add("EV.own.single_bump",
+            "своя мутация даёт ровно +1 и не становится внешней, в том числе через паузу после "
+            "ответа команды",
+            "PASS" if (isinstance(r_own, int) and r_sk == r_own + 1
+                       and own_after.get("revision") == r_sk) else "FAIL",
+            f"одна команда: ревизия {r_own}->{r_sk}; после паузы 3 с {own_after.get('revision')}; "
+            f"err={error_code(s_env)}")
+
+    # ── EV.close.unsubscribed: subscription follows the document, not the old objects ────────────
+    _e, c_env, _r = client.tool("kompas_close_document", {
+        "document_id": doc, "dirty_policy": "save", "operation_id": str(uuid.uuid4())}, timeout=180)
+    closed = error_code(c_env)
+    _e, o_env, _r = client.tool("kompas_open_document", {
+        "application_id": app_id, "path": path, "access": "edit",
+        "operation_id": str(uuid.uuid4())}, timeout=240)
+    reopened = ((o_env or {}).get("result") or {}).get("document_id") or (o_env or {}).get("document_id")
+    row5 = "FAIL"
+    detail5 = f"закрытие={closed or 'ok'}; открытие={error_code(o_env) or 'ok'}"
+    if reopened:
+        c0, _e7 = ev_context(client, reopened)
+        rc0 = c0.get("revision")
+        code3, out3 = ev_probe_run("--mutate", path)
+        c1, _e8 = ev_context(client, reopened)
+        rc1 = c1.get("revision")
+        c2, _e9 = ev_context(client, reopened)
+        row5 = "PASS" if (code3 == 0 and isinstance(rc0, int) and rc1 == rc0 + 1
+                          and c2.get("revision") == rc1) else "FAIL"
+        detail5 += (f"; проба={code3} «{out3[:80]}»; ревизия {rc0}->{rc1}; "
+                    f"повтор={c2.get('revision')}")
+    rep.add("EV.close.unsubscribed",
+            "закрыли и переоткрыли документ: новое изменение ловится ровно один раз, отказов нет",
+            row5, detail5)
+
+    # ── EV.worker_restart: the subscription must not survive on old objects ──────────────────────
+    # INVARIANT: a document handle of the killed worker is dead, and a document reopened after the
+    # restart is watched again. MEASURED: the Host keeps its session but not the registration of the
+    # old documents, so the answer for the old handle is DOCUMENT_NOT_FOUND.
+    snapshot = process_snapshot() or {}
+    workers = [pid for pid, info in snapshot.items()
+               if str(info.get("image", "")).lower().endswith("kompasmcp.worker.exe")]
+    row6 = "FAIL"
+    detail6 = f"процесс Worker не найден: процессов в снимке {len(snapshot)}"
+    if workers:
+        for pid in workers:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+        time.sleep(6.0)
+        _old_ctx, old_err = ev_context(client, reopened or doc)
+        _e, at_env, _r = client.tool("kompas_connect", {
+            "mode": "attach", "make_visible": False, "operation_id": str(uuid.uuid4())},
+            timeout=300)
+        app2 = (at_env or {}).get("application_id")
+        fresh = None
+        if app2:
+            _e, o2_env, _r = client.tool("kompas_open_document", {
+                "application_id": app2, "path": path, "access": "edit",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            fresh = ((o2_env or {}).get("result") or {}).get("document_id")                 or (o2_env or {}).get("document_id")
+        detail6 = f"Worker убит ({len(workers)}); старая ссылка на документ: {old_err or 'жива'}; "                   f"attach={error_code(at_env) or 'ok'}; переоткрыт={bool(fresh)}"
+        if fresh:
+            c6, _e7 = ev_context(client, fresh)
+            r6 = c6.get("revision")
+            code5, out5 = ev_probe_run("--mutate", path)
+            c7, _e8 = ev_context(client, fresh)
+            caught = isinstance(r6, int) and c7.get("revision") == r6 + 1
+            row6 = "PASS" if (old_err in ("DOCUMENT_NOT_FOUND", "APPLICATION_DISCONNECTED",
+                                          "STALE_REFERENCE") and code5 == 0 and caught) else "FAIL"
+            detail6 += f"; проба={code5} «{out5[:70]}»; ревизия {r6}->{c7.get('revision')}"
+        elif old_err in ("DOCUMENT_NOT_FOUND", "APPLICATION_DISCONNECTED", "STALE_REFERENCE"):
+            # The old handle is dead (that half is measured), the reopen was refused by the row's
+            # own call: the second half stays unverified instead of being called a product fault.
+            row6 = "NAMED"
+    rep.add("EV.worker_restart",
+            "после убитого Worker старые объекты не отвечают, а переоткрытый документ снова "
+            "наблюдается",
+            row6, detail6)
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -58357,6 +58624,7 @@ EXTRA_GROUP_CHECKS = {
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
     "e5": lambda c, r, a, w, v, p: e5_checks(c, r, a, w),
+    "events": lambda c, r, a, w, v, p: events_checks(c, r, a, w),
     "r1": lambda c, r, a, w, v, p: r1_checks(c, r, a, w),
     # Группа UN ведёт свои Хосты и не трогает КОМПАС: состояние проверки выпуска складывается на
     # старте процесса, поэтому ей нужны путь к исполняемому файлу и конфигурация, а не app_id.

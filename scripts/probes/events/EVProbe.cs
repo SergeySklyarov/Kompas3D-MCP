@@ -45,7 +45,7 @@ internal sealed class EVProbe : IDisposable
     {
         Console.OutputEncoding = Encoding.UTF8;
         ResolveInteropFromInstallation();
-        if (args.Any(a => a is "--mutate" or "--mutate-norebuild" or "--rename"))
+        if (args.Any(a => a is "--mutate" or "--mutate-norebuild" or "--rename" or "--rename-rebuild"))
         {
             return MutateFromAnotherProcess();
         }
@@ -360,10 +360,17 @@ internal sealed class EVProbe : IDisposable
                 return 3;
             }
 
-            if (mode == "--rename")
+            if (mode is "--rename" or "--rename-rebuild")
             {
                 part.name = "деталь переименована извне";
-                Console.Write($"имя детали изменено ({Path.GetFileName(path)})");
+                if (mode == "--rename-rebuild")
+                {
+                    // The rename alone changes no geometry; the rebuild is what makes the model react.
+                    doc.RebuildDocument();
+                }
+
+                Console.Write($"имя детали изменено, перестроение={mode == "--rename-rebuild"} "
+                              + $"({Path.GetFileName(path)})");
                 return 0;
             }
 

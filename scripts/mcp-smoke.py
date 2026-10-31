@@ -58386,18 +58386,22 @@ def ev_context(client, doc_id):
     return ((env or {}).get("result") or {}), error_code(env)
 
 
-def ev_unadvise_refusals(client):
+def ev_unadvise_refusals(client, since=0):
     """Journal lines of the Worker where the event subscription could not be released.
 
     WHY THE JOURNAL: `DocumentEventSubscription.Dispose` swallows a refused `Unadvise` (the document may
     already be gone), so the answer says nothing about it. A subscription left behind on a closed document
     would look exactly like a clean close without this line.
+    WHY `since`: the journal is one file for the whole run, so a refusal written by an earlier row - for
+    example while a disconnect takes the RPC server down - would fail this row for another row's cause.
+    The row passes the count it saw before its own close and reads only what appeared after it.
     """
     try:
         with open(client.config, encoding="utf-8-sig") as fh:
             path = json.load(fh).get("worker_log_path")
         with open(path, encoding="utf-8") as fh:
-            return [line.strip() for line in fh if "unadvise refused" in line]
+            found = [line.strip() for line in fh if "unadvise refused" in line]
+        return found[since:]
     except (OSError, ValueError, TypeError):
         return []
 
@@ -58570,6 +58574,9 @@ def events_checks(client, rep, app_id, workdir):
             f"dirty={ao_after.get('dirty')}")
 
     # ── EV.close.unsubscribed: subscription follows the document, not the old objects ────────────
+    # MEASURED: a disconnect or a killed Worker takes the RPC server down and the release of every
+    # subscription fails then; those refusals belong to the row that caused them, not to this close.
+    refusals_before = len(ev_unadvise_refusals(client))
     _e, c_env, _r = client.tool("kompas_close_document", {
         "document_id": doc, "dirty_policy": "save", "operation_id": str(uuid.uuid4())}, timeout=180)
     closed = error_code(c_env)
@@ -58592,14 +58599,14 @@ def events_checks(client, rep, app_id, workdir):
                     f"повтор={c2.get('revision')}")
     # The release swallows a refused Unadvise, so the journal is the only place the refusal is visible:
     # without it this row would prove nothing about the subscription being gone.
-    refused = ev_unadvise_refusals(client)
+    refused = ev_unadvise_refusals(client, refusals_before)
     if refused:
         row5 = "FAIL"
-    detail5 += f"; отказов отписки в журнале={len(refused)}" + (
-        f" «{refused[-1][:80]}»" if refused else "")
+    detail5 += f"; отказов отписки за эту строку={len(refused)}" + (
+        f" «{refused[-1][:80]}»" if refused else "") + f"; в журнале до неё={refusals_before}"
     rep.add("EV.close.unsubscribed",
             "закрыли и переоткрыли документ: новое изменение ловится ровно один раз, отказов нет, "
-            "журнал Worker без отказов отписки",
+            "журнал Worker без отказов отписки за эту строку",
             row5, detail5)
 
     # ── EV.worker_restart: the subscription must not survive on old objects ──────────────────────

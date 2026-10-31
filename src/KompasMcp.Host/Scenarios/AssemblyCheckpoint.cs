@@ -175,12 +175,11 @@ internal sealed class AssemblyCheckpoint
                 + string.Join("; ", failures), failures);
         }
 
-        // MEASURED: a byte copy of the top file is read back with ONE component per FILE NAME an open
-        // client document already holds: with the client's assembly open, a copy carrying the same
-        // component names read 1 of 2, copies carrying distinct names read 2 of 2 and 3 of 3, and the
-        // same copy read 3 of 3 once nothing else was open, whatever the insert count.
-        // The route is proven on the copy КОМПАС writes (the SaveAs below) and read from the FILE after
-        // the document is closed: same evidence without the unreliable read.
+        // MEASURED: a byte copy of the top file reads back ONE component per file NAME when the graph
+        // holds DIFFERENT files under that name; one file inserted twice reads as its insert count, and
+        // whether the client's document is open changes nothing.
+        // The plan renames copies with a number, so the copy verified below carries no colliding names:
+        // the route is proven on the copy КОМПАС writes (the SaveAs below), read from the FILE.
         // LIMIT: a failed verification here leaves the folder and the moved document, and the refusal
         // names that state; nothing is written to the client's files.
         var topCopy = Path.Combine(folder, Path.GetFileName(sourcePath));

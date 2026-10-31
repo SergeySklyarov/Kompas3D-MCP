@@ -165,7 +165,8 @@ def main():
 
         nested = "--nested" in sys.argv
         top_open = "--top-open" in sys.argv
-        # S0: the byte copy is read while NOTHING else is open, so the read cannot depend on a neighbour.
+        # S0/S0b read the byte copy with the client's document CLOSED (`--copy-away` without `--top-open`);
+        # T0-T3 read it with that document OPEN, so the two differ in this factor alone.
         copy_away = top_open or "--copy-away" in sys.argv
         # T1-T3: which insert pattern the copy carries. Names differ (t1, t2) or collide (t3).
         setting = argument("--setting", "t0")
@@ -208,14 +209,20 @@ def main():
             os.makedirs(os.path.dirname(top), exist_ok=True)
             with open(client_top, "rb") as reader, open(top, "wb") as writer:
                 writer.write(reader.read())
+            # S0/S0b: the client's document is closed BEFORE the copy is read, so the read cannot depend
+            # on it. T0-T3 keep it open on purpose.
+            if not top_open:
+                close(session, assembly)
         else:
             close(session, assembly)
+        open_documents = len(list_documents(session, app_id))
         read = count_file(session, app_id, top)
         rows.append({"stage": "saved", "setting": setting, "top_open": top_open,
-                     "in_memory": in_memory, "in_file": read,
+                     "in_memory": in_memory, "in_file": read, "open_documents": open_documents,
                      "paths": [item.get("source_path") for item in links_read(session, app_id, top)]})
-        print("чтение копии: постановка=%s документ клиента открыт=%s в памяти=%s в файле=%s"
-              % (setting, top_open, in_memory, read), flush=True)
+        print("чтение копии: постановка=%s документ клиента открыт=%s в памяти=%s в файле=%s "
+              "документов открыто=%s"
+              % (setting, top_open, in_memory, read, open_documents), flush=True)
         if "--read-copy" in sys.argv:
             # The reading is the whole measurement: nothing is replaced on this run.
             if top_open:
@@ -314,6 +321,14 @@ def open_document(session, app_id, path, access):
 def links(session, document):
     envelope = session.tool("kompas_list_components", {"document_id": document, "recursive": True})
     return result_of(envelope).get("components") or []
+
+
+def list_documents(session, app_id):
+    """Session documents, so a row can prove nothing else was open at the moment of the read."""
+    body = result_of(session.tool("kompas_list_documents", {"application_id": app_id}))
+    if isinstance(body, list):
+        return body
+    return (body or {}).get("documents") or []
 
 
 def count_file(session, app_id, path):

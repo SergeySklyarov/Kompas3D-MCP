@@ -165,38 +165,65 @@ def main():
 
         nested = "--nested" in sys.argv
         top_open = "--top-open" in sys.argv
+        # S0: the byte copy is read while NOTHING else is open, so the read cannot depend on a neighbour.
+        copy_away = top_open or "--copy-away" in sys.argv
+        # T1-T3: which insert pattern the copy carries. Names differ (t1, t2) or collide (t3).
+        setting = argument("--setting", "t0")
+        if setting in ("t1", "t2"):
+            plate = make_part(session, app_id, os.path.join(WORK, "plate", "plate.m3d"), 30.0, 20.0, 10.0,
+                              keep_open=parts_open)
+            if not plate:
+                print("деталь plate не построена")
+                return 1
+        inserts = {"t0": [left, right, right], "t1": [plate, left] if setting == "t1" else [],
+                   "t2": [plate, plate, left] if setting == "t2" else [],
+                   "t3": [left, right]}.get(setting)
+        if not inserts:
+            print("неизвестная постановка: %s" % setting)
+            return 1
         # S1 decision row: the copy gets a name of its own, so it no longer collides with the open client
         # document of the same name.
         unique = "--unique-name" in sys.argv
         top_name = "top-cp.m3d" if (top_open and unique) else "top.m3d"
-        top = os.path.join(WORK, "preflight" if nested or top_open else "", top_name)
+        top = os.path.join(WORK, "preflight" if nested or copy_away else "", top_name)
         os.makedirs(os.path.dirname(top), exist_ok=True)
         assembly = new_document(session, app_id, "assembly", "asc-m5")
         if not assembly:
             print("сборка не создана")
             return 1
-        for source in (left, right, right):
+        for source in inserts:
             code = insert(session, assembly, source)
             if code:
                 print("вставка отвергнута: %s" % code)
                 return 1
         # S1: the fixture saves the client's assembly, then takes the copy from disk while that same
         # document stays OPEN and the copy carries the same file name in a `preflight/` subfolder.
-        client_top = os.path.join(WORK, "top.m3d") if top_open else top
+        client_top = os.path.join(WORK, "top.m3d") if copy_away else top
         code = save_as(session, assembly, client_top)
         if code:
             print("сохранение отвергнуто: %s" % code)
             return 1
         in_memory = len(links(session, assembly))
-        if top_open:
+        if copy_away:
             os.makedirs(os.path.dirname(top), exist_ok=True)
             with open(client_top, "rb") as reader, open(top, "wb") as writer:
                 writer.write(reader.read())
         else:
             close(session, assembly)
-        rows.append({"stage": "saved", "in_memory": in_memory,
-                     "in_file": count_file(session, app_id, top),
+        read = count_file(session, app_id, top)
+        rows.append({"stage": "saved", "setting": setting, "top_open": top_open,
+                     "in_memory": in_memory, "in_file": read,
                      "paths": [item.get("source_path") for item in links_read(session, app_id, top)]})
+        print("чтение копии: постановка=%s документ клиента открыт=%s в памяти=%s в файле=%s"
+              % (setting, top_open, in_memory, read), flush=True)
+        if "--read-copy" in sys.argv:
+            # The reading is the whole measurement: nothing is replaced on this run.
+            if top_open:
+                close(session, assembly)
+            with open(out_path, "w", encoding="utf-8") as handle:
+                json.dump({"rows": rows}, handle, ensure_ascii=False, indent=1)
+            print("JSON: %s" % out_path)
+            return 0
 
         copies = copy_graph(left, right)
         code, steps, final = replace_stepwise(session, app_id, top, copies)

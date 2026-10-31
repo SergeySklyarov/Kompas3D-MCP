@@ -7,6 +7,7 @@ using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Com;
+using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
@@ -1676,10 +1677,14 @@ public partial class Api5Session
     /// </remarks>
     private static double[] MatrixOf(TransformDto transform)
     {
-        var (ox, oy, oz) = Vec3(transform.OriginMm);
-        var (xx, xy, xz) = Vec3(transform.XAxis);
-        var (yx, yy, yz) = Vec3(transform.YAxis);
-        var (zx, zy, zz) = Cross(xx, xy, xz, yx, yy, yz);
+        // INVARIANT: the frame is validated BEFORE a matrix exists. MEASURED: an axis of length 2
+        // reaches the kernel as a scaled basis, the write lands and the revision moves, so the refusal
+        // arrives as VERIFICATION_FAILED after a partial write instead of INVALID_ARGUMENT before it.
+        var frame = TransformMath.FromDto(transform);
+        var (ox, oy, oz) = Vec3(frame.OriginMm);
+        var (xx, xy, xz) = Vec3(frame.XMm);
+        var (yx, yy, yz) = Vec3(frame.YMm);
+        var (zx, zy, zz) = Vec3(frame.ZMm);
         return
         [
             xx, xy, xz, 0,

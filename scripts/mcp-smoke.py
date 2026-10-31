@@ -3169,6 +3169,14 @@ def assembly_checks(client, rep, app_id, workdir):
                 + " матрица_2=" + str(mats[1][12:15] if len(mats) > 1 else None)
                 + " код=" + str(error_code(env_gap)))
 
+        # The neighbouring rows measure "one component at 30 mm, the other at the origin", so the state
+        # this block borrowed is given back: leaving it moved would make THEIR failures look like defects.
+        call("kompas_set_component_placement", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "component_ref": rows2[1].get("component_ref"),
+            "transform": {"origin_mm": [0.0, 0.0, 0.0], "x_axis": [0.0, 1.0, 0.0],
+                          "y_axis": [-1.0, 0.0, 0.0]}})
+
     # ========= ASM.05: замена компонента =========
     src2 = os.path.join(src_dir, "asm-source-2.m3d")
     if len(rows2) >= 1:

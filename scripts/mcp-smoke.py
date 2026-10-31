@@ -2101,8 +2101,7 @@ def instrument_self_test():
           str(leaked("manifest.json")))
     check("пакет: игла только в имени файла найдена", mark in leaked(mark + "-note.txt"),
           str(leaked(mark + "-note.txt")))
-    check("пакет: разбираемый пакет без утечки не даёт ни совпадений, ни проблем",
-          not unreadable, str(unreadable))
+    check("пакет: все файлы разобраны, проблем нет", not unreadable, str(unreadable))
     broken, broken_problems = diag_package_hits({"manifest.json": b"{not json"}, [needle])
     check("пакет: неразбираемый файл назван проблемой, а не пропущен",
           not broken and len(broken_problems) == 1, str(broken_problems))
@@ -58077,19 +58076,13 @@ def diag_zip_files(path):
 
 
 def diag_checks(client, rep, app_id, workdir, process_id=None):
-    """DG.* - диагностический пакет (наряд DIAG_PACKAGE, спец. 1.4.10 и 1.12).
+    """DG.* rows: the diagnostic package (spec 1.4.10, 1.12).
 
-    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Пакет не содержит значений пользователя, а не «не содержит файлов»:
-    канарейка стоит ОДНОЙ строкой в каталоге, имени файла, имени документа, переменной, тексте
-    технических требований чертежа и в сообщении отказа, и после распаковки не встречается ни в одном
-    файле ни в одном регистре - как и имя пользователя Windows и абсолютный путь к проекту.
-    Положительный контроль обязателен: без него канарейка прошла бы на пустом пакете, поэтому
-    `operations.jsonl` обязан содержать operation_id операции этого прогона, а `sha256` манифеста -
-    совпадать с байтами файлов. Проверка сравнивает РАЗОБРАННЫЕ значения, ключи и имена файлов
-    (`diag_package_hits`), а не сырой текст, и применяется ко всем трём пакетам. Отдельно: сборка при
-    МЁРТВОМ Worker, ключ `--diagnostic-package` при ЖИВОМ Host на его собственных журналах (пакет
-    записан, журнал и лог прочитаны, Host отвечает, журнал дописывается), коды выхода ключа и два
-    отказа - существующий файл и путь вне разрешённого корня.
+    INVARIANT: the canary, the Windows user name and the project path appear in no package, in any
+    case, as a value, a key or a member name (`diag_package_hits`). The positive control is mandatory:
+    `operations.jsonl` holds this run's operation_id and `sha256` matches the bytes, otherwise the
+    canary would pass on an empty package. The rows also cover a dead Worker, the key against a live
+    Host, the key's exit codes and two refusals. History: docs/decisions/diagnostics.md#canary-check
     """
     import os
     import json as _json
@@ -58188,10 +58181,11 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             "PASS" if saved_op and saved_op in operations else "FAIL",
             f"operation_id={saved_op}; записей в хвосте={len(lines)}; save={save_code or 'succeeded'}")
 
-    # ── ключ при ЖИВОМ Host: ЕГО конфигурация, то есть журналы, которые Хост держит открытыми ──
+    # ── key against a LIVE Host: its own config, the journals that Host keeps open ──
     #
-    # Копия через `isolate_config` подменяет `log_path` и `journal_path` новыми файлами: ключ собрал
-    # бы пакет из НЕсуществующих журналов и строка осталась бы зелёной на пустом входе.
+    # INVARIANT: no `isolate_config` copy here. It swaps `log_path` and `journal_path` for new files,
+    # so the key would pack missing journals and the row would pass on an empty input.
+    # History: docs/decisions/diagnostics.md#cli-key
     with open(client.config, encoding="utf-8-sig") as fh:
         cfg = _json.load(fh)
     journal_path = cfg.get("journal_path")
@@ -58248,7 +58242,7 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             f"worker_pid={worker_pid}; убит={killed}; код={code_dead}; "
             f"size={dead_answer.get('size_bytes')}; sha256={dead_answer.get('sha256')}")
 
-    # ── канарейка: сравниваются РАЗОБРАННЫЕ значения всех трёх пакетов ──
+    # ── canary: parsed values of all three packages are compared ──
     hits, problems, scanned = [], [], []
 
     def scan(label, path):
@@ -58291,7 +58285,7 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             "PASS" if outside_code == "PATH_NOT_ALLOWED" else "FAIL",
             f"путь={outside}; код={outside_code}")
 
-    # ── коды выхода ключа: 64 - аргумент, 73 - отказ записи, файл не перезаписан ──
+    # ── key exit codes: 64 - argument, 73 - write refused, the file is not overwritten ──
     def key_run(*arguments):
         return _subprocess.run([client.host_exe, "--config", client.config] + list(arguments),
                                capture_output=True, text=True, timeout=300)

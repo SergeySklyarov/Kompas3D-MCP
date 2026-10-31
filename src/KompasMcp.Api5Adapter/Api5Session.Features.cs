@@ -755,6 +755,10 @@ public partial class Api5Session
 
         // P2.3: without Update() the document keeps the old geometry even though every setter said
         // true, so this call is part of the contract, not an optimisation.
+        // INVARIANT: the burst opens BEFORE the model is touched: a refusal after Update() (L11) leaves
+        // a rebuilt model without a revision bump, and its own Rebuild would otherwise be read as a
+        // foreign change by the next command. History: docs/decisions/adapter-core.md#document-events
+        document.Events.ExpectOwnBurst();
         var updated = entity.Update();
         SettleAfterMutation(document);
 

@@ -122,6 +122,11 @@ public partial class Api5Session
                     RetryPolicy.ReacquireContext);
 
             var before = ViewNumbers(views);
+            // INVARIANT: building the view from the part's file rebuilds the part itself, so the burst
+            // opens here: the export is not a mutation and bumps no revision, and its own Rebuild would
+            // otherwise make the saved part look externally changed to the next command.
+            // History: docs/decisions/adapter-core.md#document-events
+            document.Events.ExpectOwnBurst();
             bool accepted;
             try
             {

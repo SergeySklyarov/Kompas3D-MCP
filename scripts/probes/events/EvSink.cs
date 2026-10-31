@@ -6,7 +6,7 @@ namespace EVProbe;
 /// connection point of <c>ksDocument3DNotify</c> carries.</summary>
 /// <remarks>INVARIANT: the sink only records - no COM call and no document work inside a handler, because
 /// the worker runs on one STA thread and a call from a handler re-enters it.
-/// DOC: the v24 help mirror, page ksdocs3dnotify_events.html (the list of model events)
+/// DOC: the v24 help mirror, page ksdocument3dnotify_events.html (the list of model events)
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 [ComImport]
 [Guid("b6c1bcfd-68da-4a0a-a95c-296084c6a01a")]

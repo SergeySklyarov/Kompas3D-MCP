@@ -104,29 +104,44 @@ public interface IConnectionPoint
     void EnumConnections(out IntPtr enumerator);
 }
 
+/// <summary>The one call a release makes, separated so the "exactly once" rule is testable without COM.</summary>
+internal interface IAdviseRelease
+{
+    void Unadvise(int cookie);
+    void Release();
+}
+
 /// <summary>One subscription to a model document's events, released exactly once.</summary>
-/// <remarks>DOC: <c>eventscommon.html</c> - "отписка - обязанность подписчика"; the close event of the file
-/// interface says the same for a document being closed. INVARIANT: a failed subscription never blocks the
-/// document - the caller keeps <c>conservative</c> and the document opens as before.
+/// <remarks>DOC: <c>eventscommon.html</c> - for Automation the events come through ConnectionPoint, and
+/// releasing them is the subscriber's own job; the file interface says the same for a document being
+/// closed. INVARIANT: a failed subscription never blocks the document - the caller keeps
+/// <c>conservative</c> and the document opens as before.
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 public sealed class DocumentEventSubscription : IDisposable
 {
     // The connection point of ksDocument3DNotify carries the event interface IID of the sink above.
     private static readonly Guid NotifyIid = new("b6c1bcfd-68da-4a0a-a95c-296084c6a01a");
 
-    private IConnectionPoint? _point;
+    private readonly Action<string>? _warn;
+    private IAdviseRelease? _release;
     private int _cookie = -1;
 
-    private DocumentEventSubscription(IConnectionPoint point, int cookie)
+    private DocumentEventSubscription(IAdviseRelease release, int cookie, Action<string>? warn)
     {
-        _point = point;
+        _release = release;
         _cookie = cookie;
+        _warn = warn;
     }
+
+    /// <summary>Subscription over an arbitrary release seam. Test-only: the production path is
+    /// <see cref="TrySubscribe"/>.</summary>
+    internal static DocumentEventSubscription Create(IAdviseRelease release, int cookie,
+        Action<string>? warn = null) => new(release, cookie, warn);
 
     /// <summary>Subscribes to the events of one document; <paramref name="error"/> names the reason when it
     /// could not.</summary>
     public static DocumentEventSubscription? TrySubscribe(object? source, DocumentEventMark mark,
-        out string? error)
+        out string? error, Action<string>? warn = null)
     {
         error = null;
         if (source is null)
@@ -146,7 +161,7 @@ public sealed class DocumentEventSubscription : IDisposable
         {
             container.FindConnectionPoint(ref iid, out var point);
             point.Advise(new DocumentEventSink(mark), out var cookie);
-            return new DocumentEventSubscription(point, cookie);
+            return new DocumentEventSubscription(new ConnectionPointRelease(point), cookie, warn);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or NotSupportedException)
         {
@@ -157,30 +172,52 @@ public sealed class DocumentEventSubscription : IDisposable
 
     /// <summary>Releases the subscription; a second call does nothing.</summary>
     /// <remarks>INVARIANT: exactly one <c>Unadvise</c> per successful <c>Advise</c> - KOMPAS keeps the cookie
-    /// and a repeated release is not a documented no-op.
+    /// and a repeated release is not a documented no-op. A refused release is written to the worker journal:
+    /// swallowed silently, a subscription left behind on a closed document would look like a clean close.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public void Dispose()
     {
-        var point = _point;
+        var release = _release;
         var cookie = _cookie;
-        _point = null;
+        _release = null;
         _cookie = -1;
-        if (point is null || cookie < 0)
+        if (release is null || cookie < 0)
         {
             return;
         }
 
         try
         {
-            point.Unadvise(cookie);
+            release.Unadvise(cookie);
         }
-        catch (COMException)
+        catch (COMException ex)
         {
             // The document may already be gone; the subscription is released either way and the mark with it.
+            _warn?.Invoke($"unadvise refused: 0x{ex.HResult:X8} {ex.Message}");
         }
         finally
         {
-            Marshal.ReleaseComObject(point);
+            release.Release();
+        }
+    }
+
+    /// <summary>The production release: one <c>Unadvise</c> and the interface reference with it.</summary>
+    private sealed class ConnectionPointRelease : IAdviseRelease
+    {
+        private IConnectionPoint? _point;
+
+        public ConnectionPointRelease(IConnectionPoint point) => _point = point;
+
+        public void Unadvise(int cookie) => _point!.Unadvise(cookie);
+
+        public void Release()
+        {
+            var point = _point;
+            _point = null;
+            if (point is not null)
+            {
+                Marshal.ReleaseComObject(point);
+            }
         }
     }
 }

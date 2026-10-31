@@ -20,6 +20,9 @@
     <ProjectReference Include="..\..\..\src\KompasMcp.Domain\KompasMcp.Domain.csproj" />
     <ProjectReference Include="..\..\..\src\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
     <ProjectReference Include="..\..\..\src\KompasMcp.Host\KompasMcp.Host.csproj" />
+    <!-- The document-event subscription rules (release once, failed subscription) are checked here without
+         COM: the seam they are checked through is internal to the adapter. -->
+    <ProjectReference Include="..\..\..\src\KompasMcp.Api5Adapter\KompasMcp.Api5Adapter.csproj" />
   </ItemGroup>
 
   <!-- The client contour of card GAP-012 (CP04a): 21 arcs and 4 lines, embedded so the area test is

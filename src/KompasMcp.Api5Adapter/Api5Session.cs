@@ -42,6 +42,16 @@ public sealed partial class Api5Session : IDisposable
 
     public bool IsConnected => _applications.Count > 0;
 
+    /// <summary>Drains the COM messages already queued for the apartment, or null when the caller owns no
+    /// pump.</summary>
+    /// <remarks>INVARIANT: the session only asks for what is already posted; it never waits for an event and
+    /// starts no thread. A null pump keeps the count-based attribution of the mark.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    public Action? PumpPending { get; set; }
+
+    /// <summary>Journal hook of the process that owns the session, for facts a caller cannot see.</summary>
+    public Action<string>? Warn { get; set; }
+
     public IReadOnlyCollection<ApplicationEntry> Applications => _applications.Values;
 
     public IReadOnlyCollection<DocumentEntry> Documents => _documents.Values;
@@ -82,7 +92,7 @@ public sealed partial class Api5Session : IDisposable
             return;
         }
 
-        BumpRevision(document, "external.events", invalidateAll: true);
+        BumpRevision(document, "external.events", invalidateAll: true, ownRebuild: false);
 
         // After BumpRevision, which names an ordinary mutation: what arrived here came from outside.
         document.SaveState = DocumentSaveTracking.AfterExternalChange();
@@ -1247,15 +1257,14 @@ public sealed partial class Api5Session : IDisposable
         _documents[entry.Id] = entry;
 
         // Events are the documented way to learn about a rebuild that did not pass through this server.
-        // DOC: ksdocs3dnotify_events.html - the interface carries Rebuild, and nothing about a save.
+        // DOC: ksdocument3dnotify_events.html - the interface carries Rebuild, and nothing about a save.
         if (document is not null)
         {
             entry.EventsSubscription = DocumentEventSubscription.TrySubscribe(
-                SafeNotifySource(document), entry.Events, out _);
+                SafeNotifySource(document), entry.Events, out _, Warn);
+            entry.ExternalChangeDetection = DetectionFor(entry.EventsSubscription);
             if (entry.EventsSubscription is not null)
             {
-                entry.ExternalChangeDetection = ExternalChangeDetection.Reliable;
-
                 // The open itself rebuilds the model and raises the same event as a foreign change.
                 entry.Events.ExpectOwnBurst();
             }
@@ -1263,6 +1272,15 @@ public sealed partial class Api5Session : IDisposable
 
         return entry;
     }
+
+    /// <summary>What the caller may assume about external-change detection for a document with this
+    /// subscription.</summary>
+    /// <remarks>INVARIANT: <c>Reliable</c> is claimed only when the subscription really exists; a failed one
+    /// leaves the document on the fingerprint and answers <c>conservative</c> - the open is not refused.
+    /// TEST: DocumentEventSubscriptionTests.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    internal static ExternalChangeDetection DetectionFor(DocumentEventSubscription? subscription) =>
+        subscription is null ? ExternalChangeDetection.Conservative : ExternalChangeDetection.Reliable;
 
     /// <summary>The event source of a model document, or null when KOMPAS did not give one.</summary>
     /// <remarks>DOC: <c>ksdocument3d_getdocument3dnotify.html</c>. A drawing has no model notifications and
@@ -1678,7 +1696,10 @@ public sealed partial class Api5Session : IDisposable
     /// <param name="reason">Recorded for diagnostics ("extrude", "rebuild", …).</param>
     /// <param name="invalidateAll">True when the model was re-read or rebuilt rather than edited by this
     /// server: then handles from the previous revision must not resolve. False for an ordinary mutation.</param>
-    public void BumpRevision(DocumentEntry document, string reason, bool invalidateAll = false)
+    /// <param name="ownRebuild">True when this call follows a rebuild of our own and its event has to be
+    /// absorbed; false when the rebuild already arrived as a foreign event.</param>
+    public void BumpRevision(DocumentEntry document, string reason, bool invalidateAll = false,
+        bool ownRebuild = true)
     {
         document.Revision++;
         References.RevisionForward(document.Id, document.Revision, invalidateAll);
@@ -1717,7 +1738,14 @@ public sealed partial class Api5Session : IDisposable
         document.LastRevisionReason = reason;
 
         // Our own rebuild raises the same event as a foreign one: the burst keeps it from bumping twice.
-        document.Events.ExpectOwnBurst();
+        // The pump then delivers what is already posted, so the burst closes HERE, before the gap in which
+        // a foreign rebuild could arrive - otherwise that change would be dropped as ours for good.
+        if (ownRebuild)
+        {
+            document.Events.ExpectOwnBurst();
+            PumpPending?.Invoke();
+            document.Events.CloseOwnBurstIfDelivered();
+        }
 
         // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
         // confirmed write to file (SaveDocument); doing it here would defeat both close guards.

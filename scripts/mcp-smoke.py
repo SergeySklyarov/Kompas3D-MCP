@@ -58386,6 +58386,22 @@ def ev_context(client, doc_id):
     return ((env or {}).get("result") or {}), error_code(env)
 
 
+def ev_unadvise_refusals(client):
+    """Journal lines of the Worker where the event subscription could not be released.
+
+    WHY THE JOURNAL: `DocumentEventSubscription.Dispose` swallows a refused `Unadvise` (the document may
+    already be gone), so the answer says nothing about it. A subscription left behind on a closed document
+    would look exactly like a clean close without this line.
+    """
+    try:
+        with open(client.config, encoding="utf-8-sig") as fh:
+            path = _json.load(fh).get("worker_log_path")
+        with open(path, encoding="utf-8") as fh:
+            return [line.strip() for line in fh if "unadvise refused" in line]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
 def ev_build_box(client, app_id, name, height_mm=20):
     """Part with one extrusion: the probe's `--mutate` needs a feature it can edit."""
     c_err, c_env, _ = client.tool("kompas_create_document", {
@@ -58524,6 +58540,28 @@ def events_checks(client, rep, app_id, workdir):
             f"одна команда: ревизия {r_own}->{r_sk}; после паузы 3 с {own_after.get('revision')}; "
             f"err={error_code(s_env)}")
 
+    # ── EV.external.after_own: the ordinary order - our mutation, then a foreign one ─────────────
+    # INVARIANT: the own burst is closed inside the command that caused it, so a foreign rebuild that
+    # arrives BEFORE the next command still reaches the revision. The fingerprint cannot show it: the
+    # probe renames the part and rebuilds, `тело:признаки:габарит` stays the same.
+    ao_before, _e10 = ev_context(client, doc)
+    r_ao = ao_before.get("revision")
+    _e, ao_env, _ = client.tool("kompas_rebuild", {
+        "document_id": doc, "operation_id": str(uuid.uuid4())})
+    r_own2 = (ao_env or {}).get("revision_after")
+    time.sleep(3.0)
+    code4, out4 = ev_probe_run("--rename-rebuild", path)
+    ao_after, _e11 = ev_context(client, doc)
+    r_ao2 = ao_after.get("revision")
+    rep.add("EV.external.after_own",
+            "своя мутация, затем чужая без команд между ними (пауза больше задержки доставки): "
+            "своя +1, чужая ещё +1, документ изменён",
+            "PASS" if (isinstance(r_own2, int) and r_own2 == (r_ao or 0) + 1 and code4 == 0
+                       and r_ao2 == r_own2 + 1 and ao_after.get("dirty") is True) else "FAIL",
+            f"своё перестроение: {r_ao}->{r_own2}; пауза 3 с; проба={code4} «{out4[:70]}»; "
+            f"после чужой: {r_ao2} (ждали {r_own2 + 1 if isinstance(r_own2, int) else '?'}); "
+            f"dirty={ao_after.get('dirty')}")
+
     # ── EV.close.unsubscribed: subscription follows the document, not the old objects ────────────
     _e, c_env, _r = client.tool("kompas_close_document", {
         "document_id": doc, "dirty_policy": "save", "operation_id": str(uuid.uuid4())}, timeout=180)
@@ -58545,8 +58583,16 @@ def events_checks(client, rep, app_id, workdir):
                           and c2.get("revision") == rc1) else "FAIL"
         detail5 += (f"; проба={code3} «{out3[:80]}»; ревизия {rc0}->{rc1}; "
                     f"повтор={c2.get('revision')}")
+    # The release swallows a refused Unadvise, so the journal is the only place the refusal is visible:
+    # without it this row would prove nothing about the subscription being gone.
+    refused = ev_unadvise_refusals(client)
+    if refused:
+        row5 = "FAIL"
+    detail5 += f"; отказов отписки в журнале={len(refused)}" + (
+        f" «{refused[-1][:80]}»" if refused else "")
     rep.add("EV.close.unsubscribed",
-            "закрыли и переоткрыли документ: новое изменение ловится ровно один раз, отказов нет",
+            "закрыли и переоткрыли документ: новое изменение ловится ровно один раз, отказов нет, "
+            "журнал Worker без отказов отписки",
             row5, detail5)
 
     # ── EV.worker_restart: the subscription must not survive on old objects ──────────────────────
@@ -58563,8 +58609,10 @@ def events_checks(client, rep, app_id, workdir):
             subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
         time.sleep(6.0)
         _old_ctx, old_err = ev_context(client, reopened or doc)
+        # The documented path after a dead Worker is a NEW session, not an attach to the one that died: the
+        # subscription lives in the Worker that owned it, so the row has to bring a fresh one up.
         _e, at_env, _r = client.tool("kompas_connect", {
-            "mode": "attach", "make_visible": False, "operation_id": str(uuid.uuid4())},
+            "mode": "launch", "make_visible": False, "operation_id": str(uuid.uuid4())},
             timeout=300)
         app2 = (at_env or {}).get("application_id")
         fresh = None
@@ -58573,7 +58621,8 @@ def events_checks(client, rep, app_id, workdir):
                 "application_id": app2, "path": path, "access": "edit",
                 "operation_id": str(uuid.uuid4())}, timeout=240)
             fresh = ((o2_env or {}).get("result") or {}).get("document_id")                 or (o2_env or {}).get("document_id")
-        detail6 = f"Worker убит ({len(workers)}); старая ссылка на документ: {old_err or 'жива'}; "                   f"attach={error_code(at_env) or 'ok'}; переоткрыт={bool(fresh)}"
+        detail6 = (f"Worker убит ({len(workers)}); старая ссылка на документ: {old_err or 'жива'}; "
+                   f"новый сеанс={error_code(at_env) or 'ok'}; переоткрыт={bool(fresh)}")
         if fresh:
             c6, _e7 = ev_context(client, fresh)
             r6 = c6.get("revision")
@@ -58583,10 +58632,11 @@ def events_checks(client, rep, app_id, workdir):
             row6 = "PASS" if (old_err in ("DOCUMENT_NOT_FOUND", "APPLICATION_DISCONNECTED",
                                           "STALE_REFERENCE") and code5 == 0 and caught) else "FAIL"
             detail6 += f"; проба={code5} «{out5[:70]}»; ревизия {r6}->{c7.get('revision')}"
-        elif old_err in ("DOCUMENT_NOT_FOUND", "APPLICATION_DISCONNECTED", "STALE_REFERENCE"):
-            # The old handle is dead (that half is measured), the reopen was refused by the row's
-            # own call: the second half stays unverified instead of being called a product fault.
-            row6 = "NAMED"
+        else:
+            # Both halves are measured now: the old handle is dead and the documented way back (a new
+            # session plus a reopen of the file) did not deliver a document. That is a FAIL with the
+            # reason, not a row left unnamed.
+            detail6 += f"; новый сеанс не дал документа (старая ссылка: {old_err or 'жива'})"
     rep.add("EV.worker_restart",
             "после убитого Worker старые объекты не отвечают, а переоткрытый документ снова "
             "наблюдается",

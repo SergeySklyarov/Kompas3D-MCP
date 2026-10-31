@@ -27,6 +27,11 @@
     <ProjectReference Include="..\KompasMcp.Domain\KompasMcp.Domain.csproj" />
   </ItemGroup>
 
+  <!-- The unit tests check the release-once seam and the detection rule without COM. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="KompasMcp.Unit" />
+  </ItemGroup>
+
   <Import Project="..\..\build\KompasInterop.props" />
 
 </Project>

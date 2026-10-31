@@ -59,6 +59,11 @@ public sealed class CommandDispatcher
         _log = log;
         _controlCopies = new DocumentControlCopies(controlCopyDirectory);
 
+        // The session closes its own-event burst inside the command that caused it, and needs the apartment's
+        // queue for that. The pump is the one the STA thread already runs between commands.
+        _session.PumpPending = sta.PumpPendingMessages;
+        _session.Warn = message => log.Write("warn", message, new { source = "document-events" });
+
         // The one place the latch is fed. The handler runs on the thread that THREW, synchronously,
         // before the catch that would swallow the loss; it must therefore stay trivial and non-throwing.
         // A loss that is NOT ours is named in the log: "the mark was not set" and "a foreign loss was

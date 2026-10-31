@@ -370,20 +370,26 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "kompasmcp.api5adapter": {
+        "type": "Project",
+        "dependencies": {
+          "KompasMcp.Domain": "[0.12.0, )"
+        }
+      },
       "kompasmcp.contracts": {
         "type": "Project"
       },
       "kompasmcp.domain": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Contracts": "[1.0.0, )"
+          "KompasMcp.Contracts": "[0.12.0, )"
         }
       },
       "kompasmcp.host": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Contracts": "[1.0.0, )",
-          "KompasMcp.Domain": "[1.0.0, )",
+          "KompasMcp.Contracts": "[0.12.0, )",
+          "KompasMcp.Domain": "[0.12.0, )",
           "Microsoft.Extensions.Hosting": "[10.0.12, )",
           "ModelContextProtocol": "[2.2.0, )"
         }

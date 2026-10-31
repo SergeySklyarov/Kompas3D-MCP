@@ -7,7 +7,7 @@ namespace KompasMcp.Unit;
 /// <remarks>INVARIANT: several events in a row are one bump; an event of our own burst is dropped where it
 /// arrives, however late it is consumed. These rules are what keeps a foreign rebuild at exactly +1 and our
 /// own at zero extra.
-/// DOC: the v24 help mirror, page ksdocs3dnotify_events.html - the model raises Rebuild for both.
+/// DOC: the v24 help mirror, page ksdocument3dnotify_events.html - the model raises Rebuild for both.
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 public class DocumentEventMarkTests
 {
@@ -46,8 +46,8 @@ public class DocumentEventMarkTests
     [Fact]
     public void OwnEvent_ConsumedSecondsLater_IsStillOurs()
     {
-        // The regression this rule exists for: our own rebuild is delivered in the gap after the command,
-        // while the next command may arrive seconds later. Attribution must not depend on that gap.
+        // INVARIANT: attribution must not depend on how late the own event is delivered - the next
+        // command may arrive seconds after it.
         var mark = new DocumentEventMark();
         mark.ExpectOwnBurst();
 
@@ -58,7 +58,7 @@ public class DocumentEventMarkTests
     [Fact]
     public void EventBeyondTheOwnBurst_IsApplied()
     {
-        // Measured: one own action raises one or two events. A third one is not ours.
+        // MEASURED: one own action raises one or two events; a third one is not ours.
         var mark = new DocumentEventMark();
         mark.ExpectOwnBurst();
         mark.Raise();
@@ -90,6 +90,37 @@ public class DocumentEventMarkTests
 
         mark.Raise();
         Assert.True(mark.TryTake());
+        Assert.False(mark.TryTake());
+    }
+
+    [Fact]
+    public void ForeignBurst_AfterSettledOwnBurstWithoutACommand_IsApplied()
+    {
+        // The ordinary order: our mutation, our event delivered inside that command, the user changes the
+        // model before the next command arrives. The burst is closed by the pump, so the second event is
+        // foreign and must reach the revision - otherwise the change is invisible for good.
+        var mark = new DocumentEventMark();
+        mark.ExpectOwnBurst();
+        mark.Raise();
+
+        Assert.True(mark.CloseOwnBurstIfDelivered());
+
+        mark.Raise();
+        Assert.True(mark.TryTake());
+        Assert.False(mark.TryTake());
+    }
+
+    [Fact]
+    public void BurstWithoutDeliveredOwnEvent_StaysOpen()
+    {
+        // LIMIT of the settled burst: with nothing delivered by the pump there is no proof the own event has
+        // passed, so the count-based attribution of the old order stays in force.
+        var mark = new DocumentEventMark();
+        mark.ExpectOwnBurst();
+
+        Assert.False(mark.CloseOwnBurstIfDelivered());
+
+        mark.Raise();
         Assert.False(mark.TryTake());
     }
 

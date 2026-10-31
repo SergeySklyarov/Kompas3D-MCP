@@ -66,8 +66,11 @@
   отписки в журнале Worker за прогон, а два из них записал ранний `kompas_disconnect`, унёсший RPC
   сервер (`0x800706BA`), к закрытию этой строки они не относятся. В `549d71c` счёт ограничен своим
   окном (`ev_unadvise_refusals(client, since)`), `--events-only` на нём - **34 PASS / 1 NAMED /
-  0 FAIL**, `EV.close.unsubscribed` PASS с «отказов за эту строку=0». Новый зачётный `--all`
-  запущен на `549d71c` в 15:52; итог - в следующей записи.
+  0 FAIL**, `EV.close.unsubscribed` PASS с «отказов за эту строку=0». Зачётный `--all` на `549d71c`:
+  **2075 PASS / 9 NAMED / 3 UNKNOWN, FAIL 0**, 37 минут, дерево чистое, каталог
+  `scratch/mcp-smoke/runs/20261031-145222-all-549d71c`; сверка с `7b5ffa9` - ровно одно расхождение
+  (`EV.close.unsubscribed` FAIL → PASS), с зачётом попытки 1 `fb6a73b` - плюс одна строка
+  `EV.external.after_own` (NAMED) и `EV.worker_restart` NAMED → PASS. Наряд сдан.
 - **Наряд `DIAG_PACKAGE` (31.10.2026) - ПРИНЯТ попыткой 2.** Новый инструмент
   `kompas_diagnostic_package` и ключ Хоста `--diagnostic-package <файл.zip>`: один сборщик без COM и
   Worker, поэтому пакет собирается и при мёртвом Worker. В пакете только разрешённые поля (`manifest`,

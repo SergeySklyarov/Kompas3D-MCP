@@ -2070,6 +2070,48 @@ def instrument_self_test():
     check("опечатка после значения поймана",
           argument_error(["--host", "x.exe", "--no-such"]) == "--no-such")
 
+    # Diagnostic package (order DIAG_PACKAGE, remark 1). The check must find a leak behind JSON
+    # escaping, behind `\u` escaping, behind `/`, inside a nested JSON string, in a key, in another
+    # case and in a member name - and must call an unparsable member a problem, not a skip.
+    needle = "C:\\Projects\\X"
+    mark = "KANAR7"
+    escaped = {
+        "operations.jsonl": json.dumps({"result_json": json.dumps({"path": needle})}),
+        "host-log.jsonl": json.dumps({"message": "КАНАРЕЙКА"}),
+        "environment.json": json.dumps({"roots": [needle.replace("\\", "/")]}),
+        "processes.json": json.dumps({mark.lower(): 1}),
+        "manifest.json": json.dumps({"level": mark.lower()}),
+        mark + "-note.txt": "clean text",
+    }
+    package = {name: text.encode("utf-8") for name, text in escaped.items()}
+    found, unreadable = diag_package_hits(package, [needle, "КАНАРЕЙКА", mark])
+
+    def leaked(name):
+        return {hit["needle"] for hit in found if hit["file"] == name}
+
+    check("пакет: путь с удвоенным `\\` найден в JSON-строке", needle in leaked("operations.jsonl"),
+          str(leaked("operations.jsonl")))
+    check("пакет: `\\u`-экранированная кириллица найдена в значении",
+          "КАНАРЕЙКА" in leaked("host-log.jsonl"), str(leaked("host-log.jsonl")))
+    check("пакет: путь с `/` найден", needle in leaked("environment.json"),
+          str(leaked("environment.json")))
+    check("пакет: игла только в ключе найдена", mark in leaked("processes.json"),
+          str(leaked("processes.json")))
+    check("пакет: игла в другом регистре найдена", mark in leaked("manifest.json"),
+          str(leaked("manifest.json")))
+    check("пакет: игла только в имени файла найдена", mark in leaked(mark + "-note.txt"),
+          str(leaked(mark + "-note.txt")))
+    check("пакет: разбираемый пакет без утечки не даёт ни совпадений, ни проблем",
+          not unreadable, str(unreadable))
+    broken, broken_problems = diag_package_hits({"manifest.json": b"{not json"}, [needle])
+    check("пакет: неразбираемый файл назван проблемой, а не пропущен",
+          not broken and len(broken_problems) == 1, str(broken_problems))
+    clean_files = {"manifest.json": json.dumps({"format_version": "diag-1"}).encode("utf-8"),
+                   "host-log.jsonl": json.dumps({"level": "info"}).encode("utf-8")}
+    check("чистый пакет: совпадений нет",
+          diag_package_hits(clean_files, [needle, mark]) == ([], []),
+          str(diag_package_hits(clean_files, [needle, mark])))
+
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
     return 1 if failures else 0
@@ -57953,6 +57995,87 @@ def r1_checks(client, rep, app_id, workdir):
         close(two_doc)
 
 
+_DIAG_SEPARATORS = re.compile(r"[\\/]+")
+
+
+def diag_normalize(text):
+    """Comparison form of a package value or a needle: lower case, one separator for every run.
+
+    MEASURED: JSON writes a Windows path as `C:\\\\Projects\\\\X`, so a raw-text search for the plain
+    needle finds nothing and a path leak goes unnoticed. Collapsing separator runs makes the escaped,
+    the plain and the `/` form equal. History: docs/decisions/diagnostics.md#canary-check
+    """
+    return _DIAG_SEPARATORS.sub("/", str(text).lower())
+
+
+def diag_strings(value):
+    """Keys and string values of a parsed JSON document, as `(where, text)` pairs."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield "ключ", str(key)
+            yield from diag_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from diag_strings(item)
+    elif isinstance(value, str):
+        yield "значение", value
+
+
+def diag_package_hits(files, needles):
+    """Needles found in a diagnostic package, and members the check could not parse.
+
+    INVARIANT: a member that does not parse is a problem, never a skip - a check that ignores the one
+    file it cannot read passes on a broken package. Values are compared after `diag_normalize`, so an
+    escaped path, `\\u`-escaped text and a nested JSON string are covered, and keys are compared too.
+    History: docs/decisions/diagnostics.md#canary-check
+    """
+    wanted = [needle for needle in needles if needle]
+    hits = {}
+    problems = []
+    for name in sorted(files):
+        text = files[name].decode("utf-8", "replace")
+        lines = text.splitlines() or [""]
+        for needle in wanted:
+            form = diag_normalize(needle)
+            if form in diag_normalize(name):
+                hits[("имя файла", needle, name)] = {
+                    "needle": needle, "file": name, "where": "имя файла", "snippet": name}
+            for line in lines:
+                position = diag_normalize(line).find(form)
+                if position >= 0:
+                    start = max(0, position - 60)
+                    hits[("сырой текст", needle, name)] = {
+                        "needle": needle, "file": name, "where": "сырой текст",
+                        "snippet": line.strip()[start:start + 160]}
+                    break
+        if not name.lower().endswith((".json", ".jsonl")):
+            continue
+        chunks = lines if name.lower().endswith(".jsonl") else [text]
+        for number, chunk in enumerate(chunks, 1):
+            if not chunk.strip():
+                continue
+            try:
+                document = json.loads(chunk)
+            except ValueError as problem:
+                problems.append(f"{name}:{number}: не разбирается ({problem})")
+                continue
+            for where, value in diag_strings(document):
+                for needle in wanted:
+                    if diag_normalize(needle) in diag_normalize(value):
+                        hits[("значение", needle, name, value)] = {
+                            "needle": needle, "file": name, "where": where,
+                            "snippet": value[:200]}
+    return list(hits.values()), problems
+
+
+def diag_zip_files(path):
+    """Members of a package as `{name: bytes}`."""
+    import zipfile
+
+    with zipfile.ZipFile(path) as archive:
+        return {name: archive.read(name) for name in archive.namelist()}
+
+
 def diag_checks(client, rep, app_id, workdir, process_id=None):
     """DG.* - диагностический пакет (наряд DIAG_PACKAGE, спец. 1.4.10 и 1.12).
 
@@ -57962,14 +58085,15 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
     файле ни в одном регистре - как и имя пользователя Windows и абсолютный путь к проекту.
     Положительный контроль обязателен: без него канарейка прошла бы на пустом пакете, поэтому
     `operations.jsonl` обязан содержать operation_id операции этого прогона, а `sha256` манифеста -
-    совпадать с байтами файлов. Отдельно: сборка при МЁРТВОМ Worker, ключ `--diagnostic-package` при
-    ЖИВОМ Host (пакет записан, Host отвечает, журнал дописывается) и два отказа - существующий файл и
-    путь вне разрешённого корня.
+    совпадать с байтами файлов. Проверка сравнивает РАЗОБРАННЫЕ значения, ключи и имена файлов
+    (`diag_package_hits`), а не сырой текст, и применяется ко всем трём пакетам. Отдельно: сборка при
+    МЁРТВОМ Worker, ключ `--diagnostic-package` при ЖИВОМ Host на его собственных журналах (пакет
+    записан, журнал и лог прочитаны, Host отвечает, журнал дописывается), коды выхода ключа и два
+    отказа - существующий файл и путь вне разрешённого корня.
     """
     import os
     import json as _json
     import hashlib
-    import zipfile
     import subprocess as _subprocess
 
     canary = "KANAR" + uuid.uuid4().hex[:10].upper()
@@ -58038,23 +58162,9 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
         return
 
     answer = result(env)
-    with zipfile.ZipFile(target) as zf:
-        raw = {name: zf.read(name) for name in zf.namelist()}
+    raw = diag_zip_files(target)
     names = sorted(raw)
-
-    # ── канарейка: сравнивается ЗНАЧЕНИЕ, а не наличие файла ──
-    needles = [n for n in (canary.lower(), user.lower(), project.lower(),
-                           project.lower().replace("\\", "/")) if n]
-    hits = []
-    for needle in needles:
-        for name in names:
-            if needle in raw[name].decode("utf-8", "replace").lower():
-                hits.append(f"{needle!r} в {name}")
-    rep.add("DG.canary.clean",
-            "канарейка, имя пользователя и путь проекта не встречаются в пакете",
-            "PASS" if not hits else "FAIL",
-            f"файлов={len(names)} ({', '.join(names)}); совпадений={len(hits)}"
-            + (f": {hits[:4]}" if hits else ""))
+    needles = [n for n in (canary, user, project) if n]
 
     # ── манифест: sha256 совпадает с байтами ──
     manifest = _json.loads(raw["manifest.json"].decode("utf-8")) if "manifest.json" in raw else {}
@@ -58078,29 +58188,47 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             "PASS" if saved_op and saved_op in operations else "FAIL",
             f"operation_id={saved_op}; записей в хвосте={len(lines)}; save={save_code or 'succeeded'}")
 
-    # ── ключ при ЖИВОМ Host: пакет записан, Host отвечает, журнал дописывается ──
+    # ── ключ при ЖИВОМ Host: ЕГО конфигурация, то есть журналы, которые Хост держит открытыми ──
+    #
+    # Копия через `isolate_config` подменяет `log_path` и `journal_path` новыми файлами: ключ собрал
+    # бы пакет из НЕсуществующих журналов и строка осталась бы зелёной на пустом входе.
     with open(client.config, encoding="utf-8-sig") as fh:
         cfg = _json.load(fh)
     journal_path = cfg.get("journal_path")
-    cfg_cli = isolate_config(client.config, workdir, "diag-cli")
+    env_live, live_code = call("kompas_create_variable",
+                               {"document_id": part, "expected_revision": revision(part),
+                                "name": canary + "A", "value": 2.0})
+    live_op = (env_live or {}).get("operation_id")
     cli_target = os.path.join(workdir, "diag-cli-" + canary + ".zip")
     done = _subprocess.run(
-        [client.host_exe, "--config", cfg_cli, "--diagnostic-package", cli_target],
+        [client.host_exe, "--config", client.config, "--diagnostic-package", cli_target],
         capture_output=True, text=True, timeout=300)
+    cli_files = diag_zip_files(cli_target) if os.path.exists(cli_target) else {}
+    cli_manifest = (_json.loads(cli_files["manifest.json"].decode("utf-8"))
+                    if "manifest.json" in cli_files else {})
+    read_counts = {entry.get("name"): entry.get("records_read")
+                   for entry in cli_manifest.get("files") or []}
+    cli_operations = cli_files.get("operations.jsonl", b"").decode("utf-8", "replace")
     size_before = os.path.getsize(journal_path) if journal_path and os.path.exists(journal_path) else 0
-    _env, live_code = call("kompas_create_variable",
-                           {"document_id": part, "expected_revision": revision(part),
-                            "name": canary + "B", "value": 2.0})
-    size_after = os.path.getsize(journal_path) if journal_path and os.path.exists(journal_path) else 0
     _e, health_env, _r = client.tool("kompas_health", {"detail": "minimal"})
+    _env, live2_code = call("kompas_create_variable",
+                            {"document_id": part, "expected_revision": revision(part),
+                             "name": canary + "C", "value": 3.0})
+    size_after = os.path.getsize(journal_path) if journal_path and os.path.exists(journal_path) else 0
+    live_in_package = bool(live_op) and live_op in cli_operations
     rep.add("DG.cli.alive_host",
-            "ключ --diagnostic-package при живом Host: пакет, ответ Host, дописанный журнал",
+            "ключ при живом Host на его журналах: rc=0, журнал и лог прочитаны, операция этого "
+            "прогона в пакете, Host отвечает, журнал дописывается",
             "PASS" if (done.returncode == 0 and os.path.exists(cli_target)
+                       and (read_counts.get("operations.jsonl") or 0) > 0
+                       and (read_counts.get("host-log.jsonl") or 0) > 0
+                       and live_in_package
                        and (health_env or {}).get("status") == "succeeded"
                        and size_after > size_before) else "FAIL",
-            f"rc={done.returncode}; файл={os.path.exists(cli_target)}; "
+            f"rc={done.returncode}; файл={os.path.exists(cli_target)}; прочитано={read_counts}; "
+            f"operation_id={live_op} в пакете={live_in_package}; "
             f"health={(health_env or {}).get('status')}; журнал {size_before}->{size_after}; "
-            f"stderr={(done.stderr or '').strip()[:160]!r}; variable={live_code}")
+            f"stderr={(done.stderr or '').strip()[:160]!r}; переменные={live_code or live2_code}")
 
     # ── Worker мёртв: пакет собирается, ответ годный ──
     _e, health_env, _r = client.tool("kompas_health", {"detail": "minimal"})
@@ -58120,6 +58248,36 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             f"worker_pid={worker_pid}; убит={killed}; код={code_dead}; "
             f"size={dead_answer.get('size_bytes')}; sha256={dead_answer.get('sha256')}")
 
+    # ── канарейка: сравниваются РАЗОБРАННЫЕ значения всех трёх пакетов ──
+    hits, problems, scanned = [], [], []
+
+    def scan(label, path):
+        if not os.path.exists(path):
+            problems.append(f"{label}: пакета нет")
+            return
+        try:
+            files = diag_zip_files(path)
+        except Exception as problem:  # noqa: BLE001 - любой отказ чтения пакета = FAIL строки
+            problems.append(f"{label}: пакет не читается ({problem})")
+            return
+        scanned.append(f"{label}={len(files)}")
+        found, unreadable = diag_package_hits(files, needles)
+        hits.extend(dict(hit, package=label) for hit in found)
+        problems.extend(f"{label}: {text}" for text in unreadable)
+
+    scan("инструмент", target)
+    scan("ключ", cli_target)
+    scan("мёртвый Worker", dead_target)
+    shown = ["%s/%s (%s): %s" % (hit["package"], hit["file"], hit["where"], hit["snippet"])
+             for hit in sorted(hits, key=lambda hit: hit["where"] == "сырой текст")[:4]]
+    rep.add("DG.canary.clean",
+            "канарейка, имя пользователя и путь проекта не встречаются в трёх пакетах (инструмент, "
+            "ключ, мёртвый Worker) ни в значении, ни в ключе, ни в имени файла",
+            "PASS" if scanned and not hits and not problems else "FAIL",
+            f"пакетов={len(scanned)} ({', '.join(scanned)}); совпадений={len(hits)}; "
+            f"нечитаемых={len(problems)}"
+            + (f"; {shown}" if shown else "") + (f"; {problems[:2]}" if problems else ""))
+
     # ── отказы: существующий файл и путь вне разрешённого корня ──
     _env, exists_code = call("kompas_diagnostic_package", {"output_path": target})
     rep.add("DG.refuse.exists", "существующий файл без overwrite - отказ",
@@ -58132,6 +58290,35 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
     rep.add("DG.refuse.outside_root", "путь вне разрешённого корня - отказ PATH_NOT_ALLOWED",
             "PASS" if outside_code == "PATH_NOT_ALLOWED" else "FAIL",
             f"путь={outside}; код={outside_code}")
+
+    # ── коды выхода ключа: 64 - аргумент, 73 - отказ записи, файл не перезаписан ──
+    def key_run(*arguments):
+        return _subprocess.run([client.host_exe, "--config", client.config] + list(arguments),
+                               capture_output=True, text=True, timeout=300)
+
+    def bytes_of(path):
+        with open(path, "rb") as fh:
+            return fh.read()
+
+    no_value = key_run("--diagnostic-package")
+    not_zip_path = os.path.join(workdir, "diag-" + canary + ".txt")
+    not_zip = key_run("--diagnostic-package", not_zip_path)
+    cli_bytes = bytes_of(cli_target) if os.path.exists(cli_target) else b""
+    existing = key_run("--diagnostic-package", cli_target)
+    kept = os.path.exists(cli_target) and bytes_of(cli_target) == cli_bytes
+    outside_run = key_run("--diagnostic-package", outside)
+    rep.add("DG.cli.exit_codes",
+            "ключ: нет значения или не .zip - 64; существующий файл и путь вне корня - 73, файл "
+            "не перезаписан",
+            "PASS" if (no_value.returncode == 64 and not_zip.returncode == 64
+                       and not os.path.exists(not_zip_path)
+                       and existing.returncode == 73 and kept and bool(cli_bytes)
+                       and outside_run.returncode == 73
+                       and not os.path.exists(outside)) else "FAIL",
+            f"без значения={no_value.returncode}; не .zip={not_zip.returncode} "
+            f"файл={os.path.exists(not_zip_path)}; существующий={existing.returncode} "
+            f"байты те же={kept}; вне корня={outside_run.returncode} "
+            f"файл={os.path.exists(outside)}")
 
     # ── ответ инструмента: путь, размер, sha256 и числа по файлам, без содержимого ──
     files = answer.get("files") or []

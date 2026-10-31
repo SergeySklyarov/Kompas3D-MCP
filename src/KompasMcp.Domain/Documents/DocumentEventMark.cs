@@ -4,35 +4,33 @@ namespace KompasMcp.Domain.Documents;
 /// handler is allowed to do.</summary>
 /// <remarks>INVARIANT: raising a mark calls no COM and touches no document - the worker runs on one STA thread
 /// and a call from a handler re-enters the apartment it was called from.
-/// MEASURED: the model raises <c>Rebuild</c> both for our own mutation and for a foreign one, and our own
-/// arrives within 400 ms of the call, with nothing later; the own window is what tells the two apart.
+/// MEASURED: the model raises <c>Rebuild</c> both for our own mutation and for a foreign one; one own
+/// mutation produces one or two of them, and the same event follows the open of a document.
 /// TEST: DocumentEventMarkTests holds the "one bump per burst" and "own is not external" rules.
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 public sealed class DocumentEventMark
 {
-    /// <summary>How long after our own mutation an incoming event is treated as ours. The measured delay is
-    /// under 400 ms; the margin covers a loaded machine.</summary>
-    /// <remarks>LIMIT: a foreign rebuild that lands inside this window is dropped as if it were ours; the
-    /// fingerprint check before the next mutation still sees it.
+    /// <summary>How many events one own action may raise. Measured: one or two, never three.</summary>
+    /// <remarks>LIMIT: a foreign rebuild that lands between our own events of the same burst is taken for
+    /// ours; the fingerprint check before the next mutation still sees the change.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public const long OwnWindowMs = 1000;
+    public const int OwnBurst = 2;
 
     private int _pending;
-    private long _ownUntilMs;
+    private int _ownLeft;
 
     /// <summary>Events raised but not yet consumed. Read-only view for tests and diagnostics.</summary>
     public int Pending => Volatile.Read(ref _pending);
 
     /// <summary>Called from the handler. Several events in a row collapse into one mark.</summary>
-    /// <remarks>INVARIANT: an event that arrives inside the own window is ours and is dropped here, where its
-    /// arrival time is known. MEASURED: delivery of our own rebuild takes up to 400 ms, while the next command
-    /// may come seconds later, so a decision taken at consumption time would call our own event foreign and
-    /// bump the revision under the command that asked for it.
-    /// TEST: DocumentEventMarkTests holds the "taken long after the window" case.
+    /// <remarks>INVARIANT: an event is attributed where it arrives, and the attribution is a count, not a
+    /// clock. MEASURED: delivery can lag the call by more than a second, because the pump runs only between
+    /// commands, so no window in milliseconds separates our own rebuild from a foreign one.
+    /// TEST: DocumentEventMarkTests holds the "late own event" and "own burst" cases.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public void Raise(long nowMs)
+    public void Raise()
     {
-        if (nowMs < Interlocked.Read(ref _ownUntilMs))
+        if (Interlocked.Decrement(ref _ownLeft) >= 0)
         {
             return;
         }
@@ -40,22 +38,29 @@ public sealed class DocumentEventMark
         Interlocked.Increment(ref _pending);
     }
 
-    /// <summary>Opens the window in which incoming events are attributed to this session.</summary>
-    /// <remarks>INVARIANT: our own mutation always bumps the revision itself, so an event from it must not
-    /// bump a second time. Clearing the pending count also covers an event delivered during the mutation
-    /// itself, before this call runs.
+    /// <summary>Opens the burst in which incoming events are attributed to this session: after our own
+    /// mutation, and after registering a document, whose open raises the same event.</summary>
+    /// <remarks>INVARIANT: our own mutation always bumps the revision itself, so its events must not bump a
+    /// second time. Clearing the pending count also covers an event delivered during the mutation itself,
+    /// before this call runs.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public void OpenOwnWindow(long nowMs)
+    public void ExpectOwnBurst()
     {
-        Interlocked.Exchange(ref _ownUntilMs, nowMs + OwnWindowMs);
+        Interlocked.Exchange(ref _ownLeft, OwnBurst);
         Interlocked.Exchange(ref _pending, 0);
     }
 
-    /// <summary>Takes the mark, or reports that there is nothing to apply.</summary>
+    /// <summary>Takes the mark, or reports that there is nothing to apply. Ends the burst: whatever did not
+    /// arrive before this command started belongs to the next one.</summary>
     /// <remarks>INVARIANT: one burst of events yields exactly one <c>true</c>; a second call without new
     /// events yields <c>false</c>. Whether a mark was ours was decided when the event arrived, so this call
-    /// needs no clock and cannot re-classify an event that is already recorded.
+    /// cannot re-classify an event that is already recorded.
     /// TEST: DocumentEventMarkTests.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public bool TryTake() => Interlocked.Exchange(ref _pending, 0) > 0;
+    public bool TryTake()
+    {
+        var taken = Interlocked.Exchange(ref _pending, 0) > 0;
+        Interlocked.Exchange(ref _ownLeft, 0);
+        return taken;
+    }
 }

@@ -1255,6 +1255,9 @@ public sealed partial class Api5Session : IDisposable
             if (entry.EventsSubscription is not null)
             {
                 entry.ExternalChangeDetection = ExternalChangeDetection.Reliable;
+
+                // The open itself rebuilds the model and raises the same event as a foreign change.
+                entry.Events.ExpectOwnBurst();
             }
         }
 
@@ -1713,8 +1716,8 @@ public sealed partial class Api5Session : IDisposable
         document.Fingerprint = ComputeFingerprint(document);
         document.LastRevisionReason = reason;
 
-        // Our own rebuild raises the same event as a foreign one: the window keeps it from bumping twice.
-        document.Events.OpenOwnWindow(Environment.TickCount64);
+        // Our own rebuild raises the same event as a foreign one: the burst keeps it from bumping twice.
+        document.Events.ExpectOwnBurst();
 
         // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
         // confirmed write to file (SaveDocument); doing it here would defeat both close guards.

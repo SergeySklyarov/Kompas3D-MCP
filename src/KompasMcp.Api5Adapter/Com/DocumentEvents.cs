@@ -54,7 +54,7 @@ public sealed class DocumentEventSink : IDocument3DNotifySink
     {
         if (name == "Rebuild")
         {
-            _mark.Raise();
+            _mark.Raise(Environment.TickCount64);
         }
 
         return true;

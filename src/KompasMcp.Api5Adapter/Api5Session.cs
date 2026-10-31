@@ -72,11 +72,12 @@ public sealed partial class Api5Session : IDisposable
     /// <summary>Applies the mark the event handler raised, if there is one to apply.</summary>
     /// <remarks>INVARIANT: one burst of events bumps the revision by one and makes the save state an external
     /// change, exactly like the fingerprint path; old references stop resolving because the revision moved.
-    /// MEASURED: our own rebuild raises the same event, so a mark inside the own window is consumed and
-    /// dropped. History: docs/decisions/adapter-core.md#document-events</remarks>
+    /// MEASURED: our own rebuild raises the same event, so the handler drops it inside the own window and
+    /// nothing is left to apply here.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
     private void ApplyExternalChangeMark(DocumentEntry document)
     {
-        if (!document.Events.TryTake(Environment.TickCount64))
+        if (!document.Events.TryTake())
         {
             return;
         }
@@ -2182,8 +2183,6 @@ public sealed class DocumentEntry
 
     /// <summary>The subscription itself, released when the document leaves the session.</summary>
     public DocumentEventSubscription? EventsSubscription { get; set; }
-
-
 
     /// <summary>Savedness state: whether a write to file confirmed the current model is on disk.</summary>
     public DocumentSaveState SaveState { get; set; } = DocumentSaveState.Unknown;

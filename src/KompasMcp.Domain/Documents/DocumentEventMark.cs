@@ -24,11 +24,26 @@ public sealed class DocumentEventMark
     public int Pending => Volatile.Read(ref _pending);
 
     /// <summary>Called from the handler. Several events in a row collapse into one mark.</summary>
-    public void Raise() => Interlocked.Increment(ref _pending);
+    /// <remarks>INVARIANT: an event that arrives inside the own window is ours and is dropped here, where its
+    /// arrival time is known. MEASURED: delivery of our own rebuild takes up to 400 ms, while the next command
+    /// may come seconds later, so a decision taken at consumption time would call our own event foreign and
+    /// bump the revision under the command that asked for it.
+    /// TEST: DocumentEventMarkTests holds the "taken long after the window" case.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    public void Raise(long nowMs)
+    {
+        if (nowMs < Interlocked.Read(ref _ownUntilMs))
+        {
+            return;
+        }
+
+        Interlocked.Increment(ref _pending);
+    }
 
     /// <summary>Opens the window in which incoming events are attributed to this session.</summary>
     /// <remarks>INVARIANT: our own mutation always bumps the revision itself, so an event from it must not
-    /// bump a second time.
+    /// bump a second time. Clearing the pending count also covers an event delivered during the mutation
+    /// itself, before this call runs.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public void OpenOwnWindow(long nowMs)
     {
@@ -38,16 +53,9 @@ public sealed class DocumentEventMark
 
     /// <summary>Takes the mark, or reports that there is nothing to apply.</summary>
     /// <remarks>INVARIANT: one burst of events yields exactly one <c>true</c>; a second call without new
-    /// events yields <c>false</c>. An event inside the own window is consumed and discarded.
+    /// events yields <c>false</c>. Whether a mark was ours was decided when the event arrived, so this call
+    /// needs no clock and cannot re-classify an event that is already recorded.
     /// TEST: DocumentEventMarkTests.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public bool TryTake(long nowMs)
-    {
-        if (Interlocked.Exchange(ref _pending, 0) == 0)
-        {
-            return false;
-        }
-
-        return nowMs >= Interlocked.Read(ref _ownUntilMs);
-    }
+    public bool TryTake() => Interlocked.Exchange(ref _pending, 0) > 0;
 }

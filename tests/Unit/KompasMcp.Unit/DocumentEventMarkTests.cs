@@ -4,8 +4,9 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Rules of the event mark: what one burst of events is worth, and which of them are ours.</summary>
-/// <remarks>INVARIANT: several events in a row are one bump; an event inside the own window is consumed and
-/// dropped. These rules are what keeps a foreign rebuild at exactly +1 and our own at zero extra.
+/// <remarks>INVARIANT: several events in a row are one bump; an event that arrives inside the own window is
+/// dropped where it arrives, however late it is consumed. These rules are what keeps a foreign rebuild at
+/// exactly +1 and our own at zero extra.
 /// DOC: the v24 help mirror, page ksdocs3dnotify_events.html - the model raises Rebuild for both.
 /// History: docs/decisions/adapter-core.md#document-events</remarks>
 public class DocumentEventMarkTests
@@ -15,19 +16,19 @@ public class DocumentEventMarkTests
     {
         var mark = new DocumentEventMark();
 
-        Assert.False(mark.TryTake(nowMs: 5000));
+        Assert.False(mark.TryTake());
     }
 
     [Fact]
     public void ForeignBurst_IsOneBump()
     {
         var mark = new DocumentEventMark();
-        mark.Raise();
-        mark.Raise();
-        mark.Raise();
+        mark.Raise(nowMs: 5000);
+        mark.Raise(nowMs: 5001);
+        mark.Raise(nowMs: 5002);
 
-        Assert.True(mark.TryTake(nowMs: 5000));
-        Assert.False(mark.TryTake(nowMs: 5001));
+        Assert.True(mark.TryTake());
+        Assert.False(mark.TryTake());
     }
 
     [Fact]
@@ -35,13 +36,23 @@ public class DocumentEventMarkTests
     {
         var mark = new DocumentEventMark();
         mark.OpenOwnWindow(nowMs: 1000);
-        mark.Raise();
+        mark.Raise(nowMs: 1200);
 
-        Assert.False(mark.TryTake(nowMs: 1200));
-
-        // Consumed, not kept: the next command must not see the same event again.
-        Assert.False(mark.TryTake(nowMs: 1300));
+        Assert.False(mark.TryTake());
         Assert.Equal(0, mark.Pending);
+    }
+
+    [Fact]
+    public void OwnEvent_TakenLongAfterTheWindow_IsStillOurs()
+    {
+        // The regression this rule exists for: our own rebuild is delivered within 400 ms of the mutation,
+        // while the next command may arrive seconds later. Attribution must not depend on that gap.
+        var mark = new DocumentEventMark();
+        mark.OpenOwnWindow(nowMs: 1000);
+        mark.Raise(nowMs: 1400);
+
+        Assert.False(mark.TryTake());
+        Assert.False(mark.TryTake());
     }
 
     [Fact]
@@ -49,20 +60,20 @@ public class DocumentEventMarkTests
     {
         var mark = new DocumentEventMark();
         mark.OpenOwnWindow(nowMs: 1000);
-        mark.Raise();
+        mark.Raise(nowMs: 1000 + DocumentEventMark.OwnWindowMs);
 
-        Assert.True(mark.TryTake(nowMs: 1000 + DocumentEventMark.OwnWindowMs));
+        Assert.True(mark.TryTake());
     }
 
     [Fact]
     public void OpeningTheWindow_DropsAMarkRaisedBefore()
     {
         var mark = new DocumentEventMark();
-        mark.Raise();
+        mark.Raise(nowMs: 500);
         mark.OpenOwnWindow(nowMs: 1000);
 
         Assert.Equal(0, mark.Pending);
-        Assert.False(mark.TryTake(nowMs: 5000));
+        Assert.False(mark.TryTake());
     }
 
     [Fact]
@@ -70,12 +81,12 @@ public class DocumentEventMarkTests
     {
         var mark = new DocumentEventMark();
         mark.OpenOwnWindow(nowMs: 1000);
-        mark.Raise();
+        mark.Raise(nowMs: 1100);
 
-        Assert.False(mark.TryTake(nowMs: 1100));
+        Assert.False(mark.TryTake());
 
-        mark.Raise();
-        Assert.True(mark.TryTake(nowMs: 1000 + DocumentEventMark.OwnWindowMs + 1));
-        Assert.False(mark.TryTake(nowMs: 1000 + DocumentEventMark.OwnWindowMs + 2));
+        mark.Raise(nowMs: 1000 + DocumentEventMark.OwnWindowMs + 1);
+        Assert.True(mark.TryTake());
+        Assert.False(mark.TryTake());
     }
 }

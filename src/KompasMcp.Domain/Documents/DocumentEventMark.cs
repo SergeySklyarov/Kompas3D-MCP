@@ -11,14 +11,13 @@ namespace KompasMcp.Domain.Documents;
 public sealed class DocumentEventMark
 {
     /// <summary>How many events one own action may raise. Measured: one or two, never three.</summary>
-    /// <remarks>LIMIT: the allowance is only a fallback for a burst the in-command pump did not settle; a
-    /// foreign rebuild inside it is still taken for ours.
+    /// <remarks>LIMIT: a foreign rebuild that lands between our own events of the same burst is taken for
+    /// ours; the fingerprint check before the next mutation still sees the change.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public const int OwnBurst = 2;
 
     private int _pending;
     private int _ownLeft;
-    private int _ownDelivered;
 
     /// <summary>Events raised but not yet consumed. Read-only view for tests and diagnostics.</summary>
     public int Pending => Volatile.Read(ref _pending);
@@ -33,7 +32,6 @@ public sealed class DocumentEventMark
     {
         if (Interlocked.Decrement(ref _ownLeft) >= 0)
         {
-            Interlocked.Increment(ref _ownDelivered);
             return;
         }
 
@@ -49,30 +47,7 @@ public sealed class DocumentEventMark
     public void ExpectOwnBurst()
     {
         Interlocked.Exchange(ref _ownLeft, OwnBurst);
-        Interlocked.Exchange(ref _ownDelivered, 0);
         Interlocked.Exchange(ref _pending, 0);
-    }
-
-    /// <summary>Closes the own burst at the end of the command that caused it, once our own events have
-    /// already been delivered there.</summary>
-    /// <remarks>INVARIANT: the burst must not stay open across the gap between commands. A foreign rebuild
-    /// arriving in that gap was dropped as ours and never reached the revision, while the document kept
-    /// answering <c>reliable</c> - the change stayed invisible for good.
-    /// MEASURED: KOMPAS posts <c>Rebuild</c> while the call is still running, so one non-blocking pump right
-    /// after the mutation delivers it inside the same command; what arrives after that is foreign.
-    /// LIMIT: when the pump delivered no own event (the call raised none, or delivery lagged), the burst
-    /// stays open and the count-based attribution of <see cref="OwnBurst"/> holds instead.
-    /// TEST: DocumentEventMarkTests holds both orders.
-    /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public bool CloseOwnBurstIfDelivered()
-    {
-        if (Volatile.Read(ref _ownDelivered) == 0)
-        {
-            return false;
-        }
-
-        Interlocked.Exchange(ref _ownLeft, 0);
-        return true;
     }
 
     /// <summary>Takes the mark, or reports that there is nothing to apply. Ends the burst: whatever did not

@@ -386,9 +386,11 @@ design, because the COM objects behind it are not. Identity rules that the contr
 
 * A document is addressed by server UUID, never by "the active tab". `Document3D()` is a factory (proved in
   P0.5: two calls give different IUnknowns), so there is no ambient document to misuse.
-* Revisions are server-side counters bumped on mutation, rebuild, reload and restore. External edits made in
-  the KOMPAS UI cannot be trusted to raise events here, so a cheap fingerprint is compared before every
-  mutation and the document is marked `conservative` - the limitation is reported, not hidden.
+* Revisions are server-side counters bumped on mutation, rebuild, reload and restore. An edit made outside
+  this server is learned from the model's own `Rebuild` event for a part or an assembly whose subscription
+  succeeded (`external_change_detection=reliable`, `#document-events`); a drawing, a specification and a
+  document whose subscription failed stay on the fingerprint check and answer `conservative` - the
+  limitation is reported, not hidden.
 * COM references are held only in this object and released exactly when the document is closed or the
   session ends (spec 1.6).
 
@@ -828,6 +830,30 @@ LIMIT: чужое перестроение, попавшее в тот же burs
 закрытие) не подписывались - по таблице выше `SaveAs` и `close` на `IDocument3DNotify` не
 отзываются.
 
+MEASURED (границы «своё/чужое» по времени и по насосу НЕТ): проверено два устройства, оба не дают
+границы. (1) Насос очереди в конце своей команды: неблокирующий `PeekMessage` сразу после мутации
+забирает только уже поставленное, а `Rebuild` ставится позже - доставка идёт, когда насос STA
+прокрутится между командами, поэтому в конце команды очередь пуста. (2) Закрытие пачки по факту
+доставки: закрывать нечего, своего события в команде ещё нет. Остаётся счётчик `OwnBurst`, и он
+переживает ответ команды. Замер (строка `EV.external.after_own`): своё перестроение 9 → 10, затем
+чужое переименование с перестроением через 3 с - ревизия осталась 10, отметка чужое не увидела;
+документ при этом изменён (`dirty`), а отпечаток `1:1:40;30;30;0;0` не изменился ни от того, ни от
+другого.
+
+| Порядок | Что приходит | Итог |
+|---|---|---|
+| своя мутация с перестроением | 1-2 `Rebuild` между командами | пачка поглощает их, ревизия +1 от мутации |
+| своя мутация, затем чужое перестроение до следующей команды | `Rebuild` в той же открытой пачке | поглощается как своё: ревизия НЕ растёт (`EV.external.after_own` = NAMED) |
+| чужое перестроение после `TryTake` (следующая команда уже была) | `Rebuild` | +1 отметкой, документ изменён (`EV.external.revision`) |
+| своя мутация без перестроения (создание эскиза) | ничего | пачка ждёт `TryTake` |
+
+LIMIT (точная формулировка): чужое перестроение, пришедшее между своей мутацией и следующей командой,
+считается своим и ревизию не двигает. Изменение не видно до следующей мутации, где его ловит сверка
+отпечатка, - но при `fingerprint_blind` (правка без смены `тела:признаки:габарит`) не видит и она.
+Устройства, которое разделило бы эти два события, в документированном маршруте нет: имя события одно,
+задержка доставки (1,39-1,42 с) больше промежутка, а насос в команде очередь пустой. Обходы (опрос по
+таймеру, отдельный поток, ожидание события внутри команды) запрещены нарядом §5 и не делались.
+
 MEASURED (burst нужен не только мутации): модель перестраивает не только мутация. Отказ
 `kompas_update_feature` по смене опорного эскиза (пробная запись `SetSketch` + `Update` +
 `RebuildDocument`) перестраивает модель ДО проверки и уходит отказом, ревизию не поднимая: без burst
@@ -847,12 +873,21 @@ TEST: группа `--events-only`, строки `EV.*` (`scripts/mcp-smoke.py`,
 переименование с `RebuildDocument`: отпечаток `тела:признаки:габарит` не меняется, событие приходит.
 Проверено снятием отметки: без `ApplyExternalChangeMark` падают ровно `EV.external.revision`,
 `EV.external.fingerprint_blind` (ревизия 6 → 6 при том же отпечатке) и `EV.close.unsubscribed`, то
-есть строки держатся событием, а не отпечатком.
+есть строки держатся событием, а не отпечатком. Порядок «своё, затем чужое без команд между ними»
+фиксирует строка `EV.external.after_own` и модульный тест `DocumentEventMarkTests`
+(`ForeignEventInsideTheOwnWindow_IsAbsorbed`): она названа NAMED со ссылкой на `LIMIT` выше, потому
+что измеренное поведение - поглощение, а не поимка. Если граница когда-нибудь появится, та же строка
+даст PASS без правки. Правила подписки проверяются без COM в `DocumentEventSubscriptionTests`: отказ
+подписки (`notify_source_null`, `connection_point_container_absent`) оставляет документ на
+`conservative`, второй `Dispose` не даёт второго `Unadvise`, а отказ `Unadvise` пишется в журнал
+Worker (`unadvise refused`), потому что сам `Dispose` его глотает.
 
-LIMIT: `EV.worker_restart` закрыт наполовину. После убитого Worker старые объекты мертвы
-(`DOCUMENT_NOT_FOUND` - подписка на них не переходит), но переоткрыть документ в том же сеансе
-прибор не может: `kompas_connect mode=attach` отвечает `APPLICATION_DISCONNECTED`, и строка остаётся
-NAMED. Закрыть её - значит поднимать сеанс заново (`mode=launch`) внутри строки.
+MEASURED (`EV.worker_restart`): после убитого Worker старые объекты мертвы
+(`DOCUMENT_NOT_FOUND` - подписка на них не переходит), а `kompas_connect mode=attach` отвечает
+`APPLICATION_DISCONNECTED`: сеанс принадлежал убитому Worker, и прикрепляться к нему не к чему.
+Штатный путь назад - новый сеанс (`mode=launch`) и переоткрытие файла тем же прибором; после него
+чужое изменение ловится ровно +1. Строка идёт этим путём и заканчивается PASS или FAIL, промежуточного
+NAMED у неё больше нет.
 
 ## <a id="object-type-numbers"></a>Номера признаков в дереве API5 - история из кода
 

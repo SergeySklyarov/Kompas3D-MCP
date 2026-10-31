@@ -218,22 +218,6 @@ public sealed class StaExecutor : IDisposable
         }
     }
 
-    /// <summary>Drains the messages already queued for this apartment, without waiting for more.</summary>
-    /// <remarks>INVARIANT: called only from the STA thread and only for what is already posted - it is not
-    /// a timer and it never waits, so it cannot turn a command into a poll.
-    /// MEASURED: KOMPAS posts its document notifications while the outgoing call is still running, so this
-    /// delivers them inside the command that caused them.
-    /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public void PumpPendingMessages()
-    {
-        if (!IsOnStaThread)
-        {
-            throw new InvalidOperationException("Очередь сообщений принадлежит STA-потоку: насосить её можно только на нём.");
-        }
-
-        PumpMessages();
-    }
-
     public void Dispose()
     {
         if (_disposed)

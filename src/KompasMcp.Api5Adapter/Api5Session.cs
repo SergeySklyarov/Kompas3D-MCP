@@ -42,13 +42,6 @@ public sealed partial class Api5Session : IDisposable
 
     public bool IsConnected => _applications.Count > 0;
 
-    /// <summary>Drains the COM messages already queued for the apartment, or null when the caller owns no
-    /// pump.</summary>
-    /// <remarks>INVARIANT: the session only asks for what is already posted; it never waits for an event and
-    /// starts no thread. A null pump keeps the count-based attribution of the mark.
-    /// History: docs/decisions/adapter-core.md#document-events</remarks>
-    public Action? PumpPending { get; set; }
-
     /// <summary>Journal hook of the process that owns the session, for facts a caller cannot see.</summary>
     public Action<string>? Warn { get; set; }
 
@@ -92,7 +85,7 @@ public sealed partial class Api5Session : IDisposable
             return;
         }
 
-        BumpRevision(document, "external.events", invalidateAll: true, ownRebuild: false);
+        BumpRevision(document, "external.events", invalidateAll: true);
 
         // After BumpRevision, which names an ordinary mutation: what arrived here came from outside.
         document.SaveState = DocumentSaveTracking.AfterExternalChange();
@@ -1696,10 +1689,7 @@ public sealed partial class Api5Session : IDisposable
     /// <param name="reason">Recorded for diagnostics ("extrude", "rebuild", …).</param>
     /// <param name="invalidateAll">True when the model was re-read or rebuilt rather than edited by this
     /// server: then handles from the previous revision must not resolve. False for an ordinary mutation.</param>
-    /// <param name="ownRebuild">True when this call follows a rebuild of our own and its event has to be
-    /// absorbed; false when the rebuild already arrived as a foreign event.</param>
-    public void BumpRevision(DocumentEntry document, string reason, bool invalidateAll = false,
-        bool ownRebuild = true)
+    public void BumpRevision(DocumentEntry document, string reason, bool invalidateAll = false)
     {
         document.Revision++;
         References.RevisionForward(document.Id, document.Revision, invalidateAll);
@@ -1738,14 +1728,7 @@ public sealed partial class Api5Session : IDisposable
         document.LastRevisionReason = reason;
 
         // Our own rebuild raises the same event as a foreign one: the burst keeps it from bumping twice.
-        // The pump then delivers what is already posted, so the burst closes HERE, before the gap in which
-        // a foreign rebuild could arrive - otherwise that change would be dropped as ours for good.
-        if (ownRebuild)
-        {
-            document.Events.ExpectOwnBurst();
-            PumpPending?.Invoke();
-            document.Events.CloseOwnBurstIfDelivered();
-        }
+        document.Events.ExpectOwnBurst();
 
         // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
         // confirmed write to file (SaveDocument); doing it here would defeat both close guards.

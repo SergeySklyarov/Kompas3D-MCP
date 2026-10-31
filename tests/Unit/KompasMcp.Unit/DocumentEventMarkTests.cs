@@ -94,33 +94,17 @@ public class DocumentEventMarkTests
     }
 
     [Fact]
-    public void ForeignBurst_AfterSettledOwnBurstWithoutACommand_IsApplied()
+    public void ForeignEventInsideTheOwnWindow_IsAbsorbed()
     {
-        // The ordinary order: our mutation, our event delivered inside that command, the user changes the
-        // model before the next command arrives. The burst is closed by the pump, so the second event is
-        // foreign and must reach the revision - otherwise the change is invisible for good.
+        // LIMIT of the count-based attribution, and the ordinary order it costs: our mutation, then a
+        // foreign change before the next command. Both raise the same event and delivery lags the command,
+        // so the allowance of the own burst swallows the foreign one - the mark does not see the change.
+        // The fingerprint check before the next mutation still does.
         var mark = new DocumentEventMark();
         mark.ExpectOwnBurst();
         mark.Raise();
-
-        Assert.True(mark.CloseOwnBurstIfDelivered());
-
         mark.Raise();
-        Assert.True(mark.TryTake());
-        Assert.False(mark.TryTake());
-    }
 
-    [Fact]
-    public void BurstWithoutDeliveredOwnEvent_StaysOpen()
-    {
-        // LIMIT of the settled burst: with nothing delivered by the pump there is no proof the own event has
-        // passed, so the count-based attribution of the old order stays in force.
-        var mark = new DocumentEventMark();
-        mark.ExpectOwnBurst();
-
-        Assert.False(mark.CloseOwnBurstIfDelivered());
-
-        mark.Raise();
         Assert.False(mark.TryTake());
     }
 

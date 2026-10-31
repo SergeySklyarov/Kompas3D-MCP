@@ -15568,9 +15568,14 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
         refs_twin = [row.get("component_ref") for row in links_twin]
         client_sha_before = sha(twin_top)
         if refs_twin:
-            env, code = run(twin_current, [{
-                "step_id": "s1", "tool": "kompas_delete_component",
-                "arguments": {"component_ref": refs_twin[0]}}])
+            # INVARIANT: the step cannot carry a component_ref read BEFORE the run: the checkpoint inside
+            # the run saves and reassigns the copy, and both revoke every earlier reference. The mutation
+            # is therefore an insertion, and its revision comes from a read-only step of the same plan.
+            env, code = run(twin_current, [
+                {"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}},
+                {"step_id": "s2", "tool": "kompas_insert_component",
+                 "arguments": {"source_path": twin_a,
+                               "expected_revision": {"from_step": "s1", "field": "revision.after"}}}])
             answer = result(env)
             cp_success = answer.get("checkpoint") or {}
             doc_copy = answer.get("document_id_after")
@@ -15578,9 +15583,10 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 "document_id": doc_copy, "detail": "minimal"})
             ctx_copy = (env_ctx or {}).get("result") or {}
             copy_path = cp_success.get("document_path")
-            copy_root = _os.path.join(workdir, "control-copies", "scenario") + _os.sep
-            in_copies = bool(copy_path) and _os.path.abspath(copy_path).startswith(
-                _os.path.abspath(copy_root))
+            # INVARIANT: the copy lives in the folder whose manifest the same answer names.
+            copy_root = _os.path.dirname(cp_success.get("manifest_path") or "") + _os.sep
+            in_copies = bool(copy_path) and len(copy_root) > 1 and _os.path.abspath(
+                copy_path).startswith(_os.path.abspath(copy_root))
             components_copy = len(links_of(doc_copy)) if doc_copy else None
             copy_ok = (
                 code is None
@@ -15589,7 +15595,7 @@ def assembly_checkpoint_checks(client, rep, app_id, workdir):
                 and in_copies
                 and copy_path == cp_success.get("path")
                 and ctx_copy.get("path") == copy_path
-                and components_copy == len(refs_twin) - 1
+                and components_copy == len(refs_twin) + 1
                 and sha(twin_top) == client_sha_before)
             rep.add("ASC.11.success_on_copy",
                     "успешный изменяющий шаг: ответ называет копию (document_path = checkpoint.path), "

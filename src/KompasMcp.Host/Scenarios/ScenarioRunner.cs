@@ -192,22 +192,6 @@ internal sealed class ScenarioRunner
                 stepArguments["operation_id"] = ChildOperationId(parentOperationId, step.StepId);
             }
 
-            // INVARIANT: after a checkpoint the plan runs on the copy, whose revision the caller cannot know
-            // when it writes the steps — the copy is written and reassigned by the checkpoint itself. The
-            // runner fills the revision it knows, the same way it fills the document id.
-            if (Declares(step.Tool, "expected_revision") && !stepArguments.ContainsKey("expected_revision"))
-            {
-                var context = await _invoke("kompas_get_context", new JsonObject
-                {
-                    ["document_id"] = effectiveDocumentId,
-                    ["detail"] = "minimal",
-                }, cancellationToken).ConfigureAwait(false);
-                if (JsonScalars.ReadLong(context.Result?["revision"]) is { } currentRevision)
-                {
-                    stepArguments["expected_revision"] = currentRevision;
-                }
-            }
-
             var envelope = await _invoke(step.Tool.Name, stepArguments, cancellationToken).ConfigureAwait(false);
             var compact = Compact(envelope.Result, out var truncated);
             results[step.StepId] = new StepOutcome(envelope.Result as JsonObject, envelope.RevisionAfter);

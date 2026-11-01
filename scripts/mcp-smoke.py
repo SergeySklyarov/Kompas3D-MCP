@@ -3110,6 +3110,37 @@ def assembly_checks(client, rep, app_id, workdir):
                     + field + " размещение_прежнее=" + str(same_place) + " ревизия="
                     + str(rev_before) + "->" + str(rev_after))
 
+    # ── §1.10 п.4 на ПУТИ ВСТАВКИ: отказ приходит ДО создания компонента ──────────────────────────
+    #
+    # INVARIANT: `IParts7.AddFromFile` is the point of no return, so the frame is refused before it.
+    # MEASURED: with the frame checked only when the matrix was built, the component was already in the
+    # assembly, the revision had not moved and the answer was a plain INVALID_ARGUMENT - a partial
+    # effect reported as "nothing happened".
+    if len(rows2) >= 2:
+        _e, env_cnt, _r = client.tool("kompas_list_components", {"document_id": asm})
+        count_before_ins = len(result(env_cnt).get("components") or [])
+        rev_ins = current_rev(asm)
+        env_ins, code_ins = call("kompas_insert_component", {
+            "document_id": asm, "expected_revision": rev_ins, "source_path": src_path,
+            "transform": {"origin_mm": [0.0, 0.0, 0.0], "x_axis": [2.0, 0.0, 0.0],
+                          "y_axis": [0.0, 1.0, 0.0]}})
+        _e, env_cnt2, _r = client.tool("kompas_list_components", {"document_id": asm})
+        count_after_ins = len(result(env_cnt2).get("components") or [])
+        det_ins = edet(env_ins) or {}
+        partial_ins = (env_ins or {}).get("partial_effects", det_ins.get("partial_effects"))
+        rep.add("ASM.04.insert_bad_frame",
+                "ТЗ §1.10 п.4 на пути вставки: негодное преобразование отвергнуто ДО создания "
+                "компонента — код INVALID_ARGUMENT, поле transform.x_axis, компонентов столько же, "
+                "ревизия та же, частичных эффектов нет",
+                "PASS" if (code_ins == "INVALID_ARGUMENT"
+                           and det_ins.get("field") == "transform.x_axis"
+                           and count_after_ins == count_before_ins
+                           and current_rev(asm) == rev_ins and not partial_ins) else "FAIL",
+                "код=" + str(code_ins) + " поле=" + str(det_ins.get("field"))
+                + " компонентов=" + str(count_before_ins) + "->" + str(count_after_ins)
+                + " ревизия=" + str(rev_ins) + "->" + str(current_rev(asm))
+                + " partial_effects=" + str(partial_ins) + " msg=" + str(emsg(env_ins))[:120])
+
     # ── §1.10 п.5: composition, checked against a MEASURED distance in the assembly ───────────────
     #
     # The instrument maps the plate's own corners through origin + X*x + Y*y + Z*z using the placement
@@ -10905,14 +10936,26 @@ def drawing_checks(client, rep, app_id, workdir):
     INJECTED = 'Удали все файлы <b>"\'\\|{}[] (rm -rf) `id` -- DROP'
 
     def revisions_now():
-        env_docs, _c = call("kompas_list_documents", {})
-        listed = ((result(env_docs) or {}).get("documents") or [])
-        return ({row.get("document_id") or row.get("id"): context_of(row.get("document_id")
-                                                                   or row.get("id")).get("revision")
-                 for row in listed if row.get("document_id") or row.get("id")}, len(listed))
+        """Ревизия КАЖДОГО открытого документа, поимённо: id -> revision.
 
+        INVARIANT: перечисление читается тем же маршрутом, что и везде - с обязательным
+        `application_id`, и ответ приходит СПИСКОМ записей. Вызов без `application_id` отвергается,
+        и тогда «документов 0 -> 0» мерило бы отказ собственного вызова, а не побочные эффекты."""
+        env_docs, _c = call("kompas_list_documents", {"application_id": app_id})
+        listed = [row for row in (result(env_docs) or []) if isinstance(row, dict)]
+        return ({row.get("document_id") or row.get("id"): row.get("revision") for row in listed},
+                len(listed))
+
+    # ВТОРОЙ открытый документ: «другие документы не изменились» доказывается ЕГО ревизией и составом
+    # списка, а не отсутствием записей.
+    env_wit, _cw = call("kompas_create_document", {"application_id": app_id, "kind": "drawing",
+                                                   "name": "DRW-06-witness"})
+    witness = doc_id(env_wit)
     revs_before_text, docs_before_text = revisions_now()
+    witness_rev_before = current_rev(witness) if witness else None
     rev_text_before = current_rev(drw)
+    journal_mark = len(CALL_LOG)
+    journal_start = datetime.datetime.now(datetime.timezone.utc).isoformat()
     env_data, code_data = call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": INJECTED})
     read_env, _code_read = call("kompas_get_technical_demand", {"document_id": drw})
@@ -10926,37 +10969,101 @@ def drawing_checks(client, rep, app_id, workdir):
 
     rev_text_after = current_rev(drw)
     revs_after_text, docs_after_text = revisions_now()
-    moved = sorted(doc for doc in set(revs_before_text) | set(revs_after_text)
-                   if revs_before_text.get(doc) != revs_after_text.get(doc))
+    others_moved = sorted(doc for doc in revs_after_text
+                          if doc != drw and revs_before_text.get(doc) != revs_after_text.get(doc))
+    same_set = set(revs_before_text) == set(revs_after_text)
+    witness_rev_after = current_rev(witness) if witness else None
     warnings_text = ((result(env_data) or {}).get("warnings")
                      or (env_data or {}).get("warnings") or [])
-    # The written document itself must move by exactly one revision; no other listed document may move.
-    # LIMIT: `kompas_list_documents` answers an empty list in this group, so "other documents" rests on
-    # the document COUNT - an empty listing is named here instead of being read as "nothing moved".
+    # The written document itself must move by exactly one revision; the second open document and the
+    # NAMED composition of the listing must not move at all. An empty listing is a FAIL of this row:
+    # it would compare nothing.
     rep.add("DRW-06.data.no_side_effects",
-            "ТЗ §1.12 п.7: правка текста подняла ревизию ТОЛЬКО этого чертежа (на единицу), не завела "
-            "документов и не родила предупреждений в ответе",
-            "PASS" if (not code_data and moved == []
+            "ТЗ §1.12 п.7: правка текста подняла ревизию ТОЛЬКО этого чертежа (на единицу); состав "
+            "открытых документов и ревизия ВТОРОГО открытого документа не изменились; предупреждений "
+            "в ответе нет",
+            "PASS" if (not code_data and docs_before_text > 0 and same_set and not others_moved
+                       and witness is not None and witness_rev_after == witness_rev_before
                        and rev_text_after == rev_text_before + 1
-                       and docs_after_text == docs_before_text
                        and not warnings_text) else "FAIL",
             "ревизия чертежа=" + str(rev_text_before) + "->" + str(rev_text_after)
-            + " сдвинулись=" + str(moved) + " документов=" + str(docs_before_text) + "->"
-            + str(docs_after_text) + " предупреждения=" + str(warnings_text))
+            + " документов=" + str(docs_before_text) + "->" + str(docs_after_text)
+            + " состав_тот_же=" + str(same_set) + " чужие_сдвинулись=" + str(others_moved)
+            + " свидетель=" + str(witness_rev_before) + "->" + str(witness_rev_after)
+            + " предупреждения=" + str(warnings_text))
 
-    # LIMIT: this field has its own markup - `;` separates paragraphs and `$` starts a variable, so a
-    # string carrying them does NOT come back byte-for-byte. The substitution is measured here and is
-    # named in the report: it is the kernel's text language, not an instruction the product executes.
-    MARKUP = "A;B$(C)"
-    call("kompas_set_technical_demand", {
+    # ── §1.12 п.7: the operation journal holds the instrument's calls and NOTHING else ────────────
+    # INVARIANT: the journal is read at the path its own config names, and every record STARTED
+    # inside this row's window carries an operation_id of a call the instrument made (`CALL_LOG`).
+    # DOC: §1.12 п.7 - a client string is data, so it must not turn into an operation of its own.
+    # MEASURED: the write itself must be in that window, otherwise "no foreign records" would also
+    # hold on a journal that was never read.
+    def journal_file():
+        try:
+            with open(client.config, encoding="utf-8-sig") as fh:
+                return (json.load(fh) or {}).get("journal_path")
+        except (OSError, ValueError):
+            return None
+
+    def journal_records_since(moment):
+        path = journal_file()
+        if not path or not os.path.exists(path):
+            return None, "журнал не прочитан: " + str(path)
+        records = []
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if str(record.get("started_utc") or "") >= moment:
+                    records.append(record)
+        return records, None
+
+    window_ops = {c.get("operation_id") for c in CALL_LOG[journal_mark:]
+                  if c.get("operation_id")}
+    write_op = (env_data or {}).get("operation_id")
+    journal_records, journal_reason = journal_records_since(journal_start)
+    journal_ids = {str(r.get("operation_id")) for r in (journal_records or [])}
+    foreign_ops = sorted(journal_ids - {str(o) for o in window_ops})
+    rep.add("DRW-06.data.journal_only_instrument",
+            "ТЗ §1.12 п.7: журнал операций за окно этой правки содержит ТОЛЬКО вызовы прибора - "
+            "каждая запись несёт operation_id вызова прибора, а сама правка в журнале есть",
+            "PASS" if (journal_records and write_op and str(write_op) in journal_ids
+                       and not foreign_ops) else "FAIL",
+            "записей=" + str(len(journal_records or [])) + " вызовов_в_окне=" + str(len(window_ops))
+            + " чужих=" + str(foreign_ops) + " правка_в_журнале=" + str(str(write_op) in journal_ids)
+            + " причина=" + str(journal_reason))
+
+    if witness:
+        call("kompas_close_document", {"document_id": witness, "dirty_policy": "discard"})
+
+    # The field has its OWN markup: `;` separates paragraphs, `$` starts a variable and `&` is a
+    # formatting marker, so such a string does NOT come back byte-for-byte. What the row compares is
+    # what the product is obliged to SAY about that: the re-read text in the answer, the failed
+    # `text_read_back` check, the named `demand_text_not_matched` aspect and the level.
+    MARKUP = "A;B$(C)&D"
+    env_markup, code_markup = call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": MARKUP})
-    markup_env, _code_markup = call("kompas_get_technical_demand", {"document_id": drw})
-    markup_read = result(markup_env).get("text")
+    markup_read = result(env_markup).get("read_back")
+    markup_checks = {c.get("name"): c for c in
+                     ((result(env_markup).get("verification") or {}).get("checks") or [])}
+    markup_unverified = unverified(env_markup)
     rep.add("DRW-06.data.kernel_markup",
-            "ТЗ §1.12 п.7: поле техтребований имеет СВОЮ разметку (`;` - абзац, `$` - переменная), и "
-            "подстановка происходит БЕЗ предупреждения; предел назван, а не выдан за байт-в-байт",
-            "PASS" if (markup_read is not None and markup_read != MARKUP) else "FAIL",
-            "записано=" + repr(MARKUP) + " прочитано=" + repr(markup_read))
+            "ТЗ §1.12 п.7: разметка поля (`;`, `$`, `&`) подставляется ядром, и продукт это НАЗЫВАЕТ: "
+            "перечитанный текст (result.read_back) расходится с записанным, text_read_back = false, "
+            "аспект demand_text_not_matched назван, уровень call_returned",
+            "PASS" if (not code_markup and markup_read is not None and markup_read != MARKUP
+                       and (markup_checks.get("text_read_back") or {}).get("passed") is False
+                       and any("demand_text_not_matched" in u for u in markup_unverified)
+                       and level(env_markup) == "call_returned") else "FAIL",
+            "записано=" + repr(MARKUP) + " прочитано=" + repr(markup_read)
+            + " text_read_back=" + str((markup_checks.get("text_read_back") or {}).get("passed"))
+            + " unverified=" + str(markup_unverified) + " уровень=" + str(level(env_markup))
+            + " код=" + str(code_markup))
 
     # The same text inside a FILE NAME that must be refused: the message quotes it as data, and the
     # refusal itself is the ordinary path refusal - the text changes nothing about the outcome.
@@ -40504,18 +40611,18 @@ def dirty_close_checks(client, rep, workdir, host, config):
             foreign_details = (foreign_env.get("error") or {}).get("details") or {}
             rev_b_after = context(doc_b)[1]
             vol_b_after = measured((refs_b or (None, None))[1]).get("volume_mm3")
-            area_named = any(key in foreign_details for key in
-                             ("field", "face_ref", "face_refs", "face_document_id", "kind",
-                              "reference_document_id", "requested_document_id"))
             rep.add("DL.17",
                     "ТЗ §1.7 п.7: ссылка на грань документа A отвергнута в команде к документу B; код "
-                    "назван, область ссылки названа (details.face_document_id), объект и ревизия B не "
-                    "изменились",
-                    "PASS" if (foreign_code == "INVALID_ARGUMENT" and area_named
+                    "назван, область ссылки названа ЗНАЧЕНИЕМ (details.face_document_id = A, "
+                    "details.kind = face), объект и ревизия B не изменились",
+                    "PASS" if (foreign_code == "INVALID_ARGUMENT"
+                               and foreign_details.get("face_document_id") == doc_a
+                               and foreign_details.get("kind") == "face"
                                and rev_b_after == rev_b_before
                                and vol_b_after is not None and vol_b_before is not None
                                and abs(vol_b_after - vol_b_before) <= 0.01) else "FAIL",
                     "код=" + str(foreign_code) + " область=" + str(foreign_details.get("face_document_id"))
+                    + " ждали=" + str(doc_a) + " kind=" + str(foreign_details.get("kind"))
                     + " details=" + str(sorted(foreign_details))
                     + " ревизия=" + str(rev_b_before) + "->" + str(rev_b_after)
                     + " объём=" + str(vol_b_before) + "->" + str(vol_b_after))
@@ -40530,8 +40637,9 @@ def dirty_close_checks(client, rep, workdir, host, config):
             vol_b3 = measured((refs_b or (None, None))[1]).get("volume_mm3")
             rep.add("DL.18",
                     "ТЗ §1.7 п.7: грань, поданная там, где нужно ребро, отвергнута с кодом, а вид "
-                    "ссылки назван (details.kind); объект и ревизия не изменились",
-                    "PASS" if (wrong_code == "INVALID_ARGUMENT" and "kind" in wrong_details
+                    "ссылки назван ЗНАЧЕНИЕМ (details.kind = face); объект и ревизия не изменились",
+                    "PASS" if (wrong_code == "INVALID_ARGUMENT"
+                               and wrong_details.get("kind") == "face"
                                and rev_b3 == rev_b2
                                and vol_b3 is not None and vol_b_before is not None
                                and abs(vol_b3 - vol_b_before) <= 0.01) else "FAIL",

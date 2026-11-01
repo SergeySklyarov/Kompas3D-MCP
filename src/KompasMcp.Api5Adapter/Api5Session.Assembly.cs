@@ -455,6 +455,14 @@ public partial class Api5Session
         RequireRevision(document, command.ExpectedRevision);
         RequireSourceFile(command.SourcePath);
 
+        // INVARIANT: the frame is refused BEFORE AddFromFile, the point of no return of this route.
+        // MEASURED: validating it where the matrix is built left the component inserted, the revision
+        // unmoved and the answer a plain INVALID_ARGUMENT, so a partial effect read as "no change".
+        if (command.Transform is not null)
+        {
+            TransformMath.FromDto(command.Transform);
+        }
+
         // Snapshot BEFORE insertion: both the component count and their sources. With these, the
         // inserted instance is confirmed as the SINGLE new one, not as "the last in the list".
         var beforeParts = ComponentParts5(document);

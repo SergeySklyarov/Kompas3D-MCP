@@ -1413,10 +1413,12 @@ public partial class Api5Session
                 $"Грань '{faceRef}' принадлежит документу {stored.DocumentId}, а оболочка правится в "
                 + $"{document.Id}. Грани из чужой детали не переносятся.",
                 RetryPolicy.Never,
+                // INVARIANT: the refusal names the area BY VALUE - whose document and which kind.
                 details: new Dictionary<string, object?>
                 {
                     ["face_document_id"] = stored.DocumentId,
                     ["shell_document_id"] = document.Id,
+                    ["kind"] = "face",
                 });
         }
 

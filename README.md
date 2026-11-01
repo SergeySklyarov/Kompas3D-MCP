@@ -18,10 +18,11 @@
 
 > *English summary.* An MCP server that lets an AI agent drive a real, licensed KOMPAS-3D v24 (x64):
 > parts, sketches, features, assemblies and mates, a bill of materials with CSV/JSON export, component
-> properties and native specification reading, drawings, sheet metal, STEP/DXF export. Every mutating
-> call reports a measured verification level, is journaled for safe retries and is confined to
-> configured disk roots. No arbitrary code execution. Dual-licensed MIT / Apache-2.0. Documentation is
-> in Russian.
+> properties and native specification reading, drawings, sheet metal, direct face editing (move,
+> delete, restore), stiffening ribs, counterbored, countersunk, spherical-bottom and conical holes,
+> STEP/DXF/IGES export. Every mutating call reports a measured verification level, is journaled for
+> safe retries and is confined to configured disk roots. No arbitrary code execution. Dual-licensed
+> MIT / Apache-2.0. Documentation is in Russian.
 
 ## Быстрая установка
 
@@ -75,6 +76,11 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
   фаски, отверстия, резьба, уклоны, булевы операции, массивы.
 - **Правка, а не пересоздание.** Параметры существующего признака читаются и меняются на месте;
   признак можно подавить, восстановить или удалить.
+- **Прямая правка граней.** Грани тела сдвигаются вдоль своей нормали, удаляются в двух режимах и
+  восстанавливаются поверхностью по грани, без правки дерева построения.
+- **Рёбра жёсткости и отверстия.** Ребро по разомкнутой цепочке эскиза с односторонней или
+  симметричной толщиной и уклоном; отверстия с цековкой, зенковкой, сферическим дном, конусом
+  насквозь и выточкой с зенковкой.
 - **Сборки.** Вставка, замена и размещение компонентов, сопряжения, разнесённый вид, сечения,
   проверка пересечений и зазоров.
 - **Состав изделия (BOM) и спецификация.** Сводная ведомость сборки с деревом и количествами, её
@@ -85,7 +91,7 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
 - **Переменные и материал.** Внешние переменные и привязка к ним параметров; материал, плотность и
   масса.
 - **Измерение и обмен.** Габарит, объём, центр масс, грани и рёбра; экспорт и импорт STEP, экспорт
-  STL, снимок модели картинкой прямо в чат.
+  IGES и STL, выгрузка контура плоской детали в DXF, снимок модели картинкой прямо в чат.
 
 ![Дашборд прогресса профиля mechanical-core-v1, снимок 23.09.2026](docs/assets/dashboard-20260923.png)
 
@@ -94,6 +100,10 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
 отстают; действующие числа - в [состоянии и планах](docs/project-status.md).*
 
 Чего пока нет и что в работе: [состояние и планы](docs/project-status.md).
+
+Текущий выпуск - **0.13.0**: 129 операций, 14 прямых инструментов, 21 профиль приёмки, режимов
+**134/134** и зависимостей **82/82**, открытых нет. Заметки выпуска:
+[distribution/v0.13.0.md](docs/distribution/v0.13.0.md).
 
 ## Почему ему можно доверять
 

@@ -2082,7 +2082,7 @@ def instrument_self_test():
     # Diagnostic package (order DIAG_PACKAGE, remark 1). The check must find a leak behind JSON
     # escaping, behind `\u` escaping, behind `/`, inside a nested JSON string, in a key, in another
     # case and in a member name - and must call an unparsable member a problem, not a skip.
-    needle = "C:\\Projects\\X"
+    needle = "D:\\work\\X"
     mark = "KANAR7"
     escaped = {
         "operations.jsonl": json.dumps({"result_json": json.dumps({"path": needle})}),
@@ -58941,7 +58941,7 @@ _DIAG_SEPARATORS = re.compile(r"[\\/]+")
 def diag_normalize(text):
     """Comparison form of a package value or a needle: lower case, one separator for every run.
 
-    MEASURED: JSON writes a Windows path as `C:\\\\Projects\\\\X`, so a raw-text search for the plain
+    MEASURED: JSON writes a Windows path as `D:\\\\work\\\\X`, so a raw-text search for the plain
     needle finds nothing and a path leak goes unnoticed. Collapsing separator runs makes the escaped,
     the plain and the `/` form equal. History: docs/decisions/diagnostics.md#canary-check
     """

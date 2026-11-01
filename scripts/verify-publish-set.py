@@ -446,6 +446,51 @@ def emit_schemas(host: Path, root: Path, out_dir: Path) -> str | None:
     return None
 
 
+CATALOG_REL = "src/KompasMcp.Host/Catalog/ToolCatalog.cs"
+SESSION_REL = "src/KompasMcp.Host/HostSession.cs"
+REGISTRATION_LITERAL_RX = re.compile(r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', re.MULTILINE)
+REGISTRATION_CONST_RX = re.compile(
+    r'^\s{12}([A-Za-z_]\w*)\(HostSession\.([A-Za-z_]\w*)\s*,', re.MULTILINE
+)
+TOOL_CONST_RX = re.compile(
+    r'^\s*public const string ([A-Za-z_]\w*) = "(kompas_[a-z_]+)";', re.MULTILINE
+)
+
+
+def registry_names(catalog_text: str, session_text: str | None) -> tuple[set[str], set[str], list[str]]:
+    """Tool names the Host catalog registers, the factory forms seen, and NAMED refusals.
+
+    INVARIANT: a registration is recognized by its POSITION and shape, never by a list of factory
+    names, and the name may be a literal or a `HostSession` constant resolved inside the same set.
+    MEASURED: a literal-only pattern silently dropped three tools registered through constants, and
+    their schemas were reported as unregistered while the built Host listed them.
+    LIMIT: a constant defined outside `HostSession.cs` is a refusal naming it, not a silent skip.
+    History: docs/decisions/releases.md#schemas-content
+    """
+    names: set[str] = set()
+    forms: set[str] = set()
+    issues: list[str] = []
+    for factory, name in REGISTRATION_LITERAL_RX.findall(catalog_text):
+        forms.add(f"{factory}(")
+        names.add(name)
+    constants = dict(TOOL_CONST_RX.findall(session_text)) if session_text is not None else {}
+    for factory, constant in REGISTRATION_CONST_RX.findall(catalog_text):
+        forms.add(f"{factory}(HostSession.…)")
+        if session_text is None:
+            issues.append(
+                f"{CATALOG_REL}  ← регистрация `{factory}(HostSession.{constant},`: "
+                f"{SESSION_REL} нет в наборе — имя инструмента не разрешить, и это НЕ пропуск"
+            )
+        elif constant not in constants:
+            issues.append(
+                f"{CATALOG_REL}  ← константа `HostSession.{constant}` не разрешается: в {SESSION_REL} "
+                f"нет `public const string {constant} = \"kompas_…\"`"
+            )
+        else:
+            names.add(constants[constant])
+    return names, forms, issues
+
+
 def self_test() -> int:
     """Both sides of every rule added here: a good input passes, a broken one is NAMED.
 
@@ -487,6 +532,23 @@ def self_test() -> int:
     if not any("kompas_extra.json" in p and "Host выдаёт" in p for p in problems):
         failures.append(f"недостающий файл набора не назван: {problems}")
 
+    catalog = (
+        '            ReadOnly("kompas_literal", "описание", Sch.Props(), "read.literal"),\n'
+        '            Control(HostSession.OperationStatusTool, "Состояние операции", "…",\n'
+        '                    Sch.Props(), HostSession.OperationStatusCommand),\n'
+    )
+    session = '    public const string OperationStatusTool = "kompas_operation_status";\n'
+    names, _, issues = registry_names(catalog, session)
+    if names != {"kompas_literal", "kompas_operation_status"} or issues:
+        failures.append(f"реестр: литерал и константа не собраны: {sorted(names)}, {issues}")
+    names, _, issues = registry_names(catalog, None)
+    if names != {"kompas_literal"} or not any("OperationStatusTool" in i for i in issues):
+        failures.append(f"реестр: регистрация через константу без HostSession.cs не названа: {issues}")
+    names, _, issues = registry_names(
+        catalog, '    public const string OtherTool = "kompas_other";\n')
+    if names != {"kompas_literal"} or not any("OperationStatusTool" in i for i in issues):
+        failures.append(f"реестр: неразрешённая константа не названа: {issues}")
+
     builtin_rx = personal_account_rx("Administrator")
     if builtin_rx is not None:
         failures.append("встроенное имя Administrator снова ищется как личный идентификатор, и "
@@ -503,7 +565,8 @@ def self_test() -> int:
             print("  -", line)
         return 1
     print("самопроверка пройдена: кириллица в поток cp1252 печатается; схемы — совпадение чисто, "
-          "изменённое описание, лишний и недостающий файл названы; 5f — встроенное имя пропущено, "
+          "изменённое описание, лишний и недостающий файл названы; реестр — литерал и константа "
+          "собраны, неразрешённая константа названа; 5f — встроенное имя пропущено, "
           "личное и кириллическая форма найдены")
     return 0
 
@@ -1112,42 +1175,35 @@ def main() -> int:
            "молча переписывать файл, недостающий RID заставляет CI=true restore отказать "
            "(NU1004) — ни сборка, ни тесты этого не показывают")
 
-    # 13. Схемы инструментов против РЕЕСТРА в исходнике Host.
-    #     Класс заведён по измеренному случаю, а не по предположению: 23.09.2026 `schemas/`
-    #     в индексе содержал 44 файла, тогда как `ToolCatalog.cs` регистрировал 50 — не
-    #     хватало ровно шести (опорная геометрия и плоскость эскиза). Ни сборка, ни тесты,
-    #     ни приёмка этого не показывают: `schemas/` — выгрузка, а Host проверяет аргументы
-    #     по схемам, ВСТРОЕННЫМ в ToolCatalog, и потому расходится с папкой молча. Читатель
-    #     публичного репозитория берёт контракт из `schemas/` и получил бы контракт на 44
-    #     инструмента при работающих 50.
-    #     Имена берутся ПО ПРИЗНАКУ ФОРМЫ регистрации, а НЕ по перечню фабрик. Прежний образец
-    #     называл две фабрики (`Mutation(` / `ReadOnly(`) и на третьей (`Control(`, заведённой
-    #     04.10.2026 для инструментов управления сеансом) объявил три схемы «без регистрации» —
-    #     то есть перечень имён устарел ровно так, как и должен: молча он этого не сделал, и это
-    #     его заслуга. Но лечится это признаком, а не третьим именем в списке: здесь берётся
-    #     ЛЮБАЯ фабрика в позиции регистрации (строка списка `tools`, отступ 12, первый аргумент —
-    #     литерал `kompas_…`). Слепоты это не создаёт: регистрация, не попавшая под образец,
-    #     немедленно всплывает как «схема без регистрации в реестре», то есть отказом.
-    #     Найденные формы называются в отчёте — чтобы четвёртая форма была ВИДНА, а не выведена.
-    catalog_rel = "src/KompasMcp.Host/Catalog/ToolCatalog.cs"
+    # 13. Tool schemas against the REGISTRY in the Host source.
+    # DOC: `schemas/` is an export, not an input - the Host validates arguments against the schemas
+    # embedded in the catalog, so a folder that disagrees with the registry stays invisible to build,
+    # tests and acceptance, while the public reader takes the contract from the folder.
+    # INVARIANT: names are recognized by the SHAPE of a registration in the `tools` list position
+    # (indent 12), never by a list of factory names - a third factory already broke a name list.
+    # LIMIT: the name is a literal or a `HostSession` constant; an unresolvable constant is a refusal,
+    # so a registration cannot fall out of the comparison silently.
+    # History: docs/decisions/releases.md#schemas-content
     schema_issues: list[str] = []
-    catalog_text = content(catalog_rel)
+    catalog_text = content(CATALOG_REL)
+    registered: set[str] = set()
+    registration_forms: set[str] = set()
     if catalog_text is None:
         schema_issues.append(
-            f"{catalog_rel}  ← реестра инструментов нет в наборе: сравнивать схемы не с чем"
+            f"{CATALOG_REL}  ← реестра инструментов нет в наборе: сравнивать схемы не с чем"
         )
     else:
-        registrations = re.findall(
-            r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', catalog_text, re.MULTILINE
+        registered, registration_forms, registry_issues = registry_names(
+            catalog_text, content(SESSION_REL)
         )
-        registered = {name for _, name in registrations}
-        registration_forms = sorted({factory for factory, _ in registrations})
+        schema_issues += registry_issues
         on_disk = {f[len("schemas/"):-len(".json")] for f in files
                    if f.startswith("schemas/") and f.endswith(".json")}
         if not registered:
             schema_issues.append(
-                f"{catalog_rel}  ← не найдено ни одной регистрации инструмента: образец разошёлся "
-                f"с исходником (ожидалась фабрика в позиции регистрации с литералом `kompas_…`)"
+                f"{CATALOG_REL}  ← не найдено ни одной регистрации инструмента: образец разошёлся "
+                f"с исходником (ожидалась фабрика в позиции регистрации с литералом `kompas_…` "
+                f"или с константой `HostSession.<имя>`)"
             )
         missing = sorted(registered - on_disk)
         extra = sorted(on_disk - registered)
@@ -1164,9 +1220,9 @@ def main() -> int:
                 + " — инструмент удалён или переименован, а выгрузка осталась"
             )
     fail += schema_issues
-    if catalog_text is not None and registered:
+    if registered:
         print(f"         · форм регистрации найдено: {len(registration_forms)} — "
-              + ", ".join(f"`{form}(`" for form in registration_forms))
+              + ", ".join(f"`{form}`" for form in sorted(registration_forms)))
     report("13. Схемы инструментов против реестра Host", "FAIL", schema_issues,
            "`schemas/` — ВЫГРУЗКА, а не вход: Host проверяет аргументы по схемам, встроенным "
            "в ToolCatalog, поэтому расхождение папки с реестром ни сборка, ни тесты, ни приёмка "
@@ -1328,15 +1384,14 @@ def main() -> int:
     #     то, что читатель принимает за контракт.
     listing_markers = ("<!-- BEGIN TOOL LISTING -->", "<!-- END TOOL LISTING -->")
     listing_issues: list[str] = []
-    registry_text = content(catalog_rel) if catalog_rel else None
+    registry_text = content(CATALOG_REL)
     if registry_text is None:
         listing_issues.append(
-            f"{catalog_rel}  ← реестра нет в наборе: список инструментов сверять не с чем"
+            f"{CATALOG_REL}  ← реестра нет в наборе: список инструментов сверять не с чем"
         )
     else:
-        registry = {name for _, name in re.findall(
-            r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', registry_text, re.MULTILINE
-        )}
+        registry, _, registry_issues = registry_names(registry_text, content(SESSION_REL))
+        listing_issues += registry_issues
         listing_docs = [rel for rel in files if rel == "docs/TOOLS.md"]
         if not listing_docs:
             listing_issues.append(

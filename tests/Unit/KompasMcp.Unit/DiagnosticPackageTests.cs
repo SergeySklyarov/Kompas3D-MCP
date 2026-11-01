@@ -91,7 +91,7 @@ public class DiagnosticPackageTests : IDisposable
             ["tool"] = "kompas_extrude",
             ["outcome"] = "failed",
             ["started_utc"] = "2026-10-31T05:00:00.0000000+00:00",
-            ["error"] = new JsonObject { ["code"] = "GEOMETRY_FAILED", ["message"] = @"C:\Users\ivanov\model.m3d", ["hresult"] = -2147221504 },
+            ["error"] = new JsonObject { ["code"] = "GEOMETRY_FAILED", ["message"] = @"D:\work\ivanov\model.m3d", ["hresult"] = -2147221504 },
         }.ToJsonString();
         var path = WriteJournal(line);
 
@@ -147,7 +147,7 @@ public class DiagnosticPackageTests : IDisposable
     [Fact]
     public void PathLabel_DiffersBetweenPackages_AndMatchesInsideOne()
     {
-        var path = @"C:\Projects\KompasMCP\scratch\model.m3d";
+        var path = @"D:\work\KompasMCP\scratch\model.m3d";
         var first = DiagnosticPackage.MaskPath(path, new byte[16]);
         var samePackage = DiagnosticPackage.MaskPath(path.ToUpperInvariant().Replace('/', '\\'), new byte[16]);
         var otherSalt = new byte[16];
@@ -176,7 +176,7 @@ public class DiagnosticPackageTests : IDisposable
             {
                 ["ts_utc"] = "2026-10-31T05:00:00.0000000+00:00",
                 ["level"] = "info",
-                ["message"] = @"открыт C:\Users\ivanov\model.m3d",
+                ["message"] = @"открыт D:\work\ivanov\model.m3d",
                 ["category"] = "KompasMcp.Host.HostSession",
             }.ToJsonString() + "\n");
 

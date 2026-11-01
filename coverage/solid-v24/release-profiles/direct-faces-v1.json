@@ -2,7 +2,7 @@
   "meta": {
     "profile_id": "direct-faces-v1",
     "title": "Прямое моделирование v24: грани тела без дерева построения",
-    "revision": "1.1",
+    "revision": "1.2",
     "revision_history": [
       {
         "revision": "1.0",
@@ -13,6 +13,11 @@
         "revision": "1.1",
         "date": "28.10.2026",
         "change": "наряд DIRECT_FACES_DELETE_RESTORE добавил два режима: удаление граней в двух режимах (open_shell - проверен, keep_body - маршрут документирован, но ядро отказывает на бруске, поэтому режим не закрыт) и восстановление поверхности по грани (создаёт отдельный объект, объём не возвращает)"
+      },
+      {
+        "revision": "1.2",
+        "date": "01.11.2026",
+        "change": "наряд PROFILE_SCOPE_SYNC_0_13 привёл current_level к матрице: все четыре режима закрыты и стоят mcp_verified; режим keep_body закрыт замером на плите со сквозным отверстием (объём 22429.2037 -> 24000, граней 7 -> 6) и на грани скругления R3 (заплатка, прирост (R²-πR²/4)×L), отказ на бруске остаётся строкой E5.DEL.keep_body_refused; зависимости dep.api7.surface_container и dep.refs.faces_body подняты по строкам E5.DEP.*"
       }
     ],
     "target_build": "24.0.0.2799",
@@ -27,7 +32,7 @@
       "family": "SM-24",
       "queue": "E5",
       "priority": "practical_required",
-      "current_level": "not_started",
+      "current_level": "mcp_verified",
       "required_actions": [
         "discover",
         "edit",
@@ -44,7 +49,7 @@
       "family": "SM-24",
       "queue": "E5",
       "priority": "practical_required",
-      "current_level": "not_started",
+      "current_level": "mcp_verified",
       "required_actions": [
         "discover",
         "edit",
@@ -61,7 +66,7 @@
       "family": "SM-24",
       "queue": "E5",
       "priority": "practical_required",
-      "current_level": "not_started",
+      "current_level": "mcp_verified",
       "required_actions": [
         "discover",
         "edit",
@@ -70,7 +75,7 @@
         "negative_tests",
         "geometry_validation"
       ],
-      "gap": "Маршрут документирован (IFaceRemover.SaveBody = true), но на бруске 40x30x20 все шесть граней дают Update() = false, то есть целостность тела из снятой грани не восстанавливается. Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента, порядок свойств и второй Update, тип грани на исход не влияют; контроль с тем же одиночным объектом и SaveBody = false срабатывает. Инструмент выполняет маршрут и отвечает отказом GEOMETRY_FAILED с details.mode, а не успехом. Режим не закрыт: успешный исход нигде не обещан, вылечиваемая геометрия не измерялась (LIMIT)."
+      "gap": "Маршрут документирован: ISurfaceContainer.FaceRemovers.Add() -> IFaceRemover.Faces + SaveBody = true -> IModelObject.Update(). MEASURED: целостность тела восстанавливается не на всякой геометрии - на бруске 40x30x20 все шесть граней дают Update() = false (снятую грань нечем заместить), а на плите со сквозным отверстием Ø10 цилиндрическая грань снимается и отверстие заполняется (22429.2037 -> 24000 мм3, граней 7 -> 6), на бруске со скруглением R3 снятая грань закрывается плоской заплаткой между точками касания (прирост (R² - πR²/4) × длину ребра = 77.2567 мм3, а не 309.0266 у острого угла, граней 10 -> 9). Перестроение и save->close->reopen вылеченное тело сохраняют. Отказ на бруске назван GEOMETRY_FAILED с details.mode и остаётся строкой E5.DEL.keep_body_refused."
     },
     {
       "ref": "SM-24.restore_faces.by_face",
@@ -78,7 +83,7 @@
       "family": "SM-24",
       "queue": "E5",
       "priority": "practical_required",
-      "current_level": "not_started",
+      "current_level": "mcp_verified",
       "required_actions": [
         "discover",
         "create",
@@ -105,7 +110,7 @@
         "discover",
         "read"
       ],
-      "gap": "Справка: «Данный интерфейс можно получить у компонента IPart7 посредством вызова метода IUnknown::QueryInterface». В .NET работает приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную QueryInterface не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом."
+      "gap": "Справка: «Данный интерфейс можно получить у компонента IPart7 посредством вызова метода IUnknown::QueryInterface». В .NET работает приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную QueryInterface не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом. Проверяется строками E5.DEP.surface_container и E5.DEP.faces_body: удаление и восстановление граней получают ISurfaceContainer приведением от IPart7 и читают его коллекции, грани адресуются ссылками kompas_read_topology, грань чужого документа отвергается (E5.NEG.foreign_face)."
     },
     {
       "id": "dep.refs.faces_body",
@@ -120,13 +125,13 @@
         "read",
         "negative_tests"
       ],
-      "gap": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь читаются CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани (тело) в ссылке не хранится, поэтому принадлежность проверяется по COM-указателю: грань чужого тела отвергается с details.body_index."
+      "gap": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь читаются CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани (тело) в ссылке не хранится, поэтому принадлежность проверяется по COM-указателю: грань чужого тела отвергается с details.body_index. Проверяется строками E5.DEP.surface_container и E5.DEP.faces_body: удаление и восстановление граней получают ISurfaceContainer приведением от IPart7 и читают его коллекции, грани адресуются ссылками kompas_read_topology, грань чужого документа отвергается (E5.NEG.foreign_face)."
     }
   ],
   "explicitly_out_of_scope": [
     "Касательные грани (SM-24.move_faces.tangent_group) - наряд DIRECT_FACES_TANGENT. Параметр tangent_group объявлен в контракте, но true отвергается именованным отказом: успех за невыполненную работу не выдаётся.",
     "Тело без истории построения (импорт STEP) - наряд DIRECT_FACES_NO_HISTORY. Маршрут от дерева построения не зависит (измерено на импортированном теле), но приёмка на теле без истории в этот профиль не входит; туда же отнесён save_reopen всех четырёх режимов.",
-    "Успешный исход режима keep_body: документированный маршрут есть, но ядро отказывает на измеренной геометрии. Режим остаётся в профиле с названным отказом, а не закрывается подбором недокументированных членов.",
+    "Успешный исход keep_body на геометрии БЕЗ соседей, способных закрыть снятую грань: на бруске все шесть граней дают Update() = false, и это названный отказ, а не закрытие режима. Замеры сделаны на одной геометрии каждого вида (плита с отверстием Ø10, скругление R3 на ребре 40 мм); другие радиусы, толщины и длины рёбер не измерялись (LIMIT).",
     "Изменение положения грани отдельным признаком (SM-24.change_face_position): документированного программного маршрута нет - страницы нет, а номер типа o3d_FaceResizer = 660 маршрутом не является. Решение о снятии требования - за заказчиком.",
     "Замена граней (SM-24.replace_faces.offset) и изменение размера грани (SM-24.resize_face): документированного маршрута нет по той же причине.",
     "Изменение скругления на теле без истории (SM-24.change_fillet): прямое изменение не документировано; для тела с историей радиус правится признаком дерева через kompas_update_feature.",

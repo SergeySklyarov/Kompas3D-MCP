@@ -5225,8 +5225,8 @@
         "edit": "verified",
         "rebuild": "verified",
         "save_reopen": "verified",
-        "suppress_restore": "not_started",
-        "delete_dependencies": "not_started",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
         "negative_tests": "verified",
         "geometry_validation": "verified"
       },
@@ -5249,7 +5249,9 @@
         "R1-28.create.body_target",
         "R1-18.create.reverse_side1",
         "R1-19.negative.reverse_side0",
-        "R1-29.negative.side_orthogonal"
+        "R1-29.negative.side_orthogonal",
+        "R1-30.suppress_restore.side0",
+        "R1-31.delete_dependencies.side0"
       ],
       "evidence": [
         "coverage/solid-v24/catalog.json#SM-14.rib",
@@ -5283,22 +5285,28 @@
       "adapter_route": "тот же маршрут API5; угол - ksRibDefinition.angle в ГРАДУСАХ, направляющий сегмент - ksRibDefinition.index (ksribdefinition_index.html: «0 - первое ребро эскиза»). Угол читается обратно тем же признаком. ИЗМЕРЕНО: уклон ДОБАВЛЯЕТ материал (2400 / 2663.389 / 3059.881 мм³ при 0° / 2° / 5°), поэтому ожидание по площади к нему неприменимо, и инструмент называет это в unverified_aspects вместо ложного совпадения.",
       "actions": {
         "discover": "verified",
-        "create": "implemented",
-        "read": "implemented",
+        "create": "verified",
+        "read": "verified",
         "edit": "verified",
-        "rebuild": "not_started",
+        "rebuild": "verified",
         "save_reopen": "verified",
-        "suppress_restore": "not_started",
-        "delete_dependencies": "not_started",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
         "negative_tests": "verified",
-        "geometry_validation": "not_started"
+        "geometry_validation": "verified"
       },
       "tests": [
         "R1-02.discover.fields",
         "R1-11.read.parameters",
         "R1-14.negative.side_range",
         "R1-23.edit.angle",
-        "R1-27.save_reopen"
+        "R1-27.save_reopen",
+        "R1-32.create.face_draft",
+        "R1-33.read.face_draft",
+        "R1-34.geometry.face_draft",
+        "R1-35.rebuild.face_draft",
+        "R1-36.suppress_restore.face_draft",
+        "R1-37.delete_dependencies.face_draft"
       ],
       "evidence": [
         "docs/decisions/ribs.md#draft",
@@ -5326,22 +5334,27 @@
       "parameters_schema": "schemas/kompas_rib.json",
       "adapter_route": "тот же маршрут API5; режим - SetThinParam(2, t, t) (dtBoth, direction_type.html) при kompas_rib.symmetric = true и SetThinParam(0, t, 0) при false. Ожидание проверки удваивается (площадь цепочки × толщину × 2), режим подтверждается чтением обратно: thin_type = both И обе толщины равны запрошенной. ИЗМЕРЕНО: 6-мм ребро даёт 4800 мм³ против 2400 у одностороннего при том же габарите, отношение приростов 2,000 с допуском 1 %; правка symmetric на построенном ребре добавляет материал (R1-24). Неприменённый ядром режим - именованный отказ GEOMETRY_FAILED: SetThinParam отвечает до появления геометрии, и единственный свидетель - чтение.",
       "actions": {
-        "discover": "implemented",
+        "discover": "verified",
         "create": "verified",
         "read": "verified",
         "edit": "verified",
-        "rebuild": "not_started",
+        "rebuild": "verified",
         "save_reopen": "verified",
-        "suppress_restore": "not_started",
-        "delete_dependencies": "not_started",
-        "negative_tests": "not_started",
+        "suppress_restore": "verified",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
         "geometry_validation": "verified"
       },
       "tests": [
         "R1-20.create.symmetric",
         "R1-21.geometry.symmetric_ratio",
         "R1-24.edit.symmetric",
-        "R1-27.save_reopen"
+        "R1-27.save_reopen",
+        "R1-38.discover.symmetric",
+        "R1-39.negative.symmetric_thickness",
+        "R1-40.rebuild.symmetric",
+        "R1-41.suppress_restore.symmetric",
+        "R1-42.delete_dependencies.symmetric"
       ],
       "evidence": [
         "docs/decisions/ribs.md#thickness",
@@ -16518,16 +16531,21 @@
         "discover": "verified",
         "create": "not_applicable",
         "read": "verified",
-        "edit": "not_started",
-        "rebuild": "not_started",
-        "save_reopen": "not_started",
+        "edit": "verified",
+        "rebuild": "verified",
+        "save_reopen": "verified",
         "suppress_restore": "not_applicable",
         "delete_dependencies": "not_applicable",
         "negative_tests": "verified",
-        "geometry_validation": "not_started"
+        "geometry_validation": "verified"
       },
       "tests": [
-        "E5.DEL.keep_body_refused"
+        "E5.DEL.keep_body_refused",
+        "E5.KEEP.hole_fixture",
+        "E5.KEEP.hole",
+        "E5.KEEP.rebuild",
+        "E5.KEEP.save_reopen",
+        "E5.KEEP.fillet"
       ],
       "evidence": [
         "scripts/mcp-smoke.py",
@@ -16535,10 +16553,10 @@
         "scratch/probe-e5-savebody.json"
       ],
       "limitations": [
-        "Режим НЕ закрыт: MEASURED на бруске 40x30x20 - все шесть граней дают Update() = false при SaveBody = true, то есть целостность тела из снятой грани не восстанавливается. Инструмент выполняет документированный маршрут и отвечает отказом GEOMETRY_FAILED с details.mode, а не успехом.",
-        "Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента (одиночный VT_DISPATCH против массива), порядок свойств и второй Update, тип грани - на исход не влияют; контроль с тем же одиночным объектом и SaveBody=false срабатывает (6 -> 5 граней, объём 0).",
-        "Расхождение с записью E5_RESEARCH: там Update() возвращал true при неизменной модели, здесь - false. Запись исследования больше не воспроизводится, и это названо, а не сглажено.",
-        "LIMIT: геометрия, из которой целостность восстанавливается, не измерялась, поэтому успех режима нигде не обещан."
+        "MEASURED на бруске 40x30x20: все шесть граней дают Update() = false при SaveBody = true - снятая грань бруска не имеет соседей, способных её заместить, поэтому отказ на бруске остаётся строкой E5.DEL.keep_body_refused.",
+        "MEASURED на плите со сквозным отверстием Ø10: цилиндрическая грань снимается, объём 22429.2037 -> 24000 (отверстие заполнено), граней 7 -> 6; перестроение и save->close->reopen сохраняют 24000 и 6 граней (E5.KEEP.hole, E5.KEEP.rebuild, E5.KEEP.save_reopen).",
+        "MEASURED на бруске со скруглением R3: снятая грань скругления закрывается ПЛОСКОЙ заплаткой между точками касания, а не острым углом - прирост равен (R² - πR²/4) × длину ребра: 77.2567 мм3 против 309.0266 у острого угла, граней 10 -> 9 (E5.KEEP.fillet). Ожидание считается по заплатке.",
+        "Замеры сделаны на одной геометрии каждого вида и одном размере; на других радиусах, толщинах и длинах рёбер форма заплатки не измерялась."
       ],
       "profile": "direct-faces-v1",
       "priority": "practical_required",
@@ -16621,8 +16639,8 @@
       "parameters_schema": null,
       "adapter_route": "ISurfaceContainer получается приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную IUnknown::QueryInterface в .NET не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом.",
       "actions": {
-        "discover": "implemented",
-        "read": "implemented",
+        "discover": "verified",
+        "read": "verified",
         "negative_tests": "implemented",
         "create": "not_applicable",
         "edit": "not_applicable",
@@ -16632,7 +16650,9 @@
         "delete_dependencies": "not_applicable",
         "geometry_validation": "not_applicable"
       },
-      "tests": [],
+      "tests": [
+        "E5.DEP.surface_container"
+      ],
       "evidence": [
         "docs/decisions/direct-faces.md"
       ],
@@ -16666,9 +16686,9 @@
       "parameters_schema": null,
       "adapter_route": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь - CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани в ссылке не хранится: принадлежность телу проверяется по COM-указателю, грань чужого тела отвергается с details.body_index.",
       "actions": {
-        "discover": "implemented",
-        "read": "implemented",
-        "negative_tests": "implemented",
+        "discover": "verified",
+        "read": "verified",
+        "negative_tests": "verified",
         "create": "not_applicable",
         "edit": "not_applicable",
         "rebuild": "not_applicable",
@@ -16677,7 +16697,10 @@
         "delete_dependencies": "not_applicable",
         "geometry_validation": "not_applicable"
       },
-      "tests": [],
+      "tests": [
+        "E5.DEP.faces_body",
+        "E5.NEG.foreign_face"
+      ],
       "evidence": [
         "docs/decisions/direct-faces.md"
       ],

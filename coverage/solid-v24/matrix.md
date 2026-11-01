@@ -51,17 +51,14 @@
 ### профиль direct-faces-v1 — Прямое моделирование v24: грани тела без дерева построения
 
 - **обязательных_режимов:** 4
-- **режимов_закрыто:** 3
+- **режимов_закрыто:** 4
 - **общих_зависимостей:** 2
-- **зависимостей_закрыто:** 0
-- **профиль_закрыт:** нет
-- **готовность_процента:** 50.0%
-- **по_очередям:** E5 3/4
-- **открытые_режимы:**
-  - `SM-24.delete_faces.keep_body`
-- **открытые_зависимости:**
-  - `dep.api7.surface_container`
-  - `dep.refs.faces_body`
+- **зависимостей_закрыто:** 2
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** E5 4/4
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
 
 ### профиль dismantle-minimal-v1 — Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента
 
@@ -174,16 +171,13 @@
 ### профиль rib-v1 — Рёбра жёсткости v24: ребро по разомкнутой цепочке эскиза
 
 - **обязательных_режимов:** 3
-- **режимов_закрыто:** 0
+- **режимов_закрыто:** 3
 - **общих_зависимостей:** 4
 - **зависимостей_закрыто:** 4
-- **профиль_закрыт:** нет
-- **готовность_процента:** 57.1%
-- **по_очередям:** E2 0/3
-- **открытые_режимы:**
-  - `SM-14.rib.mode_side_positions`
-  - `SM-14.rib.mode_face_draft`
-  - `SM-14.rib.mode_symmetric_thickness`
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** E2 3/3
+- **открытые_режимы:** []
 - **открытые_зависимости:** []
 
 ### профиль sections-minimal-v1 — Динамическое сечение модели v24: шаг смещённой плоскостью, режим отображения и доказательство снимком
@@ -273,16 +267,16 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 386
-- **строк_полностью_закрыто:** 195
+- **строк_полностью_закрыто:** 199
 - **строк_с_каким_либо_прогрессом:** 222
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
 - **операций:** 153
 - **режимов_и_вариантов:** 236
 - **применимых_действий:** 3108
-- **действий_verified:** 1333
-- **покрытие_действий:** 42.9%
-- **распределение_статусов:** {'not_started': 1765, 'verified': 1333, 'not_applicable': 752, 'implemented': 10}
+- **действий_verified:** 1355
+- **покрытие_действий:** 43.6%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1355, 'not_applicable': 752, 'implemented': 2}
 - **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 77, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -349,15 +343,15 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `SM-24.move_faces` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.MOVE.save_reopen, E5.STEP.fixture, E5.STEP.move, E5.STEP.refusal, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
 | `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.DEL.save_reopen, E5.STEP.delete_shell, E5.STEP.save_reopen, E5.NEG.delete_refusals, FaceRemovalEffectTests |
-| `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | — | — | — | н/п | н/п | OK | — | E5.DEL.keep_body_refused |
+| `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.keep_body_refused, E5.KEEP.hole_fixture, E5.KEEP.hole, E5.KEEP.rebuild, E5.KEEP.save_reopen, E5.KEEP.fillet |
 | `SM-24.restore_faces.by_face` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | E5.RES.by_face, E5.RES.shell_not_healed, E5.RES.verified, E5.RES.save_reopen, E5.NEG.restore_mode |
 
 ### Общие зависимости профиля `direct-faces-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
-| `dep.api7.surface_container` | нет | discover, read | — |
-| `dep.refs.faces_body` | нет | discover, read, negative_tests | — |
+| `dep.api7.surface_container` | да | discover, read | E5.DEP.surface_container |
+| `dep.refs.faces_body` | да | discover, read, negative_tests | E5.DEP.faces_body, E5.NEG.foreign_face |
 
 ## Метрика 1 — обязательные режимы профиля `dismantle-minimal-v1`
 
@@ -580,9 +574,9 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0, R1-29.negative.side_orthogonal |
-| `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | код | код | OK | — | OK | — | — | OK | — | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen |
-| `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | код | OK | OK | OK | — | OK | — | — | — | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen |
+| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0, R1-29.negative.side_orthogonal, R1-30.suppress_restore.side0, R1-31.delete_dependencies.side0 |
+| `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen, R1-32.create.face_draft, R1-33.read.face_draft, R1-34.geometry.face_draft, R1-35.rebuild.face_draft, R1-36.suppress_restore.face_draft, R1-37.delete_dependencies.face_draft |
+| `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen, R1-38.discover.symmetric, R1-39.negative.symmetric_thickness, R1-40.rebuild.symmetric, R1-41.suppress_restore.symmetric, R1-42.delete_dependencies.symmetric |
 
 ### Общие зависимости профиля `rib-v1`
 
@@ -826,9 +820,9 @@
 | `SM-13.shell.mode_direction` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.02.discover, B5O.02.create, B5O.02.read, B5O.02.edit, B5O.02.rebuild, B5O.02.save_reopen, B5O.02.suppress_restore, B5O.02.delete_dependencies, B5O.02.negative_tests, B5O.02.geometry_validation, B5.04, B5.05, B5.06 |
 | `SM-13.shell.mode_variable_thickness` | SM-13 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-13.shell.uniform_thickness` | SM-13 | practical_required | B5 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B5O.03.discover, B5O.03.create, B5O.03.read, B5O.03.edit, B5O.03.rebuild, B5O.03.save_reopen, B5O.03.suppress_restore, B5O.03.delete_dependencies, B5O.03.negative_tests, B5O.03.geometry_validation, B5.04, B5.05 |
-| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | — | — | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0, R1-29.negative.side_orthogonal |
-| `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | код | OK | OK | OK | — | OK | — | — | — | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen |
-| `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | код | код | OK | — | OK | — | — | OK | — | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen |
+| `SM-14.rib.mode_side_positions` | SM-14 | practical_required | E2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-01.discover.tool, R1-02.discover.fields, R1-03.create.side0, R1-05.geometry.volume, R1-06.geometry.contour_area, R1-07.geometry.checks, R1-08.geometry.level, R1-09.geometry.body_volume, R1-10.read.family, R1-12.rebuild.kept, R1-13.negative.closed_contour, R1-14.negative.side_range, R1-15.negative.thickness, R1-16.negative.body, R1-17.negative.outside_body, R1-28.create.body_target, R1-18.create.reverse_side1, R1-19.negative.reverse_side0, R1-29.negative.side_orthogonal, R1-30.suppress_restore.side0, R1-31.delete_dependencies.side0 |
+| `SM-14.rib.mode_symmetric_thickness` | SM-14 | practical_required | E2 | mcp_implemented | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-20.create.symmetric, R1-21.geometry.symmetric_ratio, R1-24.edit.symmetric, R1-27.save_reopen, R1-38.discover.symmetric, R1-39.negative.symmetric_thickness, R1-40.rebuild.symmetric, R1-41.suppress_restore.symmetric, R1-42.delete_dependencies.symmetric |
+| `SM-14.rib.mode_face_draft` | SM-14 | practical_required | E2 | mcp_implemented | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | R1-02.discover.fields, R1-11.read.parameters, R1-14.negative.side_range, R1-23.edit.angle, R1-27.save_reopen, R1-32.create.face_draft, R1-33.read.face_draft, R1-34.geometry.face_draft, R1-35.rebuild.face_draft, R1-36.suppress_restore.face_draft, R1-37.delete_dependencies.face_draft |
 | `SM-14.rib.mode_extend_to_face` | SM-14 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-16.cut_by_plane.mode_side_removed` | SM-16 | practical_required | B3 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B3.10, B3.11, B3.37, B3L.03, B3.23, B3.24, B3.24a, B3.24b, B3.24c, B3.24d, B3.24e, B3.24f, B3.24g, B3.24h, B3.24i, B3.24j, B3.24k, B3.58, B3M.08.discover, B3M.08.create, B3M.08.read, B3M.08.edit, B3M.08.rebuild, B3M.08.save_reopen, B3M.08.suppress_restore, B3M.08.delete_dependencies, B3M.08.negative_tests, B3M.08.geometry_validation |
 | `SM-16.cut_by_plane.mode_tangent_sets` | SM-16 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -916,7 +910,7 @@
 | `SM-23.mirror_part.from_file` | SM-23 | later | — | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-24.change_face_position` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-24.change_fillet` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
-| `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | — | — | — | н/п | н/п | OK | — | E5.DEL.keep_body_refused |
+| `SM-24.delete_faces.keep_body` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.keep_body_refused, E5.KEEP.hole_fixture, E5.KEEP.hole, E5.KEEP.rebuild, E5.KEEP.save_reopen, E5.KEEP.fillet |
 | `SM-24.delete_faces.open_shell` | SM-24 | practical_required | E5 | metadata_found | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.DEL.open_shell, E5.DEL.open_shell_verified, E5.DEL.save_reopen, E5.STEP.delete_shell, E5.STEP.save_reopen, E5.NEG.delete_refusals, FaceRemovalEffectTests |
 | `SM-24.move_faces.tangent_group` | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | код | E5.TAN.fixture, E5.TAN.group_wider, E5.TAN.group_verified, E5.TAN.no_tangents, E5.TAN.single_on_tangent, E5.TAN.save_reopen, E5.NEG.tangent_empty, FaceMoveEffectTests |
 | `SM-24.replace_faces.offset` | SM-24 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
@@ -1103,8 +1097,8 @@
 | `dep.api7.sections_interface` *(вне каталога)* | G11 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | SEC-01.discovery, SEC-03.read, SEC-07.reopen, SEC-11.not_3d |
 | `dep.api7.dismantle_interface` *(вне каталога)* | G9 | dependency_of | — | — | OK | — | OK | — | — | OK | — | — | — | — | DSM-01.discovery, DSM-08.read_back, DSM-11.save_reopen |
 | `SM-24.move_faces` *(вне каталога)* | SM-24 | practical_required | E5 | metadata_found | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | E5.PREP.volume, E5.PREP.face, E5.MOVE.inward_volume, E5.MOVE.inward_area, E5.MOVE.inward_offset, E5.MOVE.verified, E5.MOVE.outward, E5.MOVE.save_reopen, E5.STEP.fixture, E5.STEP.move, E5.STEP.refusal, E5.NEG.empty_faces, E5.NEG.zero_offset, E5.NEG.tangent_empty, E5.NEG.foreign_face, FaceMoveEffectTests |
-| `dep.api7.surface_container` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
-| `dep.refs.faces_body` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | код | н/п | код | н/п | н/п | — | н/п | н/п | код | н/п | — |
+| `dep.api7.surface_container` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | OK | н/п | OK | н/п | н/п | — | н/п | н/п | код | н/п | E5.DEP.surface_container |
+| `dep.refs.faces_body` *(вне каталога)* | SM-24 | dependency_of | — | metadata_found | OK | н/п | OK | н/п | н/п | — | н/п | н/п | OK | н/п | E5.DEP.faces_body, E5.NEG.foreign_face |
 
 ## Ограничения и незакрытое
 
@@ -1415,17 +1409,17 @@
 - `SM-13.shell.uniform_thickness` — закрыт целиком
   - толщина обязана быть положительным конечным числом: ноль и нечисловое значение отвергаются схемой ДО COM
   - толщина подтверждается ВТОРЫМ числом рядом с объёмом — числом граней; по одному объёму правка толщины неотличима от правки набора граней
-- `SM-14.rib.mode_side_positions` — не закрыт
+- `SM-14.rib.mode_side_positions` — закрыт целиком
   - Side считается ОТ НАПРАВЛЕНИЯ КРИВОЙ, а не от осей мира: на цепочке слева направо строит 0, на той же цепочке справа налево строит 1, а 0 отказывает. Значение передаётся как есть, подбирать его под геометрию сервер не будет
   - Принимаются только 0 (left) и 1 (right): значения 2 (up) и 3 (down) отвергаются до COM именованным отказом CAPABILITY_UNAVAILABLE с details.field = side. Измерено на двух геометриях (плита со срединной плоскостью и L-образная стенка с эскизом на грани), что 2 и 3 не строят там, где 0 и 1 строят
   - Ребро в УГОЛ между бортом и плитой не строится ни одним из двух положений: контур в углу отказал и по граням, и с отступом 1.5 мм (наряд RIB_POSITIONS)
   - Правка параметров построенного ребра и сохранение-переоткрытие закрыты нарядом RIB_MODES (строки R1-22…R1-27)
   - body задаётся через API7 (IRib.Body, irib_body.html) ДО Create(): после Create() ядро уже отказывает на двутельной детали. Подтверждение - по телам (целевое выросло, остальные нет), строка R1-28
-- `SM-14.rib.mode_symmetric_thickness` — не закрыт
+- `SM-14.rib.mode_symmetric_thickness` — закрыт целиком
   - Режим проверен на одной геометрии (плита 40×30×20, цепочка 400 мм²) и одной толщине 6 мм; на других толщинах отношение приростов не измерялось
   - Отказ на НЕприменённый режим (чтение thin_type не совпало с запрошенным) реализован, но отрицательной строкой не вызывался: получить его можно только сломанным ядром
   - SetThinParam(1, t, 0) (dtReverse) на измеренной геометрии отказывает (Update() = false) - вопрос В1 отчёта исследования, разбирается вместе с положениями Side
-- `SM-14.rib.mode_face_draft` — не закрыт
+- `SM-14.rib.mode_face_draft` — закрыт целиком
   - Угол с НЕНУЛЕВЫМ значением проверен строкой R1-23: правка 0 → 5° даёт тот же объём, что построение сразу с 5° (толщина 10, симметрично), расхождение в пределах 1 %. Другие углы не измерялись
   - Угол наклона ГРАНИ не читается: в interop v24 нет IFace.GetNormal/ParamU*, поэтому подтверждение идёт объёмом и повторным чтением параметров, а не углом грани
 - `SM-16.cut_by_plane.mode_side_removed` — закрыт целиком
@@ -1494,11 +1488,11 @@
   - SaveInitialObjects НЕ действует: справка imirrorpattern_saveinitialobjects.html говорит «Свойство работает только для o3d_mirrorAllOperation» и «у других операций зеркального копирования возможность скрыть экземпляры отсутствует». Измерено: записано false — прочитано из модели true, объём 78 429,20367320509 в обеих половинах. Требование «половины различаются на операции 48» снято как противоречащее справке, а не отложено.
   - ОТКРЫТАЯ ЗАВИСИМОСТЬ НАЗВАНА (§12), а не умолчана: строка закрыта на НЕПОКРЫТОЙ зависимости `dep.refs.planes` — плоскость зеркала: решение о знаке нормали (нормаль YOZ направлена в −X) обязано быть записано В КОНТРАКТ, а не спрятано в ResolvePlaneEntity. Заявленное действие этой строки не опирается на закрытие `dep.refs.planes`; зависимость остаётся открытой и названа здесь по имени.
   - ОТКРЫТАЯ ЗАВИСИМОСТЬ НАЗВАНА (§12), а не умолчана: строка закрыта на НЕПОКРЫТОЙ зависимости `dep.bodies.multibody` — «тело №0» не является универсальной целью: ΔV обязан измеряться ПО КАЖДОМУ ТЕЛУ, а не только по суммарному объёму документа. Заявленное действие этой строки не опирается на закрытие `dep.bodies.multibody`; зависимость остаётся открытой и названа здесь по имени.
-- `SM-24.delete_faces.keep_body` — не закрыт
-  - Режим НЕ закрыт: MEASURED на бруске 40x30x20 - все шесть граней дают Update() = false при SaveBody = true, то есть целостность тела из снятой грани не восстанавливается. Инструмент выполняет документированный маршрут и отвечает отказом GEOMETRY_FAILED с details.mode, а не успехом.
-  - Гипотезы исследовательского отчёта проверены и отвергнуты: форма аргумента (одиночный VT_DISPATCH против массива), порядок свойств и второй Update, тип грани - на исход не влияют; контроль с тем же одиночным объектом и SaveBody=false срабатывает (6 -> 5 граней, объём 0).
-  - Расхождение с записью E5_RESEARCH: там Update() возвращал true при неизменной модели, здесь - false. Запись исследования больше не воспроизводится, и это названо, а не сглажено.
-  - LIMIT: геометрия, из которой целостность восстанавливается, не измерялась, поэтому успех режима нигде не обещан.
+- `SM-24.delete_faces.keep_body` — закрыт целиком
+  - MEASURED на бруске 40x30x20: все шесть граней дают Update() = false при SaveBody = true - снятая грань бруска не имеет соседей, способных её заместить, поэтому отказ на бруске остаётся строкой E5.DEL.keep_body_refused.
+  - MEASURED на плите со сквозным отверстием Ø10: цилиндрическая грань снимается, объём 22429.2037 -> 24000 (отверстие заполнено), граней 7 -> 6; перестроение и save->close->reopen сохраняют 24000 и 6 граней (E5.KEEP.hole, E5.KEEP.rebuild, E5.KEEP.save_reopen).
+  - MEASURED на бруске со скруглением R3: снятая грань скругления закрывается ПЛОСКОЙ заплаткой между точками касания, а не острым углом - прирост равен (R² - πR²/4) × длину ребра: 77.2567 мм3 против 309.0266 у острого угла, граней 10 -> 9 (E5.KEEP.fillet). Ожидание считается по заплатке.
+  - Замеры сделаны на одной геометрии каждого вида и одном размере; на других радиусах, толщинах и длинах рёбер форма заплатки не измерялась.
 - `SM-24.delete_faces.open_shell` — закрыт целиком
   - save_reopen измерен (E5.DEL.save_reopen, E5.STEP.save_reopen): оболочка переживает save -> close -> reopen и с историей построения, и на теле без истории; объём 0, граней 5.
   - not_applicable у create: операция удаления не создаёт объект в дереве построения (справка isurfacecontainer.html: операции адресуют грани и тело), поэтому создавать нечего.

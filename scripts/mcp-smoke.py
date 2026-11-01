@@ -57889,6 +57889,186 @@ def e5_checks(client, rep, app_id, workdir):
                                      "bodies": (after_del.get("bodies"), 0), "solid": (False, 0)},
                                     "e5-step-shell")
             close(step_doc)
+
+    # ── E5.DEP: зависимости маршрута - ISurfaceContainer и ссылки на грани ──────────────────────
+    # Строка нужна затем, чтобы зависимость держалась ИЗМЕРЕНИЕМ, а не пересказом маршрута: удаление
+    # и восстановление получают ISurfaceContainer приведением от IPart7 и читают его коллекции, а
+    # грани адресуются ссылками kompas_read_topology, а не поиском по нормали.
+    dep_doc, dep_problem = new_box("e5-dep", W, H, DEPTH)
+    if dep_problem:
+        for cid, what in (("E5.DEP.surface_container",
+                           "e5: ISurfaceContainer получен от IPart7 - удаление и восстановление граней"),
+                          ("E5.DEP.faces_body",
+                           "e5: грани адресуются ссылками чтения топологии и принадлежат телу")):
+            rep.add(cid, what, "NAMED", dep_problem)
+    else:
+        dep_read = all_face_refs(dep_doc)
+        dep_top, dep_lookup = top_face(dep_doc)
+        if not dep_top or not dep_read:
+            for cid, what in (("E5.DEP.surface_container",
+                               "e5: ISurfaceContainer получен от IPart7 - удаление и восстановление"),
+                              ("E5.DEP.faces_body",
+                               "e5: грани адресуются ссылками чтения топологии и принадлежат телу")):
+                rep.add(cid, what, "NAMED", "грань не найдена: %s" % (dep_lookup,))
+        else:
+            _e, dep_del, _r = client.tool("kompas_delete_faces", {
+                "document_id": dep_doc, "expected_revision": current_rev(dep_doc),
+                "face_refs": [dep_top[0]], "mode": "open_shell",
+                "operation_id": str(uuid.uuid4())})
+            dep_del_code = error_code(dep_del)
+            dep_left = all_face_refs(dep_doc)
+            _e, dep_res, _r = client.tool("kompas_restore_faces", {
+                "document_id": dep_doc, "expected_revision": current_rev(dep_doc),
+                "face_ref": dep_left[0] if dep_left else dep_top[0],
+                "operation_id": str(uuid.uuid4())})
+            dep_res_code = error_code(dep_res)
+            rep.add("E5.DEP.surface_container",
+                    "e5: ISurfaceContainer получен приведением от IPart7 - коллекции FaceRemovers и "
+                    "RestoredSurfaces читаются, обе операции прошли",
+                    "PASS" if dep_del_code is None and dep_res_code is None else "FAIL",
+                    "удаление код=%s level=%s; восстановление код=%s level=%s (отказ "
+                    "CAPABILITY_UNAVAILABLE означал бы недостижимый контейнер)"
+                    % (dep_del_code, level(result(dep_del)), dep_res_code, level(result(dep_res))))
+            rep.add("E5.DEP.faces_body",
+                    "e5: грань адресуется ссылкой чтения топологии: снята ровно одна грань тела",
+                    "PASS" if dep_del_code is None and len(dep_left) == len(dep_read) - 1 else "FAIL",
+                    "прочитано=%s после удаления=%s ожидание=%s (kompas_read_topology)"
+                    % (len(dep_read), len(dep_left), len(dep_read) - 1))
+        close(dep_doc)
+
+    # ── E5.KEEP: keep_body там, где соседние грани МОГУТ закрыть снятую ────────────────────────
+    # DOC: ifaceremover_savebody.html - «SaveBody - Сохранять целостность тела», тип BOOL, версия v20;
+    # других условий справка не называет, а ifaceremover_props.html перечисляет у IFaceRemover ровно
+    # два свойства: Faces и SaveBody. Брусок как единственный замер негоден: у него снятая грань не
+    # имеет соседей, способных её заместить. Здесь две геометрии с такими соседями - цилиндрическая
+    # грань сквозного отверстия и грань скругления ребра.
+    def plate_with_hole(name, radius=5.0):
+        """Плита 40x30x20 со СКВОЗНЫМ отверстием радиуса radius в центре: боковая грань - цилиндр."""
+        doc, problem = new_box(name, W, H, DEPTH)
+        if problem:
+            return None, problem
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "hole"})
+        sketch = result(env).get("id")
+        if code or not sketch:
+            return doc, "эскиз отверстия не создан: %s" % (code,)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "circle", "center_mm": [W / 2, H / 2],
+                          "radius_mm": radius}]})
+        if code:
+            return doc, "окружность отверстия: %s" % (code,)
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "cut",
+            "end_condition": "through", "direction": "symmetric",
+            "target_body_ref": body_ref(doc),
+            "expected_volume_delta_mm3": -math.pi * radius * radius * DEPTH})
+        if code:
+            return doc, "вырез отверстия: %s" % (code,)
+        return doc, None
+
+    def cylinder_face(doc):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body_ref(doc), "include": "faces"})
+        for row in ((env or {}).get("result") or {}).get("faces") or []:
+            if row.get("surface_type") == "cylinder" and row.get("face_ref"):
+                return row.get("face_ref")
+        return None
+
+    def keep_body_row(cid, what, doc, expected_volume, face):
+        """Один замер режима keep_body: успех сверяется объёмом, отказ - кодом и details.mode."""
+        if not face:
+            rep.add(cid, what, "NAMED", "грань нужного вида не найдена")
+            return
+        before = numbers(doc)
+        _e, env, _r = client.tool("kompas_delete_faces", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "face_refs": [face], "mode": "keep_body", "operation_id": str(uuid.uuid4())})
+        code = error_code(env)
+        after = numbers(doc)
+        mode = (((env or {}).get("error") or {}).get("details") or {}).get("mode")
+        built = (code is None and near(after.get("volume"), expected_volume, TOL_V)
+                 and after.get("faces") == (before.get("faces") or 0) - 1)
+        refused = (code == "GEOMETRY_FAILED" and mode == "keep_body"
+                   and near(after.get("volume"), before.get("volume"), TOL_V))
+        rep.add(cid, what, "PASS" if built or refused else "FAIL",
+                "код=%s mode=%s объём %s→%s ожидание при успехе=%s граней %s→%s "
+                "(ядро построило=%s)"
+                % (code, mode, before.get("volume"), after.get("volume"), expected_volume,
+                   before.get("faces"), after.get("faces"), built))
+        return built
+
+    hole_doc, hole_problem = plate_with_hole("e5-keep-hole")
+    hole_volume = V0 - math.pi * 25.0 * DEPTH
+    if hole_problem:
+        rep.add("E5.KEEP.hole", "e5: keep_body на цилиндрической грани сквозного отверстия", "NAMED",
+                hole_problem)
+    else:
+        hole_before = numbers(hole_doc)
+        rep.add("E5.KEEP.hole_fixture",
+                "e5: плита со сквозным отверстием Ø10 построена - объём 22429.20, грань-цилиндр есть",
+                "PASS" if near(hole_before.get("volume"), hole_volume, TOL_V)
+                and cylinder_face(hole_doc) else "FAIL",
+                "объём=%s ожидание=%s грань-цилиндр=%s (kompas_measure, kompas_read_topology)"
+                % (hole_before.get("volume"), round(hole_volume, 4),
+                   bool(cylinder_face(hole_doc))))
+        keep_body_row("E5.KEEP.hole",
+                      "e5: keep_body на цилиндрической грани сквозного отверстия: успех - объём "
+                      "плиты без отверстия, отказ - GEOMETRY_FAILED с details.mode",
+                      hole_doc, V0, cylinder_face(hole_doc))
+        if numbers(hole_doc).get("volume") is not None and near(
+                numbers(hole_doc).get("volume"), V0, TOL_V):
+            _env_rb, keep_rb = call("kompas_rebuild", {"document_id": hole_doc})
+            after_keep_rb = numbers(hole_doc)
+            rep.add("E5.KEEP.rebuild",
+                    "e5: перестроение сохраняет вылеченное тело - объём 24000 и число граней",
+                    "PASS" if keep_rb is None and near(after_keep_rb.get("volume"), V0, TOL_V)
+                    and after_keep_rb.get("faces") == 6 else "FAIL",
+                    "код=%s объём=%s граней=%s ожидание=%s / 6"
+                    % (keep_rb, after_keep_rb.get("volume"), after_keep_rb.get("faces"), V0))
+            keep_path = os.path.join(workdir, "e5-keep-body.m3d")
+            env, keep_save = call("kompas_save_document", {
+                "document_id": hole_doc, "expected_revision": current_rev(hole_doc),
+                "target_path": keep_path})
+            saved_keep = keep_save is None and os.path.isfile(keep_path)
+            call("kompas_close_document", {"document_id": hole_doc, "dirty_policy": "save"})
+            env, keep_open = call("kompas_open_document", {
+                "application_id": app_id, "path": keep_path, "access": "edit"})
+            keep_reopened = doc_id(env)
+            if not keep_reopened:
+                rep.add("E5.KEEP.save_reopen",
+                        "e5: вылеченное тело переживает save→close→reopen", "FAIL",
+                        "документ не переоткрыт: %s" % (keep_open,))
+            else:
+                reopened_numbers = numbers(keep_reopened)
+                rep.add("E5.KEEP.save_reopen",
+                        "e5: вылеченное тело переживает save→close→reopen - объём 24000, 6 граней",
+                        "PASS" if saved_keep and near(reopened_numbers.get("volume"), V0, TOL_V)
+                        and reopened_numbers.get("faces") == 6 else "FAIL",
+                        "saved=%s объём=%s граней=%s ожидание=%s / 6 (kompas_measure)"
+                        % (saved_keep, reopened_numbers.get("volume"),
+                           reopened_numbers.get("faces"), V0))
+                call("kompas_close_document", {"document_id": keep_reopened,
+                                               "dirty_policy": "discard"})
+    close(hole_doc)
+
+    fillet_doc, fillet_problem = filleted_bar("e5-keep-fillet")
+    # MEASURED: снятая грань скругления R3 закрывается ПЛОСКОЙ заплаткой между точками касания, а не
+    # острым углом: прирост равен площади между дугой и хордой (R² − πR²/4) × длину ребра. На бруске
+    # 40 мм это 77.257 мм3 против 309.027 у острого угла, поэтому ожидание считается по заплатке.
+    FILLET_VOLUME = 23690.9734
+    fillet_patch = (9.0 - math.pi * 9.0 / 4.0) * W
+    if fillet_problem:
+        rep.add("E5.KEEP.fillet", "e5: keep_body на грани скругления ребра", "NAMED", fillet_problem)
+    else:
+        keep_body_row("E5.KEEP.fillet",
+                      "e5: keep_body на грани скругления R3 закрывает снятую грань плоской заплаткой: "
+                      "объём 23768.23, граней на одну меньше",
+                      fillet_doc, FILLET_VOLUME + fillet_patch, cylinder_face(fillet_doc))
+    close(fillet_doc)
+
     close(other)
     close(box)
 
@@ -58474,6 +58654,227 @@ def r1_checks(client, rep, app_id, workdir):
                        EXPECTED_ADDED,
                        {key: (before_by_body[key], after_by_body.get(key)) for key in others}, why(env)))
         close(two_doc)
+
+    # ===== R1-30…R1-42: подавление, удаление, уклон и симметричная толщина =====
+    #
+    # Каждая строка строит СВОЮ деталь: подавление и удаление меняют дерево, и на общей детали второй
+    # замер перестал бы быть тем же замером. Ожидание объёма у всех одно - плита 24000 мм3 плюс прирост
+    # ребра, - поэтому сверяется число, а не «нет ошибки». Уклон добавляет материал, поэтому его эталон
+    # не площадь, а деталь, построенная с тем же углом.
+    TOL_VOL = 1.0
+
+    def rib_ref_of(doc_id_):
+        """Ссылка ребра в дереве: семейство читается, имя типа признака - нет."""
+        for row in feats(doc_id_):
+            row_ref = row.get("feature_ref") or row.get("ref")
+            if not row_ref:
+                continue
+            _e, env_f, _r = client.tool("kompas_get_feature", {"feature_ref": row_ref})
+            if (result(env_f) or {}).get("family") == "rib":
+                return row_ref
+        return None
+
+    def sketch_count(doc_id_):
+        _e, env_s, _r = client.tool("kompas_list_sketches", {"document_id": doc_id_})
+        rows_s = result(env_s)
+        return len(rows_s if isinstance(rows_s, list) else (rows_s or {}).get("sketches") or [])
+
+    def rib_doc(name, thickness=THICKNESS, symmetric=False, angle=None):
+        """Плита 40x30x20, цепочка 400 мм2 и ребро side = 0. Возвращает (doc, ответ, ошибка)."""
+        doc, problem = plate(name)
+        if problem:
+            return None, {}, problem
+        chain, problem = chain_sketch(doc, [(0, 20), (20, 40), (40, 20)], name=name + "-chain")
+        if problem:
+            return doc, {}, problem
+        args = {"sketch_ref": chain, "expected_revision": revision(doc), "side": 0,
+                "thickness_mm": thickness}
+        if symmetric:
+            args["symmetric"] = True
+        if angle is not None:
+            args["draft_angle_deg"] = angle
+        env, code = call("kompas_rib", args)
+        if code:
+            return doc, {}, "ребро не построено: %s (%s)" % (code, why(env))
+        return doc, result(env), None
+
+    def after_rev(env, doc):
+        return (env or {}).get("revision_after") or revision(doc)
+
+    def suppress_restore_row(row, text, doc, with_rib, base):
+        """Подавление возвращает объём к базовому телу, снятие - к объёму с ребром."""
+        ref = rib_ref_of(doc)
+        if not ref:
+            rep.add(row, text, "FAIL", "ссылка ребра не найдена в дереве")
+            return
+        _e, sup_env, _r = client.tool("kompas_set_feature_suppressed", {
+            "feature_ref": ref, "expected_revision": revision(doc), "suppressed": True,
+            "expected_volume_mm3": base, "operation_id": str(uuid.uuid4())})
+        sup_code = error_code(sup_env)
+        rev = after_rev(sup_env, doc)
+        suppressed_volume = volume(doc)
+        _e, res_env, _r = client.tool("kompas_set_feature_suppressed", {
+            "feature_ref": ref, "expected_revision": rev, "suppressed": False,
+            "operation_id": str(uuid.uuid4())})
+        res_code = error_code(res_env)
+        restored_volume = volume(doc)
+        rep.add(row, text,
+                "PASS" if (sup_code is None and near(suppressed_volume, base, TOL_VOL)
+                           and res_code is None and near(restored_volume, with_rib, TOL_VOL))
+                else "FAIL",
+                "подавление код=%s объём=%s (ожидание %s); снятие код=%s объём=%s (ожидание %s) "
+                "(kompas_measure)" % (sup_code, suppressed_volume, base, res_code, restored_volume,
+                                      with_rib))
+
+    def delete_row(row, text, doc, base):
+        """Удаление ребра уносит и его материал; судьба эскиза ребра называется числом."""
+        ref = rib_ref_of(doc)
+        if not ref:
+            rep.add(row, text, "FAIL", "ссылка ребра не найдена в дереве")
+            return
+        before_sketches = sketch_count(doc)
+        _e, del_env, _r = client.tool("kompas_delete_feature", {
+            "feature_ref": ref, "expected_revision": revision(doc), "confirm_dependents": True,
+            "expected_volume_mm3": base, "operation_id": str(uuid.uuid4())})
+        del_code = error_code(del_env)
+        after = volume(doc)
+        after_sketches = sketch_count(doc)
+        rep.add(row, text, "PASS" if del_code is None and near(after, base, TOL_VOL) else "FAIL",
+                "код=%s объём=%s ожидание=%s эскизов=%s→%s ребро_в_дереве=%s (kompas_measure, "
+                "kompas_list_sketches)" % (del_code, after, base, before_sketches, after_sketches,
+                                           rib_ref_of(doc) is not None))
+
+    # --- R1-30/R1-31: положения side на ребре 6 мм, одностороннем ---
+    side_doc, side_rib, side_problem = rib_doc("r1-suppress-side")
+    rib_volume = PLATE_VOLUME + EXPECTED_ADDED
+    if side_problem:
+        for row, text in (("R1-30.suppress_restore.side0", "подавление снимает ребро, снятие подавления возвращает"),
+                          ("R1-31.delete_dependencies.side0", "удаление ребра возвращает объём к базовому телу")):
+            rep.add(row, text, "FAIL", side_problem)
+    else:
+        suppress_restore_row("R1-30.suppress_restore.side0",
+                             "подавление возвращает объём к плите, снятие подавления - к объёму с ребром",
+                             side_doc, rib_volume, PLATE_VOLUME)
+        delete_row("R1-31.delete_dependencies.side0",
+                   "удаление ребра возвращает объём к базовому телу; эскиз ребра назван числом",
+                   side_doc, PLATE_VOLUME)
+    close(side_doc)
+
+    # --- R1-32…R1-37: уклон, построенный СРАЗУ (10 мм, симметрично, 5°) ---
+    # Эталон уклона - деталь R1-23, получившая тот же угол ПРАВКОЙ: сравнение двух путей к одной
+    # геометрии, а не число из прошлого прогона. Угол 0 при тех же 10 мм и симметрии даёт 28000.
+    draft_doc, draft_rib, draft_problem = rib_doc("r1-draft", thickness=10.0, symmetric=True,
+                                                  angle=5.0)
+    draft_added = draft_rib.get("volume_added_mm3")
+    draft_volume = None
+    if draft_problem:
+        for row, text in (
+                ("R1-32.create.face_draft", "уклон построен сразу с ненулевым углом"),
+                ("R1-33.read.face_draft", "угол прочитан обратно тем же признаком"),
+                ("R1-34.geometry.face_draft", "объём уклона совпадает с правкой до того же угла"),
+                ("R1-35.rebuild.face_draft", "перестроение сохраняет объём и угол"),
+                ("R1-36.suppress_restore.face_draft", "подавление и снятие уклона"),
+                ("R1-37.delete_dependencies.face_draft", "удаление уклона")):
+            rep.add(row, text, "FAIL", draft_problem)
+    else:
+        draft_volume = volume(draft_doc)
+        rep.add("R1-32.create.face_draft",
+                "уклон 5° строится сразу: прирост положителен и строго больше прироста при 0°",
+                "PASS" if (isinstance(draft_added, (int, float)) and draft_added > 0
+                           and near(draft_volume, PLATE_VOLUME + draft_added, TOL_VOL)
+                           and draft_volume > PLATE_VOLUME + AREA * 10.0) else "FAIL",
+                "прирост=%s объём=%s ожидание>%s (угол 0 при 10 мм симметрично)"
+                % (draft_added, draft_volume, PLATE_VOLUME + AREA * 10.0))
+        _e, env_r, _r = client.tool("kompas_get_feature",
+                                    {"feature_ref": (draft_rib.get("feature_ref") or {}).get("id")})
+        draft_read = rib_params_of(result(env_r))
+        rep.add("R1-33.read.face_draft",
+                "угол 5° прочитан обратно вместе с видом тонкой стенки и толщиной",
+                "PASS" if (near(draft_read.get("angle_deg"), 5.0, 1e-6)
+                           and draft_read.get("thin_type") == "both"
+                           and near(draft_read.get("normal_thickness_mm"), 10.0, 1e-6)) else "FAIL",
+                "прочитано=%s" % (draft_read,))
+        rep.add("R1-34.geometry.face_draft",
+                "объём уклона, построенного сразу, совпадает с объёмом после правки до того же угла",
+                "PASS" if (edit_volume is not None
+                           and near(draft_volume, edit_volume, edit_volume * TOL)) else "FAIL",
+                "сразу=%s правкой=%s (R1-23) расхождение=%s"
+                % (draft_volume, edit_volume,
+                   None if edit_volume is None else round(draft_volume - edit_volume, 3)))
+        _env_rb, rb_code = call("kompas_rebuild", {"document_id": draft_doc})
+        rebuilt_draft = volume(draft_doc)
+        _e, env_r2, _r = client.tool("kompas_get_feature", {"feature_ref": rib_ref_of(draft_doc)})
+        rebuilt_read = rib_params_of(result(env_r2))
+        rep.add("R1-35.rebuild.face_draft",
+                "перестроение сохраняет объём уклона и его параметры",
+                "PASS" if (rb_code is None and near(rebuilt_draft, draft_volume, TOL_VOL)
+                           and near(rebuilt_read.get("angle_deg"), 5.0, 1e-6)
+                           and rebuilt_read.get("thin_type") == "both") else "FAIL",
+                "код=%s до=%s после=%s прочитано=%s"
+                % (rb_code, draft_volume, rebuilt_draft, rebuilt_read))
+        suppress_restore_row("R1-36.suppress_restore.face_draft",
+                             "подавление уклонного ребра возвращает объём к плите, снятие - к объёму с ребром",
+                             draft_doc, draft_volume, PLATE_VOLUME)
+        delete_row("R1-37.delete_dependencies.face_draft",
+                   "удаление уклонного ребра возвращает объём к базовому телу", draft_doc,
+                   PLATE_VOLUME)
+    close(draft_doc)
+
+    # --- R1-38…R1-42: симметричная толщина (6 мм) ---
+    sym_volume = PLATE_VOLUME + SYMMETRIC_ADDED
+    sym_rib_schema = ((entry_of(client, "kompas_rib") or {}).get("inputSchema") or {})
+    sym_props = sym_rib_schema.get("properties") or {}
+    sym_field = sym_props.get("symmetric") or {}
+    sym_text = json.dumps(sym_field, ensure_ascii=False)
+    rep.add("R1-38.discover.symmetric",
+            "поле symmetric названо схемой инструмента, а его значение - выводом каталога: dtBoth",
+            "PASS" if ("boolean" in sym_text and "dtBoth" in sym_text) else "FAIL",
+            "поле=%s" % (sym_text[:400],))
+    sym_doc, sym_rib, sym_problem = rib_doc("r1-symmetric-cycle", symmetric=True)
+    if sym_problem:
+        for row, text in (("R1-39.negative.symmetric_thickness",
+                           "неположительная толщина при symmetric=true отвергнута по имени поля"),
+                          ("R1-40.rebuild.symmetric", "перестроение сохраняет симметричное ребро"),
+                          ("R1-41.suppress_restore.symmetric", "подавление и снятие симметричного ребра"),
+                          ("R1-42.delete_dependencies.symmetric", "удаление симметричного ребра")):
+            rep.add(row, text, "FAIL", sym_problem)
+    else:
+        # Отказ берётся ДО мутации: негодный вход не должен менять ни ревизию, ни дерево.
+        chain, problem = chain_sketch(sym_doc, [(0, 20), (20, 40), (40, 20)], name="r1-chain-symneg")
+        rev_before = revision(sym_doc)
+        bodies_before = len(bodies(sym_doc))
+        env, code = call("kompas_rib", {"sketch_ref": chain, "expected_revision": rev_before,
+                                        "side": 0, "thickness_mm": 0.0, "symmetric": True})
+        details = ((env or {}).get("error") or {}).get("details") or {}
+        violations = details.get("violations") or []
+        named_field = details.get("field") or ((violations[0] or {}).get("path") if violations else None)
+        rep.add("R1-39.negative.symmetric_thickness",
+                "нулевая толщина при symmetric=true отвергнута INVALID_ARGUMENT с именем поля, "
+                "ревизия и число тел не изменились",
+                "PASS" if (code == "INVALID_ARGUMENT" and named_field
+                           and "thickness" in str(named_field)
+                           and revision(sym_doc) == rev_before
+                           and len(bodies(sym_doc)) == bodies_before) else "FAIL",
+                "код=%s поле=%s ревизия=%s→%s тел=%s→%s"
+                % (code, named_field, rev_before, revision(sym_doc), bodies_before,
+                   len(bodies(sym_doc))))
+        _env_rb, rb_code = call("kompas_rebuild", {"document_id": sym_doc})
+        rebuilt_sym = volume(sym_doc)
+        _e, env_s2, _r = client.tool("kompas_get_feature", {"feature_ref": rib_ref_of(sym_doc)})
+        sym_read = rib_params_of(result(env_s2))
+        rep.add("R1-40.rebuild.symmetric",
+                "перестроение сохраняет симметричное ребро: объём 28800 и thin_type = both",
+                "PASS" if (rb_code is None and near(rebuilt_sym, sym_volume, TOL_VOL)
+                           and sym_read.get("thin_type") == "both") else "FAIL",
+                "код=%s объём=%s ожидание=%s прочитано=%s"
+                % (rb_code, rebuilt_sym, sym_volume, sym_read))
+        suppress_restore_row("R1-41.suppress_restore.symmetric",
+                             "подавление симметричного ребра возвращает объём к плите, снятие - к 28800",
+                             sym_doc, sym_volume, PLATE_VOLUME)
+        delete_row("R1-42.delete_dependencies.symmetric",
+                   "удаление симметричного ребра возвращает объём к базовому телу", sym_doc,
+                   PLATE_VOLUME)
+    close(sym_doc)
 
 
 _DIAG_SEPARATORS = re.compile(r"[\\/]+")

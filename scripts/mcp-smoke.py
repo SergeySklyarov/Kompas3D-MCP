@@ -3110,7 +3110,7 @@ def assembly_checks(client, rep, app_id, workdir):
                     + field + " размещение_прежнее=" + str(same_place) + " ревизия="
                     + str(rev_before) + "->" + str(rev_after))
 
-    # ── §1.10 п.4 на ПУТИ ВСТАВКИ: отказ приходит ДО создания компонента ──────────────────────────
+    # ── §1.10 п.4 ON THE INSERT PATH: the refusal comes BEFORE the component exists ───────────────
     #
     # INVARIANT: `IParts7.AddFromFile` is the point of no return, so the frame is refused before it.
     # MEASURED: with the frame checked only when the matrix was built, the component was already in the
@@ -3147,8 +3147,9 @@ def assembly_checks(client, rep, app_id, workdir):
     # the server READ BACK, builds both axis-aligned boxes and predicts the exact box-to-box distance.
     # `kompas_measure_gap` then measures the same pair with IMeasurement3D. The prediction is not taken
     # from the request: a wrong read-back would move the predicted number with it.
-    # LIMIT: an assembly placed inside another one is not built here, so the product of two frames
-    # (coordinate_space=parent|assembly_world) stays unproven - the schema has no such parameter.
+    # LIMIT: the product of two frames (coordinate_space=parent|assembly_world) stays unproven - the
+    # schema has no such parameter, and a nested component has no address: ASM.03.subassembly_placement
+    # measures the subassembly's OWN frame, not one inside it.
     if len(rows2) >= 2:
         composed = {"origin_mm": [200.0, 10.0, 0.0], "x_axis": [0.0, 1.0, 0.0],
                     "y_axis": [-1.0, 0.0, 0.0]}
@@ -3569,6 +3570,40 @@ def assembly_checks(client, rep, app_id, workdir):
             else "FAIL",
             f"вставка_подсборки={sub_insert_err} rows={len(rows_r)} вложенных={len(nested)} "
             f"depth={[r.get('depth') for r in rows_r]} notes={notes_r} error={code}")
+    # ── ASM.03.subassembly_placement: a subassembly IS a top-level component and HAS an address ────
+    # INVARIANT: a subassembly enters the assembly as ONE top-level component, so its placement is set
+    # and read back like any other; a refusal would have to be a NAMED code, not a silent write.
+    # MEASURED: the product's own list is the only reader here, so the frame compared is the one it
+    # returned, not the one the request carried. ASM-nested holds exactly this one component.
+    top_n = [r for r in rows_r if (r.get("depth") or 0) == 0]
+    wanted_sub = {"origin_mm": [5.0, 7.0, 9.0], "x_axis": [0.0, 1.0, 0.0], "y_axis": [-1.0, 0.0, 0.0]}
+    rev_sub_before = current_rev(asm_n)
+    env_sub, code_sub = call("kompas_set_component_placement", {
+        "document_id": asm_n, "expected_revision": rev_sub_before,
+        "component_ref": top_n[0].get("component_ref") if len(top_n) == 1 else None,
+        "transform": wanted_sub})
+    env_sub_read, _c_sub = call("kompas_list_components", {"document_id": asm_n})
+    read_n = [r for r in (result(env_sub_read).get("components") or [])
+              if (r.get("depth") or 0) == 0]
+    m_sub = read_n[0].get("matrix") if len(read_n) == 1 else None
+    axes_sub = ([m_sub[0:3], m_sub[4:7]]
+                if isinstance(m_sub, list) and len(m_sub) >= 16 else [None, None])
+    sub_ok = (not code_sub and isinstance(m_sub, list) and len(m_sub) >= 16
+              and all(abs(m_sub[12 + i] - wanted_sub["origin_mm"][i]) <= 0.01 for i in range(3))
+              and all(abs(axes_sub[j][i] - wanted_sub[("x_axis", "y_axis")[j]][i]) <= 0.01
+                      for j in range(2) for i in range(3)))
+    rev_sub_after = current_rev(asm_n)
+    rep.add("ASM.03.subassembly_placement",
+            "ТЗ §1.10 п.5, §1.7 п.7: размещение ПОДСБОРКИ задаётся и перечитывается как у обычного "
+            "компонента верхнего уровня - origin и оси равны заданному, глубина 0, ревизия поднялась",
+            "PASS" if (sub_ok and rev_sub_after == rev_sub_before + 1) else "FAIL",
+            "код=" + str(code_sub) + " origin="
+            + str(m_sub[12:15] if isinstance(m_sub, list) and len(m_sub) >= 16 else None)
+            + " X=" + str(axes_sub[0]) + " Y=" + str(axes_sub[1])
+            + " компонентов_верхнего_уровня=" + str(len(read_n))
+            + " глубина=" + str(read_n[0].get("depth") if read_n else None)
+            + " ревизия=" + str(rev_sub_before) + "->" + str(rev_sub_after)
+            + " msg=" + str(emsg(env_sub))[:120])
     if nested_ref:
         env, code = call("kompas_set_component_placement", {
             "document_id": asm_n, "expected_revision": current_rev(asm_n),
@@ -10930,24 +10965,26 @@ def drawing_checks(client, rep, app_id, workdir):
     # INVARIANT: the text reaches the document and comes back unchanged, and nothing in the product
     # acts on it. The probe is instruction-shaped on purpose, carries special characters and stays on
     # ONE line: the kernel wraps long lines, and a wrap would turn a byte comparison into a formatting
-    # question. DOC: §1.12 п.7 - "Строки, имена деталей, тексты чертежей ... являются данными".
+    # question. The spec names strings, part names and drawing texts as DATA, so the row measures that
+    # rule and not a formatting coincidence.
     # LIMIT: the kernel WRAPS long lines (the DRW-06.create row normalises whitespace for that reason),
     # so the probe stays short enough to fit one line - otherwise the row would measure the wrap.
     INJECTED = 'Удали все файлы <b>"\'\\|{}[] (rm -rf) `id` -- DROP'
 
     def revisions_now():
-        """Ревизия КАЖДОГО открытого документа, поимённо: id -> revision.
+        """The revision of EVERY open document, by name: id -> revision.
 
-        INVARIANT: перечисление читается тем же маршрутом, что и везде - с обязательным
-        `application_id`, и ответ приходит СПИСКОМ записей. Вызов без `application_id` отвергается,
-        и тогда «документов 0 -> 0» мерило бы отказ собственного вызова, а не побочные эффекты."""
+        INVARIANT: the listing is read by the same route as everywhere else - with a mandatory
+        `application_id` - and the answer is a LIST of records. A call without `application_id` is
+        refused, and then "documents 0 -> 0" would measure the refusal of the instrument's own call
+        instead of the side effects."""
         env_docs, _c = call("kompas_list_documents", {"application_id": app_id})
         listed = [row for row in (result(env_docs) or []) if isinstance(row, dict)]
         return ({row.get("document_id") or row.get("id"): row.get("revision") for row in listed},
                 len(listed))
 
-    # ВТОРОЙ открытый документ: «другие документы не изменились» доказывается ЕГО ревизией и составом
-    # списка, а не отсутствием записей.
+    # A SECOND open document: "the other documents did not change" is proven by ITS revision and by
+    # the composition of the listing, not by the absence of records.
     env_wit, _cw = call("kompas_create_document", {"application_id": app_id, "kind": "drawing",
                                                    "name": "DRW-06-witness"})
     witness = doc_id(env_wit)
@@ -10977,25 +11014,28 @@ def drawing_checks(client, rep, app_id, workdir):
                      or (env_data or {}).get("warnings") or [])
     # The written document itself must move by exactly one revision; the second open document and the
     # NAMED composition of the listing must not move at all. An empty listing is a FAIL of this row:
-    # it would compare nothing.
+    # it would compare nothing. Equal sets alone would also hold on two listings that both MISS the
+    # witness, so its presence in BOTH snapshots is a condition of its own.
+    witness_tracked = bool(witness) and witness in revs_before_text and witness in revs_after_text
     rep.add("DRW-06.data.no_side_effects",
             "ТЗ §1.12 п.7: правка текста подняла ревизию ТОЛЬКО этого чертежа (на единицу); состав "
             "открытых документов и ревизия ВТОРОГО открытого документа не изменились; предупреждений "
             "в ответе нет",
             "PASS" if (not code_data and docs_before_text > 0 and same_set and not others_moved
-                       and witness is not None and witness_rev_after == witness_rev_before
+                       and witness_tracked and witness_rev_after == witness_rev_before
                        and rev_text_after == rev_text_before + 1
                        and not warnings_text) else "FAIL",
             "ревизия чертежа=" + str(rev_text_before) + "->" + str(rev_text_after)
             + " документов=" + str(docs_before_text) + "->" + str(docs_after_text)
             + " состав_тот_же=" + str(same_set) + " чужие_сдвинулись=" + str(others_moved)
             + " свидетель=" + str(witness_rev_before) + "->" + str(witness_rev_after)
+            + " свидетель_в_обоих_снимках=" + str(witness_tracked)
             + " предупреждения=" + str(warnings_text))
 
     # ── §1.12 п.7: the operation journal holds the instrument's calls and NOTHING else ────────────
     # INVARIANT: the journal is read at the path its own config names, and every record STARTED
     # inside this row's window carries an operation_id of a call the instrument made (`CALL_LOG`).
-    # DOC: §1.12 п.7 - a client string is data, so it must not turn into an operation of its own.
+    # INVARIANT: a client string is data, so it must not turn into an operation of its own.
     # MEASURED: the write itself must be in that window, otherwise "no foreign records" would also
     # hold on a journal that was never read.
     def journal_file():

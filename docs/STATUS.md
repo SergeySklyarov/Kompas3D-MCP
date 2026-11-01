@@ -33,8 +33,9 @@
   недоступный каталог назван кодом и каталогом. На коде до правки (`--host artifacts/publish`, коммит `4edf2df`)
   **31 PASS / 4 FAIL** - красные ровно положительные строки; на `f44f4fa` **35 PASS / 0 FAIL**.
   **Зачёт.** `build -c Debug`/`-c Release` 0; `test -c Debug` 1789/1789; `lint-dashes` 0; `long-comment-blocks src tests` 0;
-  `contract-diff` 0; `mcp-smoke --self-test` 104/0. `--all` на `f44f4fa` (Release того же кода, дерево чистое) - итог в
-  отчёте, §6.3. Отчёт - `SCENARIO_CHECKPOINT_PATHS_REPORT_20261101.md`.
+  `contract-diff` 0; `mcp-smoke --self-test` 104/0. `--all` на `f44f4fa` (Release того же кода, дерево чистое,
+  `exit_code 0`): **2121 PASS / 9 NAMED / 3 UNKNOWN, FAIL 0**; состав строк против прогона попытки 1 (`7efb625`) -
+  отсутствующих 0, новых 0, вердикты совпали целиком. Отчёт - `SCENARIO_CHECKPOINT_PATHS_REPORT_20261101.md`.
   Решение и правило - `docs/decisions/scenario.md#checkpoint-service-path`. Долг не вырос: 8 открытых при бюджете 10.
   **Замечено вне наряда:** установленная конфигурация отстала от шаблона (`sync_budget_ms` 10 000 против 40 000,
   `operation_budget_ms` 120 000 против 240 000); `require_read_only_model_roots` есть только в ней, но Хостом не читается.

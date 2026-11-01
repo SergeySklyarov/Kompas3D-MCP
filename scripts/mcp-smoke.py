@@ -1015,8 +1015,9 @@ ALL_GROUPS_EXTRA = (
     ("scenario", ["--scenario-only"]),
     # Группа ASC строит свои детали и двухуровневую сборку сама, общий сеанс ей не нужен.
     ("asm_checkpoint", ["--asm-checkpoint-only"]),
-    # Группа CP ведёт свой Хост: каталог контрольных копий задаётся конфигурацией на старте процесса,
-    # а строки сравнивают поведение при каталоге ВНЕ всех корней (так его кладёт установщик).
+    # Group CP runs its own Host: the control-copy directory comes from the configuration at process
+    # start, and the rows compare behaviour with a directory OUTSIDE every root (where the installer
+    # puts it).
     ("checkpoint_paths", ["--checkpoint-paths-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
@@ -19361,8 +19362,8 @@ def main():
     # конфигурацией на старте процесса, а строки сравнивают поведение при малом бюджете.
     ops_only = "--ops-only" in sys.argv
 
-    # Наряд SCENARIO_CHECKPOINT_PATHS: контрольная точка сценария при каталоге копий ВНЕ корней.
-    # Группа ведёт свой Хост: каталог копий задаётся конфигурацией на старте процесса.
+    # Order SCENARIO_CHECKPOINT_PATHS: the scenario checkpoint with the copy directory OUTSIDE the roots.
+    # The group runs its own Host: the copy directory comes from the configuration at process start.
     checkpoint_paths_only = "--checkpoint-paths-only" in sys.argv
 
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
@@ -19916,9 +19917,9 @@ def main():
             return finish(rep, client)
 
         if checkpoint_paths_only:
-            # Группа CP: свой Хост с каталогом контрольных копий ВНЕ всех корней - так его кладёт
-            # установщик. Общий сеанс прогона держит каталог копий внутри корня записи, поэтому
-            # дефект в нём не воспроизводится.
+            # Group CP: its own Host with the control-copy directory OUTSIDE every root, where the
+            # installer puts it. The shared run keeps the copy directory inside the write root, so the
+            # defect does not reproduce there.
             checkpoint_paths_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
@@ -53464,16 +53465,16 @@ def catalog_checks(host, config, workdir, rep):
 
 
 def checkpoint_paths_checks(host, config, workdir, rep):
-    """CP.* — контрольная точка сценария на конфигурации УСТАНОВКИ (наряд SCENARIO_CHECKPOINT_PATHS).
+    """CP.* — the scenario checkpoint on the INSTALLER's configuration (order SCENARIO_CHECKPOINT_PATHS).
 
-    ЗАЧЕМ ЭТА ГРУППА. Установщик кладёт `control_copy_directory` в каталог установки, то есть ВНЕ
-    `writable_roots` и `read_only_roots`. Общий прогон этого не видел: `config/kompas-mcp.local.json`
-    держит каталог копий в `scratch`, внутри корня записи, и дефект `PATH_NOT_ALLOWED` на служебном
-    пути оставался невидимым. Строки сравнивают ЗНАЧЕНИЯ: файл копии и манифест на диске,
-    `document_id_after` открывается, sha256 файла клиента до и после, код и причина отказа.
+    WHY THIS GROUP. The installer puts `control_copy_directory` inside the install folder, that is OUTSIDE
+    `writable_roots` and `read_only_roots`. The shared run never saw it: `config/kompas-mcp.local.json`
+    keeps the copy directory under `scratch`, inside the write root, so the `PATH_NOT_ALLOWED` defect on a
+    service path stayed invisible. The rows compare VALUES: the copy file and the manifest on disk,
+    `document_id_after` opens, the client file's sha256 before and after, the refusal code and cause.
 
-    ПОЧЕМУ СВОЙ ХОСТ. Каталог копий задаётся конфигурацией на старте процесса. Строка CP.07 поднимает
-    ВТОРОЙ Хост с недоступным каталогом: тот же процесс переписать каталог не может.
+    WHY ITS OWN HOST. The copy directory comes from the configuration at process start. Row CP.07 raises a
+    SECOND Host with an unreachable directory: one process cannot rewrite its own configuration.
     """
     import hashlib
     import json
@@ -53481,9 +53482,9 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     import tempfile
     from localconfig import isolate_config
 
-    # Каталог копий ВНЕ всех корней, как его создаёт установщик. Имя нарочно соседствует с корнем
-    # записи ("scratch" против "scratch-…"): посегментное сравнение путей не должно принять соседа за
-    # корень, и строка это тоже держит.
+    # The copy directory OUTSIDE every root, as the installer creates it. The name deliberately sits next
+    # to the write root ("scratch" against "scratch-..."): a segment-wise comparison must not take a
+    # neighbour for the root, and a row holds that too.
     copies_root = tempfile.mkdtemp(prefix="kompas-checkpoint-copies-")
     folder = _os.path.join(workdir, "checkpoint-paths")
     _os.makedirs(folder, exist_ok=True)
@@ -53493,11 +53494,11 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         with open(path, encoding="utf-8-sig") as fh:
             data = json.load(fh)
         data["control_copy_directory"] = control_copy_directory
-        # Конфигурация ТОЙ ЖЕ ФОРМЫ, что у установки: бюджеты установленной конфигурации - самые жёсткие
-        # из действующих (10 000 синхронизация, 120 000 операция). Смысл строк от них зависит: шаг
-        # плана с ответом `running` считается отказом, поэтому на 40 000 он успевал бы там, где на
-        # установке отказывает. `require_read_only_model_roots` НЕ задаётся: ключ не читается Хостом
-        # (`HostOptions.cs`, раздел об удалённых ключах), то есть ничего не меняет.
+        # The SAME SHAPE of configuration as the install: the installed budgets are the tightest in force
+        # (10 000 sync, 120 000 operation). The rows depend on them: a plan step answering `running`
+        # counts as a refusal, so at 40 000 it would finish where the install refuses.
+        # `require_read_only_model_roots` is NOT set: the Host does not read the key (`HostOptions.cs`,
+        # section on removed keys), so it changes nothing.
         data["sync_budget_ms"] = 10000
         data["operation_budget_ms"] = 120000
         with open(path, "w", encoding="utf-8") as fh:
@@ -53557,7 +53558,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         return ((env or {}).get("result") or {}).get("volume_mm3")
 
     def model_volume(doc):
-        """Сумма объёмов ВСЕХ тел: построение второго тела меняет её, а `volume` читает только первое."""
+        """Sum of the volumes of ALL bodies: a second body changes it, `volume` reads only the first."""
         _e, env, _r = probe.tool("kompas_list_bodies", {"document_id": doc})
         rows = (env or {}).get("result")
         if isinstance(rows, dict):
@@ -53584,7 +53585,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         return result(env).get("document_id") or result(env).get("id"), code, emsg(env)
 
     def make_part(name, path, depth=10.0):
-        """Деталь с одним телом, сохранённая по пути клиента: без файла нечего сравнивать до/после."""
+        """A one-body part saved to the client's path: without a file nothing can be compared."""
         _os.makedirs(_os.path.dirname(path), exist_ok=True)
         doc, code, message = new_document("part", name)
         if not doc:
@@ -53613,8 +53614,8 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         return doc, None
 
     def run(doc, steps, on_error="restore_checkpoint", policy="document_copy"):
-        # Контрольная точка снимается ТОЛЬКО при on_error=restore_checkpoint: восстанавливать нечего,
-        # если восстановление не заказано (то же правило, что в группе SC).
+        # The checkpoint is taken ONLY for on_error=restore_checkpoint: there is nothing to restore when
+        # no restore was ordered (the same rule as in group SC).
         return call("kompas_run_scenario", {
             "scenario_version": 1, "document_id": doc, "operation_id": str(uuid.uuid4()),
             "on_error": on_error, "checkpoint_policy": policy, "steps": steps}, timeout=600)
@@ -53634,7 +53635,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         bool(doc) and part_sha_before is not None and not error,
         f"doc={doc} sha={str(part_sha_before)[:12]} объём={part_volume_before} ошибка={error}")
 
-    # ── CP.01 копия детали при каталоге копий вне корней ──────────────────────────────────────
+    # ── CP.01 copy of a detail with the copy directory outside the roots ──────────────────────
     checkpoint = {}
     copied_id = None
     if doc:
@@ -53644,8 +53645,8 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         copy_path = checkpoint.get("path")
         copied_id = answer.get("document_id_after")
         copy_on_disk = bool(copy_path) and _os.path.exists(copy_path)
-        # Копия обязана лежать в каталоге копий и НЕ в корне записи: иначе строка прошла бы на
-        # конфигурации, где дефект не воспроизводится.
+        # The copy must lie in the copy directory and NOT in the write root: otherwise the row would pass
+        # on a configuration where the defect does not reproduce.
         in_copies = bool(copy_path) and _os.path.abspath(copy_path).startswith(
             _os.path.abspath(copies_root) + _os.sep)
         client_intact = _os.path.exists(part_path) and sha(part_path) == part_sha_before
@@ -53662,15 +53663,15 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             f"в_каталоге_копий={in_copies} файл_клиента_цел={client_intact} "
             f"document_id_after={copied_id} читается={after_ok} err={code} {emsg(env)}")
 
-    # ── CP.02 восстановление по контрольной точке ────────────────────────────────────────────
+    # ── CP.02 restore from the checkpoint ────────────────────────────────────────────────────
     restore_doc = None
     if doc:
-        # Шаги s1-s4 РЕАЛЬНО меняют геометрию: эскиз, его профиль, замкнутый контур и тело по нему.
-        # Без этого сравнение объёмов до и после проходило бы и без восстановления - `kompas_rebuild`
-        # объём не меняет. Шаг s5 отказывает на несуществующем эскизе.
-        # first_revision - ревизия к моменту s1: контрольная точка снимается документированным SaveAs
-        # и САМА поднимает ревизию на единицу (то же правило, что в группе SC), поэтому у заказанного
-        # восстановления она на единицу больше замера до сценария.
+        # Steps s1-s4 REALLY change the geometry: a sketch, its profile, a closed contour and a body on
+        # it. Without that the volume comparison would pass even with no restore - `kompas_rebuild` does
+        # not change the volume. Step s5 refuses on a sketch that does not exist.
+        # first_revision is the revision at s1: the checkpoint is taken by a documented SaveAs and raises
+        # the revision by one itself (the same rule as in group SC), so the ordered restore carries one
+        # more than the measurement taken before the scenario.
         def plan(first_revision):
             return [{"step_id": "s1", "tool": "kompas_create_sketch",
                      "arguments": {"expected_revision": first_revision,
@@ -53694,8 +53695,8 @@ def checkpoint_paths_checks(host, config, workdir, rep):
                                    "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
                                                  "width_mm": 5.0, "height_mm": 5.0}]}}]
 
-        # Тот же план на отдельной детали БЕЗ восстановления: объём обязан стать другим, иначе строка
-        # не отличает настоящее восстановление от его отсутствия. Значение идёт в отчёт.
+        # The same plan on a separate part with NO restore: the volume must change, otherwise the row
+        # cannot tell a real restore from its absence. The value goes into the report.
         no_restore_volume = None
         no_restore_before = None
         no_restore_status = None
@@ -53728,7 +53729,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             f"статус={no_restore_status}) документ_после={restore_doc} err={code} {emsg(env)}")
         doc = restore_doc or doc
 
-    # ── CP.03 прямое сохранение в каталог копий ──────────────────────────────────────────────
+    # ── CP.03 direct save into the copy directory ───────────────────────────────────────────
     direct = _os.path.join(copies_root, "control-copies", "scenario", "direct-cp03.m3d")
     if doc:
         env, code = call("kompas_save_document", {
@@ -53738,14 +53739,15 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             code == "PATH_NOT_ALLOWED" and not _os.path.exists(direct),
             f"код={code} файл_есть={_os.path.exists(direct)} {emsg(env)}")
 
-    # ── CP.04 шаг плана с записью в каталог копий ────────────────────────────────────────────
+    # ── CP.04 plan step writing into the copy directory ──────────────────────────────────────
     step_target = _os.path.join(copies_root, "control-copies", "scenario", "step-cp04.m3d")
     if doc:
         env, code = run(doc, [{"step_id": "s1", "tool": "kompas_save_document",
                                "arguments": {"target_path": step_target}}])
         answer = result(env)
-        # Конкретный код отказа плана: `kompas_save_document` шагу запрещён, план отвергается целиком
-        # до первого шага (INVALID_ARGUMENT, поле `steps[0].tool`), а не исполняется с отказом шага.
+        # The exact refusal code: `kompas_save_document` is not allowed as a step, so the plan is
+        # rejected as a whole before the first step (INVALID_ARGUMENT, field `steps[0].tool`) instead of
+        # running with a failed step.
         row("CP.04.step_save_denied",
             "шаг плана, сохраняющий в каталог копий: план отвергнут (INVALID_ARGUMENT), файла нет",
             code == "INVALID_ARGUMENT" and not _os.path.exists(step_target)
@@ -53753,7 +53755,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             f"код={code} статус={(env or {}).get('status')} файл_есть={_os.path.exists(step_target)} "
             f"шагов={len(answer.get('steps') or [])} {emsg(env)}")
 
-    # ── CP.05 шаг плана, читающий файл из каталога копий ─────────────────────────────────────
+    # ── CP.05 plan step reading a file from the copy directory ───────────────────────────────
     foreign = _os.path.join(copies_root, "control-copies", "scenario", "foreign.m3d")
     _os.makedirs(_os.path.dirname(foreign), exist_ok=True)
     with open(foreign, "w", encoding="utf-8") as handle:
@@ -53772,7 +53774,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             f"код_шага={step_code} статус={answer.get('status')} шаг={answer.get('failed_step')} "
             f"err={code} {emsg(env)}")
 
-    # ── CP.06 сборка: копия графа при каталоге копий вне корней ─────────────────────────────
+    # ── CP.06 assembly: graph copy with the copy directory outside the roots ─────────────────
     assembly_error = None
     checkpoint_asm = {}
     if doc:
@@ -53832,8 +53834,8 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         copied = [entry.get("copy_path") for entry in files if entry.get("copy_path")]
         copies_exist = bool(copied) and all(_os.path.exists(path) for path in copied)
         client_intact = _os.path.exists(asm_path) and sha(asm_path) == asm_sha_before
-        # Результат сборки читается ПО `document_id_after` - и на детали, и на сборке. Поле есть в
-        # отчёте контрольной точки (`checkpoint`), а не в корне ответа: закрытие берёт его оттуда же.
+        # The assembly result is read BY `document_id_after` - on a detail and on an assembly alike. The
+        # field lives in the checkpoint report (`checkpoint`), not at the root of the answer.
         asm_after_id = checkpoint_asm.get("document_id_after")
         asm_after_ok = False
         if asm_after_id:
@@ -53861,9 +53863,9 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         close(asm_doc)
     close_host(probe)
 
-    # ── CP.07 каталог копий недоступен ──────────────────────────────────────────────────────
-    # Другой Хост: каталог копий задаётся конфигурацией на старте процесса. Путь на несуществующем
-    # томе не создаётся ни `Directory.CreateDirectory`, ни SaveAs.
+    # ── CP.07 copy directory unreachable ────────────────────────────────────────────────────
+    # A second Host: the copy directory comes from the configuration at process start. A path on a
+    # non-existent volume is created neither by `Directory.CreateDirectory` nor by SaveAs.
     broken = "Q:\\no-such-volume"
     probe2 = open_host(own_config(broken, "cp-broken"), "mcp-smoke-checkpoint-broken")
 
@@ -53882,6 +53884,11 @@ def checkpoint_paths_checks(host, config, workdir, rep):
                           {"application_id": app_id2, "kind": "part", "name": "cp-broken-part"})
         doc2 = (env or {}).get("result", {}).get("document_id") or (env or {}).get("result", {}).get("id")
     plan_refused = None
+    # Values the row below reads must exist even when the document was never created, or the group dies
+    # with a NameError instead of reporting a FAIL with the cause.
+    step_error_code = None
+    copy_folder = None
+    rows = []
     detail_text = ""
     if doc2:
         env, code = call2("kompas_run_scenario", {
@@ -53891,23 +53898,26 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         answer = (env or {}).get("result") or {}
         checkpoint_broken = answer.get("checkpoint") or {}
         err = (env or {}).get("error") or {}
-        # Причина обязана назвать каталог: клиент ищет дефект в конфигурации, а не в модели.
+        # The cause must name the directory: the client looks for the defect in the configuration, not
+        # in the model.
         detail_text = f"{err.get('message') or ''} {json.dumps(err.get('details') or {}, ensure_ascii=False)}"
         details = err.get("details") or {}
         step_error_code = ((details.get("step_error") or {}).get("code")
                            if isinstance(details.get("step_error"), dict) else None)
-        # Отказ каталога называет САМ каталог: `ScenarioRunner` кладёт его в `details.copy_folder`
-        # отказа, а отчёт сценария переносит поля отказа с префиксом `checkpoint_`.
+        # The refusal names the directory itself: `ScenarioRunner` puts it into `details.copy_folder` of
+        # the error, and the scenario report carries the error's fields with a `checkpoint_` prefix.
         copy_folder = details.get("checkpoint_copy_folder")
         rows = answer.get("steps") or []
-        # Пустой список шагов делает `all(...)` истинным, поэтому непустота проверяется отдельно, как и
-        # код отказа: строка называется «CHECKPOINT_FAILED» и обязана проверять именно его.
+        # An empty step list makes `all(...)` true, so non-emptiness is checked separately, as is the
+        # refusal code: the row is named after CHECKPOINT_FAILED and must check exactly that.
         plan_refused = (answer.get("status") == "failed"
                         and step_error_code == "CHECKPOINT_FAILED"
                         and isinstance(copy_folder, str) and copy_folder.startswith("Q:")
                         and checkpoint_broken.get("taken") is False
                         and bool(rows)
                         and all(step.get("status") == "skipped" for step in rows))
+    else:
+        detail_text = f"документ не создан: {code} {emsg(env)}"
     row("CP.07.copy_folder_unavailable",
         "каталог копий недоступен: CHECKPOINT_FAILED с причиной и каталогом, план не выполнен",
         bool(plan_refused),
@@ -60097,8 +60107,8 @@ EXTRA_GROUP_CHECKS = {
     "ops": lambda c, r, a, w, v, p: ops_checks(c.host_exe, c.config, w, r),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
     "asm_checkpoint": lambda c, r, a, w, v, p: assembly_checkpoint_checks(c, r, a, w),
-    # Группа CP ведёт свои Хосты: каталог копий задаётся конфигурацией на старте процесса, поэтому ей
-    # нужны путь к исполняемому файлу и конфигурация, а не app_id общего сеанса.
+    # Group CP runs its own Hosts: the copy directory comes from the configuration at process start, so
+    # it needs the executable path and the configuration rather than the shared session's app_id.
     "checkpoint_paths": lambda c, r, a, w, v, p: checkpoint_paths_checks(c.host_exe, c.config, w, r),
     # Группа DG собирает пакет из журнала и лога своего сеанса: свежий сеанс ей нужен, чтобы канарейка стояла в живом документе.
     "diag": lambda c, r, a, w, v, p: diag_checks(c, r, a, w, p),

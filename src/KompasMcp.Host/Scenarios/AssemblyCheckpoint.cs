@@ -332,7 +332,7 @@ internal sealed class AssemblyCheckpoint
         {
             return Refuse(report, "copy_not_verified",
                 "Ссылки в копии не совпали с графом: " + string.Join("; ", verification.Mismatches),
-                verification.Mismatches, moved);
+                verification.Mismatches, moved, stepError: verification.Error);
         }
 
         if (!manifestWritten)
@@ -595,21 +595,26 @@ internal sealed class AssemblyCheckpoint
         return new ReassignResult(true, string.Empty, saved?.RevisionAfter ?? reassigned.Revision);
     }
 
-    /// <summary>The copy's component rows, or <c>null</c> when the read failed.</summary>
-    private async Task<JsonObject[]?> ListRowsAsync(string documentId, CancellationToken cancellationToken)
+    /// <summary>The copy's component rows, or the refused call's error when the read failed.</summary>
+    /// <remarks>INVARIANT: a failed read is not the same as an empty copy, so the call's own error travels
+    /// back with the <c>null</c> rows and reaches <c>step_error</c> of the refusal.
+    /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    private async Task<(JsonObject[]? Rows, JsonObject? Error)> ListRowsAsync(
+        string documentId, CancellationToken cancellationToken)
     {
         var listed = await _invoke("kompas_list_components", new JsonObject
         {
             ["document_id"] = documentId,
         }, cancellationToken).ConfigureAwait(false);
         return listed.Status == OperationStatus.Succeeded
-            ? (listed.Result?["components"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToArray()
-            : null;
+            ? ((listed.Result?["components"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToArray(),
+                null)
+            : (null, ErrorOf(listed));
     }
 
     /// <summary>How many components the document reports, or <c>null</c> when the read failed.</summary>
     private async Task<int?> CountComponentsAsync(string documentId, CancellationToken cancellationToken) =>
-        (await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false))?.Length;
+        (await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false)).Rows?.Length;
 
     /// <summary>Point every component of one document at its copy, by the documented source replacement.</summary>
     /// <remarks>DOC: kspart_setfilename.html — «Метод используется для компонентов, вставленных в сборку»;
@@ -635,10 +640,10 @@ internal sealed class AssemblyCheckpoint
         // MEASURED: a replace revokes the references of the document and a re-read hands out NEW ones, so a
         // row cannot be remembered between reads. The copy is therefore chosen by the row's POSITION, and the
         // list is re-read before every replace because the replace revokes the refs read before it.
-        var first = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
+        var (first, firstError) = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
         if (first is null)
         {
-            return new ReassignResult(false, "компоненты копии не прочитаны", current);
+            return new ReassignResult(false, "компоненты копии не прочитаны", current, Error: firstError);
         }
 
         var planned = first
@@ -652,10 +657,10 @@ internal sealed class AssemblyCheckpoint
                 continue;
             }
 
-            var rows = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
+            var (rows, rowsError) = await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false);
             if (rows is null)
             {
-                return new ReassignResult(false, "компоненты копии не прочитаны", current);
+                return new ReassignResult(false, "компоненты копии не прочитаны", current, Error: rowsError);
             }
 
             // INVARIANT: the row at this position is still the row the plan was built for. The replace is
@@ -733,7 +738,11 @@ internal sealed class AssemblyCheckpoint
 
     // ---- Verification ----
 
-    private sealed record VerifyResult(IReadOnlyList<string> Mismatches);
+    /// <summary>The mismatches found, and the refused call's error when a read of the copy failed.</summary>
+    /// <remarks>INVARIANT: a verification that could not read the copy is a refusal caused by a refused call,
+    /// so it carries that call's code; a graph that was read and disagrees carries none.
+    /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    private sealed record VerifyResult(IReadOnlyList<string> Mismatches, JsonObject? Error = null);
 
     /// <summary>Reopen the copy and re-read the links from the FILE, not from memory.</summary>
     /// <remarks>INVARIANT: the caller closes every open document of the copy first — an open-by-path while the
@@ -763,7 +772,8 @@ internal sealed class AssemblyCheckpoint
         {
             var cause = opened.Error is null ? string.Empty
                 : $": {opened.Error.Code}: {opened.Error.Message}";
-            return new VerifyResult(new[] { "копия верхней сборки не открылась для проверки" + cause });
+            return new VerifyResult(
+                new[] { "копия верхней сборки не открылась для проверки" + cause }, ErrorOf(opened));
         }
 
         var verifyDocumentId = JsonScalars.ReadString(opened.Result?["document_id"])
@@ -784,7 +794,7 @@ internal sealed class AssemblyCheckpoint
 
         if (!graph.Ok)
         {
-            return new VerifyResult(new[] { graph.Message });
+            return new VerifyResult(new[] { graph.Message }, graph.Error);
         }
 
         var (passed, mismatches) = AssemblyCopyPlan.Verify(entries, copyFolder, graph.Links, expectedComponents);

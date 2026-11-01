@@ -81,6 +81,16 @@ public class AssemblyCheckpointTests : IDisposable
 
         public string? RefuseAccess { get; init; }
 
+        /// <summary>How many recursive component reads to answer before refusing the rest (the graph).</summary>
+        public int RefuseGraphsAfter { get; init; } = -1;
+
+        /// <summary>How many plain component reads to answer before refusing the rest (the copy's rows).</summary>
+        public int RefuseRowsAfter { get; init; } = -1;
+
+        private int _graphsAnswered;
+
+        private int _rowsAnswered;
+
         public Task<ResultEnvelope<JsonNode?>> Invoke(
             string tool, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
         {
@@ -88,16 +98,28 @@ public class AssemblyCheckpointTests : IDisposable
             var access = arguments["access"]?.GetValue<string>();
             if (tool == RefuseTool && (RefuseAccess is null || access == RefuseAccess))
             {
-                return Task.FromResult(new ResultEnvelope<JsonNode?>
+                return Task.FromResult(Refused(tool, "PATH_NOT_ALLOWED"));
+            }
+
+            if (tool == "kompas_list_components")
+            {
+                var recursive = arguments["recursive"]?.GetValue<bool>() == true;
+                var answered = recursive ? _graphsAnswered++ : _rowsAnswered++;
+                var limit = recursive ? RefuseGraphsAfter : RefuseRowsAfter;
+                if (limit >= 0 && answered >= limit)
                 {
-                    Status = OperationStatus.Failed,
-                    Error = new ErrorDto(
-                        "PATH_NOT_ALLOWED", $"отказ вызова {tool}", RetryPolicy.Never, null, false, null),
-                });
+                    return Task.FromResult(Refused(tool, "CAPABILITY_UNAVAILABLE"));
+                }
             }
 
             return Task.FromResult(Answer(tool, arguments));
         }
+
+        private static ResultEnvelope<JsonNode?> Refused(string tool, string code) => new()
+        {
+            Status = OperationStatus.Failed,
+            Error = new ErrorDto(code, $"отказ вызова {tool}", RetryPolicy.Never, null, false, null),
+        };
 
         private ResultEnvelope<JsonNode?> Answer(string tool, JsonObject arguments)
         {
@@ -301,5 +323,72 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.Equal("PATH_NOT_ALLOWED",
             outcome.Error!["step_error"]!["code"]!.GetValue<string>());
         Assert.Contains("вложенных сборок", outcome.Error!["message"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task RefusedVerificationOpen_CarriesThatCallsStepError()
+    {
+        var part = Part("part.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseTool = "kompas_open_document",
+            RefuseAccess = "read_only",
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("copy_not_verified", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("PATH_NOT_ALLOWED",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task RefusedVerificationGraph_CarriesThatCallsStepError()
+    {
+        var part = Part("part.m3d");
+        // The first recursive read builds the plan; the second one is the verification's.
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseGraphsAfter = 1,
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("copy_not_verified", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("CAPABILITY_UNAVAILABLE",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task RefusedCopyRows_CarriesThatCallsStepError()
+    {
+        var part = Part("part.m3d");
+        // No plain component read is answered: the reassignment cannot learn what the copy holds.
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseRowsAfter = 0,
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("top_refs_not_reassigned", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("CAPABILITY_UNAVAILABLE",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
     }
 }

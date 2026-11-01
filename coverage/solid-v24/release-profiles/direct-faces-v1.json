@@ -58,7 +58,7 @@
         "negative_tests",
         "geometry_validation"
       ],
-      "gap": "Маршрут документирован: ISurfaceContainer.FaceRemovers.Add() -> IFaceRemover.Faces + SaveBody = false -> IModelObject.Update(). Форма массива берётся из справки ifaceremover_faces.html: один объект как VT_DISPATCH, несколько как VT_ARRAY | VT_DISPATCH. Успех подтверждается числами: граней стало меньше ровно на число названных, объём нулевой, площадь уменьшилась. Отказы: пустой список, повторы, список, покрывающий ВСЕ грани тела, грани разных тел, недокументированный режим, Update() = false, ненулевой объём после операции. save_reopen не измерялся - наряд DIRECT_FACES_NO_HISTORY."
+      "gap": "Маршрут документирован: ISurfaceContainer.FaceRemovers.Add() -> IFaceRemover.Faces + SaveBody = false -> IModelObject.Update(). Форма массива берётся из справки ifaceremover_faces.html: один объект как VT_DISPATCH, несколько как VT_ARRAY | VT_DISPATCH. Успех подтверждается числами: граней стало меньше ровно на число названных, объём нулевой, площадь уменьшилась. Отказы: пустой список, повторы, список, покрывающий ВСЕ грани тела, грани разных тел, недокументированный режим, Update() = false, ненулевой объём после операции. save_reopen измерен строками E5.DEL.save_reopen и E5.RES.save_reopen, поэтому действие закрыто у всех четырёх режимов профиля."
     },
     {
       "ref": "SM-24.delete_faces.keep_body",
@@ -110,7 +110,7 @@
         "discover",
         "read"
       ],
-      "gap": "Справка: «Данный интерфейс можно получить у компонента IPart7 посредством вызова метода IUnknown::QueryInterface». В .NET работает приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную QueryInterface не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом. Проверяется строками E5.DEP.surface_container и E5.DEP.faces_body: удаление и восстановление граней получают ISurfaceContainer приведением от IPart7 и читают его коллекции, грани адресуются ссылками kompas_read_topology, грань чужого документа отвергается (E5.NEG.foreign_face)."
+      "gap": "Справка: «Данный интерфейс можно получить у компонента IPart7 посредством вызова метода IUnknown::QueryInterface». В .NET работает приведением (ISurfaceContainer)IPart7 - измерено пробой блока E5; вручную QueryInterface не нужен. Не ответил - отказ CAPABILITY_UNAVAILABLE с названным интерфейсом. Проверяется строкой E5.DEP.surface_container: удаление грани обнуляет объём тела и снимает ровно одну грань, восстановление добавляет ОТДЕЛЬНОЕ тело с прочитанной площадью, а площадь оболочки при этом не меняется. Сами коллекции FaceRemovers и RestoredSurfaces в ответе инструмента не читаются - судится эффект операций, а не коллекции."
     },
     {
       "id": "dep.refs.faces_body",
@@ -125,7 +125,7 @@
         "read",
         "negative_tests"
       ],
-      "gap": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь читаются CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани (тело) в ссылке не хранится, поэтому принадлежность проверяется по COM-указателю: грань чужого тела отвергается с details.body_index. Проверяется строками E5.DEP.surface_container и E5.DEP.faces_body: удаление и восстановление граней получают ISurfaceContainer приведением от IPart7 и читают его коллекции, грани адресуются ссылками kompas_read_topology, грань чужого документа отвергается (E5.NEG.foreign_face)."
+      "gap": "Новых читателей не заводится: грани адресуются ссылками kompas_read_topology, объём и площадь читаются CalcMassInertiaProperties, площадь и периметр перемещаемых граней - GetArea и EdgeCollection/GetLength. Владелец грани (тело) в ссылке не хранится, поэтому принадлежность проверяется по COM-указателю: грань чужого тела отвергается с details.body_index. Проверяется строками E5.DEP.faces_body и E5.NEG.foreign_face: грани адресуются ссылками kompas_read_topology (после удаления одной грани прочитанных ровно на одну меньше), а грань чужого документа отвергается."
     }
   ],
   "explicitly_out_of_scope": [

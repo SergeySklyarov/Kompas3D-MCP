@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-01T08:31:29+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-01T18:43:44+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 166, маршрутов 774.
-- Измеряемая сборка: `release_build`, коммит `4edf2df`, дерево чистое; `KompasMcp.Host.dll` sha256 `8ea12feb9c3242cc6a1873b6d3ecc605d5799c9d27a2df3ad5178f8e0f69f362`.
+- Измеряемая сборка: `release_build`, коммит `a40171a`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `70ab659207b2fa8b8fe3eabd981b2047664f6a56a52f83a8ac45d3e3ab67cb28`.
 
 ## 2. Сверка полноты
 
@@ -37,9 +37,9 @@
 | rows_action_without_dedicated_row | 23 |
 | rows_actions_without_required_calls | 28 |
 | rows_status_lowered_by_unsupported_actions | 28 |
-| acceptance_rows | 2124 |
-| acceptance_calls_journal | 19212 |
-| acceptance_rows_with_call_window | 2124 |
+| acceptance_rows | 2133 |
+| acceptance_calls_journal | 19285 |
+| acceptance_rows_with_call_window | 2133 |
 | required_of_mismatches_matrix_vs_profile | 16 |
 | dependency_verdict_control_proved | None |
 

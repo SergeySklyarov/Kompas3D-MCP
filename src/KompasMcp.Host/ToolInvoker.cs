@@ -85,11 +85,21 @@ public sealed class ToolInvoker : IAsyncDisposable
     /// ones raised inside the journal or queue: an escaping <see cref="KompasContractException"/>
     /// would be reported as an unclassified VERIFICATION_FAILED, and OPERATION_ID_CONFLICT in
     /// particular must never lose its code.</summary>
-    public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
+    public Task<ResultEnvelope<JsonNode?>> InvokeAsync(
+        string toolName, JsonObject arguments, CancellationToken cancellationToken) =>
+        InvokeAsync(toolName, arguments, null, cancellationToken);
+
+    /// <summary>The same entry, with ONE path outside the client's roots admitted for this call.</summary>
+    /// <remarks>INVARIANT: <paramref name="servicePath"/> comes from the Host's own scenario code, never
+    /// from an argument — no tool field, no <c>kompas_run</c> wrapper and no step can set it, so the client
+    /// gains no way past the file policy. The grant covers that one path only and is not inherited by
+    /// anything the call invokes. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
+    internal async Task<ResultEnvelope<JsonNode?>> InvokeAsync(
+        string toolName, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
     {
         try
         {
-            return await InvokeCoreAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+            return await InvokeCoreAsync(toolName, arguments, servicePath, cancellationToken).ConfigureAwait(false);
         }
         catch (KompasContractException contract)
         {
@@ -107,7 +117,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
     }
 
-    private async Task<ResultEnvelope<JsonNode?>> InvokeCoreAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
+    private async Task<ResultEnvelope<JsonNode?>> InvokeCoreAsync(
+        string toolName, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
     {
         var tool = ToolCatalog.All.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
         if (tool is null)
@@ -140,7 +151,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             };
         }
 
-        var pathFailure = CheckPaths(tool, arguments);
+        var pathFailure = CheckPaths(tool, arguments, servicePath);
         if (pathFailure is not null)
         {
             return new ResultEnvelope<JsonNode?>
@@ -158,7 +169,9 @@ public sealed class ToolInvoker : IAsyncDisposable
         // the Worker. History: docs/decisions/scenario.md#scenario-run
         if (string.Equals(tool.WorkerCommand, WorkerCommands.Scenario, StringComparison.Ordinal))
         {
-            return await new ScenarioRunner(_options.ControlCopyDirectory, InvokeAsync)
+            return await new ScenarioRunner(
+                    _options.ControlCopyDirectory,
+                    (name, stepArguments, grant, token) => InvokeAsync(name, stepArguments, grant, token))
                 .RunAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
@@ -576,7 +589,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
     }
 
-    private ErrorDto? CheckPaths(ToolDefinition tool, JsonObject arguments)
+    private ErrorDto? CheckPaths(ToolDefinition tool, JsonObject arguments, string? servicePath)
     {
         // `path` on an EDIT open is an intent to WRITE to that file: a document opened with
         // access=edit is later saved by kompas_save_document without target_path, i.e. back to the
@@ -618,7 +631,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             var writes = field is "output_path" or "target_path" or "save_path"
                          || (field is "path" && pathIsWrite);
             var decision = _pathPolicy.Evaluate(value, intendToWrite: writes);
-            if (decision.Access != PathAccess.Denied)
+            if (decision.Access != PathAccess.Denied || IsServicePath(value, servicePath))
             {
                 continue;
             }
@@ -638,6 +651,30 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
 
         return null;
+    }
+
+    /// <summary>Whether the candidate is the one path a caller's service grant names.</summary>
+    /// <remarks>INVARIANT: the grant is compared as a canonical path — equal to it, or inside it when it
+    /// names a folder — so "…-r1" does not admit "…-r10". A grant that does not canonicalise admits
+    /// nothing. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
+    private static bool IsServicePath(string candidate, string? servicePath)
+    {
+        if (string.IsNullOrWhiteSpace(servicePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var grant = Path.TrimEndingDirectorySeparator(Path.GetFullPath(servicePath));
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+            return string.Equals(full, grant, StringComparison.OrdinalIgnoreCase)
+                   || PathPolicy.IsWithin(full, grant);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     // ---- Execution ----

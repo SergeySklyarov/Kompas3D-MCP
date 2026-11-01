@@ -31,12 +31,18 @@ internal sealed class AssemblyCheckpoint
     private readonly string _controlCopyDirectory;
     private readonly Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invoke;
 
+    /// <summary>The same entry, admitting ONE copy file outside the client's roots.</summary>
+    /// <remarks>INVARIANT: the grant is the file this call reads or writes, computed here — a client
+    /// argument never reaches it. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
+    private readonly Func<string, JsonObject, string, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invokeCopy;
+
     internal AssemblyCheckpoint(
         string controlCopyDirectory,
-        Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> invoke)
+        Func<string, JsonObject, string?, CancellationToken, Task<ResultEnvelope<JsonNode?>>> invoke)
     {
         _controlCopyDirectory = controlCopyDirectory;
-        _invoke = invoke;
+        _invoke = (tool, arguments, token) => invoke(tool, arguments, null, token);
+        _invokeCopy = (tool, arguments, copyPath, token) => invoke(tool, arguments, copyPath, token);
     }
 
     /// <summary>The folder a checkpoint of this document and revision is written to.</summary>
@@ -133,7 +139,7 @@ internal sealed class AssemblyCheckpoint
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             return Refuse(report, "copy_folder_unavailable",
-                $"Каталог копии недоступен: {ex.GetType().Name}: {ex.Message}", Array.Empty<string>());
+                $"Каталог копии недоступен: {folder}: {ex.GetType().Name}: {ex.Message}", Array.Empty<string>());
         }
 
         try
@@ -186,19 +192,19 @@ internal sealed class AssemblyCheckpoint
 
         // The top file goes through the SAME route as a detail: SaveAs, so unsaved edits of the top assembly
         // are inside the copy. The live document becomes the copy; the client's own file is not written.
-        var saved = await _invoke("kompas_save_document", new JsonObject
+        var saved = await _invokeCopy("kompas_save_document", new JsonObject
         {
             ["document_id"] = documentId,
             ["expected_revision"] = revision.Value,
             ["target_path"] = topCopy,
             ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "checkpoint-save"),
-        }, cancellationToken).ConfigureAwait(false);
+        }, topCopy, cancellationToken).ConfigureAwait(false);
 
         if (saved.Status != OperationStatus.Succeeded)
         {
             DeleteFolderIfCreated(folder, created);
             return Refuse(report, "copy_not_written", "Копия верхней сборки не снята: документ не сохранён "
-                + "документированным SaveAs.", Array.Empty<string>());
+                + "документированным SaveAs.", Array.Empty<string>(), stepError: ErrorOf(saved));
         }
 
         // ---- From here the live document IS the copy: a refusal must not delete the folder under it. ----
@@ -243,7 +249,8 @@ internal sealed class AssemblyCheckpoint
             if (resaved.Status != OperationStatus.Succeeded)
             {
                 return Refuse(report, "copy_not_saved",
-                    "Копия с переназначенными ссылками не сохранена.", Array.Empty<string>(), moved);
+                    "Копия с переназначенными ссылками не сохранена.", Array.Empty<string>(), moved,
+                    stepError: ErrorOf(resaved));
             }
         }
 
@@ -278,7 +285,7 @@ internal sealed class AssemblyCheckpoint
 
             return Refuse(report, "copy_not_closed",
                 "Копия снята, но закрыть её документ перед проверкой не удалось" + cause,
-                Array.Empty<string>(), closeState);
+                Array.Empty<string>(), closeState, stepError: ErrorOf(closed));
         }
 
         var verification = await VerifyAsync(
@@ -367,7 +374,7 @@ internal sealed class AssemblyCheckpoint
             arguments["application_id"] = applicationId;
         }
 
-        var opened = await _invoke("kompas_open_document", arguments, cancellationToken)
+        var opened = await _invokeCopy("kompas_open_document", arguments, path, cancellationToken)
             .ConfigureAwait(false);
         if (opened.Status != OperationStatus.Succeeded)
         {
@@ -500,7 +507,7 @@ internal sealed class AssemblyCheckpoint
             openArguments["application_id"] = applicationId;
         }
 
-        var opened = await _invoke("kompas_open_document", openArguments, cancellationToken)
+        var opened = await _invokeCopy("kompas_open_document", openArguments, copyPath, cancellationToken)
             .ConfigureAwait(false);
 
         if (opened.Status != OperationStatus.Succeeded)
@@ -673,7 +680,7 @@ internal sealed class AssemblyCheckpoint
                 return new ReassignResult(false, "ревизия копии не прочитана перед переназначением", null);
             }
 
-            var replacedEnvelope = await _invoke("kompas_replace_component", new JsonObject
+            var replacedEnvelope = await _invokeCopy("kompas_replace_component", new JsonObject
             {
                 ["document_id"] = documentId,
                 ["expected_revision"] = current.Value,
@@ -681,7 +688,7 @@ internal sealed class AssemblyCheckpoint
                 ["source_path"] = copyPath,
                 ["operation_id"] = ScenarioRunner.ChildOperationId(
                     parentOperationId, "copy-reassign-" + componentRef),
-            }, cancellationToken).ConfigureAwait(false);
+            }, copyPath, cancellationToken).ConfigureAwait(false);
 
             if (replacedEnvelope.Status != OperationStatus.Succeeded)
             {
@@ -737,7 +744,7 @@ internal sealed class AssemblyCheckpoint
             openArguments["application_id"] = applicationId;
         }
 
-        var opened = await _invoke("kompas_open_document", openArguments, cancellationToken)
+        var opened = await _invokeCopy("kompas_open_document", openArguments, topCopy, cancellationToken)
             .ConfigureAwait(false);
 
         if (opened.Status != OperationStatus.Succeeded)
@@ -773,6 +780,14 @@ internal sealed class AssemblyCheckpoint
     }
 
     // ---- Helpers ----
+
+    private static JsonObject? ErrorOf(ResultEnvelope<JsonNode?> envelope) => envelope.Error is null
+        ? null
+        : new JsonObject
+        {
+            ["code"] = envelope.Error.Code,
+            ["message"] = envelope.Error.Message,
+        };
 
     private static bool TryWriteAtomic(string path, JsonObject manifest, out string? reason)
     {
@@ -822,7 +837,8 @@ internal sealed class AssemblyCheckpoint
     /// cause travels in <c>details.cause</c>, so a client reads the same field whatever failed.
     /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
     private static AssemblyCheckpointOutcome Refuse(
-        JsonObject report, string cause, string message, IReadOnlyList<string> files, JsonObject? state = null)
+        JsonObject report, string cause, string message, IReadOnlyList<string> files, JsonObject? state = null,
+        JsonObject? stepError = null)
     {
         if (state is not null)
         {
@@ -832,20 +848,27 @@ internal sealed class AssemblyCheckpoint
             }
         }
 
-        return new AssemblyCheckpointOutcome(
-            false,
-            report,
-            new JsonObject
-            {
-                ["code"] = "CHECKPOINT_FAILED",
-                ["message"] = message,
-                ["reason"] = "copy_not_written",
-                ["details"] = new JsonObject
-                {
-                    ["field"] = "checkpoint_policy",
-                    ["cause"] = cause,
-                    ["files"] = new JsonArray(files.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
-                },
-            });
+        var details = new JsonObject
+        {
+            ["field"] = "checkpoint_policy",
+            ["cause"] = cause,
+            ["files"] = new JsonArray(files.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
+        };
+        var error = new JsonObject
+        {
+            ["code"] = "CHECKPOINT_FAILED",
+            ["message"] = message,
+            ["reason"] = "copy_not_written",
+            ["details"] = details,
+        };
+        // INVARIANT: a refusal caused by a refused call carries that call's code and message, so the
+        // client reads the same field here as it does on a detail.
+        // History: docs/decisions/scenario.md#assembly-checkpoint
+        if (stepError is not null)
+        {
+            error["step_error"] = stepError;
+        }
+
+        return new AssemblyCheckpointOutcome(false, report, error);
     }
 }

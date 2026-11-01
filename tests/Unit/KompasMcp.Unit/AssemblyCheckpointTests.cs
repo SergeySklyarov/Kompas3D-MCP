@@ -77,7 +77,7 @@ public class AssemblyCheckpointTests : IDisposable
         public string SourcePath { get; init; } = string.Empty;
 
         public Task<ResultEnvelope<JsonNode?>> Invoke(
-            string tool, JsonObject arguments, CancellationToken cancellationToken)
+            string tool, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
         {
             Tools.Add(tool);
             return Task.FromResult(Answer(tool, arguments));

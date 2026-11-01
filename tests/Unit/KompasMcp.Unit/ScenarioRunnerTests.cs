@@ -18,7 +18,7 @@ public sealed class ScenarioRunnerTests
     private const string Document = "0123456789abcdef0123456789abcdef";
 
     private static ScenarioRunner Runner(List<string> calls, Func<string, JsonObject, ResultEnvelope<JsonNode?>?>? overrideAnswer = null) =>
-        new(@"C:\temp\control", (tool, arguments, _) =>
+        new(@"C:\temp\control", (tool, arguments, _, _) =>
         {
             calls.Add(tool);
             var answer = overrideAnswer?.Invoke(tool, arguments) ?? Succeeded(arguments, new JsonObject { ["sketch_ref"] = "sk-1" });
@@ -117,7 +117,7 @@ public sealed class ScenarioRunnerTests
     {
         var calls = new List<string>();
         JsonObject? extrudeArguments = null;
-        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, _) =>
+        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, _, _) =>
         {
             calls.Add(tool);
             if (tool == "kompas_extrude")
@@ -152,7 +152,7 @@ public sealed class ScenarioRunnerTests
     public async Task FailedStepStopsThePlanAndNamesPartialEffects()
     {
         var calls = new List<string>();
-        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, _) =>
+        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, _, _) =>
         {
             calls.Add(tool);
             return Task.FromResult(tool == "kompas_extrude"
@@ -182,7 +182,7 @@ public sealed class ScenarioRunnerTests
     [Fact]
     public async Task NestedArgumentsAndResultsAreResolved()
     {
-        var runner = new ScenarioRunner(@"C:	emp\control", (tool, arguments, _) => Task.FromResult(
+        var runner = new ScenarioRunner(@"C:	emp\control", (tool, arguments, _, _) => Task.FromResult(
             Succeeded(arguments, new JsonObject
             {
                 ["id"] = "sk-1",
@@ -204,5 +204,37 @@ public sealed class ScenarioRunnerTests
 
         Assert.Equal(OperationStatus.Succeeded, answer.Status);
         Assert.Equal("sk-1", answer.Result?["steps"]?[1]?["result"]?["id"]?.GetValue<string>());
+    }
+
+    /// <summary>Only the checkpoint's own save carries a service path, and it names the copy it writes;
+    /// a step carries none, so no plan reaches outside the client's roots.</summary>
+    /// <remarks>INVARIANT: the grant is computed by the runner from the copy path, never read from an
+    /// argument. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
+    [Fact]
+    public async Task CheckpointSaveCarriesTheCopyAsItsServicePathOnly()
+    {
+        var grants = new List<(string Tool, string? Grant)>();
+        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, grant, _) =>
+        {
+            grants.Add((tool, grant));
+            return Task.FromResult(tool == "kompas_get_context"
+                ? new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Succeeded,
+                    Result = new JsonObject { ["revision"] = 7, ["kind"] = "part" },
+                }
+                : Succeeded(arguments, new JsonObject { ["id"] = "sk-1" }));
+        });
+
+        var plan = Plan(Step("s1", "kompas_create_sketch"));
+        plan["on_error"] = "restore_checkpoint";
+        plan["checkpoint_policy"] = "document_copy";
+
+        var answer = await runner.RunAsync(plan, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Succeeded, answer.Status);
+        var copy = Path.Combine(@"C:\temp\control", "control-copies", "scenario", Parent + "-r7.m3d");
+        Assert.Equal(copy, grants.Single(row => row.Tool == "kompas_save_document").Grant);
+        Assert.Null(grants.Single(row => row.Tool == "kompas_create_sketch").Grant);
     }
 }

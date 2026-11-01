@@ -929,6 +929,10 @@ RUN_GROUPS = (
      "Приёмка ASC: контрольная точка сборки - копия графа зависимостей, ссылки перечитаны из заново "
      "открытой копии, файлы клиента не изменены, режим read_only назван, чертёж отказывает "
      "(наряд ASSEMBLY_CHECKPOINT, спека §1.9)"),
+    ("checkpoint_paths", "checkpoint-paths", "checkpoint-paths-acceptance.json",
+     "Приёмка CP: контрольная точка сценария на конфигурации УСТАНОВКИ - каталог копий вне всех "
+     "корней: копия детали и сборки с манифестом, восстановление, прямой путь и путь шага "
+     "по-прежнему PATH_NOT_ALLOWED, недоступный каталог назван (наряд SCENARIO_CHECKPOINT_PATHS)"),
     ("flat_part", "flat-part", "flat-part-acceptance.json",
      "Приёмка FLT: DXF контура плоской детали - вид по оси нормали, петли и габарит, отверстие и "
      "скругления, площадь контура против площади грани, сторонний разбор ezdxf, отказы по плоскости "
@@ -1011,6 +1015,9 @@ ALL_GROUPS_EXTRA = (
     ("scenario", ["--scenario-only"]),
     # Группа ASC строит свои детали и двухуровневую сборку сама, общий сеанс ей не нужен.
     ("asm_checkpoint", ["--asm-checkpoint-only"]),
+    # Группа CP ведёт свой Хост: каталог контрольных копий задаётся конфигурацией на старте процесса,
+    # а строки сравнивают поведение при каталоге ВНЕ всех корней (так его кладёт установщик).
+    ("checkpoint_paths", ["--checkpoint-paths-only"]),
     # Группа IGES строит свою деталь и не зависит от общего сеанса: свежий сеанс ей не нужен.
     ("iges", ["--iges-only"]),
     # Группа OPS ведёт свой Хост со своим журналом и малым бюджетом синхронизации: состояния
@@ -2240,6 +2247,8 @@ FLAGS = (
     ("--e5-only", False, "группа E5: прямое редактирование граней тела"),
     ("--scenario-only", False, "группа SC: ограниченный сценарий kompas_run_scenario"),
     ("--asm-checkpoint-only", False, "группа ASC: контрольная точка сборки - копия графа"),
+    ("--checkpoint-paths-only", False,
+     "группа CP: контрольная точка сценария при каталоге копий вне корней"),
     ("--iges-only", False, "группа IGES: экспорт модели в IGES"),
     ("--flat-part-only", False, "группа FLT: DXF контура плоской детали"),
     ("--diag-only", False, "группа DG: диагностический пакет без содержимого моделей"),
@@ -19352,6 +19361,10 @@ def main():
     # конфигурацией на старте процесса, а строки сравнивают поведение при малом бюджете.
     ops_only = "--ops-only" in sys.argv
 
+    # Наряд SCENARIO_CHECKPOINT_PATHS: контрольная точка сценария при каталоге копий ВНЕ корней.
+    # Группа ведёт свой Хост: каталог копий задаётся конфигурацией на старте процесса.
+    checkpoint_paths_only = "--checkpoint-paths-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -19393,6 +19406,7 @@ def main():
         "events": events_only,
         "scenario": scenario_only,
         "asm_checkpoint": asm_checkpoint_only,
+        "checkpoint_paths": checkpoint_paths_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
@@ -19899,6 +19913,13 @@ def main():
             # Группа OPS: свой Хост со своим журналом и малым бюджетом синхронизации; общий сеанс
             # прогона ей не нужен и мешал бы - бюджет задаётся конфигурацией процесса.
             ops_checks(host, measured_config, workdir, rep)
+            return finish(rep, client)
+
+        if checkpoint_paths_only:
+            # Группа CP: свой Хост с каталогом контрольных копий ВНЕ всех корней - так его кладёт
+            # установщик. Общий сеанс прогона держит каталог копий внутри корня записи, поэтому
+            # дефект в нём не воспроизводится.
+            checkpoint_paths_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
         if update_only:
@@ -53442,6 +53463,374 @@ def catalog_checks(host, config, workdir, rep):
         stop(probe)
 
 
+def checkpoint_paths_checks(host, config, workdir, rep):
+    """CP.* — контрольная точка сценария на конфигурации УСТАНОВКИ (наряд SCENARIO_CHECKPOINT_PATHS).
+
+    ЗАЧЕМ ЭТА ГРУППА. Установщик кладёт `control_copy_directory` в каталог установки, то есть ВНЕ
+    `writable_roots` и `read_only_roots`. Общий прогон этого не видел: `config/kompas-mcp.local.json`
+    держит каталог копий в `scratch`, внутри корня записи, и дефект `PATH_NOT_ALLOWED` на служебном
+    пути оставался невидимым. Строки сравнивают ЗНАЧЕНИЯ: файл копии и манифест на диске,
+    `document_id_after` открывается, sha256 файла клиента до и после, код и причина отказа.
+
+    ПОЧЕМУ СВОЙ ХОСТ. Каталог копий задаётся конфигурацией на старте процесса. Строка CP.07 поднимает
+    ВТОРОЙ Хост с недоступным каталогом: тот же процесс переписать каталог не может.
+    """
+    import hashlib
+    import json
+    import os as _os
+    import tempfile
+    from localconfig import isolate_config
+
+    # Каталог копий ВНЕ всех корней, как его создаёт установщик. Имя нарочно соседствует с корнем
+    # записи ("scratch" против "scratch-…"): посегментное сравнение путей не должно принять соседа за
+    # корень, и строка это тоже держит.
+    copies_root = tempfile.mkdtemp(prefix="kompas-checkpoint-copies-")
+    folder = _os.path.join(workdir, "checkpoint-paths")
+    _os.makedirs(folder, exist_ok=True)
+
+    def own_config(control_copy_directory, prefix):
+        path = isolate_config(config, workdir, prefix)
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        data["control_copy_directory"] = control_copy_directory
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        return path
+
+    def open_host(cfg, name):
+        probe = Client(host, cfg)
+        probe.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                  "clientInfo": {"name": name, "version": "0"}}, timeout=60)
+        probe.notify("notifications/initialized")
+        return probe
+
+    def close_host(probe):
+        try:
+            if probe.p.stdin:
+                probe.p.stdin.close()
+        except OSError:
+            pass
+
+    def sha(path):
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+
+    def row(ident, title, ok, detail):
+        rep.add(ident, title, "PASS" if ok else "FAIL", detail)
+
+    probe = open_host(own_config(copies_root, "cp"), "mcp-smoke-checkpoint")
+
+    def call(tool, args, timeout=600):
+        payload = dict(args)
+        if probe.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = probe.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def current_rev(doc):
+        _e, env, _r = probe.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def volume(doc):
+        _e, env, _r = probe.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        if isinstance(rows, dict):
+            rows = rows.get("rows") or rows.get("bodies") or []
+        if not isinstance(rows, list) or not rows:
+            return None
+        _e, env, _r = probe.tool("kompas_measure",
+                                 {"target_ref": rows[0].get("body_ref"), "properties": ["volume"]})
+        return ((env or {}).get("result") or {}).get("volume_mm3")
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def new_document(kind, name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": kind, "name": name})
+        return result(env).get("document_id") or result(env).get("id"), code, emsg(env)
+
+    def make_part(name, path, depth=10.0):
+        """Деталь с одним телом, сохранённая по пути клиента: без файла нечего сравнивать до/после."""
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        doc, code, message = new_document("part", name)
+        if not doc:
+            return None, f"документ не создан: {code} {message}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": name + "-profile"})
+        sketch = result(env).get("id")
+        if not sketch:
+            return doc, f"эскиз не создан: {code} {emsg(env)}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": 40.0, "height_mm": 20.0}]})
+        if code:
+            return doc, f"правка эскиза: {code} {emsg(env)}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": depth, "direction": "positive"})
+        if code:
+            return doc, f"выдавливание: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
+        if code:
+            return doc, f"сохранение: {code} {emsg(env)}"
+        return doc, None
+
+    def run(doc, steps, on_error="restore_checkpoint", policy="document_copy"):
+        # Контрольная точка снимается ТОЛЬКО при on_error=restore_checkpoint: восстанавливать нечего,
+        # если восстановление не заказано (то же правило, что в группе SC).
+        return call("kompas_run_scenario", {
+            "scenario_version": 1, "document_id": doc, "operation_id": str(uuid.uuid4()),
+            "on_error": on_error, "checkpoint_policy": policy, "steps": steps}, timeout=600)
+
+    rebuild_step = [{"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}}]
+
+    env, code = call("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
+    app_id = (env or {}).get("application_id")
+    row("CP.00", "connect(launch): сеанс для группы поднят",
+        bool(app_id), f"app_id={app_id} err={code} {emsg(env)}")
+
+    part_path = _os.path.join(folder, "cp-part.m3d")
+    doc, error = make_part("cp-part", part_path)
+    part_sha_before = sha(part_path) if _os.path.exists(part_path) else None
+    part_volume_before = volume(doc) if doc else None
+    row("CP.01.build", "деталь с телом сохранена по пути клиента",
+        bool(doc) and part_sha_before is not None and not error,
+        f"doc={doc} sha={str(part_sha_before)[:12]} объём={part_volume_before} ошибка={error}")
+
+    # ── CP.01 копия детали при каталоге копий вне корней ──────────────────────────────────────
+    checkpoint = {}
+    copied_id = None
+    if doc:
+        env, code = run(doc, rebuild_step)
+        answer = result(env)
+        checkpoint = answer.get("checkpoint") or {}
+        copy_path = checkpoint.get("path")
+        copied_id = answer.get("document_id_after")
+        copy_on_disk = bool(copy_path) and _os.path.exists(copy_path)
+        # Копия обязана лежать в каталоге копий и НЕ в корне записи: иначе строка прошла бы на
+        # конфигурации, где дефект не воспроизводится.
+        in_copies = bool(copy_path) and _os.path.abspath(copy_path).startswith(
+            _os.path.abspath(copies_root) + _os.sep)
+        client_intact = _os.path.exists(part_path) and sha(part_path) == part_sha_before
+        after_ok = False
+        if copied_id:
+            _e, ctx, _r = probe.tool("kompas_get_context",
+                                     {"document_id": copied_id, "detail": "minimal"})
+            after_ok = (ctx or {}).get("status") == "succeeded"
+        row("CP.01.detail_copy",
+            "деталь, document_copy, каталог копий вне корней: копия снята и читается",
+            code is None and checkpoint.get("taken") is True and copy_on_disk and in_copies
+            and client_intact and after_ok,
+            f"taken={checkpoint.get('taken')} копия={str(copy_path)[:80]} на_диске={copy_on_disk} "
+            f"в_каталоге_копий={in_copies} файл_клиента_цел={client_intact} "
+            f"document_id_after={copied_id} читается={after_ok} err={code} {emsg(env)}")
+
+    # ── CP.02 восстановление по контрольной точке ────────────────────────────────────────────
+    restore_doc = None
+    if doc:
+        # Шаг s2 отказывает на несуществующем эскизе: после s1 модель уже изменена, и восстановление
+        # обязано вернуть её к замеру ДО сценария.
+        steps = [{"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}},
+                 {"step_id": "s2", "tool": "kompas_edit_sketch",
+                  "arguments": {"sketch_ref": "no-such-sketch", "expected_revision": 1,
+                                "mode": "append",
+                                "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                                              "width_mm": 5.0, "height_mm": 5.0}]}}]
+        volume_before = volume(doc)
+        env, code = run(doc, steps)
+        answer = result(env)
+        restore = answer.get("restore") or {}
+        restore_doc = restore.get("document_id_after") or answer.get("document_id_after")
+        volume_after = volume(restore_doc) if restore_doc else None
+        row("CP.02.restore",
+            "on_error=restore_checkpoint: сбой шага, состояние совпало с замером до сценария",
+            answer.get("status") == "failed" and restore.get("succeeded") is True
+            and volume_after is not None and volume_before is not None
+            and abs(volume_after - volume_before) < 1e-6,
+            f"статус={answer.get('status')} шаг={answer.get('failed_step')} "
+            f"restore={restore.get('succeeded')} объём_до={volume_before} после={volume_after} "
+            f"документ_после={restore_doc} err={code} {emsg(env)}")
+        doc = restore_doc or doc
+
+    # ── CP.03 прямое сохранение в каталог копий ──────────────────────────────────────────────
+    direct = _os.path.join(copies_root, "control-copies", "scenario", "direct-cp03.m3d")
+    if doc:
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": direct})
+        row("CP.03.direct_save_denied",
+            "прямое сохранение в каталог копий: PATH_NOT_ALLOWED, файла нет",
+            code == "PATH_NOT_ALLOWED" and not _os.path.exists(direct),
+            f"код={code} файл_есть={_os.path.exists(direct)} {emsg(env)}")
+
+    # ── CP.04 шаг плана с записью в каталог копий ────────────────────────────────────────────
+    step_target = _os.path.join(copies_root, "control-copies", "scenario", "step-cp04.m3d")
+    if doc:
+        env, code = run(doc, [{"step_id": "s1", "tool": "kompas_save_document",
+                               "arguments": {"target_path": step_target}}])
+        answer = result(env)
+        row("CP.04.step_save_denied",
+            "шаг плана, сохраняющий в каталог копий: отказ плана, файла нет",
+            code is not None and not _os.path.exists(step_target)
+            and answer.get("steps") in (None, []),
+            f"код={code} статус={(env or {}).get('status')} файл_есть={_os.path.exists(step_target)} "
+            f"шагов={len(answer.get('steps') or [])} {emsg(env)}")
+
+    # ── CP.05 шаг плана, читающий файл из каталога копий ─────────────────────────────────────
+    foreign = _os.path.join(copies_root, "control-copies", "scenario", "foreign.m3d")
+    _os.makedirs(_os.path.dirname(foreign), exist_ok=True)
+    with open(foreign, "w", encoding="utf-8") as handle:
+        handle.write("not a model")
+    if doc:
+        env, code = run(doc, [{"step_id": "s1", "tool": "kompas_insert_component",
+                               "arguments": {"expected_revision": 1, "source_path": foreign}}])
+        answer = result(env)
+        rows = answer.get("steps") or []
+        step_code = None
+        if rows:
+            step_code = ((rows[0].get("error") or {}).get("code"))
+        row("CP.05.step_read_denied",
+            "шаг плана, читающий файл из каталога копий: PATH_NOT_ALLOWED на шаге",
+            step_code == "PATH_NOT_ALLOWED" and answer.get("status") == "failed",
+            f"код_шага={step_code} статус={answer.get('status')} шаг={answer.get('failed_step')} "
+            f"err={code} {emsg(env)}")
+
+    # ── CP.06 сборка: копия графа при каталоге копий вне корней ─────────────────────────────
+    assembly_error = None
+    checkpoint_asm = {}
+    if doc:
+        close(doc)
+    sub_path = _os.path.join(folder, "cp-sub.m3d")
+    asm_path = _os.path.join(folder, "cp-top.m3d")
+    sub_doc = asm_doc = None
+    part_doc, error_part = make_part("cp-asm-part", _os.path.join(folder, "cp-asm-part.m3d"))
+    if part_doc:
+        close(part_doc)
+        sub_doc, code, message = new_document("assembly", "cp-sub")
+        if sub_doc:
+            env, code = call("kompas_insert_component", {
+                "document_id": sub_doc, "expected_revision": current_rev(sub_doc),
+                "source_path": _os.path.join(folder, "cp-asm-part.m3d")})
+            if code:
+                assembly_error = f"вставка детали: {code} {emsg(env)}"
+            else:
+                env, code = call("kompas_save_document", {
+                    "document_id": sub_doc, "expected_revision": current_rev(sub_doc),
+                    "target_path": sub_path})
+                if code:
+                    assembly_error = f"сохранение подсборки: {code} {emsg(env)}"
+                else:
+                    asm_doc, code, message = new_document("assembly", "cp-top")
+                    if not asm_doc:
+                        assembly_error = f"сборка не создана: {code} {message}"
+                    else:
+                        env, code = call("kompas_insert_component", {
+                            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+                            "source_path": sub_path})
+                        if code:
+                            assembly_error = f"вставка подсборки: {code} {emsg(env)}"
+                        else:
+                            env, code = call("kompas_save_document", {
+                                "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+                                "target_path": asm_path})
+                            if code:
+                                assembly_error = f"сохранение сборки: {code} {emsg(env)}"
+        else:
+            assembly_error = f"подсборка не создана: {code} {message}"
+        close(sub_doc)
+    else:
+        assembly_error = f"деталь для сборки не построена: {error_part}"
+
+    if asm_doc and not assembly_error:
+        asm_sha_before = sha(asm_path)
+        env, code = run(asm_doc, rebuild_step)
+        answer = result(env)
+        checkpoint_asm = answer.get("checkpoint") or {}
+        manifest_path = checkpoint_asm.get("manifest_path")
+        manifest = {}
+        if manifest_path and _os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        files = manifest.get("files") or []
+        copied = [entry.get("copy_path") for entry in files if entry.get("copy_path")]
+        copies_exist = bool(copied) and all(_os.path.exists(path) for path in copied)
+        client_intact = _os.path.exists(asm_path) and sha(asm_path) == asm_sha_before
+        row("CP.06.assembly_copy",
+            "сборка, document_copy, каталог копий вне корней: копия графа и манифест сняты",
+            code is None and checkpoint_asm.get("taken") is True
+            and bool(manifest_path) and _os.path.exists(manifest_path)
+            and manifest.get("verified") is True and copies_exist and client_intact,
+            f"taken={checkpoint_asm.get('taken')} манифест={str(manifest_path)[:70]} "
+            f"проверен={manifest.get('verified')} файлов={len(files)} копии_на_диске={copies_exist} "
+            f"файл_клиента_цел={client_intact} err={code} {emsg(env)}")
+        if checkpoint_asm.get("document_id_after"):
+            close(checkpoint_asm["document_id_after"])
+    else:
+        row("CP.06.assembly_copy",
+            "сборка, document_copy, каталог копий вне корней: копия графа и манифест сняты",
+            False, f"сборка не построена: {assembly_error}")
+
+    if asm_doc:
+        close(asm_doc)
+    close_host(probe)
+
+    # ── CP.07 каталог копий недоступен ──────────────────────────────────────────────────────
+    # Другой Хост: каталог копий задаётся конфигурацией на старте процесса. Путь на несуществующем
+    # томе не создаётся ни `Directory.CreateDirectory`, ни SaveAs.
+    broken = "Q:\\no-such-volume"
+    probe2 = open_host(own_config(broken, "cp-broken"), "mcp-smoke-checkpoint-broken")
+
+    def call2(tool, args, timeout=600):
+        payload = dict(args)
+        if probe2.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = probe2.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    env, code = call2("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
+    app_id2 = (env or {}).get("application_id")
+    doc2 = None
+    if app_id2:
+        env, code = call2("kompas_create_document",
+                          {"application_id": app_id2, "kind": "part", "name": "cp-broken-part"})
+        doc2 = (env or {}).get("result", {}).get("document_id") or (env or {}).get("result", {}).get("id")
+    plan_refused = None
+    detail_text = ""
+    if doc2:
+        env, code = call2("kompas_run_scenario", {
+            "scenario_version": 1, "document_id": doc2, "operation_id": str(uuid.uuid4()),
+            "on_error": "restore_checkpoint", "checkpoint_policy": "document_copy",
+            "steps": [{"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}}]}, timeout=600)
+        answer = (env or {}).get("result") or {}
+        checkpoint_broken = answer.get("checkpoint") or {}
+        err = (env or {}).get("error") or {}
+        # Причина обязана назвать каталог: клиент ищет дефект в конфигурации, а не в модели.
+        detail_text = f"{err.get('message') or ''} {json.dumps(err.get('details') or {}, ensure_ascii=False)}"
+        rows = answer.get("steps") or []
+        plan_refused = (answer.get("status") == "failed"
+                        and checkpoint_broken.get("taken") is False
+                        and all(step.get("status") == "skipped" for step in rows)
+                        and "Q:" in detail_text)
+    row("CP.07.copy_folder_unavailable",
+        "каталог копий недоступен: CHECKPOINT_FAILED с названным каталогом, план не выполнен",
+        bool(plan_refused),
+        f"статус={(env or {}).get('status')} причина={detail_text[:200]} err={code}")
+    if doc2:
+        call2("kompas_close_document", {"document_id": doc2, "dirty_policy": "discard"})
+    close_host(probe2)
+
+
 def ops_checks(host, config, workdir, rep):
     """OPS.01…OPS.14 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
 
@@ -59621,6 +60010,9 @@ EXTRA_GROUP_CHECKS = {
     "ops": lambda c, r, a, w, v, p: ops_checks(c.host_exe, c.config, w, r),
     "scenario": lambda c, r, a, w, v, p: scenario_checks(c, r, a, w),
     "asm_checkpoint": lambda c, r, a, w, v, p: assembly_checkpoint_checks(c, r, a, w),
+    # Группа CP ведёт свои Хосты: каталог копий задаётся конфигурацией на старте процесса, поэтому ей
+    # нужны путь к исполняемому файлу и конфигурация, а не app_id общего сеанса.
+    "checkpoint_paths": lambda c, r, a, w, v, p: checkpoint_paths_checks(c.host_exe, c.config, w, r),
     # Группа DG собирает пакет из журнала и лога своего сеанса: свежий сеанс ей нужен, чтобы канарейка стояла в живом документе.
     "diag": lambda c, r, a, w, v, p: diag_checks(c, r, a, w, p),
 }

@@ -47,11 +47,11 @@ internal sealed class ScenarioRunner
 
     private readonly string _controlCopyDirectory;
     private readonly AssemblyCheckpoint _assembly;
-    private readonly Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invoke;
+    private readonly Func<string, JsonObject, string?, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invoke;
 
     internal ScenarioRunner(
         string controlCopyDirectory,
-        Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> invoke)
+        Func<string, JsonObject, string?, CancellationToken, Task<ResultEnvelope<JsonNode?>>> invoke)
     {
         _controlCopyDirectory = controlCopyDirectory;
         _assembly = new AssemblyCheckpoint(controlCopyDirectory, invoke);
@@ -192,7 +192,7 @@ internal sealed class ScenarioRunner
                 stepArguments["operation_id"] = ChildOperationId(parentOperationId, step.StepId);
             }
 
-            var envelope = await _invoke(step.Tool.Name, stepArguments, cancellationToken).ConfigureAwait(false);
+            var envelope = await _invoke(step.Tool.Name, stepArguments, null, cancellationToken).ConfigureAwait(false);
             var compact = Compact(envelope.Result, out var truncated);
             results[step.StepId] = new StepOutcome(envelope.Result as JsonObject, envelope.RevisionAfter);
 
@@ -568,7 +568,7 @@ internal sealed class ScenarioRunner
         {
             ["document_id"] = documentId,
             ["detail"] = "minimal",
-        }, cancellationToken).ConfigureAwait(false);
+        }, null, cancellationToken).ConfigureAwait(false);
 
         var revision = JsonScalars.ReadLong(context.Result?["revision"]);
         if (context.Status != OperationStatus.Succeeded || revision is null)
@@ -628,17 +628,21 @@ internal sealed class ScenarioRunner
             return new CheckpointOutcome(false, report, new JsonObject
             {
                 ["code"] = "CHECKPOINT_FAILED",
-                ["message"] = $"Каталог контрольных копий недоступен: {ex.GetType().Name}: {ex.Message}",
+                ["message"] = $"Каталог контрольных копий недоступен: {path}: {ex.GetType().Name}: {ex.Message}",
                 ["reason"] = "copy_folder_unavailable",
+                ["details"] = new JsonObject { ["copy_folder"] = Path.GetDirectoryName(path) },
             });
         }
+
+        // The copy lives outside the client's roots on an installed configuration, so the call names it
+        // as the one service path it may write. History: docs/decisions/scenario.md#checkpoint-service-path
         var saved = await _invoke("kompas_save_document", new JsonObject
         {
             ["document_id"] = documentId,
             ["expected_revision"] = revision.Value,
             ["target_path"] = path,
             ["operation_id"] = ChildOperationId(parentOperationId, "checkpoint-save"),
-        }, cancellationToken).ConfigureAwait(false);
+        }, path, cancellationToken).ConfigureAwait(false);
 
         if (saved.Status != OperationStatus.Succeeded)
         {
@@ -648,6 +652,7 @@ internal sealed class ScenarioRunner
                 ["message"] = "Копия документа не снята: документ не сохранён документированным SaveAs "
                     + "(копией одного файла восстанавливается только деталь).",
                 ["reason"] = "copy_not_written",
+                ["details"] = new JsonObject { ["copy_folder"] = Path.GetDirectoryName(path) },
                 ["step_error"] = ErrorOf(saved)?.DeepClone(),
             });
         }
@@ -701,7 +706,7 @@ internal sealed class ScenarioRunner
             ["document_id"] = documentId,
             ["dirty_policy"] = "discard",
             ["operation_id"] = ChildOperationId(parentOperationId, "restore-close"),
-        }, cancellationToken).ConfigureAwait(false);
+        }, null, cancellationToken).ConfigureAwait(false);
 
         if (closed.Status != OperationStatus.Succeeded)
         {
@@ -723,7 +728,8 @@ internal sealed class ScenarioRunner
             openArguments["application_id"] = applicationId;
         }
 
-        var opened = await _invoke("kompas_open_document", openArguments, cancellationToken)
+        // The copy is reopened from a path outside the client's roots, so this call names it too.
+        var opened = await _invoke("kompas_open_document", openArguments, copyPath, cancellationToken)
             .ConfigureAwait(false);
 
         if (opened.Status != OperationStatus.Succeeded)

@@ -48,12 +48,12 @@ public class AssemblyCheckpointTests : IDisposable
     private string CopyOf(string part) => Path.Combine(
         _directory, "control-copies", "scenario", OpId + "-r1", "files", "001-" + Path.GetFileName(part));
 
-    private static JsonObject Row(string sourcePath, string name = "part") => new()
+    private static JsonObject Row(string sourcePath, string name = "part", bool isDetail = true) => new()
     {
         ["component_ref"] = "ref-" + name,
         ["source_path"] = sourcePath,
         ["name"] = name,
-        ["is_detail"] = true,
+        ["is_detail"] = isDetail,
         ["depth"] = 0,
     };
 
@@ -76,10 +76,26 @@ public class AssemblyCheckpointTests : IDisposable
 
         public string SourcePath { get; init; } = string.Empty;
 
+        /// <summary>A tool this session refuses, optionally only for one <c>access</c> value.</summary>
+        public string? RefuseTool { get; init; }
+
+        public string? RefuseAccess { get; init; }
+
         public Task<ResultEnvelope<JsonNode?>> Invoke(
             string tool, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
         {
             Tools.Add(tool);
+            var access = arguments["access"]?.GetValue<string>();
+            if (tool == RefuseTool && (RefuseAccess is null || access == RefuseAccess))
+            {
+                return Task.FromResult(new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Failed,
+                    Error = new ErrorDto(
+                        "PATH_NOT_ALLOWED", $"отказ вызова {tool}", RetryPolicy.Never, null, false, null),
+                });
+            }
+
             return Task.FromResult(Answer(tool, arguments));
         }
 
@@ -215,5 +231,75 @@ public class AssemblyCheckpointTests : IDisposable
             outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("copy-2", outcome.Report["document_id_after"]!.GetValue<string>());
         Assert.NotEqual("copy-1", outcome.Report["document_id_after"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task RefusedTopSave_CarriesThatCallsStepError()
+    {
+        var part = Part("part.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseTool = "kompas_save_document",
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("copy_not_written", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("PATH_NOT_ALLOWED",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+        Assert.False(outcome.Report["taken"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task RefusedReopen_CarriesThatCallsStepError()
+    {
+        var part = Part("part.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseTool = "kompas_open_document",
+            RefuseAccess = "edit",
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Graphs.Enqueue(new JsonArray(Row(CopyOf(part))));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("reopen_failed", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("PATH_NOT_ALLOWED",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+        // The copy is closed at that point, so the answer must not offer its id as a live document.
+        Assert.Null(outcome.Report["document_id_after"]);
+    }
+
+    [Fact]
+    public async Task RefusedNestedCopyOpen_CarriesThatCallsStepError()
+    {
+        var sub = Part("sub.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseTool = "kompas_open_document",
+            RefuseAccess = "edit",
+        };
+        // A nested ASSEMBLY is the only entry that is reopened for reassignment, so only it is refused.
+        session.Graphs.Enqueue(new JsonArray(Row(sub, "sub", isDetail: false)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("copy_not_written", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        Assert.Equal("PATH_NOT_ALLOWED",
+            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+        Assert.Contains("вложенных сборок", outcome.Error!["message"]!.GetValue<string>());
     }
 }

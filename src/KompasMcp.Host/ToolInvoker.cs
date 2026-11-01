@@ -89,10 +89,10 @@ public sealed class ToolInvoker : IAsyncDisposable
         string toolName, JsonObject arguments, CancellationToken cancellationToken) =>
         InvokeAsync(toolName, arguments, null, cancellationToken);
 
-    /// <summary>The same entry, with ONE path outside the client's roots admitted for this call.</summary>
+    /// <summary>The same entry, with ONE file outside the client's roots admitted for this call.</summary>
     /// <remarks>INVARIANT: <paramref name="servicePath"/> comes from the Host's own scenario code, never
     /// from an argument — no tool field, no <c>kompas_run</c> wrapper and no step can set it, so the client
-    /// gains no way past the file policy. The grant covers that one path only and is not inherited by
+    /// gains no way past the file policy. The grant covers that one file only and is not inherited by
     /// anything the call invokes. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
     internal async Task<ResultEnvelope<JsonNode?>> InvokeAsync(
         string toolName, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
@@ -653,11 +653,12 @@ public sealed class ToolInvoker : IAsyncDisposable
         return null;
     }
 
-    /// <summary>Whether the candidate is the one path a caller's service grant names.</summary>
-    /// <remarks>INVARIANT: the grant is compared as a canonical path — equal to it, or inside it when it
-    /// names a folder — so "…-r1" does not admit "…-r10". A grant that does not canonicalise admits
-    /// nothing. History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
-    private static bool IsServicePath(string candidate, string? servicePath)
+    /// <summary>Whether the candidate is the one FILE a caller's service grant names.</summary>
+    /// <remarks>INVARIANT: the grant names a file, so it is compared as a canonical path for EQUALITY only:
+    /// a neighbour in the same folder, a sibling "…-r10" of a granted "…-r1" and a file inside a granted
+    /// folder all stay denied. A grant that does not canonicalise admits nothing.
+    /// History: docs/decisions/scenario.md#checkpoint-service-path</remarks>
+    internal static bool IsServicePath(string candidate, string? servicePath)
     {
         if (string.IsNullOrWhiteSpace(servicePath))
         {
@@ -668,8 +669,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         {
             var grant = Path.TrimEndingDirectorySeparator(Path.GetFullPath(servicePath));
             var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
-            return string.Equals(full, grant, StringComparison.OrdinalIgnoreCase)
-                   || PathPolicy.IsWithin(full, grant);
+            return string.Equals(full, grant, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {

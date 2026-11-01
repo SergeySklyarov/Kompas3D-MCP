@@ -53493,6 +53493,13 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         with open(path, encoding="utf-8-sig") as fh:
             data = json.load(fh)
         data["control_copy_directory"] = control_copy_directory
+        # Конфигурация ТОЙ ЖЕ ФОРМЫ, что у установки: бюджеты установленной конфигурации - самые жёсткие
+        # из действующих (10 000 синхронизация, 120 000 операция). Смысл строк от них зависит: шаг
+        # плана с ответом `running` считается отказом, поэтому на 40 000 он успевал бы там, где на
+        # установке отказывает. `require_read_only_model_roots` НЕ задаётся: ключ не читается Хостом
+        # (`HostOptions.cs`, раздел об удалённых ключах), то есть ничего не меняет.
+        data["sync_budget_ms"] = 10000
+        data["operation_budget_ms"] = 120000
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
         return path
@@ -53548,6 +53555,24 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         _e, env, _r = probe.tool("kompas_measure",
                                  {"target_ref": rows[0].get("body_ref"), "properties": ["volume"]})
         return ((env or {}).get("result") or {}).get("volume_mm3")
+
+    def model_volume(doc):
+        """Сумма объёмов ВСЕХ тел: построение второго тела меняет её, а `volume` читает только первое."""
+        _e, env, _r = probe.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        if isinstance(rows, dict):
+            rows = rows.get("rows") or rows.get("bodies") or []
+        if not isinstance(rows, list) or not rows:
+            return None
+        total = 0.0
+        for row in rows:
+            _e, env, _r = probe.tool("kompas_measure",
+                                     {"target_ref": row.get("body_ref"), "properties": ["volume"]})
+            value = ((env or {}).get("result") or {}).get("volume_mm3")
+            if value is None:
+                return None
+            total += float(value)
+        return total
 
     def close(doc):
         if doc:
@@ -53640,28 +53665,67 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # ── CP.02 восстановление по контрольной точке ────────────────────────────────────────────
     restore_doc = None
     if doc:
-        # Шаг s2 отказывает на несуществующем эскизе: после s1 модель уже изменена, и восстановление
-        # обязано вернуть её к замеру ДО сценария.
-        steps = [{"step_id": "s1", "tool": "kompas_rebuild", "arguments": {}},
-                 {"step_id": "s2", "tool": "kompas_edit_sketch",
-                  "arguments": {"sketch_ref": "no-such-sketch", "expected_revision": 1,
-                                "mode": "append",
-                                "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
-                                              "width_mm": 5.0, "height_mm": 5.0}]}}]
-        volume_before = volume(doc)
-        env, code = run(doc, steps)
+        # Шаги s1-s4 РЕАЛЬНО меняют геометрию: эскиз, его профиль, замкнутый контур и тело по нему.
+        # Без этого сравнение объёмов до и после проходило бы и без восстановления - `kompas_rebuild`
+        # объём не меняет. Шаг s5 отказывает на несуществующем эскизе.
+        # first_revision - ревизия к моменту s1: контрольная точка снимается документированным SaveAs
+        # и САМА поднимает ревизию на единицу (то же правило, что в группе SC), поэтому у заказанного
+        # восстановления она на единицу больше замера до сценария.
+        def plan(first_revision):
+            return [{"step_id": "s1", "tool": "kompas_create_sketch",
+                     "arguments": {"expected_revision": first_revision,
+                                   "plane": {"base": "xy", "offset_mm": 20.0}, "name": "cp02-profile"}},
+                    {"step_id": "s2", "tool": "kompas_edit_sketch",
+                     "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                                   "expected_revision": {"from_step": "s1", "field": "revision.after"},
+                                   "mode": "append",
+                                   "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                                                 "width_mm": 40.0, "height_mm": 20.0}]}},
+                    {"step_id": "s3", "tool": "kompas_finish_sketch",
+                     "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                                   "require_closed_profile": False}},
+                    {"step_id": "s4", "tool": "kompas_extrude",
+                     "arguments": {"sketch_ref": {"from_step": "s1", "field": "result.id"},
+                                   "expected_revision": {"from_step": "s3", "field": "revision.after"},
+                                   "operation": "base", "depth_mm": 5.0, "direction": "positive"}},
+                    {"step_id": "s5", "tool": "kompas_edit_sketch",
+                     "arguments": {"sketch_ref": "no-such-sketch", "expected_revision": 1,
+                                   "mode": "append",
+                                   "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                                                 "width_mm": 5.0, "height_mm": 5.0}]}}]
+
+        # Тот же план на отдельной детали БЕЗ восстановления: объём обязан стать другим, иначе строка
+        # не отличает настоящее восстановление от его отсутствия. Значение идёт в отчёт.
+        no_restore_volume = None
+        no_restore_before = None
+        no_restore_status = None
+        no_restore_doc, _nr_error = make_part("cp-part-nr", _os.path.join(folder, "cp-part-nr.m3d"))
+        if no_restore_doc:
+            no_restore_before = model_volume(no_restore_doc)
+            env, _nr_code = run(no_restore_doc, plan(current_rev(no_restore_doc)), on_error="stop")
+            no_restore_status = result(env).get("status")
+            no_restore_volume = model_volume(no_restore_doc)
+            close(no_restore_doc)
+
+        volume_before = model_volume(doc)
+        env, code = run(doc, plan(current_rev(doc) + 1))
         answer = result(env)
         restore = answer.get("restore") or {}
         restore_doc = restore.get("document_id_after") or answer.get("document_id_after")
-        volume_after = volume(restore_doc) if restore_doc else None
+        volume_after = model_volume(restore_doc) if restore_doc else None
+        step_status = {row.get("step_id"): row.get("status") for row in (answer.get("steps") or [])}
+        geometry_changed = (no_restore_volume is not None and no_restore_before is not None
+                            and abs(no_restore_volume - no_restore_before) > 1.0)
         row("CP.02.restore",
-            "on_error=restore_checkpoint: сбой шага, состояние совпало с замером до сценария",
+            "on_error=restore_checkpoint: геометрия изменена шагами, состояние совпало с замером",
             answer.get("status") == "failed" and restore.get("succeeded") is True
+            and all(step_status.get(step) == "succeeded" for step in ("s1", "s2", "s3", "s4"))
             and volume_after is not None and volume_before is not None
-            and abs(volume_after - volume_before) < 1e-6,
-            f"статус={answer.get('status')} шаг={answer.get('failed_step')} "
-            f"restore={restore.get('succeeded')} объём_до={volume_before} после={volume_after} "
-            f"документ_после={restore_doc} err={code} {emsg(env)}")
+            and abs(volume_after - volume_before) < 1e-6 and geometry_changed,
+            f"статус={answer.get('status')} шаги={step_status} restore={restore.get('succeeded')} "
+            f"объём_до={volume_before} после={volume_after} "
+            f"без_восстановления={no_restore_volume} (было {no_restore_before}, "
+            f"статус={no_restore_status}) документ_после={restore_doc} err={code} {emsg(env)}")
         doc = restore_doc or doc
 
     # ── CP.03 прямое сохранение в каталог копий ──────────────────────────────────────────────
@@ -53680,9 +53744,11 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         env, code = run(doc, [{"step_id": "s1", "tool": "kompas_save_document",
                                "arguments": {"target_path": step_target}}])
         answer = result(env)
+        # Конкретный код отказа плана: `kompas_save_document` шагу запрещён, план отвергается целиком
+        # до первого шага (INVALID_ARGUMENT, поле `steps[0].tool`), а не исполняется с отказом шага.
         row("CP.04.step_save_denied",
-            "шаг плана, сохраняющий в каталог копий: отказ плана, файла нет",
-            code is not None and not _os.path.exists(step_target)
+            "шаг плана, сохраняющий в каталог копий: план отвергнут (INVALID_ARGUMENT), файла нет",
+            code == "INVALID_ARGUMENT" and not _os.path.exists(step_target)
             and answer.get("steps") in (None, []),
             f"код={code} статус={(env or {}).get('status')} файл_есть={_os.path.exists(step_target)} "
             f"шагов={len(answer.get('steps') or [])} {emsg(env)}")
@@ -53766,16 +53832,26 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         copied = [entry.get("copy_path") for entry in files if entry.get("copy_path")]
         copies_exist = bool(copied) and all(_os.path.exists(path) for path in copied)
         client_intact = _os.path.exists(asm_path) and sha(asm_path) == asm_sha_before
+        # Результат сборки читается ПО `document_id_after` - и на детали, и на сборке. Поле есть в
+        # отчёте контрольной точки (`checkpoint`), а не в корне ответа: закрытие берёт его оттуда же.
+        asm_after_id = checkpoint_asm.get("document_id_after")
+        asm_after_ok = False
+        if asm_after_id:
+            _e, ctx, _r = probe.tool("kompas_get_context",
+                                     {"document_id": asm_after_id, "detail": "minimal"})
+            asm_after_ok = (ctx or {}).get("status") == "succeeded"
         row("CP.06.assembly_copy",
             "сборка, document_copy, каталог копий вне корней: копия графа и манифест сняты",
             code is None and checkpoint_asm.get("taken") is True
             and bool(manifest_path) and _os.path.exists(manifest_path)
-            and manifest.get("verified") is True and copies_exist and client_intact,
+            and manifest.get("verified") is True and copies_exist and client_intact
+            and asm_after_ok,
             f"taken={checkpoint_asm.get('taken')} манифест={str(manifest_path)[:70]} "
             f"проверен={manifest.get('verified')} файлов={len(files)} копии_на_диске={copies_exist} "
-            f"файл_клиента_цел={client_intact} err={code} {emsg(env)}")
-        if checkpoint_asm.get("document_id_after"):
-            close(checkpoint_asm["document_id_after"])
+            f"файл_клиента_цел={client_intact} document_id_after={asm_after_id} "
+            f"читается={asm_after_ok} err={code} {emsg(env)}")
+        if asm_after_id:
+            close(asm_after_id)
     else:
         row("CP.06.assembly_copy",
             "сборка, document_copy, каталог копий вне корней: копия графа и манифест сняты",
@@ -53817,15 +53893,26 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         err = (env or {}).get("error") or {}
         # Причина обязана назвать каталог: клиент ищет дефект в конфигурации, а не в модели.
         detail_text = f"{err.get('message') or ''} {json.dumps(err.get('details') or {}, ensure_ascii=False)}"
+        details = err.get("details") or {}
+        step_error_code = ((details.get("step_error") or {}).get("code")
+                           if isinstance(details.get("step_error"), dict) else None)
+        # Отказ каталога называет САМ каталог: `ScenarioRunner` кладёт его в `details.copy_folder`
+        # отказа, а отчёт сценария переносит поля отказа с префиксом `checkpoint_`.
+        copy_folder = details.get("checkpoint_copy_folder")
         rows = answer.get("steps") or []
+        # Пустой список шагов делает `all(...)` истинным, поэтому непустота проверяется отдельно, как и
+        # код отказа: строка называется «CHECKPOINT_FAILED» и обязана проверять именно его.
         plan_refused = (answer.get("status") == "failed"
+                        and step_error_code == "CHECKPOINT_FAILED"
+                        and isinstance(copy_folder, str) and copy_folder.startswith("Q:")
                         and checkpoint_broken.get("taken") is False
-                        and all(step.get("status") == "skipped" for step in rows)
-                        and "Q:" in detail_text)
+                        and bool(rows)
+                        and all(step.get("status") == "skipped" for step in rows))
     row("CP.07.copy_folder_unavailable",
-        "каталог копий недоступен: CHECKPOINT_FAILED с названным каталогом, план не выполнен",
+        "каталог копий недоступен: CHECKPOINT_FAILED с причиной и каталогом, план не выполнен",
         bool(plan_refused),
-        f"статус={(env or {}).get('status')} причина={detail_text[:200]} err={code}")
+        f"статус={(env or {}).get('status')} код_шага={step_error_code} каталог={copy_folder} "
+        f"шагов={len(rows)} причина_текст={detail_text[:160]} err={code}")
     if doc2:
         call2("kompas_close_document", {"document_id": doc2, "dirty_policy": "discard"})
     close_host(probe2)

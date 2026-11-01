@@ -92,7 +92,8 @@ internal sealed class AssemblyCheckpoint
         var graph = await ReadGraphAsync(documentId, cancellationToken).ConfigureAwait(false);
         if (!graph.Ok)
         {
-            return Refuse(report, "graph_not_read", graph.Message, Array.Empty<string>());
+            return Refuse(report, "graph_not_read", graph.Message, Array.Empty<string>(),
+                stepError: graph.Error);
         }
 
         var plan = AssemblyCopyPlan.Build(graph.Links, folder, externalParts);
@@ -162,6 +163,7 @@ internal sealed class AssemblyCheckpoint
         // A nested assembly is reassigned BEFORE the assembly that inserts it, so the parent never points at
         // a file whose own links still lead to the client's originals.
         var failures = new List<string>();
+        JsonObject? failureError = null;
         foreach (var nested in AssemblyCopyPlan.BottomUp(plan.Entries))
         {
             var reassigned = await ReassignAsync(
@@ -171,6 +173,7 @@ internal sealed class AssemblyCheckpoint
             if (!reassigned.Ok)
             {
                 failures.Add($"{Path.GetFileName(nested.SourcePath)}: {reassigned.Message}");
+                failureError ??= reassigned.Error;
             }
         }
 
@@ -178,7 +181,7 @@ internal sealed class AssemblyCheckpoint
         {
             DeleteFolderIfCreated(folder, created);
             return Refuse(report, "copy_not_written", "Ссылки вложенных сборок не переназначены: "
-                + string.Join("; ", failures), failures);
+                + string.Join("; ", failures), failures, stepError: failureError);
         }
 
         // MEASURED: a byte copy of the top file reads back ONE component per file NAME when the graph
@@ -235,7 +238,7 @@ internal sealed class AssemblyCheckpoint
         {
             return Refuse(report, "top_refs_not_reassigned",
                 $"Ссылки верхней сборки не переназначены: {topReassigned.Message}", Array.Empty<string>(),
-                moved);
+                moved, stepError: topReassigned.Error);
         }
 
         if (topReassigned.Revision is { } afterReassign && afterReassign != revisionNow)
@@ -297,7 +300,7 @@ internal sealed class AssemblyCheckpoint
         // reopened for edit. A refusal here names the state instead of reporting a checkpoint that is not one.
         var reopened = await OpenForPlanAsync(
             parentOperationId, topCopy, applicationId, cancellationToken).ConfigureAwait(false);
-        if (reopened is null)
+        if (reopened.DocumentId is null)
         {
             // INVARIANT: the copy is closed at this point, so no id of it may be offered as a live document.
             var closedState = new JsonObject
@@ -308,12 +311,12 @@ internal sealed class AssemblyCheckpoint
             };
             return Refuse(report, "reopen_failed",
                 "Копия снята, но заново открыть её для плана не удалось: документ закрыт, шаги не выполнялись.",
-                Array.Empty<string>(), closedState);
+                Array.Empty<string>(), closedState, stepError: reopened.Error);
         }
 
         // The plan continues on the REOPENED document, so every later refusal names its id — the id from
         // before the close addresses nothing.
-        moved["document_id_after"] = reopened;
+        moved["document_id_after"] = reopened.DocumentId;
         moved["notes"] = "Документ теперь открыт из копии в каталоге контрольной точки: правки идут в копию, "
             + "файл клиента не изменён.";
 
@@ -341,7 +344,7 @@ internal sealed class AssemblyCheckpoint
         report["taken"] = true;
         report["path"] = topCopy;
         report["document_path"] = topCopy;
-        report["document_id_after"] = reopened;
+        report["document_id_after"] = reopened.DocumentId;
         report["revision"] = revision.Value;
         report["application_id"] = applicationId;
         report["manifest_path"] = manifestPath;
@@ -359,8 +362,11 @@ internal sealed class AssemblyCheckpoint
         return new AssemblyCheckpointOutcome(true, report, null);
     }
 
-    /// <summary>Open the copy for edit and read its id, or <c>null</c> when the open was refused.</summary>
-    private async Task<string?> OpenForPlanAsync(
+    /// <summary>The reopened document's id, or the refused call's error when the open was refused.</summary>
+    /// <remarks>INVARIANT: a refusal that came from a refused call carries that call's code and message, so
+    /// the client reads the same <c>step_error</c> here as it does on a detail.
+    /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
+    private async Task<(string? DocumentId, JsonObject? Error)> OpenForPlanAsync(
         string parentOperationId, string path, string? applicationId, CancellationToken cancellationToken)
     {
         var arguments = new JsonObject
@@ -378,11 +384,11 @@ internal sealed class AssemblyCheckpoint
             .ConfigureAwait(false);
         if (opened.Status != OperationStatus.Succeeded)
         {
-            return null;
+            return (null, ErrorOf(opened));
         }
 
-        return JsonScalars.ReadString(opened.Result?["document_id"])
-            ?? JsonScalars.ReadString(opened.Result?["id"]);
+        return (JsonScalars.ReadString(opened.Result?["document_id"])
+            ?? JsonScalars.ReadString(opened.Result?["id"]), null);
     }
 
     // ---- Graph ----
@@ -403,7 +409,9 @@ internal sealed class AssemblyCheckpoint
         return (listed.Result as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToArray();
     }
 
-    private sealed record GraphRead(bool Ok, string Message, IReadOnlyList<AssemblyComponentLink> Links, int ComponentCount);
+    private sealed record GraphRead(
+        bool Ok, string Message, IReadOnlyList<AssemblyComponentLink> Links, int ComponentCount,
+        JsonObject? Error = null);
 
     private async Task<GraphRead> ReadGraphAsync(string documentId, CancellationToken cancellationToken)
     {
@@ -416,7 +424,7 @@ internal sealed class AssemblyCheckpoint
         if (listed.Status != OperationStatus.Succeeded)
         {
             return new GraphRead(false, "Структура сборки не прочитана: граф зависимостей неизвестен.",
-                Array.Empty<AssemblyComponentLink>(), 0);
+                Array.Empty<AssemblyComponentLink>(), 0, ErrorOf(listed));
         }
 
         var rows = (listed.Result?["components"] as JsonArray ?? new JsonArray())
@@ -486,7 +494,8 @@ internal sealed class AssemblyCheckpoint
 
     // ---- Reassignment inside the copies ----
 
-    private sealed record ReassignResult(bool Ok, string Message, long? Revision, int? Components = null);
+    private sealed record ReassignResult(
+        bool Ok, string Message, long? Revision, int? Components = null, JsonObject? Error = null);
 
     /// <summary>Open a copied subassembly, point its components at the copies, save and close it.</summary>
     /// <remarks>INVARIANT: the copy is closed after saving, so a client's own open document is the only one
@@ -516,7 +525,8 @@ internal sealed class AssemblyCheckpoint
             // cause, and the cause is what the caller has to act on.
             var cause = opened.Error is null ? string.Empty
                 : $": {opened.Error.Code}: {opened.Error.Message}";
-            return new ReassignResult(false, $"копия вложенной сборки не открылась{cause}", null);
+            return new ReassignResult(false, $"копия вложенной сборки не открылась{cause}", null,
+                Error: ErrorOf(opened));
         }
 
         var copyDocumentId = JsonScalars.ReadString(opened.Result?["document_id"])
@@ -560,7 +570,8 @@ internal sealed class AssemblyCheckpoint
 
         if (saved is not null && saved.Status != OperationStatus.Succeeded)
         {
-            return new ReassignResult(false, "копия вложенной сборки не сохранена после переназначения", null);
+            return new ReassignResult(false, "копия вложенной сборки не сохранена после переназначения",
+                null, Error: ErrorOf(saved));
         }
 
         if (afterSave is { } left && reassigned.Components is { } planned && left != planned)
@@ -577,7 +588,8 @@ internal sealed class AssemblyCheckpoint
             var cause = closed.Error is null ? string.Empty
                 : $": {closed.Error.Code}: {closed.Error.Message}";
             return new ReassignResult(false,
-                $"копия «{Path.GetFileName(copyPath)}» не закрыта после сохранения{cause}", null);
+                $"копия «{Path.GetFileName(copyPath)}» не закрыта после сохранения{cause}", null,
+                Error: ErrorOf(closed));
         }
 
         return new ReassignResult(true, string.Empty, saved?.RevisionAfter ?? reassigned.Revision);
@@ -699,7 +711,7 @@ internal sealed class AssemblyCheckpoint
                     : $"{replacedEnvelope.Error.Code}: {replacedEnvelope.Error.Message}";
                 return new ReassignResult(false,
                     $"компонент «{JsonScalars.ReadString(rows[index]["name"]) ?? source}» не переназначен: "
-                    + refusal, current);
+                    + refusal, current, Error: ErrorOf(replacedEnvelope));
             }
 
             current = replacedEnvelope.RevisionAfter ?? current;

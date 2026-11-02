@@ -54262,6 +54262,235 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         close(restore_answer["after_doc"])
         close(restore_answer["assembly_doc"])
 
+    # ── CP.16 the client's setup VERBATIM: the installer's copy directory, the detail created ────
+    # INVARIANT: the copy directory is the INSTALLER's own, and the detail is CREATED in the session
+    # and stays open: a setup that differs from the client's cannot say that the defect is absent.
+    # DOC: the client's journal (delivery-v0.13.0-a40171a/client/operations.jsonl): the detail is
+    # created, sketched, extruded, saved, exported and never closed; the assembly is created in the
+    # session, the component is inserted, the assembly is saved, the scenario runs on it.
+    # The scenario call itself is NOT in the journal - only its child operations are (checkpoint-save,
+    # replace_component, checkpoint-resave, checkpoint-close); the outer call is missing there.
+    install_root = r"C:\Users\Administrator\AppData\Local\KompasMCP"
+    install_config_path = _os.path.join(install_root, "config", "kompas-mcp.json")
+    copies_scenario = _os.path.join(install_root, "control-copies", "scenario")
+    client_trace = _os.path.join(copies_scenario, "b4626f94-93d9-45e1-9eb9-7c8f54bb8695-r3")
+    sandbox_root = r"C:\Users\Administrator\Documents\KompasMCP\sandbox"
+    # The cell's own directory is unique per run: the green run and the red run write the same file
+    # names, and a leftover file would make the export refuse instead of measuring the scenario.
+    cell_dir = _os.path.join(sandbox_root, "cp16",
+                             datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+
+    def folder_state(path):
+        """The files of a folder with their sizes: the client's trace must not change under the cell."""
+        if not _os.path.isdir(path):
+            return None
+        state = {}
+        for base, _dirs, names in _os.walk(path):
+            for name in names:
+                full = _os.path.join(base, name)
+                state[_os.path.relpath(full, path)] = _os.path.getsize(full)
+        return state
+
+    # The installer's configuration is COPIED, not changed: the copy directory and the roots stay the
+    # installer's, the journals become the probe's (the install's journal is the client's evidence).
+    install_config = None
+    config_error = None
+    if _os.path.isfile(install_config_path):
+        install_config = isolate_config(install_config_path, cell_dir, "cp-install")
+    else:
+        config_error = f"конфигурация установки не найдена: {install_config_path}"
+
+    trace_before = folder_state(client_trace)
+    probe3 = open_host(install_config, "mcp-smoke-checkpoint-install") if install_config else None
+
+    def call3(tool, args, timeout=600):
+        payload = dict(args)
+        if probe3.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = probe3.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result3(env):
+        return (env or {}).get("result") or {}
+
+    def emsg3(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def rev3(doc):
+        _e, env, _r = probe3.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def installed_plan(source_path):
+        """The client's own plan: the same detail inserted again, then a read, then a check.
+
+        DOC: the client's acceptance R2.6 names the plan: s1 insert_component, s2 list_components,
+        s3 check_interference. MEASURED: an assembly checkpoint closes the copy and reopens it for
+        the plan, so the plan runs on a fresh document whose revision is 1.
+        """
+        return [{"step_id": "s1", "tool": "kompas_insert_component",
+                 "arguments": {"expected_revision": 1, "source_path": source_path}},
+                {"step_id": "s2", "tool": "kompas_list_components", "arguments": {}},
+                {"step_id": "s3", "tool": "kompas_check_interference", "arguments": {}}]
+
+    def installed_cell():
+        """The client's setup, verbatim: the detail created here, the installer's copy directory."""
+        if config_error:
+            return {"error": config_error}
+        env, code = call3("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
+        app = (env or {}).get("application_id")
+        if not app:
+            return {"error": f"сеанс не поднят: {code} {emsg3(env)}"}
+        # The detail: the client's own calls, in the client's order. The rectangle is the client's
+        # plate 60x40 and the depth is 10 - the client's volume 24000 mm3 and the exported contour.
+        env, code = call3("kompas_create_document",
+                          {"application_id": app, "kind": "part", "name": "cp16-flat"})
+        detail = result3(env).get("document_id") or result3(env).get("id")
+        if not detail:
+            return {"error": f"деталь не создана: {code} {emsg3(env)}"}
+        env, code = call3("kompas_create_sketch", {
+            "document_id": detail, "expected_revision": rev3(detail),
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": "cp16-profile"})
+        sketch = result3(env).get("id")
+        if not sketch:
+            return {"error": f"эскиз не создан: {code} {emsg3(env)}"}
+        env, code = call3("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev3(detail), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [100.0, 100.0],
+                          "width_mm": 60.0, "height_mm": 40.0}]})
+        if code:
+            return {"error": f"правка эскиза: {code} {emsg3(env)}"}
+        env, code = call3("kompas_finish_sketch",
+                          {"sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return {"error": f"завершение эскиза: {code} {emsg3(env)}"}
+        env, code = call3("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": rev3(detail),
+            "operation": "base", "depth_mm": 10.0, "direction": "positive"})
+        if code:
+            return {"error": f"выдавливание: {code} {emsg3(env)}"}
+        detail_path = _os.path.join(cell_dir, "flat-cp16.m3d")
+        env, code = call3("kompas_save_document", {
+            "document_id": detail, "expected_revision": rev3(detail), "target_path": detail_path})
+        if code:
+            return {"error": f"сохранение детали: {code} {emsg3(env)}"}
+        dxf_path = _os.path.join(cell_dir, "flat-cp16.dxf")
+        env, code = call3("kompas_export_flat_dxf", {
+            "document_id": detail, "output_path": dxf_path, "overwrite": True}, timeout=300)
+        export_code = code
+        # The assembly: the client's own calls, in the client's order.
+        env, code = call3("kompas_create_document",
+                          {"application_id": app, "kind": "assembly", "name": "cp16-asm"})
+        asm = result3(env).get("document_id") or result3(env).get("id")
+        if not asm:
+            return {"error": f"сборка не создана: {code} {emsg3(env)}"}
+        env, code = call3("kompas_insert_component", {
+            "document_id": asm, "expected_revision": rev3(asm), "source_path": detail_path})
+        if code:
+            return {"error": f"вставка детали: {code} {emsg3(env)}"}
+        asm_path = _os.path.join(cell_dir, "asm-cp16.m3d")
+        env, code = call3("kompas_save_document", {
+            "document_id": asm, "expected_revision": rev3(asm), "target_path": asm_path})
+        if code:
+            return {"error": f"сохранение сборки: {code} {emsg3(env)}"}
+        asm_sha = sha(asm_path)
+        # The scenario: the client's own call, on the client's own live document.
+        operation = str(uuid.uuid4())
+        env, code = call3("kompas_run_scenario", {
+            "scenario_version": 1, "document_id": asm, "operation_id": operation,
+            "on_error": "restore_checkpoint", "checkpoint_policy": "document_copy",
+            "steps": installed_plan(detail_path)}, timeout=600)
+        answer = result3(env)
+        checkpoint = answer.get("checkpoint") or {}
+        restore = answer.get("restore") or {}
+        manifest_path = checkpoint.get("manifest_path")
+        manifest = {}
+        if manifest_path and _os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        detail_entry = None
+        for entry in manifest.get("files") or []:
+            if str(entry.get("source_path") or "").lower().endswith("flat-cp16.m3d"):
+                detail_entry = entry
+                break
+        copy_path = (detail_entry or {}).get("copy_path")
+        copy_ok = False
+        if copy_path and _os.path.exists(copy_path):
+            copy_ok = (sha(copy_path) == (detail_entry or {}).get("sha256")
+                       and _os.path.getsize(copy_path) == (detail_entry or {}).get("size_bytes"))
+        # The copy folder of THIS cell: the scenario names it by its own operation id.
+        own_folders = []
+        if _os.path.isdir(copies_scenario):
+            own_folders = [name for name in _os.listdir(copies_scenario)
+                           if name.startswith(operation + "-r")]
+        return {
+            "error": None,
+            "env": env,
+            "answer": answer,
+            "checkpoint": checkpoint,
+            "restore": restore,
+            "manifest": manifest,
+            "manifest_path": manifest_path,
+            "detail_entry": detail_entry,
+            "copy_path": copy_path,
+            "copy_ok": copy_ok,
+            "steps": {item.get("step_id"): item.get("status") for item in (answer.get("steps") or [])},
+            "refusal": refusal_parts(env),
+            "own_folders": own_folders,
+            "export_code": export_code,
+            "dxf_bytes": _os.path.getsize(dxf_path) if _os.path.exists(dxf_path) else None,
+            "detail_path": detail_path,
+            "asm_path": asm_path,
+            "asm_intact": _os.path.exists(asm_path) and sha(asm_path) == asm_sha,
+            "detail_doc": detail,
+            "asm_doc": asm,
+        }
+
+    installed_answer = installed_cell()
+    # The cell cleans up AFTER ITSELF: only the copy subdirectory of THIS cell's operation id. The
+    # client's trace folder and every other foreign folder stay untouched - that is checked below.
+    removed = []
+    for name in (installed_answer.get("own_folders") or []):
+        target = _os.path.join(copies_scenario, name)
+        shutil.rmtree(target, ignore_errors=True)
+        removed.append(name)
+    trace_after = folder_state(client_trace)
+    if installed_answer.get("error"):
+        row("CP.16.client_setup_installed",
+            "постановка клиента дословно: каталог копий установки, деталь создана в сеансе и не закрыта",
+            False, f"постановка не собрана: {installed_answer['error']}")
+    else:
+        checkpoint = installed_answer["checkpoint"]
+        steps = installed_answer["steps"]
+        refusal = installed_answer["refusal"]
+        restore = installed_answer["restore"]
+        row("CP.16.client_setup_installed",
+            "постановка клиента дословно: каталог копий установки, деталь создана в сеансе и не закрыта",
+            checkpoint.get("taken") is True and installed_answer["manifest"].get("verified") is True
+            and installed_answer["detail_entry"] is not None and installed_answer["copy_ok"]
+            and all(steps.get(f"s{index}") == "succeeded" for index in (1, 2, 3))
+            and installed_answer["asm_intact"] and bool(removed)
+            and trace_before == trace_after,
+            f"taken={checkpoint.get('taken')} проверен={installed_answer['manifest'].get('verified')} "
+            f"каталог_копий={str(install_root)[:60]} "
+            f"копия_в_каталоге_установки="
+            f"{str(installed_answer['copy_path'] or '').startswith(install_root)} "
+            f"копия_с_диска_совпала={installed_answer['copy_ok']} шаги={steps} "
+            f"отказ={refusal['code']}/{refusal['cause']} вызов={refusal['call_code']}: "
+            f"{refusal['call_text']} компас_код={refusal['kompas_code']} "
+            f"компас_текст={refusal['kompas_text']} "
+            f"restore_начат={restore.get('attempted')} восстановлено={restore.get('succeeded')} "
+            f"файл_сборки_цел={installed_answer['asm_intact']} "
+            f"свой_каталог_удалён={removed} след_клиента_цел={trace_before == trace_after} "
+            f"dxf_байт={installed_answer['dxf_bytes']} err={emsg3(installed_answer['env'])}")
+        if probe3:
+            call3("kompas_close_document",
+                  {"document_id": installed_answer["detail_doc"], "dirty_policy": "discard"})
+            call3("kompas_close_document",
+                  {"document_id": installed_answer["asm_doc"], "dirty_policy": "discard"})
+    if probe3:
+        close_host(probe3)
+
     close_host(probe)
 
     # ── CP.07 copy directory unreachable ────────────────────────────────────────────────────

@@ -53861,6 +53861,295 @@ def checkpoint_paths_checks(host, config, workdir, rep):
 
     if asm_doc:
         close(asm_doc)
+
+    # ── CP.08…CP.11 the matrix of §1.1: component detail|subassembly x document open|closed ───────
+    # INVARIANT: every cell must take the checkpoint and execute the plan; a refusing cell names the
+    # refused call's code and the КОМПАС error code and text in the row's detail.
+    # DOC: cm_3d_edit_component_out_place.html - the reference-change query appears when the model
+    # and the component's source file are open in the session at the same time.
+    # History: docs/decisions/scenario.md#checkpoint-save-refusal
+    def build_component(kind, tag):
+        """The component's file and its OPEN document: a detail (part) or a subassembly (assembly)."""
+        path = _os.path.join(folder, f"mx-{tag}-component.m3d")
+        if kind == "detail":
+            doc, error = make_part(f"mx-{tag}", path)
+            return path, doc, error
+        part_path = _os.path.join(folder, f"mx-{tag}-part.m3d")
+        part_doc, error = make_part(f"mx-{tag}-part", part_path)
+        if not part_doc:
+            return path, None, error
+        close(part_doc)
+        sub_doc, code, message = new_document("assembly", f"mx-{tag}-sub")
+        if not sub_doc:
+            return path, None, f"подсборка не создана: {code} {message}"
+        env, code = call("kompas_insert_component", {
+            "document_id": sub_doc, "expected_revision": current_rev(sub_doc),
+            "source_path": part_path})
+        if code:
+            return path, None, f"вставка детали в подсборку: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {
+            "document_id": sub_doc, "expected_revision": current_rev(sub_doc),
+            "target_path": path})
+        if code:
+            return path, None, f"сохранение подсборки: {code} {emsg(env)}"
+        return path, sub_doc, None
+
+    def refusal_parts(env):
+        """The refusal read by value: its cause, the refused call's code and text, the КОМПАС code."""
+        err = (env or {}).get("error") or {}
+        details = err.get("details") or {}
+        refusal = details.get("step_error") or {}
+        refusal_details = refusal.get("details") or {}
+        call_error = refusal.get("step_error") or {}
+        call_details = call_error.get("details") or {}
+        return {
+            "code": refusal.get("code") or err.get("code"),
+            "cause": refusal_details.get("cause"),
+            "call_code": call_error.get("code"),
+            "call_text": call_error.get("message"),
+            "kompas_code": call_details.get("kompas_error_code"),
+            "kompas_text": call_details.get("kompas_error_description"),
+        }
+
+    def matrix_cell(kind, keep_open, tag, steps=None):
+        """One cell: an assembly over the component and the scenario's answer for it."""
+        component_path, component_doc, error = build_component(kind, tag)
+        if error or not component_doc:
+            return {"error": error or "компонент не построен"}
+        if not keep_open:
+            close(component_doc)
+        assembly_path = _os.path.join(folder, f"mx-{tag}-top.m3d")
+        asm_doc, code, message = new_document("assembly", f"mx-{tag}-top")
+        if not asm_doc:
+            return {"error": f"сборка не создана: {code} {message}"}
+        env, code = call("kompas_insert_component", {
+            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+            "source_path": component_path})
+        if code:
+            return {"error": f"вставка компонента: {code} {emsg(env)}"}
+        env, code = call("kompas_save_document", {
+            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+            "target_path": assembly_path})
+        if code:
+            return {"error": f"сохранение сборки: {code} {emsg(env)}"}
+        client_sha = sha(assembly_path)
+        env, code = run(asm_doc, steps if steps is not None else rebuild_step)
+        answer = result(env)
+        checkpoint = answer.get("checkpoint") or {}
+        step_status = {item.get("step_id"): item.get("status") for item in (answer.get("steps") or [])}
+        return {
+            "error": None,
+            "env": env,
+            "answer": answer,
+            "checkpoint": checkpoint,
+            "steps": step_status,
+            "refusal": refusal_parts(env),
+            "client_intact": _os.path.exists(assembly_path) and sha(assembly_path) == client_sha,
+            "component_doc": component_doc,
+            "assembly_doc": asm_doc,
+        }
+
+    def close_cell(cell):
+        """Every document of the cell is closed: the next cell starts from a clean session."""
+        after = (cell.get("checkpoint") or {}).get("document_id_after")
+        if after:
+            close(after)
+        close(cell.get("assembly_doc"))
+        close(cell.get("component_doc"))
+
+    def matrix_row(ident, kind, keep_open, tag, title):
+        """The matrix cell as an acceptance row: the checkpoint is taken and the plan executed."""
+        cell = matrix_cell(kind, keep_open, tag)
+        if cell.get("error"):
+            row(ident, title, False, f"постановка не собрана: {cell['error']}")
+            return cell
+        checkpoint = cell["checkpoint"]
+        steps = cell["steps"]
+        refusal = cell["refusal"]
+        taken = checkpoint.get("taken") is True
+        steps_ok = bool(steps) and all(value == "succeeded" for value in steps.values())
+        row(ident, title, taken and steps_ok and cell["client_intact"],
+            f"taken={checkpoint.get('taken')} шаги={steps} отказ={refusal['code']}/{refusal['cause']} "
+            f"вызов={refusal['call_code']}: {refusal['call_text']} "
+            f"компас_код={refusal['kompas_code']} компас_текст={refusal['kompas_text']} "
+            f"файл_клиента_цел={cell['client_intact']} err={emsg(cell['env'])}")
+        close_cell(cell)
+        return cell
+
+    matrix_row("CP.08.matrix_detail_open", "detail", True, "d-open",
+               "матрица: компонент деталь, документ компонента открыт: точка снята, шаги выполнены")
+    matrix_row("CP.09.matrix_detail_closed", "detail", False, "d-closed",
+               "матрица: компонент деталь, документ компонента закрыт: точка снята, шаги выполнены")
+    matrix_row("CP.10.matrix_subassembly_open", "subassembly", True, "s-open",
+               "матрица: компонент подсборка, документ компонента открыт: точка снята, шаги выполнены")
+    matrix_row("CP.11.matrix_subassembly_closed", "subassembly", False, "s-closed",
+               "матрица: компонент подсборка, документ компонента закрыт: точка снята, шаги выполнены")
+
+    # ── CP.12 the client's own setup: the client's files, the client's plan ─────────────────────
+    # INVARIANT: the client's setup is the CLIENT'S OWN files and the CLIENT'S plan; a setup that
+    # differs from them cannot say that the defect does not reproduce.
+    # DOC: the client's acceptance R2.6 names the plan: s1 insert_component, s2 list_components,
+    # s3 check_interference, and the detail is a plate 60x40x10.
+    client_dir = r"C:\Users\Administrator\Documents\KompasMCP\sandbox\acceptance"
+    client_detail = _os.path.join(folder, "client-flat-886264b9.m3d")
+    client_asm = _os.path.join(folder, "client-asm-check.m3d")
+    client_others = ["plate-cd0aaadd.m3d", "bar.m3d", "rib.m3d"]
+    for name, target in (("flat-886264b9.m3d", client_detail), ("asm-check.m3d", client_asm)):
+        source = _os.path.join(client_dir, name)
+        if _os.path.exists(source):
+            with open(source, "rb") as src, open(target, "wb") as dst:
+                dst.write(src.read())
+
+    def client_plan():
+        """The client's own plan: the same detail inserted a second time, then a read, then a check.
+
+        DOC: the client's plan named the tools, not the revision: the steps were skipped, so the
+        revision it carried is not in the journal. MEASURED: an assembly checkpoint closes the copy
+        and reopens it for the plan, so the plan runs on a fresh document whose revision is 1.
+        """
+        return [{"step_id": "s1", "tool": "kompas_insert_component",
+                 "arguments": {"expected_revision": 1, "source_path": client_detail}},
+                {"step_id": "s2", "tool": "kompas_list_components", "arguments": {}},
+                {"step_id": "s3", "tool": "kompas_check_interference", "arguments": {}}]
+
+    def client_cell(open_others):
+        """The client's setup: the client's detail OPEN, the client's LIVE assembly, the client's plan.
+
+        DOC: the client's journal shows the assembly was CREATED in the session (`kompas_create_document`,
+        `kompas_insert_component`, `kompas_save_document` into `sandbox\\acceptance\\asm-check.m3d`) and the
+        scenario ran on that live document. A saved `.m3d` re-opened from the disk is typed by КОМПАС as a
+        detail (`ksDocument3D::IsDetail`), so the assembly commands refuse it: the cell builds the
+        assembly the way the client built it.
+        """
+        # DOC: `kompas_open_document` returns the new id at the ENVELOPE level (`document_id`),
+        # not inside `result`; the id is read from both places so a renamed envelope is caught.
+        def opened_id(env):
+            row = result(env)
+            return row.get("document_id") or row.get("id") or (env or {}).get("document_id")
+
+        opened = []
+        if open_others:
+            for name in client_others:
+                path = _os.path.join(folder, name)
+                source = _os.path.join(client_dir, name)
+                if _os.path.exists(source):
+                    with open(source, "rb") as src, open(path, "wb") as dst:
+                        dst.write(src.read())
+                    env, _code = call("kompas_open_document",
+                                      {"application_id": app_id, "path": path,
+                                       "access": "edit"})
+                    doc = opened_id(env)
+                    if doc:
+                        opened.append(doc)
+        env, detail_code = call("kompas_open_document",
+                                {"application_id": app_id, "path": client_detail,
+                                 "access": "edit"})
+        detail_id = opened_id(env)
+        if not detail_id:
+            return {"error": f"деталь клиента не открыта: {detail_id} ({detail_code})"}
+        # The client's assembly: created in the session, the client's detail inserted, saved to the client's
+        # own path. The client's ORIGINAL file is not touched: the cell works on its copy.
+        asm_id, asm_code, asm_message = new_document("assembly", "client-asm-check")
+        if not asm_id:
+            return {"error": f"сборка клиента не создана: {asm_code} {asm_message}"}
+        env, insert_code = call("kompas_insert_component", {
+            "document_id": asm_id, "expected_revision": current_rev(asm_id),
+            "source_path": client_detail})
+        if insert_code:
+            return {"error": f"вставка детали клиента: {insert_code} {emsg(env)}"}
+        env, save_code = call("kompas_save_document", {
+            "document_id": asm_id, "expected_revision": current_rev(asm_id),
+            "target_path": client_asm})
+        if save_code:
+            return {"error": f"сохранение сборки клиента: {save_code} {emsg(env)}"}
+        client_sha = sha(client_asm)
+        env, code = run(asm_id, client_plan())
+        answer = result(env)
+        checkpoint = answer.get("checkpoint") or {}
+        manifest_path = checkpoint.get("manifest_path")
+        manifest = {}
+        if manifest_path and _os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        files = manifest.get("files") or []
+        detail_entry = None
+        for entry in files:
+            source = str(entry.get("source_path") or "").lower()
+            if source.endswith("flat-886264b9.m3d"):
+                detail_entry = entry
+                break
+        # The copy is read from the disk by BYTES: the copy folder lies outside the roots, so the
+        # instrument may not open it through the file policy.
+        copy_ok = False
+        copy_path = (detail_entry or {}).get("copy_path")
+        if copy_path and _os.path.exists(copy_path):
+            copy_ok = (sha(copy_path) == (detail_entry or {}).get("sha256")
+                       and _os.path.getsize(copy_path) == (detail_entry or {}).get("size_bytes"))
+        steps = {item.get("step_id"): item.get("status") for item in (answer.get("steps") or [])}
+        refusal = refusal_parts(env)
+        for doc in opened:
+            close(doc)
+        close(detail_id)
+        return {
+            "error": None,
+            "env": env,
+            "answer": answer,
+            "checkpoint": checkpoint,
+            "steps": steps,
+            "refusal": refusal,
+            "manifest": manifest,
+            "manifest_path": manifest_path,
+            "detail_entry": detail_entry,
+            "copy_ok": copy_ok,
+            "client_intact": _os.path.exists(client_asm) and sha(client_asm) == client_sha,
+            "asm_id": asm_id,
+        }
+
+    client_cell_answer = client_cell(False)
+    if client_cell_answer.get("error"):
+        row("CP.12.client_setup",
+            "постановка клиента: точка снята, манифест называет копию детали, шаги s1-s3 выполнены",
+            False, f"постановка не собрана: {client_cell_answer['error']}")
+    else:
+        checkpoint = client_cell_answer["checkpoint"]
+        manifest = client_cell_answer["manifest"]
+        steps = client_cell_answer["steps"]
+        refusal = client_cell_answer["refusal"]
+        row("CP.12.client_setup",
+            "постановка клиента: точка снята, манифест называет копию детали, шаги s1-s3 выполнены",
+            checkpoint.get("taken") is True and manifest.get("verified") is True
+            and client_cell_answer["detail_entry"] is not None and client_cell_answer["copy_ok"]
+            and all(steps.get(f"s{index}") == "succeeded" for index in (1, 2, 3))
+            and client_cell_answer["client_intact"],
+            f"taken={checkpoint.get('taken')} проверен={manifest.get('verified')} "
+            f"манифест={str(client_cell_answer['manifest_path'])[:70]} "
+            f"файлов={len(manifest.get('files') or [])} "
+            f"копия_детали={str((client_cell_answer['detail_entry'] or {}).get('copy_path'))[:70]} "
+            f"копия_с_диска_совпала={client_cell_answer['copy_ok']} шаги={steps} "
+            f"файл_клиента_цел={client_cell_answer['client_intact']} отказ={refusal['code']}/"
+            f"{refusal['cause']} вызов={refusal['call_code']}: {refusal['call_text']} "
+            f"компас_код={refusal['kompas_code']} компас_текст={refusal['kompas_text']}")
+
+    # ── CP.13 the client's session: the other documents open as well ───────────────────────────
+    # INVARIANT: the client's session held the plate, the bar and the rib as well; a refusal that
+    # depends on another open document is not reproduced without them.
+    session_cell_answer = client_cell(True)
+    if session_cell_answer.get("error"):
+        row("CP.13.client_session",
+            "сеанс клиента: прочие документы открыты, точка снята",
+            False, f"постановка не собрана: {session_cell_answer['error']}")
+    else:
+        checkpoint = session_cell_answer["checkpoint"]
+        steps = session_cell_answer["steps"]
+        refusal = session_cell_answer["refusal"]
+        row("CP.13.client_session",
+            "сеанс клиента: прочие документы открыты, точка снята",
+            checkpoint.get("taken") is True and client_cell_answer["client_intact"],
+            f"taken={checkpoint.get('taken')} шаги={steps} отказ={refusal['code']}/{refusal['cause']} "
+            f"вызов={refusal['call_code']}: {refusal['call_text']} "
+            f"компас_код={refusal['kompas_code']} компас_текст={refusal['kompas_text']} "
+            f"файл_клиента_цел={client_cell_answer['client_intact']}")
+
     close_host(probe)
 
     # ── CP.07 copy directory unreachable ────────────────────────────────────────────────────
@@ -53890,7 +54179,22 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     copy_folder = None
     rows = []
     detail_text = ""
+    restore_attempted = None
+    still_readable = False
+    edit_intact = False
+    sketch_id = None
+    sketch_error = None
     if doc2:
+        # The unsaved edit of the client's own work: it must survive a refused checkpoint, because the
+        # restore is NOT ordered when nothing was taken.
+        _e, ctx, _r = probe2.tool("kompas_get_context",
+                                  {"document_id": doc2, "detail": "minimal"})
+        rev_before = ((ctx or {}).get("result") or {}).get("revision") or 1
+        env, code = call2("kompas_create_sketch", {
+            "document_id": doc2, "expected_revision": rev_before,
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": "cp07-unsaved"})
+        sketch_id = ((env or {}).get("result") or {}).get("id")
+        sketch_error = code
         env, code = call2("kompas_run_scenario", {
             "scenario_version": 1, "document_id": doc2, "operation_id": str(uuid.uuid4()),
             "on_error": "restore_checkpoint", "checkpoint_policy": "document_copy",
@@ -53898,6 +54202,23 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         answer = (env or {}).get("result") or {}
         checkpoint_broken = answer.get("checkpoint") or {}
         err = (env or {}).get("error") or {}
+        restore = answer.get("restore") or {}
+        restore_attempted = restore.get("attempted")
+        _e, ctx, _r = probe2.tool("kompas_get_context",
+                                  {"document_id": doc2, "detail": "minimal"})
+        still_readable = (ctx or {}).get("status") == "succeeded"
+        if sketch_id:
+            _e, ctx, _r = probe2.tool("kompas_list_sketches", {"document_id": doc2})
+            found = ((ctx or {}).get("result") or {})
+            if isinstance(found, dict):
+                found = found.get("rows") or found.get("sketches") or found.get("items") or []
+            if isinstance(found, list):
+                for item in found:
+                    if not isinstance(item, dict):
+                        continue
+                    names = {str(value) for value in item.values() if isinstance(value, str)}
+                    if str(sketch_id) in names:
+                        edit_intact = True
         # The cause must name the directory: the client looks for the defect in the configuration, not
         # in the model.
         detail_text = f"{err.get('message') or ''} {json.dumps(err.get('details') or {}, ensure_ascii=False)}"
@@ -53923,6 +54244,15 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         bool(plan_refused),
         f"статус={(env or {}).get('status')} код_шага={step_error_code} каталог={copy_folder} "
         f"шагов={len(rows)} причина_текст={detail_text[:160]} err={code}")
+    # ── CP.14 the client's own work survives a refused checkpoint ───────────────────────────────
+    # INVARIANT: a refused checkpoint has nothing to roll back to, so the restore is NOT attempted and
+    # the document keeps the client's unsaved edit.
+    row("CP.14.checkpoint_refused_keeps_edit",
+        "отказ контрольной точки: документ читается, несохранённая правка на месте, restore не начат",
+        bool(plan_refused) and restore_attempted is False and still_readable and edit_intact,
+        f"отказ={plan_refused} restore_attempted={restore_attempted} читается={still_readable} "
+        f"правка_на_месте={edit_intact} эскиз={sketch_id} ошибка_эскиза={sketch_error} "
+        f"шагов={len(rows)} err={code}")
     if doc2:
         call2("kompas_close_document", {"document_id": doc2, "dirty_policy": "discard"})
     close_host(probe2)

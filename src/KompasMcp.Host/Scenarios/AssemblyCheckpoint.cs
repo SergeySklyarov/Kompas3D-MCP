@@ -809,6 +809,9 @@ internal sealed class AssemblyCheckpoint
         {
             ["code"] = envelope.Error.Code,
             ["message"] = envelope.Error.Message,
+            // INVARIANT: the refusal carries the refused call's own details, so the КОМПАС error code
+            // reaches the client through the checkpoint refusal and not only through the step.
+            ["details"] = envelope.Error.Details?.DeepClone(),
         };
 
     private static bool TryWriteAtomic(string path, JsonObject manifest, out string? reason)

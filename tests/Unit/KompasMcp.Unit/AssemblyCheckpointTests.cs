@@ -87,6 +87,11 @@ public class AssemblyCheckpointTests : IDisposable
         /// <summary>How many plain component reads to answer before refusing the rest (the copy's rows).</summary>
         public int RefuseRowsAfter { get; init; } = -1;
 
+        /// <summary>A save WITHOUT a target path is refused; the top SaveAs (with a target) still succeeds.</summary>
+        /// <remarks>The resave after the reassignment is the only save without a target path: it is the
+        /// call the client failed on, so a test must be able to refuse it alone.</remarks>
+        public bool RefuseSaveWithoutTarget { get; init; }
+
         private int _graphsAnswered;
 
         private int _rowsAnswered;
@@ -143,6 +148,11 @@ public class AssemblyCheckpointTests : IDisposable
                         ["components"] = queue.Count > 0 ? queue.Dequeue() : new JsonArray(),
                     });
                 case "kompas_save_document":
+                    if (RefuseSaveWithoutTarget && arguments["target_path"] is null)
+                    {
+                        return Refused(tool, "SAVE_FAILED");
+                    }
+
                     return new ResultEnvelope<JsonNode?>
                     {
                         Status = OperationStatus.Succeeded,
@@ -390,5 +400,38 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.Equal("top_refs_not_reassigned", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("CAPABILITY_UNAVAILABLE",
             outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+    }
+
+    /// <summary>The refusal AFTER the top SaveAs: the copy is open, and the answer must name it.</summary>
+    /// <remarks>INVARIANT: the client's own failure was the resave AFTER the SaveAs, so the answer on that
+    /// path must name the open copy and say that the client's file is unchanged — otherwise the client
+    /// saves into the copy and does not know where its file went.
+    /// History: docs/decisions/scenario.md#checkpoint-save-refusal</remarks>
+    [Fact]
+    public async Task RefusedResave_KeepsTheCopyOpenAndNamesIt()
+    {
+        var part = Part("part.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            RefuseSaveWithoutTarget = true,
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        Assert.Equal("copy_not_saved", outcome.Error!["details"]!["cause"]!.GetValue<string>());
+        // The refused call's own code reaches the client: this is the code the client saw.
+        Assert.Equal("SAVE_FAILED", outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+        // The copy's document is NOT closed: the client's next save goes there, and it must be told.
+        Assert.DoesNotContain("kompas_close_document", session.Tools);
+        Assert.Equal("copy-1", outcome.Report["document_id_after"]!.GetValue<string>());
+        Assert.Equal(_topCopy, outcome.Report["path"]!.GetValue<string>());
+        Assert.Contains("файл клиента не изменён", outcome.Report["notes"]!.GetValue<string>());
+        Assert.False(outcome.Report["taken"]!.GetValue<bool>());
     }
 }

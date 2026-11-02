@@ -149,6 +149,16 @@ internal sealed class ScenarioRunner
                         parentOperationId, effectiveDocumentId, externalParts, cancellationToken)
                     .ConfigureAwait(false);
                 checkpoint = taken.Report;
+
+                // INVARIANT: the address for further work is the document that is OPEN now. The assembly
+                // route saves the top copy FIRST and can refuse the checkpoint afterwards, leaving the
+                // copy's own document open under its id — the id the plan started with addresses nothing.
+                // History: docs/decisions/scenario.md#checkpoint-restore
+                if (JsonScalars.ReadString(checkpoint["document_id_after"]) is { Length: > 0 } checkpointId)
+                {
+                    effectiveDocumentId = checkpointId;
+                }
+
                 if (!taken.Ok)
                 {
                     // INVARIANT: without a checkpoint there is nothing to restore, so no step runs.
@@ -158,13 +168,6 @@ internal sealed class ScenarioRunner
                     steps.Add(StepReport(step, "skipped", ChildOperationId(parentOperationId, step.StepId),
                         null, null, null, taken.Error));
                     continue;
-                }
-
-                // A copy taken through SaveAs is a DIFFERENT document: the plan continues on the copy, else
-                // every following step addresses an id the session no longer has.
-                if (JsonScalars.ReadString(checkpoint["document_id_after"]) is { Length: > 0 } checkpointId)
-                {
-                    effectiveDocumentId = checkpointId;
                 }
             }
 
@@ -217,16 +220,36 @@ internal sealed class ScenarioRunner
 
         if (failedStep is not null && onError == "restore_checkpoint")
         {
-            var restored = await RestoreAsync(parentOperationId, effectiveDocumentId,
-                JsonScalars.ReadString(checkpoint["path"]),
-                JsonScalars.ReadString(checkpoint["application_id"]),
-                JsonScalars.ReadInt(checkpoint["read_only_not_restored"]) ?? 0,
-                cancellationToken).ConfigureAwait(false);
-            restore = restored;
-            if (restored["document_id_after"] is JsonValue after
-                && after.TryGetValue<string>(out var reopened))
+            // INVARIANT: the restore runs ONLY when a checkpoint was actually taken. A refused checkpoint
+            // leaves nothing to roll back to, and closing the document then would discard the client's
+            // unsaved work for a copy that does not exist.
+            // History: docs/decisions/scenario.md#checkpoint-restore
+            if (JsonScalars.ReadBool(checkpoint["taken"]) == true)
             {
-                effectiveDocumentId = reopened;
+                var restored = await RestoreAsync(parentOperationId, effectiveDocumentId,
+                    JsonScalars.ReadString(checkpoint["path"]),
+                    JsonScalars.ReadString(checkpoint["application_id"]),
+                    JsonScalars.ReadInt(checkpoint["read_only_not_restored"]) ?? 0,
+                    cancellationToken).ConfigureAwait(false);
+                restore = restored;
+                if (restored["document_id_after"] is JsonValue after
+                    && after.TryGetValue<string>(out var reopened))
+                {
+                    effectiveDocumentId = reopened;
+                }
+            }
+            else
+            {
+                restore["attempted"] = false;
+                restore["succeeded"] = false;
+                restore["reason"] = "контрольная точка не снята";
+                // The document stays OPEN with its unsaved edits; its id is the address for further work.
+                restore["document_id_after"] = effectiveDocumentId;
+                restore["checks"] = new JsonArray(new JsonObject
+                {
+                    ["name"] = "checkpoint_not_taken",
+                    ["passed"] = true,
+                });
             }
         }
 
@@ -661,7 +684,8 @@ internal sealed class ScenarioRunner
         report["path"] = path;
         report["document_path"] = path;
         report["revision"] = revision.Value;
-        report["application_id"] = context.ApplicationId;
+        report["application_id"] = await ResolveApplicationIdAsync(documentId, context, cancellationToken)
+            .ConfigureAwait(false);
         // A detail has no dependency graph, so the mode changes nothing here — but it is named, not ignored:
         // the client asked for it and has to see that the answer honoured the request.
         report["notes"] = "external_parts=" + externalParts + " на детали поведение не меняет: у детали нет "
@@ -674,6 +698,32 @@ internal sealed class ScenarioRunner
         }
 
         return new CheckpointOutcome(true, report, null);
+    }
+
+    /// <summary>The application the plan works in, read the documented way: the envelope, then the
+    /// document's own context, then the document list.</summary>
+    /// <remarks>INVARIANT: the restore opens the copy in this application and the field is mandatory in
+    /// that contract, so the id is resolved at the moment the checkpoint is taken - not at the moment the
+    /// restore runs, when the document may already be gone.
+    /// DOC: ksdocument3d_open.html; History: docs/decisions/scenario.md#checkpoint-restore</remarks>
+    private async Task<string?> ResolveApplicationIdAsync(
+        string documentId, ResultEnvelope<JsonNode?>? context, CancellationToken cancellationToken)
+    {
+        var applicationId = context?.ApplicationId
+            ?? JsonScalars.ReadString(context?.Result?["application_id"]);
+        if (!string.IsNullOrWhiteSpace(applicationId))
+        {
+            return applicationId;
+        }
+
+        var listed = await _invoke("kompas_list_documents", new JsonObject(), null, cancellationToken)
+            .ConfigureAwait(false);
+        return (listed.Result as JsonArray ?? new JsonArray())
+            .OfType<JsonObject>()
+            .Where(row => JsonScalars.ReadString(row["id"]) == documentId
+                || JsonScalars.ReadString(row["document_id"]) == documentId)
+            .Select(row => JsonScalars.ReadString(row["application_id"]))
+            .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
     }
 
     private async Task<JsonObject> RestoreAsync(
@@ -696,6 +746,21 @@ internal sealed class ScenarioRunner
         if (string.IsNullOrWhiteSpace(copyPath) || !File.Exists(copyPath))
         {
             restore["reason"] = "копии нет: восстанавливать нечего";
+            return restore;
+        }
+
+        // INVARIANT: the document is closed ONLY when the copy can be opened again in its place. The open
+        // names the application and the field is mandatory in that contract, so an unknown id means the
+        // open would fail AFTER the close - the client would lose the document and gain nothing.
+        // DOC: ksdocument3d_open.html; History: docs/decisions/scenario.md#checkpoint-restore
+        if (string.IsNullOrWhiteSpace(applicationId))
+        {
+            restore["reason"] = "application_id неизвестен: документ не закрыт, копия не открыта";
+            ((JsonArray)restore["checks"]!).Add(new JsonObject
+            {
+                ["name"] = "application_id_known_before_close",
+                ["passed"] = false,
+            });
             return restore;
         }
 
@@ -722,11 +787,8 @@ internal sealed class ScenarioRunner
             ["path"] = copyPath,
             ["access"] = "edit",
             ["operation_id"] = ChildOperationId(parentOperationId, "restore-open"),
+            ["application_id"] = applicationId,
         };
-        if (!string.IsNullOrWhiteSpace(applicationId))
-        {
-            openArguments["application_id"] = applicationId;
-        }
 
         // The copy is reopened from a path outside the client's roots, so this call names it too.
         var opened = await _invoke("kompas_open_document", openArguments, copyPath, cancellationToken)

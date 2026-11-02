@@ -237,4 +237,124 @@ public sealed class ScenarioRunnerTests
         Assert.Equal(copy, grants.Single(row => row.Tool == "kompas_save_document").Grant);
         Assert.Null(grants.Single(row => row.Tool == "kompas_create_sketch").Grant);
     }
+
+    /// <summary>A refused checkpoint restores nothing: the document is NOT closed and the answer names
+    /// the reason.</summary>
+    /// <remarks>INVARIANT: without a checkpoint there is nothing to roll back to, and closing the document
+    /// would discard the client's unsaved work for a copy that does not exist.
+    /// History: docs/decisions/scenario.md#checkpoint-restore</remarks>
+    [Fact]
+    public async Task RefusedCheckpointDoesNotCloseTheDocument()
+    {
+        var calls = new List<string>();
+        var runner = new ScenarioRunner(@"C:\temp\control", (tool, arguments, _, _) =>
+        {
+            calls.Add(tool);
+            if (tool == "kompas_get_context")
+            {
+                return Task.FromResult(new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Succeeded,
+                    Result = new JsonObject { ["revision"] = 7, ["kind"] = "part" },
+                });
+            }
+
+            // The checkpoint's own save is refused: there is no copy to restore to.
+            return Task.FromResult(tool == "kompas_save_document"
+                ? new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Failed,
+                    Error = new ErrorDto("SAVE_FAILED", "сохранение не подтверждено", RetryPolicy.Never, null, false, null),
+                }
+                : Succeeded(arguments, new JsonObject { ["id"] = "sk-1" }));
+        });
+
+        var plan = Plan(Step("s1", "kompas_create_sketch"));
+        plan["on_error"] = "restore_checkpoint";
+        plan["checkpoint_policy"] = "document_copy";
+
+        var answer = await runner.RunAsync(plan, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Failed, answer.Status);
+        Assert.DoesNotContain("kompas_close_document", calls);
+        Assert.False(answer.Result?["restore"]?["attempted"]?.GetValue<bool>());
+        Assert.Equal("контрольная точка не снята", answer.Result?["restore"]?["reason"]?.GetValue<string>());
+        // The document stays open, and its id is the address for further work.
+        Assert.Equal(Document, answer.Result?["document_id_after"]?.GetValue<string>());
+    }
+
+    /// <summary>An unknown application id refuses the restore BEFORE the close: the document is not
+    /// closed and the copy is not opened in its place.</summary>
+    /// <remarks>INVARIANT: the open names the application and the field is mandatory in that contract, so
+    /// closing first and failing afterwards would lose the document for nothing.
+    /// History: docs/decisions/scenario.md#checkpoint-restore</remarks>
+    [Fact]
+    public async Task MissingApplicationIdRefusesTheRestoreBeforeTheClose()
+    {
+        var calls = new List<string>();
+        var control = Path.Combine(Path.GetTempPath(), "kompas-scenario-" + Guid.NewGuid().ToString("N"));
+        var runner = new ScenarioRunner(control, (tool, arguments, _, _) =>
+        {
+            calls.Add(tool);
+            if (tool == "kompas_get_context")
+            {
+                // No application_id anywhere: neither in the envelope nor in the body.
+                return Task.FromResult(new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Succeeded,
+                    Result = new JsonObject { ["revision"] = 7, ["kind"] = "part" },
+                });
+            }
+
+            if (tool == "kompas_list_documents")
+            {
+                return Task.FromResult(Succeeded(arguments, new JsonArray()));
+            }
+
+            if (tool == "kompas_save_document")
+            {
+                // The checkpoint's save succeeds, so the copy EXISTS and the restore reaches the check
+                // that comes after it: the application id.
+                var copy = JsonScalars.ReadString(arguments["target_path"]);
+                if (copy is not null)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+                    File.WriteAllText(copy, "copy");
+                }
+
+                return Task.FromResult(Succeeded(arguments, new JsonObject { ["id"] = "sk-1" }));
+            }
+
+            return Task.FromResult(tool == "kompas_create_sketch"
+                ? new ResultEnvelope<JsonNode?>
+                {
+                    Status = OperationStatus.Failed,
+                    Error = new ErrorDto("GEOMETRY_FAILED", "отказ ядра", RetryPolicy.Never, null, false, null),
+                }
+                : Succeeded(arguments, new JsonObject { ["id"] = "sk-1" }));
+        });
+
+        try
+        {
+            var plan = Plan(Step("s1", "kompas_create_sketch"));
+            plan["on_error"] = "restore_checkpoint";
+            plan["checkpoint_policy"] = "document_copy";
+
+            var answer = await runner.RunAsync(plan, CancellationToken.None);
+
+            Assert.Equal(OperationStatus.Failed, answer.Status);
+            Assert.Contains("kompas_save_document", calls);
+            Assert.DoesNotContain("kompas_close_document", calls);
+            Assert.DoesNotContain("kompas_open_document", calls);
+            Assert.Equal("application_id неизвестен: документ не закрыт, копия не открыта",
+                answer.Result?["restore"]?["reason"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(control))
+            {
+                Directory.Delete(control, recursive: true);
+            }
+        }
+    }
 }

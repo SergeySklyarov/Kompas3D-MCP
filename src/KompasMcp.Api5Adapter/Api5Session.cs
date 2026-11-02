@@ -1905,11 +1905,24 @@ public sealed partial class Api5Session : IDisposable
         if (!ok)
         {
             // A failed save does not clear the state: the document stays modified.
+            // INVARIANT: the refusal carries the КОМПАС error code, read through the documented route, so
+            // a client sees WHY the save failed and not only that the boolean was false. DOC:
+            // iapplication_kompaserror.html → IKompasError.Code/Description; ksapi_ikompasdocument_save.html —
+            // «false - неуспешное (например, нет прав на перезапись файла)».
+            // History: docs/decisions/adapter-core.md#kompas-error-route
+            var details = CodeDetails(new Dictionary<string, object?>
+            {
+                ["document_id"] = document.Id,
+                ["path"] = path,
+                ["mode"] = targetPath is null ? "Save" : "SaveAs",
+            }, document);
+
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
                 $"Сохранение не подтверждено возвращаемым значением ({(targetPath is null ? "Save" : "SaveAs")}).",
                 RetryPolicy.SameOperationId,
-                partialEffects: true);
+                partialEffects: true,
+                details: details);
         }
 
         var written = ReadBackSavedFile(path);

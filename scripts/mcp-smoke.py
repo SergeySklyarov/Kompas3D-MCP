@@ -54143,12 +54143,14 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         steps = session_cell_answer["steps"]
         refusal = session_cell_answer["refusal"]
         row("CP.13.client_session",
-            "сеанс клиента: прочие документы открыты, точка снята",
-            checkpoint.get("taken") is True and client_cell_answer["client_intact"],
+            "сеанс клиента: прочие документы открыты, точка снята, шаги s1-s3 выполнены",
+            checkpoint.get("taken") is True
+            and all(steps.get(f"s{index}") == "succeeded" for index in (1, 2, 3))
+            and session_cell_answer["client_intact"],
             f"taken={checkpoint.get('taken')} шаги={steps} отказ={refusal['code']}/{refusal['cause']} "
             f"вызов={refusal['call_code']}: {refusal['call_text']} "
             f"компас_код={refusal['kompas_code']} компас_текст={refusal['kompas_text']} "
-            f"файл_клиента_цел={client_cell_answer['client_intact']}")
+            f"файл_клиента_цел={session_cell_answer['client_intact']}")
 
     close_host(probe)
 

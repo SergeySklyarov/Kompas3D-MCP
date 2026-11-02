@@ -54152,6 +54152,116 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             f"компас_код={refusal['kompas_code']} компас_текст={refusal['kompas_text']} "
             f"файл_клиента_цел={session_cell_answer['client_intact']}")
 
+    # ── CP.15 the assembly after the checkpoint: the restore reads the copy FROM THE DISK ──────
+    # INVARIANT: a step that fails after the checkpoint is taken rolls the document back to the copy;
+    # the restored document IS the copy opened from the file, so its links are the links of the file.
+    # DOC: ksdocument3d_open.html; History: docs/decisions/scenario.md#checkpoint-restore
+    def component_links(doc):
+        """The links of a document, read by the client: the component and its source path."""
+        if not doc:
+            return []
+        _e, env, _r = probe.tool("kompas_list_components", {"document_id": doc})
+        rows = (env or {}).get("result")
+        if isinstance(rows, dict):
+            rows = rows.get("components") or rows.get("rows") or []
+        return rows if isinstance(rows, list) else []
+
+    def restore_cell():
+        """The assembly, the checkpoint, a step that fails and the restore."""
+        component_path, component_doc, error = build_component("detail", "restore")
+        if error or not component_doc:
+            return {"error": error or "компонент не построен"}
+        close(component_doc)
+        assembly_path = _os.path.join(folder, "restore-top.m3d")
+        asm_doc, code, message = new_document("assembly", "restore-top")
+        if not asm_doc:
+            return {"error": f"сборка не создана: {code} {message}"}
+        env, code = call("kompas_insert_component", {
+            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+            "source_path": component_path})
+        if code:
+            return {"error": f"вставка компонента: {code} {emsg(env)}"}
+        env, code = call("kompas_save_document", {
+            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+            "target_path": assembly_path})
+        if code:
+            return {"error": f"сохранение сборки: {code} {emsg(env)}"}
+        client_sha = sha(assembly_path)
+        before = component_links(asm_doc)
+        # The step that fails: the insert of a file that does not exist. The checkpoint is taken BEFORE
+        # the first mutating step, so the copy exists and the restore has what to roll back to.
+        failing = [{"step_id": "s1", "tool": "kompas_insert_component",
+                    "arguments": {"expected_revision": 1,
+                                  "source_path": _os.path.join(folder, "no-such-component.m3d")}}]
+        env, code = run(asm_doc, failing)
+        answer = result(env)
+        checkpoint = answer.get("checkpoint") or {}
+        restore = answer.get("restore") or {}
+        manifest_path = checkpoint.get("manifest_path")
+        manifest = {}
+        if manifest_path and _os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        detail_entry = None
+        for entry in manifest.get("files") or []:
+            if entry.get("copy_path"):
+                detail_entry = entry
+                break
+        copy_path = (detail_entry or {}).get("copy_path")
+        after_doc = restore.get("document_id_after")
+        after = component_links(after_doc)
+        # The link of the copy: the component of the restored copy must lead to the COPY of the detail.
+        link_to_copy = any(
+            str(link.get("source_path") or "").lower() == str(copy_path or "").lower()
+            for link in after)
+        readable = False
+        if after_doc:
+            _e, ctx, _r = probe.tool("kompas_get_context",
+                                     {"document_id": after_doc, "detail": "minimal"})
+            readable = (ctx or {}).get("status") == "succeeded"
+        return {
+            "error": None,
+            "env": env,
+            "answer": answer,
+            "checkpoint": checkpoint,
+            "restore": restore,
+            "manifest": manifest,
+            "copy_path": copy_path,
+            "copy_on_disk": bool(copy_path) and _os.path.exists(copy_path),
+            "before": len(before),
+            "after": len(after),
+            "link_to_copy": link_to_copy,
+            "readable": readable,
+            "client_intact": _os.path.exists(assembly_path) and sha(assembly_path) == client_sha,
+            "assembly_doc": asm_doc,
+            "after_doc": after_doc,
+        }
+
+    restore_answer = restore_cell()
+    if restore_answer.get("error"):
+        row("CP.15.assembly_restore_from_disk",
+            "сборка: шаг падает после точки, восстановление читает копию с диска, ссылка ведёт на копию детали",
+            False, f"постановка не собрана: {restore_answer['error']}")
+    else:
+        restore = restore_answer["restore"]
+        row("CP.15.assembly_restore_from_disk",
+            "сборка: шаг падает после точки, восстановление читает копию с диска, ссылка ведёт на копию детали",
+            restore.get("succeeded") is True and restore.get("attempted") is True
+            and restore_answer["readable"] and restore_answer["copy_on_disk"]
+            and restore_answer["link_to_copy"]
+            and restore_answer["before"] == restore_answer["after"]
+            and restore_answer["client_intact"],
+            f"восстановлено={restore.get('succeeded')} начато={restore.get('attempted')} "
+            f"причина={restore.get('reason')} документ_после={restore_answer['after_doc']} "
+            f"читается={restore_answer['readable']} компонентов_до={restore_answer['before']} "
+            f"после={restore_answer['after']} ссылка_на_копию={restore_answer['link_to_copy']} "
+            f"копия_на_диске={restore_answer['copy_on_disk']} "
+            f"копия_детали={str(restore_answer['copy_path'])[:70]} "
+            f"файл_клиента_цел={restore_answer['client_intact']} "
+            f"err={emsg(restore_answer['env'])}")
+        close(restore_answer["after_doc"])
+        close(restore_answer["assembly_doc"])
+
     close_host(probe)
 
     # ── CP.07 copy directory unreachable ────────────────────────────────────────────────────

@@ -53990,7 +53990,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # differs from them cannot say that the defect does not reproduce.
     # DOC: the client's acceptance R2.6 names the plan: s1 insert_component, s2 list_components,
     # s3 check_interference, and the detail is a plate 60x40x10.
-    client_dir = r"C:\Users\Administrator\Documents\KompasMCP\sandbox\acceptance"
+    client_dir = r"D:\work\KompasMCP\sandbox\acceptance"
     client_detail = _os.path.join(folder, "client-flat-886264b9.m3d")
     client_asm = _os.path.join(folder, "client-asm-check.m3d")
     client_others = ["plate-cd0aaadd.m3d", "bar.m3d", "rib.m3d"]
@@ -54270,11 +54270,11 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # session, the component is inserted, the assembly is saved, the scenario runs on it.
     # The scenario call itself is NOT in the journal - only its child operations are (checkpoint-save,
     # replace_component, checkpoint-resave, checkpoint-close); the outer call is missing there.
-    install_root = r"C:\Users\Administrator\AppData\Local\KompasMCP"
+    install_root = r"D:\work\KompasMCP"
     install_config_path = _os.path.join(install_root, "config", "kompas-mcp.json")
     copies_scenario = _os.path.join(install_root, "control-copies", "scenario")
     client_trace = _os.path.join(copies_scenario, "b4626f94-93d9-45e1-9eb9-7c8f54bb8695-r3")
-    sandbox_root = r"C:\Users\Administrator\Documents\KompasMCP\sandbox"
+    sandbox_root = r"D:\work\KompasMCP\sandbox"
     # The cell's own directory is unique per run: the green run and the red run write the same file
     # names, and a leftover file would make the export refuse instead of measuring the scenario.
     cell_dir = _os.path.join(sandbox_root, "cp16",

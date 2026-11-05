@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -755,13 +755,17 @@ public sealed partial class Api5Session : IDisposable
         return new { applications, documents };
     }
 
-    public ApplicationEntry RequireApplication(string applicationId) =>
+    /// <summary>The named instance, or the refusal a call on a foreign id has to give.</summary>
+    /// <param name="whenMissing">Policy of that refusal; a READ passes
+    /// <see cref="RetryPolicy.ReacquireContext"/>, because a reconnect makes every id of the dead
+    /// instance invalid, so repeating the same call cannot succeed.</param>
+    public ApplicationEntry RequireApplication(string applicationId, RetryPolicy? whenMissing = null) =>
         _applications.TryGetValue(applicationId, out var application)
             ? application
             : throw new KompasContractException(
                 ErrorCodes.ApplicationDisconnected,
                 $"Экземпляр '{applicationId}' не подключён; сначала kompas_connect.",
-                RetryPolicy.SameOperationId);
+                whenMissing ?? RetryPolicy.SameOperationId);
 
     /// <summary>Whether the application behind a target still answers a CHEAP documented call; null when
     /// there is nothing to probe.</summary>

@@ -98,6 +98,20 @@ public static class FacePlacementMatch
             + " мм² из " + Num(requested.AreaMm2) + " мм²): снята именно она.");
     }
 
+    /// <summary>How far a read axis origin may sit from the requested point on the support face, mm.
+    /// </summary>
+    /// <remarks>MEASURED: the coordinates are written exactly and the read origin carries the kernel's
+    /// own noise; the band is the one the published position check has always used (0.5 mm).
+    /// History: docs/decisions/adapter-features.md#hole-conic-position</remarks>
+    public const double AxisOriginToleranceMm = 0.5d;
+
+    /// <summary>Whether the axis read from the body passes through the requested point of the support
+    /// face. INVARIANT: only numbers go in, so a shifted axis exercises the negative branch.</summary>
+    public static bool AxisOriginAt(IReadOnlyList<double> axisOrigin, double wantedX, double wantedY) =>
+        axisOrigin.Count >= 2
+        && Math.Abs(axisOrigin[0] - wantedX) <= AxisOriginToleranceMm
+        && Math.Abs(axisOrigin[1] - wantedY) <= AxisOriginToleranceMm;
+
     /// <summary>Whether the drilled axis lies ON the face the hole was asked to enter.</summary>
     /// <param name="axisExtentMm">Length of the cylindrical face along its axis, or <c>null</c> when the
     /// kernel did not report it. Consulted only when <paramref name="cylinderStartsAtEntrance"/>: there the

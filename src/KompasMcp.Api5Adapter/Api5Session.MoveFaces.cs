@@ -195,11 +195,21 @@ public partial class Api5Session
         {
             var details = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
             AddKompasFailure(details, ReadKompasFailure(document));
+            // MEASURED: a FILLET's own face named without tangent_group is refused by the kernel
+            // (code 33, "objects intersect with an error") while the same call on a PLANE whose tangent
+            // neighbours are the fillets is accepted. The refusal names the flag, or the caller reads
+            // "a fillet face cannot be moved at all".
+            // History: docs/decisions/direct-faces.md#tangent-refusal
+            details["tangent_group_suggested"] = !command.TangentGroup;
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Update() перемещения вернул " + (updated is null ? "ошибку вызова" : "false") +
                 ": тело не перестроено. Смещение, снимающее тело с себя, даёт именно этот исход — это "
-                + "отказ, а не частичный результат.",
+                + "отказ, а не частичный результат."
+                + (command.TangentGroup
+                    ? string.Empty
+                    : " Если названная грань касательна соседям (например, грань скругления), повторите "
+                      + "вызов с tangent_group=true: без флага ядро отказывает, когда цепочка не названа."),
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
                 details: details);

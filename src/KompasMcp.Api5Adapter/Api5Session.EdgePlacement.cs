@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Geometry;
@@ -341,14 +341,21 @@ public partial class Api5Session
         return found;
     }
 
-    /// <summary>A cylindrical face reduced to what the hole-placement rule needs: a point on its axis, the
-    /// axis direction, the radius and the length of the cylinder along the axis.</summary>
-    private sealed record AxisCylinder(double[] Point, double[] Direction, double RadiusMm, double? ExtentMm);
+    /// <summary>A cylindrical or conical face reduced to what the hole-placement rule needs: a point on
+    /// its axis, the axis direction, the radius and the length of the face along the axis.</summary>
+    private sealed record AxisFace(double[] Point, double[] Direction, double RadiusMm, double? ExtentMm);
 
-    /// <summary>Cylindrical faces of the body whose radius is <paramref name="radiusMm"/>.</summary>
-    private static List<AxisCylinder> CylindersOfRadius(DocumentEntry document, double radiusMm)
+    /// <summary>The faces whose axis is a hole's: cylinders of the entrance radius, or, when the entrance
+    /// is a CONE, the conical faces of the body.</summary>
+    /// <param name="conicEntrance">True for <c>through_conic</c>: its entrance is the cone itself.</param>
+    /// <remarks>DOC: <c>kssurface_iscone.html</c>, <c>kssurface_getsurfaceparam.html</c> (cone →
+    /// <c>ksConeParam</c>), <c>ksplacement.html</c> + <c>ksplacement_getorigin/getvector</c>.
+    /// MEASURED: <c>ksConeParam.radius</c> is not the entrance diameter, so a cone is not selected by
+    /// radius. LIMIT: <c>through_conic</c> is the only mode without a cylinder of that diameter.
+    /// History: docs/decisions/adapter-features.md#hole-conic-position</remarks>
+    private static List<AxisFace> EntranceAxes(DocumentEntry document, double radiusMm, bool conicEntrance)
     {
-        var found = new List<AxisCylinder>();
+        var found = new List<AxisFace>();
         if (document.Kind != DocumentKind.Part || document.PartNow().GetMainBody() is not ksBody body
             || body.FaceCollection() is not ksFaceCollection faces)
         {
@@ -364,18 +371,11 @@ public partial class Api5Session
 
             try
             {
-                if (face.GetSurface() is not ksSurface surface || !surface.IsCylinder()
-                    || surface.GetSurfaceParam() is not ksCylinderParam cylinder
-                    || Math.Abs(cylinder.radius - radiusMm) > HoleRadiusToleranceMm
-                    || cylinder.GetPlacement() is not ksPlacement placement
-                    || !placement.GetOrigin(out var x, out var y, out var z)
-                    || !placement.GetVector(2, out var ax, out var ay, out var az))
+                var axis = conicEntrance ? ConeAxis(face) : CylinderAxis(face, radiusMm);
+                if (axis is not null)
                 {
-                    continue;
+                    found.Add(axis);
                 }
-
-                found.Add(new AxisCylinder(new[] { x, y, z }, new[] { ax, ay, az }, cylinder.radius,
-                    cylinder.height));
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
@@ -384,6 +384,38 @@ public partial class Api5Session
         }
 
         return found;
+    }
+
+    /// <summary>A cylinder of exactly <paramref name="radiusMm"/>; null for anything else.</summary>
+    private static AxisFace? CylinderAxis(ksFaceDefinition face, double radiusMm)
+    {
+        if (face.GetSurface() is not ksSurface surface || !surface.IsCylinder()
+            || surface.GetSurfaceParam() is not ksCylinderParam cylinder
+            || Math.Abs(cylinder.radius - radiusMm) > HoleRadiusToleranceMm
+            || cylinder.GetPlacement() is not ksPlacement placement
+            || !placement.GetOrigin(out var x, out var y, out var z)
+            || !placement.GetVector(2, out var ax, out var ay, out var az))
+        {
+            return null;
+        }
+
+        return new AxisFace(new[] { x, y, z }, new[] { ax, ay, az }, cylinder.radius, cylinder.height);
+    }
+
+    /// <summary>Any conical face; its published radius is not the entrance diameter, so it is carried
+    /// as read and never compared with the requested one.</summary>
+    private static AxisFace? ConeAxis(ksFaceDefinition face)
+    {
+        if (face.GetSurface() is not ksSurface surface || !surface.IsCone()
+            || surface.GetSurfaceParam() is not ksConeParam cone
+            || cone.GetPlacement() is not ksPlacement placement
+            || !placement.GetOrigin(out var x, out var y, out var z)
+            || !placement.GetVector(2, out var ax, out var ay, out var az))
+        {
+            return null;
+        }
+
+        return new AxisFace(new[] { x, y, z }, new[] { ax, ay, az }, cone.radius, cone.height);
     }
 
     /// <summary>Refuses when the shell removed a face other than the one it was asked to remove.
@@ -448,11 +480,14 @@ public partial class Api5Session
     /// entrance into the body, so the requested plane must cut it. MEASURED: a through hole's pilot
     /// cylinder is cut by its counterbore or countersink, so its extent legitimately lies wholly on one
     /// side of the requested plane — the extent must not be consulted there.</param>
+    /// <param name="conicEntrance">True for <c>through_conic</c>: the axis is read from the CONICAL face,
+    /// because a cylinder of the entrance diameter does not exist in that mode.</param>
     private static void CheckHolePlacement(
         DocumentEntry document,
         FacePlacementMatch.PlanarFace? baseFace,
         double diameterMm,
         bool cylinderStartsAtEntrance,
+        bool conicEntrance,
         string? featureReference,
         List<NamedCheck> checks,
         List<string> unverified)
@@ -465,25 +500,27 @@ public partial class Api5Session
             return;
         }
 
-        var cylinders = CylindersOfRadius(document, diameterMm / 2d);
-        if (cylinders.Count == 0)
+        var axes = EntranceAxes(document, diameterMm / 2d, conicEntrance);
+        if (axes.Count == 0)
         {
-            unverified.Add(
-                "hole_placement_not_checked — цилиндрической грани диаметра "
-                + diameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
-                + " мм на теле не найдено: сверять ось не с чем");
+            unverified.Add(conicEntrance
+                ? "hole_placement_not_checked — конической грани отверстия на теле не найдено: "
+                    + "сверять ось не с чем"
+                : "hole_placement_not_checked — цилиндрической грани диаметра "
+                    + diameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+                    + " мм на теле не найдено: сверять ось не с чем");
             return;
         }
 
-        var results = cylinders
-            .Select(c => (Cylinder: c, Result: FacePlacementMatch.HoleAxisOnFace(
+        var results = axes
+            .Select(c => (Face: c, Result: FacePlacementMatch.HoleAxisOnFace(
                 baseFace, c.Point, c.Direction, c.ExtentMm, cylinderStartsAtEntrance)))
             .ToList();
 
         var confirmed = results.Where(r => r.Result.Verdict == FacePlacementMatch.Verdict.Confirmed).ToList();
         if (confirmed.Count > 0)
         {
-            // `passed` is the rule's verdict on the cylinder being reported, not a literal.
+            // `passed` is the rule's verdict on the face being reported, not a literal.
             checks.Add(new NamedCheck("axis_on_requested_face",
                 confirmed[0].Result.Verdict == FacePlacementMatch.Verdict.Confirmed,
                 Observed: confirmed[0].Result.Detail,
@@ -497,9 +534,10 @@ public partial class Api5Session
             var measured = results
                 .Select(r => (object?)new Dictionary<string, object?>
                 {
-                    ["axis_point_mm"] = r.Cylinder.Point,
-                    ["axis_direction"] = r.Cylinder.Direction,
-                    ["cylinder_extent_mm"] = r.Cylinder.ExtentMm,
+                    ["axis_face"] = conicEntrance ? "cone" : "cylinder",
+                    ["axis_point_mm"] = r.Face.Point,
+                    ["axis_direction"] = r.Face.Direction,
+                    ["axis_extent_mm"] = r.Face.ExtentMm,
                     ["detail"] = r.Result.Detail,
                 })
                 .ToList();
@@ -517,7 +555,7 @@ public partial class Api5Session
                     ["feature_ref"] = featureReference,
                     ["requested_face_plane_point_mm"] = baseFace.Point,
                     ["requested_face_plane_normal"] = baseFace.Normal,
-                    ["cylinders_of_diameter"] = measured,
+                    ["axes_of_entrance"] = measured,
                 });
         }
 

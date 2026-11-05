@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -126,8 +126,9 @@ public partial class Api5Session
         // ALL axes of the matching radius are read, not the first: with several holes of one diameter
         // "the first match" is a neighbour's axis, and the created feature's coordinate would be
         // attributed to it. Below, the requested position is compared against the list separately.
-        var axisOrigins = Api7Hole.FindCylinderOrigins(
-            document.PartNow(), command.DiameterMm / 2d, HoleRadiusToleranceMm);
+        // The entrance of through_conic is the cone itself, so its axis comes from the conical face.
+        var entranceAxes = EntranceAxes(document, command.DiameterMm / 2d, IsConicEntrance(command.Mode));
+        var axisOrigins = entranceAxes.Select(axis => axis.Point).ToList();
         var center = axisOrigins.Count > 0 ? axisOrigins[0] : null;
 
         // The feature's own state is read BEFORE the checks and the reference is registered FIRST: a
@@ -167,7 +168,7 @@ public partial class Api5Session
             if (!positionComparable)
             {
                 // MEASURED: the offsets are given along the SUPPORT FACE's own axes (M.5), while
-                // FindCylinderOrigins answers in PART coordinates. The two agree only when the face
+                // EntranceAxes answers in PART coordinates. The two agree only when the face
                 // frame coincides with the part frame, which the documented API publishes for a face
                 // perpendicular to the part Z axis and for no other orientation. Comparing anyway
                 // reported position_applied=false on a CORRECT hole on a +Y face - a false check is
@@ -190,12 +191,12 @@ public partial class Api5Session
                 // satisfied if an axis with those coordinates exists on the body, and not satisfied if it
                 // does not, even when a foreign axis of the matching radius stands nearby.
                 var matching = axisOrigins.FirstOrDefault(o =>
-                    Math.Abs(o[0] - wantedX) <= 0.5d && Math.Abs(o[1] - wantedY) <= 0.5d);
+                    FacePlacementMatch.AxisOriginAt(o, wantedX, wantedY));
                 checks.Add(new NamedCheck(
                     "position_applied",
                     matching is not null,
                     Observed: axisOrigins.Count == 0
-                        ? "осей Ø" + command.DiameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " на теле нет"
+                        ? "осей отверстия на теле нет"
                         : string.Join("; ", axisOrigins.Select(o => $"({o[0]:0.###}, {o[1]:0.###})")),
                     Expected: $"({wantedX:0.###}, {wantedY:0.###})"));
             }
@@ -287,7 +288,8 @@ public partial class Api5Session
         // expectation: an axis on the wrong face is a more precise finding than a mismatched delta.
         // History: docs/decisions/adapter-features.md#edge-placement-other-ops
         CheckHolePlacement(document, baseFacePlane, command.DiameterMm,
-            command.Mode == HoleMode.BlindFlat, referenceDto?.Id, checks, unverified);
+            command.Mode == HoleMode.BlindFlat, IsConicEntrance(command.Mode), referenceDto?.Id,
+            checks, unverified);
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = effect.Verdict == HoleEffectVerdict.Confirmed
@@ -377,7 +379,7 @@ public partial class Api5Session
 
     /// <summary>Whether the requested offsets may be compared with a PART-frame axis origin.</summary>
     /// <remarks>MEASURED: the offsets are given along the SUPPORT FACE's own axes (M.5), while
-    /// FindCylinderOrigins answers in PART coordinates. The documented API publishes a face frame that
+    /// the axis readers answer in PART coordinates. The documented API publishes a face frame that
     /// coincides with the part frame only for a face perpendicular to the part Z axis; for any other
     /// orientation the two pairs are different quantities, and comparing them reported a failed check on
     /// a CORRECT hole on a +Y face. An unreadable normal is NOT comparable either: a comparison that
@@ -395,6 +397,14 @@ public partial class Api5Session
             return false;
         }
     }
+
+    /// <summary>Whether the mode's entrance is the cone itself (no cylinder of the entrance diameter).
+    /// </summary>
+    /// <remarks>MEASURED: <c>through_conic</c> builds only <c>ksHTConic</c>; the counterbore, countersink
+    /// and counterdrill modes leave a pilot cylinder of <c>diameter_mm</c> (rows HO.1–HO.3), so their
+    /// axis is read from that cylinder as before.
+    /// History: docs/decisions/adapter-features.md#hole-conic-position</remarks>
+    private static bool IsConicEntrance(HoleMode mode) => mode == HoleMode.ThroughConic;
 
     /// <summary>One mode — one branch. Returns (created, failure cause, reported countersink depth): a
     /// triple, not a pair, because the countersink has a field the object computes itself, and losing

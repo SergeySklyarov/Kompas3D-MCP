@@ -14477,6 +14477,28 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
     if new_app:
         call("kompas_disconnect", {"application_id": new_app, "close_owned_application": True},
              timeout=120)
+        # ── DC.11: чтение после ШТАТНОГО отключения (наряд CLIENT_FINDINGS_0_13_0) ─────────────
+        # Постановка клиента дословно: kompas_disconnect(close_owned_application=true), затем
+        # kompas_list_documents по ПРЕЖНЕМУ application_id. Клиент получил УСПЕХ с пустым списком, то
+        # есть «в экземпляре нет документов» вместо «экземпляра больше нет». Контракт (v0.8.0, «Чтение
+        # при потерянной связи») требует НАЗВАННЫЙ отказ у чтения, а не пустые данные.
+        env_ld, code_ld = call("kompas_list_documents", {"application_id": new_app}, timeout=120)
+        env_cx, code_cx = call("kompas_get_context", {"document_id": fresh_doc or plate}, timeout=120)
+        ld_err = err_of(env_ld)
+        rep.add("DC.11",
+                "чтение после ШТАТНОГО kompas_disconnect: list_documents по прежнему application_id "
+                "отвечает APPLICATION_DISCONNECTED с retry_policy=reacquire_context, а не успехом с "
+                "пустым списком; чтение документа — названный отказ, а не пустая модель",
+                "PASS" if code_ld == "APPLICATION_DISCONNECTED"
+                and status(env_ld) != "succeeded" and not result(env_ld)
+                and ld_err.get("retry_policy") == "reacquire_context"
+                and code_cx in ("APPLICATION_DISCONNECTED", "DOCUMENT_NOT_FOUND") else "FAIL",
+                f"list_documents={code_ld}/{status(env_ld)} retry={ld_err.get('retry_policy')!r} "
+                f"get_context={code_cx}/{status(env_cx)} msg={emsg(env_ld)}",
+                details={"list_documents": {"code": code_ld, "status": status(env_ld),
+                                            "result": result(env_ld), "error": ld_err},
+                         "get_context": {"code": code_cx, "status": status(env_cx),
+                                         "error": err_of(env_cx)}})
 
     for cid, desc in (
         ("DC.00.setup", "постановка: деталь с телом, сборка с компонентом, PID своего КОМПАС"),
@@ -14491,6 +14513,7 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         ("DC.08b", "чужой обрыв виден и не применён"),
         ("DC.09", "attach при записи погибшего экземпляра в ROT"),
         ("DC.10", "экспорт и чертёжное чтение при обрыве — APPLICATION_DISCONNECTED"),
+        ("DC.11", "чтение после штатного disconnect — APPLICATION_DISCONNECTED, а не пустой список"),
     ):
         if not any(row.get("id") == cid for row in rep.rows):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
@@ -37525,6 +37548,55 @@ def hole_checks(client, rep, app_id, workdir):
                 close(doc_c2)
         close(doc_c)
 
+    # ═════════════ HO.42: положение конического отверстия (наряд CLIENT_FINDINGS_0_13_0) ════
+    # Постановка клиента дословно: плита 60 x 40 x 10, through_conic Ø12, угол 30°, сквозь, положение
+    # задано координатами на плоскости опорной грани. Прежние клетки HO.30…HO.33 мерили угол, диаметр
+    # и объём, но НЕ положение: ось искалась только среди ЦИЛИНДРИЧЕСКИХ граней запрошенного диаметра,
+    # которых у конуса нет, поэтому position_applied был false, а в unverified_aspects стояло
+    # hole_placement_not_checked на ВЕРНОЙ геометрии. Здесь ось читается с конической грани
+    # (ksConeParam → GetPlacement), и сверяется именно точка, которую клиент задал.
+    f4_desc = ("конус насквозь: ось прочитана с конической грани и совпала с заданной точкой "
+               "(position_applied=true), устье лежит на опорной грани, объём снят")
+    doc_f4, rev_f4, err_f4 = new_doc("SM07-conic-position")
+    if not doc_f4:
+        rep.add("HO.42", f4_desc, "FAIL", f"документ не создан: {err_f4}")
+    else:
+        rev_f4, top_f4, body_f4, berr_f4 = build_plate_xy(doc_f4, rev_f4, "h-conic-pos", 60.0, 40.0, 10.0)
+        if berr_f4:
+            rep.add("HO.42", f4_desc, "FAIL", f"заготовка: {berr_f4}")
+        else:
+            v_f4_before = volume(body_f4)
+            _e, f4_env, _r = client.tool("kompas_hole", {
+                "face_ref": top_f4, "expected_revision": rev_f4, "mode": "through_conic",
+                "diameter_mm": 12.0, "conic_angle_deg": 30.0,
+                "offset_x_mm": -20.0, "offset_y_mm": 0.0,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            f4_res = (f4_env or {}).get("result") or {}
+            f4_ver = (f4_env or {}).get("verification") or {}
+            f4_checks = {c.get("name"): c for c in (f4_ver.get("checks") or [])}
+            f4_pos = f4_checks.get("position_applied") or {}
+            f4_center = f4_res.get("center_mm") or []
+            f4_unverified = f4_ver.get("unverified_aspects") or []
+            v_f4_after = volume(body_f4)
+            rep.add("HO.42", f4_desc,
+                    "PASS" if error_code(f4_env) is None
+                    and f4_pos.get("passed") is True
+                    and len(f4_center) >= 2
+                    and abs(f4_center[0] + 20.0) <= 0.5 and abs(f4_center[1]) <= 0.5
+                    and not any("hole_placement_not_checked" in str(u) for u in f4_unverified)
+                    and isinstance(v_f4_before, (int, float))
+                    and isinstance(v_f4_after, (int, float))
+                    and v_f4_after < v_f4_before - 1.0 else "FAIL",
+                    f"уровень={f4_ver.get('level')} положение={f4_pos.get('observed')} "
+                    f"passed={f4_pos.get('passed')!r} центр={f4_center} "
+                    f"D_вых={f4_res.get('conic_diameter_mm')} V={v_f4_before}→{v_f4_after} "
+                    f"непроверено={json.dumps(f4_unverified, ensure_ascii=False)[:200]} "
+                    f"err={error_code(f4_env)} msg={describe(f4_env)[1]}",
+                    details={"checks": f4_checks, "center_mm": f4_center,
+                             "unverified_aspects": f4_unverified,
+                             "conic_diameter_mm": f4_res.get("conic_diameter_mm")})
+        close(doc_f4)
+
     # ── границы: угол вне (0;180) и чужие поля режима отвергаются ДО мутации ──
     doc_n, rev_n, err_n = new_doc("SM07-extended-negative")
     if not doc_n:
@@ -58753,6 +58825,100 @@ def e5_checks(client, rep, app_id, workdir):
                        json.dumps(s_checks, ensure_ascii=False),
                        json.dumps(s_warn, ensure_ascii=False)[:220]))
         close(single_doc)
+
+    # ── E5.TAN.client_fillet_face: постановка клиента дословно (наряд CLIENT_FINDINGS_0_13_0) ──
+    # ИЗМЕРЕНО КЛИЕНТОМ на 0.13.0: брусок 60 x 40 x 10, скругление r10 по ОДНОМУ вертикальному ребру,
+    # названа грань САМОГО скругления (цилиндр, касательный двум плоскостям); сдвиг 2 и 0,5 мм в обе
+    # стороны БЕЗ tangent_group - GEOMETRY_FAILED, код КОМПАС 33 «Объекты пересекаются с ошибкой».
+    # Прежняя клетка E5.TAN.single_on_tangent мерила ДРУГУЮ постановку: названа ПЛОСКАЯ грань 40x30,
+    # касательная к скруглениям, и ядро такую операцию принимает, двигая соседей неявно. Различитель -
+    # не «есть касательные соседи», а КАКАЯ грань названа: плоскость (принимается) или сам цилиндр
+    # скругления (отказ). Поэтому описание инструмента и обязано называть обе ветки.
+    def fillet_bar_client(name, width, height, depth, radius):
+        """Брусок с одним скруглением по вертикальному ребру: возвращает (doc, cylinder_ref, problem)."""
+        made, trouble = new_box(name, width, height, depth)
+        if trouble:
+            return None, None, trouble
+        verticals = edge_refs_of_length(made, depth)
+        if not verticals:
+            return made, None, "вертикальных рёбер длиной %s не найдено" % (depth,)
+        _e, fillet_env, _r = client.tool("kompas_fillet", {
+            "edge_refs": [verticals[0]], "expected_revision": current_rev(made),
+            "radius_mm": radius, "operation_id": str(uuid.uuid4())}, timeout=300)
+        if error_code(fillet_env) is not None:
+            return made, None, "скругление: %s" % (error_code(fillet_env),)
+        _e, topo_env, _r = client.tool("kompas_read_topology", {
+            "document_id": made, "body_ref": body_ref(made), "include": "faces"})
+        rows = ((topo_env or {}).get("result") or {}).get("faces") or []
+        cylinders = [row.get("face_ref") for row in rows
+                     if row.get("surface_type") == "cylinder"
+                     and row.get("radius_mm") is not None
+                     and abs(row["radius_mm"] - radius) <= 1e-6]
+        if len(cylinders) != 1:
+            return made, None, "цилиндров r%s найдено %d, ожидался один" % (radius, len(cylinders))
+        return made, cylinders[0], None
+
+    client_desc = ("грань скругления (цилиндр) без tangent_group: НАЗВАННЫЙ отказ ядра GEOMETRY_FAILED "
+                   "с кодом КОМПАС 33, подсказкой tangent_group=true и нетронутой моделью")
+    client_bar, client_face, client_problem = fillet_bar_client("e5-client-fillet", 60.0, 40.0, 10.0, 10.0)
+    if client_problem:
+        rep.add("E5.TAN.client_fillet_face", client_desc, "NAMED", client_problem)
+    else:
+        rev_before_client = current_rev(client_bar)
+        vol_before_client = volume(client_bar)
+        attempts = []
+        for offset, reverse in ((2.0, False), (2.0, True), (0.5, False), (0.5, True)):
+            _e, ref_env, _r = client.tool("kompas_move_faces", {
+                "document_id": client_bar, "expected_revision": rev_before_client,
+                "face_refs": [client_face], "offset_mm": offset, "reverse": reverse,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            ref_err = (ref_env or {}).get("error") or {}
+            ref_det = ref_err.get("details") or {}
+            attempts.append({
+                "offset": offset, "reverse": reverse, "code": ref_err.get("code"),
+                "kompas_result_code": ref_det.get("kompas_result_code"),
+                "hint": "tangent_group=true" in str(ref_err.get("message") or ""),
+                "feature_left": ref_det.get("feature_left_in_tree"),
+                "message": str(ref_err.get("message") or "")[:240],
+            })
+        rev_after_client = current_rev(client_bar)
+        vol_after_client = volume(client_bar)
+        rep.add("E5.TAN.client_fillet_face", client_desc,
+                "PASS" if all(a["code"] == "GEOMETRY_FAILED"
+                              and a["kompas_result_code"] == 33
+                              and a["hint"]
+                              and a["feature_left"] is False for a in attempts)
+                and rev_after_client == rev_before_client
+                and near(vol_after_client, vol_before_client, TOL_V) else "FAIL",
+                "попытки=%s ревизия=%s→%s объём=%s→%s"
+                % (json.dumps([{k: a[k] for k in ("offset", "reverse", "code",
+                                                  "kompas_result_code", "hint")}
+                               for a in attempts], ensure_ascii=False),
+                   rev_before_client, rev_after_client, vol_before_client, vol_after_client),
+                details={"attempts": attempts})
+        close(client_bar)
+
+    group_bar, group_face, group_problem = fillet_bar_client("e5-client-fillet-group", 60.0, 40.0, 10.0, 10.0)
+    group_desc = "та же грань скругления С tangent_group=true: цепочка из 3 граней сдвинута, объём измерен"
+    if group_problem:
+        rep.add("E5.TAN.client_fillet_group", group_desc, "NAMED", group_problem)
+    else:
+        vol_group_before = volume(group_bar)
+        _e, grp_env, _r = client.tool("kompas_move_faces", {
+            "document_id": group_bar, "expected_revision": current_rev(group_bar),
+            "face_refs": [group_face], "offset_mm": 2.0, "reverse": True,
+            "tangent_group": True, "operation_id": str(uuid.uuid4())}, timeout=300)
+        grp_res = result(grp_env)
+        grp_code = error_code(grp_env)
+        vol_group_after = volume(group_bar)
+        rep.add("E5.TAN.client_fillet_group", group_desc,
+                "PASS" if grp_code is None and grp_res.get("tangent_faces_moved") == 3
+                and isinstance(vol_group_after, (int, float))
+                and isinstance(vol_group_before, (int, float))
+                and vol_group_after > vol_group_before + 1.0 else "FAIL",
+                "код=%s tangent_faces_moved=%s объём=%s→%s"
+                % (grp_code, grp_res.get("tangent_faces_moved"), vol_group_before, vol_group_after))
+        close(group_bar)
 
     _e, t_empty, _r = client.tool("kompas_move_faces", {
         "document_id": box, "expected_revision": current_rev(box), "face_refs": [],

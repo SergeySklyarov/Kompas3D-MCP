@@ -14,6 +14,26 @@
 
 ## Текущее состояние
 
+- **Наряд `CLIENT_FINDINGS_0_13_0` (06.11.2026) - НЕ ЗАКРЫТ: правка сделана, приёмка невозможна (стоп-условие среды).**
+  Правка по трём находкам клиентской приёмки 0.13.0 готова и собрана: **F3** - отказ `kompas_move_faces` без
+  `tangent_group` теперь называет флаг (`details.tangent_group_suggested`), описание называет ОБЕ измеренные ветки
+  (плоская грань - успех с `implicit_tangent_faces_moved`; грань скругления - отказ ядра с кодом 33); **F4** - ось
+  конического отверстия читается с КОНИЧЕСКОЙ грани (`ksConeParam` → `GetPlacement`), поэтому `position_applied`
+  выдаётся и на `through_conic`, сравнение точки вынесено в `FacePlacementMatch.AxisOriginAt`; **F5** -
+  `kompas_list_documents` по отключённому `application_id` отвечает `APPLICATION_DISCONNECTED` с
+  `retry_policy=reacquire_context`, а не успехом с пустым списком. Строки прибора добавлены (`HO.42`,
+  `E5.TAN.client_fillet_face`, `E5.TAN.client_fillet_group`, `DC.11`), схемы перевыпущены, решения -
+  `docs/decisions/adapter-core.md#list-documents-disconnected`, `adapter-features.md#hole-conic-position`,
+  `direct-faces.md#tangent-refusal`.
+  **Проверено:** сборка Release 0, `dotnet test` 1799/0 (при `TEMP` внутри рабочего каталога: с системным `TEMP`
+  210 тестов падают на записи в `%TEMP%\kompas-mcp-tests` - свойство среды сессии), `--self-test` 104/0,
+  `contract-diff` 0, стражи 0, `--emit-schemas` - одна строка описания поля `offset_x_mm`.
+  **НЕ проверено на КОМПАС:** `kompas_connect(launch)` на этой машине отказывает (`COM_REGISTRATION_ERROR`;
+  `KOMPAS.Exe` падает `0xc0000409` в `ucrtbase.dll` под автоматизацией), причём тем же отказом отвечает
+  УСТАНОВЛЕННАЯ поставка 0.13.0, прошедшая приёмку 03.11.2026, - поэтому это среда, а не правка. Следствие: три
+  клетки не прогнаны, зачётного `--all` нет, наряд не закрыт. Подробности и план закрытия -
+  `CLIENT_FINDINGS_0_13_0_REPORT_20261106.md`, §4.
+
 - **Наряд `SCENARIO_CHECKPOINT_SAVE` (02.11.2026) - попытка 1 сдана как `blocked`, выдана попытка 2 (запись ниже).**
   Клиентская приёмка 0.13.0 (R2.6, находка F7) вскрыла два дефекта контрольной точки. **Дефект Б устранён** (`6b6d761`): `ScenarioRunner`
   начинал восстановление при любом отказе, включая отказ САМОЙ точки, - копии не было, но документ закрывался с

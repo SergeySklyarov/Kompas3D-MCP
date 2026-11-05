@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -948,6 +948,12 @@ public sealed class CommandDispatcher
     private object? List(IpcFrame request)
     {
         var command = Argument<ListDocumentsCommand>(request);
+        // INVARIANT: a read on an id this session does not hold is a refusal, never empty data.
+        // MEASURED: after kompas_disconnect removed the instance, filtering the registry by its id
+        // answered success with an empty list — a false "the model has no documents". The contract
+        // asks a named refusal here (docs/distribution/v0.8.0.md, "Чтение при потерянной связи").
+        // History: docs/decisions/adapter-core.md#list-documents-disconnected
+        _session.RequireApplication(command.ApplicationId, RetryPolicy.ReacquireContext);
         return _session.Documents
             .Where(d => d.ApplicationId == command.ApplicationId)
             .Select(d => _session.Context(d, includeTopology: false))

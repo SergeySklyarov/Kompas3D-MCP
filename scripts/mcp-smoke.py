@@ -55634,6 +55634,21 @@ def update_checks(host, config, workdir, rep):
         with open(feed, "w", encoding="utf-8") as fh:
             fh.write(text)
 
+    def cache_written_here(expected_version):
+        """Whether the cache file names a version THIS row's feed could have produced.
+
+        ЗАЧЕМ ТАК. Путь файла итога по умолчанию общий с живым клиентским Хостом на этой же машине:
+        любой его старт пишет туда НАСТОЯЩИЙ выпуск. Поэтому «файл существует» не доказывает, что его
+        написал проверяемый Хост - строка UN.04 проверяла бы чужую работу. Своей считается только
+        запись с версией, которую даёт фид этой строки.
+        """
+        try:
+            with open(cache, encoding="utf-8") as fh:
+                record = _json.load(fh)
+        except (OSError, ValueError):
+            return False
+        return str(record.get("latest_version") or "") == expected_version
+
     def release(tag, draft=False, prerelease=False):
         return _json.dumps({
             "tag_name": tag,
@@ -55745,7 +55760,10 @@ def update_checks(host, config, workdir, rep):
                 f"строка в инструкциях={'доступна' in line}")
 
         # --- UN.04: выключатель ---------------------------------------------------------------
+        # Фид намеренно несёт ОТДЕЛЬНУЮ версию (999.0.0): по ней и только по ней видно, писал ли файл
+        # итога ЭТОТ Хост. Выключенная проверка не должна была его читать вовсе.
         clear_cache()
+        write_feed(release("v999.0.0"))
         probe, _init = open_host({"KOMPAS_MCP_UPDATE_FEED": feed, "KOMPAS_MCP_UPDATE_CHECK": "0"})
         try:
             answer = health(probe)
@@ -55753,9 +55771,12 @@ def update_checks(host, config, workdir, rep):
             stop(probe)
 
         rep.add("UN.04",
-                "выключено: status=disabled, запроса нет (файл итога не создан)",
-                "PASS" if answer.get("status") == "disabled" and not os.path.exists(cache) else "FAIL",
-                f"status={answer.get('status')} файл итога создан={os.path.exists(cache)}")
+                "выключено: status=disabled, запроса нет (файл итога этим Хостом не создан)",
+                "PASS" if (answer.get("status") == "disabled"
+                           and not cache_written_here("999.0.0")) else "FAIL",
+                f"status={answer.get('status')} файл итога существует={os.path.exists(cache)} "
+                f"записан_этой_строкой={cache_written_here('999.0.0')}"
+                " (общий путь с клиентским Хостом: чужая запись не считается своей)")
 
         # --- UN.05: битый ответ источника ------------------------------------------------------
         clear_cache()

@@ -1415,7 +1415,11 @@ public sealed partial class Api5Session : IDisposable
             return null;
         }
 
-        if (document.Fingerprint is null)
+        // Our own change is not a foreign one: the box read right after a mutation may still be the one
+        // KOMPAS recomputes later. The observation adopts it and no revision moves (see the marker's note).
+        var ownChange = document.OwnChangesSinceObservation > 0;
+        document.OwnChangesSinceObservation = 0;
+        if (document.Fingerprint is null || ownChange)
         {
             document.Fingerprint = observed;
             return null;
@@ -1775,6 +1779,11 @@ public sealed partial class Api5Session : IDisposable
         }
 
         document.Fingerprint = ComputeFingerprint(document);
+
+        // The fingerprint taken HERE is not "the last observation" of the model: KOMPAS may recompute the
+        // box between two reads. The marker keeps that from reading as an external change.
+        document.OwnChangesSinceObservation++;
+
         document.LastRevisionReason = reason;
 
         // Our own rebuild raises the same event as a foreign one: the burst keeps it from bumping twice.
@@ -2248,6 +2257,16 @@ public sealed class DocumentEntry
     /// <summary>Fingerprint of the last OBSERVATION of the model: it catches an edit made outside MCP. It is
     /// not a savedness flag — <see cref="SaveState"/> handles that.</summary>
     public string? Fingerprint { get; set; }
+
+    /// <summary>How many of OUR OWN changes happened since the last context observation.</summary>
+    /// <remarks>INVARIANT: a fingerprint taken right after a mutation is not proof of an external change. A
+    /// box KOMPAS recomputes BETWEEN two reads differs from the one read at the mutation, so comparing them
+    /// without this marker turned our own change into "someone else changed the model": a second revision
+    /// bump and dead references (MEASURED: `set_sketch_plane` moved the revision by 2). The marker is
+    /// consumed by the next observation, which adopts the observed state without a bump.
+    /// LIMIT: a foreign edit landing between our mutation and the next context read is counted as ours.
+    /// History: docs/decisions/adapter-core.md#external-fingerprint-read</remarks>
+    public int OwnChangesSinceObservation { get; set; }
 
     /// <summary>How a change made outside MCP is noticed for THIS document: events when the subscription
     /// succeeded, the pre-mutation fingerprint check otherwise.</summary>

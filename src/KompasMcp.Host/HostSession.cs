@@ -177,7 +177,7 @@ public sealed class HostSession : IAsyncDisposable
             // History: docs/decisions/host.md#capabilities-catalog
             return string.Equals(tool.Name, CapabilitiesTool, StringComparison.Ordinal)
                 ? WithCapabilitiesCatalog(answer, _options)
-                : WithConfigProblems(WithUpdateNotice(answer));
+                : WithReconciliationHistory(WithConfigProblems(WithUpdateNotice(answer)));
         }
 
         if (!_ownership.IsOwner)
@@ -236,7 +236,28 @@ public sealed class HostSession : IAsyncDisposable
             }
         }
 
-        return await DispatchAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+        return WithDocumentScope(await DispatchAsync(toolName, arguments, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>Name the session generation in a <c>DOCUMENT_NOT_FOUND</c> refusal.</summary>
+    /// <remarks>INVARIANT: <c>known_documents</c> is the registry of the CURRENT Worker generation, and the
+    /// answer says so. MEASURED: the list was read as "documents of the previous generation" — after an
+    /// explicit disconnect the documents of the closed instance are gone, while another generation's
+    /// instance may have been adopted with its own open documents; without the generation the client cannot
+    /// tell which session the list belongs to. History: docs/decisions/host.md#document-not-found-scope</remarks>
+    private ResultEnvelope<JsonNode?> WithDocumentScope(ResultEnvelope<JsonNode?> envelope)
+    {
+        if (envelope.Error is not { } error || error.Code != ErrorCodes.DocumentNotFound)
+        {
+            return envelope;
+        }
+
+        var details = (JsonObject?)error.Details?.DeepClone() ?? new JsonObject();
+        details["session_generation"] = _ownership.Generation;
+        details["known_documents_scope"] =
+            "документы, зарегистрированные в ТЕКУЩЕМ поколении сеанса (session_generation); документы, "
+            + "закрытые вместе с прежним экземпляром КОМПАС, сюда не попадают";
+        return envelope with { Error = error with { Details = details } };
     }
 
     /// <summary>Answers the compact mode's own tools. <c>kompas_run</c> validates the arguments against
@@ -1694,6 +1715,37 @@ public sealed class HostSession : IAsyncDisposable
 
         var node = (JsonObject)result.DeepClone();
         node["update"] = _update.ToJson();
+        return envelope with { Result = node };
+    }
+
+    /// <summary>Names the unresolved outcomes of EARLIER Host processes, next to the current-session flag.</summary>
+    /// <remarks>INVARIANT: <c>needs_reconciliation</c> answers about THIS session; a record recovered from a
+    /// previous process is history and is published as its own field — count, age of the oldest, marker of
+    /// the process — so a permanent warning cannot be mistaken for a fresh one. The field is ALWAYS present
+    /// (count 0 when there is no history): an absent field would read as "not checked".
+    /// History: docs/decisions/host.md#reconciliation-history</remarks>
+    private ResultEnvelope<JsonNode?> WithReconciliationHistory(ResultEnvelope<JsonNode?> envelope)
+    {
+        if (envelope.Result is not JsonObject result)
+        {
+            return envelope;
+        }
+
+        var node = (JsonObject)result.DeepClone();
+        var history = _journal?.UnresolvedOfPreviousProcesses();
+        node["reconciliation_history"] = new JsonObject
+        {
+            ["unresolved_count"] = history?.UnresolvedCount ?? 0,
+            ["oldest_started_utc"] = history?.OldestStartedUtc,
+            ["oldest_age_s"] = history is null
+                ? null
+                : (DateTimeOffset.UtcNow - history.OldestStartedUtc).TotalSeconds,
+            ["host_pid"] = history?.HostPid,
+            // A record written before the marker existed must not read as "written by this process".
+            ["host_pid_note"] = history is null || history.HostPid is not null
+                ? null
+                : "метка процесса в записи отсутствует: журнал вёлся до её появления",
+        };
         return envelope with { Result = node };
     }
 

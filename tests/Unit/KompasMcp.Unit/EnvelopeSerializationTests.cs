@@ -63,4 +63,27 @@ public class EnvelopeSerializationTests
 
         Assert.Equal(direct, viaEnvelope);
     }
+
+    /// <summary>A strict client rejects <c>-0</c>; the answer must never carry it.</summary>
+    /// <remarks>TEST: the value is what a face normal of the bottom face is written as — <c>[-0,-0,-1]</c>.
+    /// The check is on the TEXT, because that is what the client parses. Negative zero in a nested array,
+    /// in an object field, as a <c>float</c>, and untouched neighbours are all part of the case.
+    /// History: docs/decisions/host.md#lossless-json</remarks>
+    [Fact]
+    public void NegativeZero_IsWrittenAsZero_EverywhereInTheAnswer()
+    {
+        var result = new JsonObject
+        {
+            ["normal"] = new JsonArray(-0d, -0d, -1d),
+            ["nested"] = new JsonObject { ["value"] = -0d, ["other"] = 2.5d },
+            ["as_float"] = JsonValue.Create(-0f),
+            ["untouched"] = -1d,
+        };
+
+        KompJson.NormalizeNegativeZero(result);
+        var text = result.ToJsonString();
+
+        Assert.DoesNotContain("-0", text, StringComparison.Ordinal);
+        Assert.Equal("""{"normal":[0,0,-1],"nested":{"value":0,"other":2.5},"as_float":0,"untouched":-1}""", text);
+    }
 }

@@ -119,13 +119,22 @@ def self_test():
         results.append((name, detail if not condition else "ok"))
 
     layer = (
+        "- insert:\n"
+        "    - id: mcp-kompas\n"
+        "      name: '@deepseek-ai/dsh-mcp-client'\n"
+        "      config:\n"
+        "        serverName: kompas\n"
+        "        transport: stdio\n"
+        "        command: C:\\install\\current\\KompasMcp.Host.exe\n"
+        "        args: ['--config', 'C:\\install\\kompas.json']\n"
+    )
+    flat_layer = (
         "- id: mcp-kompas\n"
         "  name: '@deepseek-ai/dsh-mcp-client'\n"
         "  config:\n"
         "    serverName: kompas\n"
         "    transport: stdio\n"
         "    command: C:\\install\\current\\KompasMcp.Host.exe\n"
-        "    args: ['--config', 'C:\\install\\kompas.json']\n"
     )
     with tempfile.TemporaryDirectory(prefix="_mcp-approval-selftest-") as scratch:
         home = os.path.join(scratch, "home")
@@ -139,6 +148,14 @@ def self_test():
         entry, problem = dsh_mcp_entry(profile, "absent")
         check("нет записи - названный отказ, а не пустая запись",
               entry is None and "нет записи" in problem, str(problem))
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write(flat_layer)
+        entry, problem = dsh_mcp_entry(profile, "kompas")
+        check("плоская запись - FAIL с подсказкой формы insert",
+              entry is None and "ПЛОСКОЙ" in (problem or "") and "insert" in (problem or ""),
+              str(problem))
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write(layer)
 
         check("хранилища нет - шаг неприменим (прибор не выдумывает PASS)",
               approval_store(profile, home) is None)

@@ -16,6 +16,9 @@ public enum JournalOutcome
 }
 
 /// <summary>What the journal remembers about one mutation (spec 1.8).</summary>
+/// <param name="HostPid">The Host process that wrote the record, once the journal carried the marker. A
+/// record of an earlier process is history, not "this session"; a missing marker is reported as missing,
+/// never as the current process.</param>
 public sealed record JournalRecord(
     string OperationId,
     string Tool,
@@ -27,7 +30,15 @@ public sealed record JournalRecord(
     string? ResultJson,
     ErrorDto? Error,
     DateTimeOffset? FinishedUtc,
-    bool NeedsReconciliation);
+    bool NeedsReconciliation,
+    int? HostPid = null);
+
+/// <summary>Unresolved outcomes left by PREVIOUS Host processes: how many, how old, and whose.</summary>
+/// <param name="HostPid">The marker of the oldest record's process, or <c>null</c> when it carried none.</param>
+public sealed record ReconciliationHistory(
+    int UnresolvedCount,
+    DateTimeOffset OldestStartedUtc,
+    int? HostPid);
 
 /// <summary>Durable, append-only journal of mutations, and the source of idempotency decisions.</summary>
 /// <remarks>INVARIANT: the intent record is appended and flushed BEFORE the command reaches COM; the terminal
@@ -327,7 +338,9 @@ public sealed class OperationJournal : IDisposable
                 null,
                 null,
                 null,
-                NeedsReconciliation: false);
+                NeedsReconciliation: false,
+                // The marker lets the next process tell ITS unknown outcomes from this one's.
+                HostPid: Environment.ProcessId);
 
             // INVARIANT: the intent record MUST be durable and locked, else the command does NOT leave —
             // a lost record makes a replay look like "never ran". With no lock nothing is appended and
@@ -461,6 +474,29 @@ public sealed class OperationJournal : IDisposable
         lock (_gate)
         {
             return _byOperation.Values.Count(r => r.NeedsReconciliation);
+        }
+    }
+
+    /// <summary>Unresolved outcomes of EARLIER Host processes, or <c>null</c> when there are none.</summary>
+    /// <remarks>INVARIANT: the flag "needs reconciliation" means the CURRENT session; a recovered record of a
+    /// previous process is history that is named separately (how many, how old, whose) instead of raising a
+    /// warning that never goes away. MEASURED: three recovered records (one of them months old) turned
+    /// <c>kompas_health</c> red in every new session. The records themselves are evidence and are never
+    /// removed. History: docs/decisions/journaling.md#reconciliation-history</remarks>
+    public ReconciliationHistory? UnresolvedOfPreviousProcesses()
+    {
+        lock (_gate)
+        {
+            var rows = _byOperation.Values
+                .Where(record => record.NeedsReconciliation && record.HostPid != Environment.ProcessId)
+                .ToList();
+            if (rows.Count == 0)
+            {
+                return null;
+            }
+
+            var oldest = rows.MinBy(record => record.StartedUtc)!;
+            return new ReconciliationHistory(rows.Count, oldest.StartedUtc, oldest.HostPid);
         }
     }
 

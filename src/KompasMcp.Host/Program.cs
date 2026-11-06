@@ -300,6 +300,10 @@ public static class Program
             }
         }
 
+        // The ONE place the answer becomes text: both the text block and structuredContent are parsed from
+        // THIS string, so a value rejected by a strict client is removed once, not per tool.
+        // History: docs/decisions/host.md#lossless-json
+        KompJson.NormalizeNegativeZero(json);
         var jsonText = json.ToJsonString();
         var content = new System.Collections.Generic.List<ModelContextProtocol.Protocol.ContentBlock>
         {

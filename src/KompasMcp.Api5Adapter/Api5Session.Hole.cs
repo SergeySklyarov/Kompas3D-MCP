@@ -341,6 +341,12 @@ public partial class Api5Session
             "single_face_only — измерялся только один базовый случай на режим (M.2/M.3/M.4); " +
             "на наклонных гранях и в многотельных деталях режимы не проверялись");
 
+        // The published depth is what the READ-BACK gives: on the countersink mode the object returns its
+        // own derived number, and on the counterdrill mode the same formula is applied to the two diameters
+        // that mode exposes (see Api7Hole.Read). The write path's own report is not used: it exists only
+        // for the countersink branch and would leave the counterdrill answer empty.
+        var countersinkDepth = readBack?.CountersinkDepthMm ?? reportedCountersinkDepth;
+
         if (referenceDto is null)
         {
             // A reference to a feature the API5 tree does not show must not be issued: an edit through
@@ -351,7 +357,7 @@ public partial class Api5Session
                 command.Mode.ToString().ToLowerInvariant(),
                 readBack?.DiameterMm,
                 readBack?.DepthMm,
-                reportedCountersinkDepth,
+                countersinkDepth,
                 center,
                 bodiesAfter,
                 volumeAfter,
@@ -365,7 +371,7 @@ public partial class Api5Session
             command.Mode.ToString().ToLowerInvariant(),
             readBack?.DiameterMm,
             readBack?.DepthMm,
-            reportedCountersinkDepth,
+            countersinkDepth,
             center,
             bodiesAfter,
             volumeAfter,

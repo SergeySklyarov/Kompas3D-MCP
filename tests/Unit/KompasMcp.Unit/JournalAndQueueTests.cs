@@ -64,6 +64,73 @@ public class OperationJournalTests : IDisposable
         Assert.Null(journal.NeedsReconciliationFor("doc-1"));
     }
 
+    /// <summary>An unresolved record of an EARLIER process is history, named separately from the flag.</summary>
+    /// <remarks>TEST: the journal lines are written by hand because the case cannot be produced in one
+    /// process — a record of a previous process carries another <c>host_pid</c>, and the oldest one may
+    /// predate the marker entirely. Both halves are checked: what is counted and what is NOT (a record of
+    /// THIS process, and a resolved one, must not appear in the history).
+    /// History: docs/decisions/journaling.md#reconciliation-history</remarks>
+    [Fact]
+    public void UnresolvedOfPreviousProcesses_CountsOnlyEarlierProcessesAndNamesTheOldest()
+    {
+        var previous = Environment.ProcessId + 1;
+        var old = new DateTimeOffset(2026, 10, 14, 8, 0, 0, TimeSpan.Zero);
+        var recent = new DateTimeOffset(2026, 11, 6, 8, 0, 0, TimeSpan.Zero);
+        string Line(string id, string outcome, bool needs, DateTimeOffset started, int? pid)
+        {
+            var record = new System.Text.Json.Nodes.JsonObject
+            {
+                ["operation_id"] = id,
+                ["tool"] = "kompas_rebuild",
+                ["arguments_hash"] = new string('a', 64),
+                ["document_id"] = Guid.NewGuid().ToString("N"),
+                ["base_revision"] = 1,
+                ["started_utc"] = started.ToString("O"),
+                ["outcome"] = outcome,
+                ["result_json"] = null,
+                ["error"] = null,
+                ["finished_utc"] = null,
+                ["needs_reconciliation"] = needs,
+            };
+            if (pid is not null)
+            {
+                record["host_pid"] = pid.Value;
+            }
+
+            return record.ToJsonString();
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(_file)!);
+        File.WriteAllLines(_file, new[]
+        {
+            // The oldest: written before the marker existed, so its process is unknown.
+            Line("old-no-pid", "outcome_unknown", true, old, null),
+            Line("previous-pid", "outcome_unknown", true, recent, previous),
+            Line("current-process", "outcome_unknown", true, recent, Environment.ProcessId),
+            Line("resolved", "succeeded", false, recent, previous),
+        });
+
+        using var journal = new OperationJournal(_file);
+        var history = journal.UnresolvedOfPreviousProcesses();
+
+        Assert.NotNull(history);
+        Assert.Equal(2, history!.UnresolvedCount);
+        Assert.Equal(old, history.OldestStartedUtc);
+        Assert.Null(history.HostPid);
+    }
+
+    [Fact]
+    public void UnresolvedOfPreviousProcesses_IsNullWhenOnlyThisProcessHasUnresolvedOutcomes()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        journal.MarkUnknown(id, "бюджет истёк");
+
+        Assert.Equal(1, journal.CountNeedingReconciliation());
+        Assert.Null(journal.UnresolvedOfPreviousProcesses());
+    }
+
     [Fact]
     public void SameIdAndSameArguments_IsReplayedNotRedischarged()
     {

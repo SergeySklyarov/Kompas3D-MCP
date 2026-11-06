@@ -61,6 +61,55 @@ class McpError(Exception):
     pass
 
 
+# ОТВЕТ, КОТОРЫЙ СТРОГИЙ КЛИЕНТ ОТВЕРГАЕТ (наряд CLIENT_FINDINGS_0_13_0_DSH §1.1).
+#
+# Клиент dsh проверяет значение инструмента на «JSON без потерь» и отвергает ответ целиком:
+# «tool mcp__kompas__kompas_run returned invalid output: value is not lossless JSON». Правило взято из
+# кода проверки, а не из догадки: @deepseek-ai/dsh-util-values/lib/index.js, walkJsonValue — число
+# принимается, только если оно конечно и НЕ отрицательный ноль (JSON.stringify(-0) даёт "0", поэтому
+# разбор не возвращает то же значение); объект обязан быть plain, массив — без дырок и лишних ключей.
+# На проводе всё это всегда JSON-текст, поэтому недостижимы только не-plain объекты, циклы и дырки:
+# остаются числа. Проверяется ТЕКСТ ответа, а не разобранное значение: json.loads('-0') даёт 0 и
+# потерял бы ровно тот признак, который клиент видит.
+WIRE_LOSSLESS_SOURCE = "@deepseek-ai/dsh-util-values/lib/index.js, walkJsonValue"
+WIRE_VIOLATIONS = []
+
+
+class _WireNumber(str):
+    """Токен числа в том виде, в каком он пришёл на провод: значение уже потеряло бы знак нуля."""
+
+
+def wire_lossless_violations(text):
+    """Поля ответа, которые строгий клиент отвергает: путь, токен и правило.
+
+    Путь строится по самому ответу (`result.planes[0].normal[0]`), чтобы FAIL называл поле, а не ответ
+    целиком: клиент отвергает вызов из-за одного числа, и искать его повторным прогоном не нужно.
+    """
+    try:
+        tree = json.loads(text, parse_int=_WireNumber, parse_float=_WireNumber,
+                          parse_constant=_WireNumber)
+    except ValueError:
+        return []
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, _WireNumber):
+            value = float(node)
+            if not math.isfinite(value):
+                found.append({"path": path, "token": str(node), "rule": "non_finite"})
+            elif value == 0.0 and str(node).startswith("-"):
+                found.append({"path": path, "token": str(node), "rule": "negative_zero"})
+        elif isinstance(node, dict):
+            for key, child in node.items():
+                walk(child, f"{path}.{key}" if path else str(key))
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(tree, "")
+    return found
+
+
 # ЖУРНАЛ ВЫЗОВОВ — ЭТО ИЗМЕРЕНИЕ, А НЕ ОТЛАДОЧНЫЙ СЛЕД (наряд F-08).
 #
 # Строка матрицы заявляет десять действий («create», «read», «edit», …), и до сих пор связь
@@ -131,6 +180,9 @@ class Client:
         self._catalog = None
         self._tools = None
         self._describe = {}
+        # Сырой текст ответа по id запроса: только из него видно, что ответ не переживает JSON без
+        # потерь (см. wire_lossless_violations).
+        self._raw_by_id = {}
         # The host writes diagnostics to stderr continuously. Left unread, the pipe buffer fills
         # and the child blocks — which looks exactly like a hung server. Drain it in the background.
         self._stderr_thread = threading.Thread(target=self._pump_stderr, daemon=True)
@@ -170,6 +222,9 @@ class Client:
                 self.log.append("STDOUT-POLLUTION: " + line[:200])
                 continue
             if msg.get("id") == want_id:
+                # Текст ответа сохраняется ДО разбора: проверка «без потерь» смотрит на токены, а не на
+                # разобранные значения (json.loads('-0') уже потерял знак).
+                self._raw_by_id[want_id] = line
                 return msg
             # notifications/other ids: ignore but keep
             self.log.append("interleaved: " + line[:160])
@@ -262,6 +317,10 @@ class Client:
             "is_error": bool(result.get("isError", False)),
             "result": result,
         })
+        # Проверка «без потерь» идёт по ТЕКСТУ ответа этого вызова и привязывается к его номеру в
+        # CALL_LOG: строка, сделавшая вызов, получает FAIL и путь поля (Report.add).
+        for entry in wire_lossless_violations(self._raw_by_id.get(self.n, "")):
+            WIRE_VIOLATIONS.append({"seq": seq, "tool": name, **entry})
         return result.get("isError", False), env, result
 
     def declares_operation_id(self, name):
@@ -413,6 +472,22 @@ class Report:
         которые обязаны быть предъявлены целиком (доказательство ссылок, отпечатки объектов),
         идут в `details` и не усекаются.
         """
+        # ОКНО ВЫЗОВОВ строки: [начало, конец) в журнале CALL_LOG. Это свидетельство того, что строка
+        # ИСПОЛНИЛА, а не того, как она названа (см. CALL_LOG). Считается ДО вердикта: ответ, который
+        # строгий клиент отверг, делает строку FAIL, и это должно случиться до записи доказательства.
+        end = len(CALL_LOG)
+        rejected = []
+        if end > self._mark:
+            self._start = self._mark
+            self._mark = end
+            rejected = [v for v in WIRE_VIOLATIONS if self._start <= v["seq"] < self._mark]
+        if rejected and verdict != "FAIL":
+            verdict = "FAIL"
+            named = ", ".join(f"{v['tool']}: {v['path']} ({v['rule']})" for v in rejected[:5])
+            detail = (detail + " | " if detail else "") + (
+                f"ответ не переживает JSON без потерь ({WIRE_LOSSLESS_SOURCE}): {named}"
+                + ("" if len(rejected) <= 5 else f" и ещё {len(rejected) - 5}"))
+            details = {**(details or {}), "lossless_json_violations": rejected}
         row = {"id": cid, "description": desc, "verdict": verdict, "detail": clip(detail, 600)}
         if self.grouped:
             # Группа строки — для разбивки отчёта `--all`. Без разбивки поле не пишется, чтобы
@@ -420,12 +495,6 @@ class Report:
             row["group"] = self.group or "vertical"
         if details is not None:
             row["details"] = details
-        # ОКНО ВЫЗОВОВ строки: [начало, конец) в журнале CALL_LOG. Это свидетельство того, что строка
-        # ИСПОЛНИЛА, а не того, как она названа (см. CALL_LOG).
-        end = len(CALL_LOG)
-        if end > self._mark:
-            self._start = self._mark
-            self._mark = end
         row["calls_window"] = [self._start, self._mark]
         # На отказе полные ответы окна уходят в отдельный файл, а строка получает на него ссылку.
         # Механизм общий для ВСЕХ строк: без него отказ разбирается повторным прогоном, а не снимком.
@@ -2127,6 +2196,25 @@ def instrument_self_test():
     check("чистый пакет: совпадений нет",
           diag_package_hits(clean_files, [needle, mark]) == ([], []),
           str(diag_package_hits(clean_files, [needle, mark])))
+
+    # Проверка «JSON без потерь» (наряд CLIENT_FINDINGS_0_13_0_DSH §1.1). Обе половины: законный ответ
+    # проходит, а ответ с отрицательным нулём и с нефинитным числом отвергается И НАЗЫВАЕТ поле -
+    # иначе проверка либо не ловит ничего, либо ловит всё.
+    legal = '{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"result":{"normal":[0,0,-1],' \
+            '"x":2.5,"big":1e21}}}}'
+    check("lossless: законный ответ нарушений не даёт",
+          wire_lossless_violations(legal) == [], str(wire_lossless_violations(legal)))
+    dirty = '{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"result":{"normal":[0,-0,-1]}}}}'
+    found = wire_lossless_violations(dirty)
+    check("lossless: отрицательный ноль найден", len(found) == 1, str(found))
+    check("lossless: путь поля назван",
+          bool(found) and found[0]["path"] == "result.structuredContent.result.normal[1]",
+          str(found[0]["path"] if found else None))
+    check("lossless: правило названо", bool(found) and found[0]["rule"] == "negative_zero")
+    non_finite = wire_lossless_violations('{"id":1,"result":{"rows":[{"x":1e999}]}}')
+    check("lossless: нефинитное число найдено и путь назван",
+          len(non_finite) == 1 and non_finite[0]["rule"] == "non_finite"
+          and non_finite[0]["path"] == "result.rows[0].x", str(non_finite))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -14528,6 +14616,31 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
                                             "result": result(env_ld), "error": ld_err},
                          "get_context": {"code": code_cx, "status": status(env_cx),
                                          "error": err_of(env_cx)}})
+
+        # ── DC.13: отказ DOCUMENT_NOT_FOUND называет ПОКОЛЕНИЕ сеанса (F9) ───────────────────────
+        # Клиент прочитал known_documents как «документы ПРЕЖНЕГО поколения»: список - реестр
+        # ТЕКУЩЕГО Worker, но без поколения его нельзя отличить от прежнего, а документы, закрытые
+        # вместе с экземпляром, в нём и не должны появляться. Правила поля в контракте нет, поэтому
+        # оно само называет поколение (session_generation) и объявляет свою область.
+        env_g, code_g = call("kompas_get_context", {"document_id": fresh_doc or plate,
+                                                   "detail": "minimal"}, timeout=120)
+        g_err = err_of(env_g)
+        g_details = g_err.get("details") or {}
+        _e, sess_env, _r = client.tool("kompas_session_status", {}, timeout=120)
+        live_gen = (((sess_env or {}).get("result") or {}).get("this_host") or {}).get("generation")
+        rep.add("DC.13",
+                "отказ DOCUMENT_NOT_FOUND после штатного отключения называет ПОКОЛЕНИЕ сеанса "
+                "(details.session_generation совпадает с тем, что даёт kompas_session_status) и "
+                "область known_documents - «реестр текущего поколения», а не «документы до отключения»",
+                "PASS" if (code_g == "DOCUMENT_NOT_FOUND"
+                           and g_details.get("session_generation")
+                           and g_details.get("session_generation") == live_gen
+                           and g_details.get("known_documents_scope")) else "FAIL",
+                f"get_context={code_g}/{status(env_g)}; поколение_отказа="
+                f"{g_details.get('session_generation')!r} поколение_сеанса={live_gen!r}; "
+                f"область={str(g_details.get('known_documents_scope'))[:80]!r} "
+                f"known_documents={len(g_details.get('known_documents') or [])} шт; msg={emsg(env_g)}",
+                details={"error": g_err, "known_documents": g_details.get("known_documents")})
 
     for cid, desc in (
         ("DC.00.setup", "постановка: деталь с телом, сборка с компонентом, PID своего КОМПАС"),
@@ -38008,6 +38121,82 @@ def hole_checks(client, rep, app_id, workdir):
                              "cylinders": len(cyl_27)})
         close(doc_27)
 
+    # ── HO.44: конус насквозь — какая грань получает diameter_mm ──────────────────────────────────
+    # Постановка находки F5: плита 60x40x10, опорная грань z=10, diameter_mm=12, полный угол 30°.
+    # Ориентацию по объёму установить НЕЛЬЗЯ: усечённый конус с теми же радиусами снимает одинаковый
+    # объём в обе стороны. Поэтому стороны читаются КРУГОВЫМИ РЁБРАМИ тела — радиусом на опорной грани
+    # и на выходе. Так же проверено клиентом (площади граней и объём совпали с аналитикой).
+    conic_desc = ("конус насквозь 60x40x10, diameter_mm=12, угол 30°: 12 лежит на грани, "
+                  "ПРОТИВОПОЛОЖНОЙ опорной, а опорная получает производный 12 + 2·h·tan15° = "
+                  "17,358983848622454 (по круговым рёбрам, не по объёму)")
+    doc_c, rev_c, err_c = new_doc("SM07-conic-side")
+    if not doc_c:
+        rep.add("HO.44", conic_desc, "FAIL", f"документ не создан: {err_c}")
+    else:
+        rev_c, top_c, body_c, berr_c = build_plate_xy(doc_c, rev_c, "h-conic", 60.0, 40.0, 10.0)
+        if berr_c:
+            rep.add("HO.44", conic_desc, "FAIL", f"заготовка: {berr_c}")
+        else:
+            _e, env_c, _r = client.tool("kompas_hole", {
+                "face_ref": top_c, "expected_revision": rev_c, "mode": "through_conic",
+                "diameter_mm": 12.0, "conic_angle_deg": 30.0,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            _e, edges_env, _r = client.tool("kompas_read_topology", {
+                "document_id": doc_c, "body_ref": body_c, "include": "edges"})
+            circles = [e for e in (((edges_env or {}).get("result") or {}).get("edges") or [])
+                       if e.get("curve_type") == "circle" and e.get("radius_mm") is not None]
+
+            def radius_at(height):
+                found = [e["radius_mm"] for e in circles
+                         if abs(((e.get("center_mm") or [0.0, 0.0, 0.0])[2]) - height) <= 0.01]
+                return found[0] if len(found) == 1 else None
+
+            r_support, r_exit = radius_at(10.0), radius_at(0.0)
+            want_support = (12.0 + 2 * 10.0 * math.tan(math.radians(15.0))) / 2.0
+            ok42 = (error_code(env_c) is None and r_support is not None and r_exit is not None
+                    and abs(2 * r_exit - 12.0) <= 0.01
+                    and abs(2 * r_support - 2 * want_support) <= 0.01)
+            rep.add("HO.44", conic_desc, "PASS" if ok42 else "FAIL",
+                    f"err={error_code(env_c)} рёбра(R,z)="
+                    f"{[(e.get('radius_mm'), (e.get('center_mm') or [None] * 3)[2]) for e in circles]} "
+                    f"R_опорной={r_support} (ждали {want_support:.9f}) R_выхода={r_exit} (ждали 6.0) "
+                    f"D_прочитан={((env_c or {}).get('result') or {}).get('diameter_read_back_mm')} "
+                    f"msg={describe(env_c)[1]}",
+                    details={"circles": [{"radius_mm": e.get("radius_mm"),
+                                          "center_mm": e.get("center_mm")} for e in circles],
+                             "expected_support_radius_mm": want_support,
+                             "measured_support_radius_mm": r_support,
+                             "measured_exit_radius_mm": r_exit})
+        close(doc_c)
+
+    # ── HO.45: глубина зенковки выточки-зенковки (through_counterdrill) ────────────────────────────
+    # Описание поля обещает производную глубину (rM − rP)/tan(угол/2). У этого режима СВОЕГО члена
+    # глубины нет (DOC: icountersinkspotfacingholeparameters_propers.html), поэтому число считается по
+    # двум диаметрам, которые режим отдаёт, и публикуется; строка сверяет его с формулой.
+    drill_desc = ("выточка с зенковкой D10/22x2@90°: countersink_depth_read_back_mm = "
+                  "(22/2 − 10/2)/tan45° = 6, а не null")
+    doc_d, rev_d, err_d = new_doc("SM07-counterdrill-depth")
+    if not doc_d:
+        rep.add("HO.45", drill_desc, "FAIL", f"документ не создан: {err_d}")
+    else:
+        rev_d, top_d, body_d, berr_d = build_plate_xy(doc_d, rev_d, "h-drill", 100.0, 80.0, 10.0)
+        if berr_d:
+            rep.add("HO.45", drill_desc, "FAIL", f"заготовка: {berr_d}")
+        else:
+            _e, env_d, _r = client.tool("kompas_hole", {
+                "face_ref": top_d, "expected_revision": rev_d, "mode": "through_counterdrill",
+                "diameter_mm": 10.0, "counterbore_diameter_mm": 22.0, "counterbore_depth_mm": 2.0,
+                "countersink_angle_deg": 90.0, "operation_id": str(uuid.uuid4())}, timeout=300)
+            got_d = (env_d or {}).get("result") or {}
+            depth_d = got_d.get("countersink_depth_read_back_mm")
+            want_d = (22.0 / 2 - 10.0 / 2) / math.tan(math.radians(45.0))
+            rep.add("HO.45", drill_desc,
+                    "PASS" if (error_code(env_d) is None and isinstance(depth_d, (int, float))
+                               and abs(depth_d - want_d) <= 1e-6) else "FAIL",
+                    f"err={error_code(env_d)} глубина={depth_d} (ждали {want_d}) "
+                    f"V={got_d.get('volume_mm3')} msg={describe(env_d)[1]}")
+        close(doc_d)
+
 
 def rotation_checks(client, rep, app_id, workdir):
     """RO: вращение SM-03 через MCP — три вида операции, ось, полный оборот, границы контракта.
@@ -55273,6 +55462,29 @@ def ops_checks(host, config, workdir, rep):
                     f"operation_id: status={status_of(repeat)} err={err_of(repeat)} "
                     f"({str(err_msg(repeat))[:160]}) за {repeat_seconds:.2f} с")
 
+            # ── OPS.15.history: запись ПРЕЖНЕГО процесса - история, а не флаг текущего сеанса ──────
+            # Флаг `needs_reconciliation` отвечает на вопрос «здесь и сейчас есть несогласованное», а
+            # восстановленная запись прежнего процесса - факт истории, и называть её флагом значит
+            # держать тревогу вечно (измерено: три записи, старейшей месяцы, поднимали флаг в каждом
+            # новом сеансе). Запись в журнале НЕ удаляется: она доказательство.
+            health = call(probe_rec, "kompas_health", {"detail": "minimal"})
+            h_res = result(health)
+            hist = h_res.get("reconciliation_history") or {}
+            rep.add("OPS.15.history",
+                    "kompas_health: needs_reconciliation говорит о ТЕКУЩЕМ сеансе (здесь false), а "
+                    "восстановленная запись прежнего процесса названа отдельно - "
+                    "reconciliation_history.unresolved_count=1, возраст старейшей, метка процесса "
+                    "(в записи её нет, и это названо), сама запись из журнала не удалена",
+                    "PASS" if (h_res.get("needs_reconciliation") is False
+                               and hist.get("unresolved_count") == 1
+                               and hist.get("oldest_started_utc")
+                               and isinstance(hist.get("oldest_age_s"), (int, float))
+                               and hist.get("host_pid") is None
+                               and hist.get("host_pid_note")) else "FAIL",
+                    f"health={err_of(health) or 'ok'} needs_reconciliation="
+                    f"{h_res.get('needs_reconciliation')!r} history={hist!r} "
+                    f"счётчик_журнала={counter}")
+
             # ── OPS.12.blocked_mutation: мутация документа с несогласованной записью ────
             # Запрет стоит ДО журнала и ДО Worker, поэтому проверяется на записи с вымышленным
             # документом: дойти до COM вызов не может и не должен. Аргументы валидны по схеме -
@@ -58100,8 +58312,8 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         allowance_mm = math.pi / 2.0 * (radius_mm + coefficient * thickness_mm)
         flat_expected_mm = blank_mm + flange_mm + (allowance_mm - (radius_mm + thickness_mm))
 
-        def flat_part(name, with_sheet_metal):
-            env0, _code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+        def flat_part(name, with_sheet_metal, app=None):
+            env0, _code = call("kompas_create_document", {"application_id": app or app_id, "kind": "part",
                                                           "name": name})
             doc0 = doc_id(env0)
             if not doc0:
@@ -58352,6 +58564,74 @@ def sheet_metal_checks(client, rep, app_id, workdir):
                 "код=" + str(code6) + " поле=" + str(field6) + " файл=" + str(os.path.exists(plain_dxf))
                 + " поле_вида_в_ответе=" + str("unfold_kind" in refusal_result))
         call("kompas_close_document", {"document_id": doc0, "dirty_policy": "discard"})
+
+        # ── SMB.46.visible_refusal: ВИДИМЫЙ экземпляр отказывает названно, а не висит ─────────────
+        # MEASURED (находка F10): в видимом экземпляре та же выгрузка дважды из двух не завершилась за
+        # 300 с, файла не создала и оставила сеанс без ответа даже на kompas_get_context; на том же
+        # файле в невидимом экземпляре проходит сразу. Документированного параметра, снимающего эту
+        # зависимость, нет (ни IDocuments.Add, ни IViews.AddStandartViews не выбирают, где перестраивается
+        # вид), поэтому инструмент отказывает ДО вызова, который виснет, и называет выход. Строка
+        # проверяет ОБЕ половины: названный отказ с подсказкой make_visible=false, файла нет, и СЕАНС
+        # после отказа отвечает - иначе отказ не лучше зависания.
+        vis_target = os.path.join(workdir, "smb-visible.dxf")
+        if os.path.exists(vis_target):
+            os.remove(vis_target)
+        env_v, _code = call("kompas_connect", {"mode": "launch", "make_visible": True}, timeout=300)
+        vis_app = (env_v or {}).get("application_id")
+        vis_detail = "видимый экземпляр: " + str(error_code(env_v))
+        if not vis_app:
+            rep.add("SMB.46.visible_refusal",
+                    "в видимом экземпляре выгрузка развёртки отказывает названным кодом до висящего "
+                    "вызова, файла не создаёт, и сеанс после отказа отвечает", "FAIL",
+                    vis_detail + " msg=" + str(emsg(env_v)))
+            return
+        vdoc, vbody, _vsketch = flat_part("SMB-visible", with_sheet_metal=True, app=vis_app)
+        code_v, details_v = None, {}
+        if vdoc and vbody:
+            call("kompas_create_sheet_metal_bend", {
+                "document_id": vdoc, "expected_revision": current_rev(vdoc), "body_ref": vbody,
+                "edge_ref": longest_edge(vdoc, vbody), "angle_deg": 90.0, "direction": True,
+                "internal_radius": True, "radius_mm": 2.0, "length_type": "contour", "length_mm": 5.0})
+            call("kompas_set_sheet_metal_unfold", {
+                "document_id": vdoc, "expected_revision": current_rev(vdoc), "body_ref": vbody,
+                "unfold": True, "fixed_face_ref": wide_face(vdoc, vbody)})
+            call("kompas_save_document", {
+                "document_id": vdoc, "expected_revision": current_rev(vdoc),
+                "target_path": os.path.join(workdir, "smb-visible.m3d")})
+            env_vx, code_v = call("kompas_export_sheet_metal_flat_dxf", {
+                "document_id": vdoc, "body_ref": vbody, "output_path": vis_target}, timeout=300)
+            details_v = efield(env_vx) or {}
+            err_v = ((env_vx or {}).get("error") or {})
+            details_v = err_v.get("details") or {}
+            # The session must still answer AFTER the refusal: this is the half that separates a named
+            # refusal from a wedged instance.
+            vctx, vref = current_rev(vdoc), None
+            _e, vc_env, _r = client.tool("kompas_get_context", {
+                "document_id": vdoc, "detail": "minimal"}, timeout=120)
+            vref = error_code(vc_env)
+            vis_detail += (f"; выгрузка={code_v} поле={details_v.get('field')} "
+                           f"предел={details_v.get('limit')} файл={os.path.exists(vis_target)} "
+                           f"чтение_после={vref or 'ok'} ревизия={vctx} "
+                           f"подсказка={str(details_v.get('remedy'))[:60]}")
+            rep.add("SMB.46.visible_refusal",
+                    "в видимом экземпляре выгрузка развёртки отказывает названным кодом до висящего "
+                    "вызова, файла не создаёт, называет выход make_visible=false, и сеанс после отказа "
+                    "отвечает на чтение контекста",
+                    "PASS" if (code_v == "CAPABILITY_UNAVAILABLE"
+                               and details_v.get("limit") == "flat_dxf_export_in_visible_instance"
+                               and "make_visible=false" in str(details_v.get("remedy"))
+                               and not os.path.exists(vis_target) and vref is None) else "FAIL",
+                    vis_detail)
+        else:
+            rep.add("SMB.46.visible_refusal",
+                    "в видимом экземпляре выгрузка развёртки отказывает названным кодом", "FAIL",
+                    vis_detail + " деталь или тело не созданы")
+        # The visible instance is torn down by PID: kompas_disconnect ends the WHOLE session, and this
+        # group still owns it. A leftover KOMPAS would leave a window nobody watches.
+        vis_pid = ((env_v or {}).get("result") or {}).get("process_id")
+        if vis_pid:
+            subprocess.run(["taskkill", "/PID", str(vis_pid), "/F"], capture_output=True, text=True)
+            time.sleep(2.0)
 
     flat_dxf_rows()
 
@@ -60761,15 +61041,22 @@ def events_checks(client, rep, app_id, workdir):
 
     doc, err = ev_build_box(client, app_id, "EV_main")
     if not doc or err:
-        rep.add("EV.subscribed", "деталь отвечает reliable, чертёж - conservative", "FAIL",
+        rep.add("EV.subscribed", "у детали и у чертежа external_change_detection=conservative", "FAIL",
                 err or "документ не создан")
         return
 
     # ── EV.subscribed: the value the caller reads, per document kind ──────────────────────────────
     ctx, ctx_err = ev_context(client, doc)
     part_mode = str(ctx.get("external_change_detection") or "").lower()
-    rep.add("EV.subscribed", "у детали external_change_detection=reliable, у чертежа conservative",
-            "PASS" if (part_mode == "reliable" and drawing_mode == "conservative") else "FAIL",
+    # INVARIANT: `reliable` is NOT claimed for any kind. MEASURED: a rebuild performed by a FOREIGN process
+    # through COM of the same instance raised no event (the host log had none while the model changed), and
+    # that is exactly the change the value promises to catch. The document therefore answers
+    # `conservative`, and the route that catches a foreign rebuild is the fingerprint comparison on every
+    # context read (EV.external.revision). History: docs/decisions/adapter-core.md#document-events
+    rep.add("EV.subscribed",
+            "у детали и у чертежа external_change_detection=conservative: reliable не заявляется, "
+            "потому что чужая перестройка события не поднимает",
+            "PASS" if (part_mode == "conservative" and drawing_mode == "conservative") else "FAIL",
             f"деталь={part_mode or 'нет'} (err={ctx_err}); чертёж={drawing_mode or 'нет'}")
 
     path = os.path.join(workdir, "ev-external.m3d")
@@ -60786,14 +61073,34 @@ def events_checks(client, rep, app_id, workdir):
         if bref else (None, None, None)
     stale = error_code(m_env) if bref else "нет ссылки на тело"
     again, _e2 = ev_context(client, doc)
+    # The fingerprint is coarse but loud: it carries the gabarit, so the +10 mm depth of the probe must
+    # show up as a new z extent (the box is 40x30x20 before the probe, so 30 after it). And a mutation
+    # that still believes in the OLD revision must be refused: without that, the client would apply a
+    # change on top of a model it never read.
+    new_fingerprint = str(after.get("fingerprint") or "")
+    old_fingerprint = str(before.get("fingerprint") or "")
+    fp_z = None
+    try:
+        fp_z = float(new_fingerprint.split(":")[2].split(";")[2])
+    except (IndexError, ValueError):
+        fp_z = None
+    grew_ok = (new_fingerprint != old_fingerprint and isinstance(fp_z, float)
+               and abs(fp_z - 30.0) <= 0.01)
+    _s_err, stale_env, _s_r = client.tool("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": r0, "plane": {"base": "xy", "offset_mm": 0},
+        "name": "EV_stale_after_external", "operation_id": str(uuid.uuid4())})
+    stale_mutation = error_code(stale_env)
     rep.add("EV.external.revision",
-            "чужая мутация без переоткрытия: ревизия +1, документ изменён, старая ссылка отвергнута "
-            "STALE_REFERENCE, повтор чтения ревизию не двигает",
+            "чужая мутация без переоткрытия: ревизия +1, новый отпечаток с размером 30, документ "
+            "изменён, старая ссылка отвергнута STALE_REFERENCE, мутация с прежней expected_revision "
+            "отвергнута REVISION_CONFLICT, повтор чтения ревизию не двигает",
             "PASS" if (code == 0 and isinstance(r0, int) and r1 == r0 + 1
                        and after.get("dirty") is True and stale == "STALE_REFERENCE"
+                       and grew_ok and stale_mutation in ("REVISION_CONFLICT", "STALE_REFERENCE")
                        and again.get("revision") == r1) else "FAIL",
             f"проба={code} «{out[:90]}»; ревизия {r0}->{r1}; dirty={after.get('dirty')}; "
-            f"старая ссылка={stale}; повторное чтение={again.get('revision')}; "
+            f"старая ссылка={stale}; отпечаток={new_fingerprint[:40]} размер30={grew_ok}; "
+            f"мутация с прежней ревизией={stale_mutation}; повторное чтение={again.get('revision')}; "
             f"save={saved} ({save_err}); err={after_err}")
 
     # ── EV.external.fingerprint_blind: the positive control ───────────────────────────────────────

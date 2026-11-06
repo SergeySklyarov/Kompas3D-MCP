@@ -837,6 +837,13 @@ public sealed class CommandDispatcher
         var command = Argument<ConnectCommand>(request);
         var application = _session.Connect(command);
 
+        // A NEW CAD CONNECTION IS A NEW SESSION: the flag means "an outcome of THIS session is unknown",
+        // and the documents of the previous session are gone with their instance. The durable evidence is
+        // the journal record, which still blocks a further mutation of the same document; the flag itself
+        // must not outlive the session it describes.
+        // History: docs/decisions/worker-ipc.md#reconciliation-scope
+        NeedsReconciliation = false;
+
         // A launched KOMPAS needs up to a minute on a cold start; report what it actually took.
         var openDocuments = _session.Documents.Count(d => d.ApplicationId == application.Id);
         var dto = application.ToDto(openDocuments);

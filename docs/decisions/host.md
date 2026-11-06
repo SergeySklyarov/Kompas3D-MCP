@@ -1295,3 +1295,91 @@ Handlers») не применимы: Хост запускается с пере
 следующий аргумент - флаг, флаг со значением, отсутствующий флаг. Разбор проверяется напрямую
 (`internal` + `InternalsVisibleTo`), а не запуском процесса: дефект в том, что процесс СТАРТОВАЛ, и
 тест обязан ловить это, не поднимая Host.
+
+## <a id="lossless-json"></a>Ответ инструмента переживает JSON без потерь: `-0` не выходит на провод (06.11.2026, наряд `CLIENT_FINDINGS_0_13_0_DSH`)
+
+**Правило клиента - цитата из кода проверки, а не из догадки.** Клиент `dsh` отвергает ответ
+инструмента целиком: `tool mcp__kompas__kompas_run returned invalid output: value is not lossless
+JSON`. Проверка живёт не в `@modelcontextprotocol/client`, а в пакетах установки `dsh`:
+`node_modules/@deepseek-ai/dsh-util-values/lib/index.js`, функция `walkJsonValue`:
+
+```
+/** Lossless finite JSON number, excluding negative zero. */
+function isJsonNumber(value) {
+	return typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0);
+}
+```
+
+и там же, в обходе значения:
+
+```
+else if (typeof current === "number") {
+	if (!Number.isFinite(current) || Object.is(current, -0)) return void 0;
+	assign(current);
+}
+```
+
+Отказ формирует `node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js`:
+
+```
+const detached = snapshotJsonValue(candidate);
+if (detached === void 0) throw new ToolOutputError(toolName, ["value is not lossless JSON"]);
+```
+
+Запрещены, следовательно, ровно два вида чисел: НЕФИНИТНОЕ и ОТРИЦАТЕЛЬНЫЙ НОЛЬ
+(`JSON.stringify(-0)` даёт `"0"`, поэтому разбор не возвращает то же значение). Остальные признаки
+того же правила (не-plain объекты, циклы, дырки в массивах, символьные ключи) на проводе
+недостижимы: клиент разбирает JSON-текст, а не живые объекты. Целые за 2^53 код проверки НЕ
+запрещает: в JS такое число уже округлено, и обратное преобразование возвращает его же.
+
+**Что именно нарушало правило (измерено).** `kompas_read_topology` с `include=faces` на бруске
+60x40x10: `faces[4].normal_at_center[2] = -0`, `faces[5].normal_at_center[0] = -0`,
+`faces[5].normal_at_center[1] = -0` - нормаль нижней грани пишется как `[-0,-0,-1]`: компонент,
+умноженный на −1, сохраняет знак нуля. `kompas_export_flat_dxf` на плите 60x40x10 отдаёт
+`"normal":[-0,-0,-1]` (сырой ответ клиента - `docs/acceptance/evidence/delivery-v0.13.0-64a59cd/client/part2-export-flat-dxf-response.json`).
+С `include=edges` отрицательного нуля не было - у рёбер этого поля нет.
+
+**Где исправлено.** Одно место - `Program.CallToolAsync`, там, где ответ становится ТЕКСТОМ:
+`KompJson.NormalizeNegativeZero` заменяет −0 на 0 во всём построенном дереве до `ToJsonString()`,
+поэтому и текстовый блок, и `structuredContent` берутся из уже исправленной строки. Не по
+инструментам: «нормаль с −0» - свойство любого ответа с нормалями, и правка по инструментам
+разошлась бы с первым же новым полем. Тест - `EnvelopeSerializationTests.NegativeZero_IsWrittenAsZero_EverywhereInTheAnswer`
+(вложенный массив, поле объекта, `float`, соседние значения не тронуты).
+
+**Проверка в приборе.** `mcp-smoke.py` проверяет ТЕКСТ каждого ответа `tools/call`
+(`wire_lossless_violations`, источник правила назван в константе `WIRE_LOSSLESS_SOURCE`), а строка,
+сделавшая вызов, получает FAIL и ПУТЬ поля в отчёте. Прогон ДО правки на поставке 0.13.0 назвал
+`kompas_read_topology` и пути выше.
+
+## <a id="document-not-found-scope"></a>Отказ `DOCUMENT_NOT_FOUND` называет поколение сеанса (06.11.2026, наряд `CLIENT_FINDINGS_0_13_0_DSH`)
+
+**Что измерено.** После штатного `kompas_disconnect(close_owned_application=true)` чтение по
+прежнему `document_id` отвечает `DOCUMENT_NOT_FOUND`, и `details.known_documents` перечисляет
+документы, зарегистрированные в ТЕКУЩЕМ Worker (в приёмке - пять документов другого экземпляра,
+принятого этим сеансом), а документов, закрытых вместе с отключённым экземпляром, там нет и быть
+не может. Клиент прочитал список как «документы прежнего поколения»: правила поля в
+`docs/02_TOOL_CONTRACTS.md` нет, и без поколения список не отличить от списка чужого сеанса.
+
+**Решение.** Список остаётся реестром ТЕКУЩЕГО поколения, а отказ сам называет поколение:
+`error.details.session_generation` - тот же UUID, что `kompas_session_status.this_host.generation`,
+и `error.details.known_documents_scope` - одна строка о том, что перечислено. Поле добавляет Хост
+(`HostSession.WithDocumentScope`), потому что поколение принадлежит ему, а не Worker.
+Строка прибора - `DC.13`.
+
+## <a id="reconciliation-history"></a>`needs_reconciliation` означает текущий сеанс, история называется отдельно (06.11.2026, наряд `CLIENT_FINDINGS_0_13_0_DSH`)
+
+**Что измерено.** В журнале остаются записи `outcome_unknown`: две - следствие зависшей выгрузки
+развёртки (F10), одна - от 14.10.2026 прежнего цикла. При старте они восстанавливаются как
+`outcome_unknown`, и `kompas_health` в КАЖДОМ новом сеансе отвечает `needs_reconciliation=true`, а
+`kompas_session_status` - `operations_needing_reconciliation=3`, хотя в полёте нет ни одной
+операции. Флаг перестаёт отличать свежую тревогу от постоянной.
+
+**Решение.** Записи журнала не удаляются: это доказательства. Флаг отвечает за ТЕКУЩИЙ сеанс:
+`CommandDispatcher.NeedsReconciliation` снимается при новом подключении к КОМПАС (новый сеанс - новый
+контекст, документы прежнего закрыты вместе с экземпляром), а запрет мутации по несогласованному
+документу держит ЖУРНАЛ (`NeedsReconciliationFor`), поэтому снятие флага не ослабляет защиту от
+повторного применения. Неразрешённые записи ПРЕЖНИХ процессов называет новое обязательное поле
+`kompas_health.reconciliation_history`: `unresolved_count`, `oldest_started_utc`, `oldest_age_s`,
+`host_pid` (метка процесса в записи; у записей, написанных до её появления, `null` и
+`host_pid_note`). Метку пишет `OperationJournal` (`JournalRecord.HostPid`), разбор - там же
+(`UnresolvedOfPreviousProcesses`), тест - `JournalAndQueueTests`, строка прибора - `OPS.15.history`.

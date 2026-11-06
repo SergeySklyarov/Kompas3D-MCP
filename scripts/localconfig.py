@@ -303,27 +303,59 @@ def parse_dsh_patch(text):
     return value
 
 
+def dsh_patch_entries(entries):
+    """Entries of a patch layer INCLUDING the ones inside an `insert:` list, with their form.
+
+    INVARIANT: a new line of the layer exists only inside `insert`; a flat `- id:` item is a patch
+    of an EXISTING line by id. DOC: `@deepseek-ai/dsh-base` README, "Changing the defaults" -
+    `- insert:\\n    - id: tool-str-replace-editor\\n      name: ...`; a flat record without a
+    target id is warned about and skipped (`patch: entry "mcp-kompas" not found`). MEASURED: a flat
+    kompas record read as a present entry while the client mounted nothing at all.
+    History: docs/decisions/tests.md#dsh-insert-form
+    """
+    flattened = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("insert")
+        if isinstance(nested, list):
+            flattened.extend({**item, "_form": "insert"} for item in nested if isinstance(item, dict))
+        else:
+            flattened.append({**entry, "_form": "flat"})
+    return flattened
+
+
 def dsh_mcp_entry(path, server_name="kompas"):
     """The `server_name` MCP client entry of a dsh profile patch layer → `(entry, problem)`.
 
     INVARIANT: only an entry of `MCP_CLIENT_PLUGIN` with `config.serverName == server_name` is
     taken; two such entries are a refusal because dsh fails the later one (`dsh-mcp-client` README,
-    "Tool naming and coexistence"). An unreadable or unsupported file is a refusal that names the
-    cause - never an empty entry, which would read as "the client has no record".
+    "Tool naming and coexistence"). INVARIANT: the entry must come from `insert` - a flat record of
+    the same server is a FAIL that names the usable form, not a found entry. An unreadable or
+    unsupported file is a refusal that names the cause - never an empty entry, which would read as
+    "the client has no record".
     """
     try:
         with open(path, encoding="utf-8-sig") as handle:
-            entries = parse_dsh_patch(handle.read())
+            entries = dsh_patch_entries(parse_dsh_patch(handle.read()))
     except (OSError, ValueError) as exc:
         return None, "%s: %s (%s)" % (type(exc).__name__, exc, path)
-    found, names = [], []
+    found, names, flat = [], [], []
     for entry in entries:
-        if not isinstance(entry, dict):
-            continue
         config = entry.get("config") if isinstance(entry.get("config"), dict) else {}
         names.append("%s/%s" % (entry.get("id"), config.get("serverName")))
         if entry.get("name") == MCP_CLIENT_PLUGIN and config.get("serverName") == server_name:
+            if entry.get("_form") == "flat":
+                flat.append(str(entry.get("id")))
+                continue
             found.append(entry)
+    if flat and not found:
+        return None, (
+            "%s: запись сервера '%s' (%s) написана ПЛОСКОЙ строкой верхнего уровня. dsh применяет "
+            "такую запись как правку СУЩЕСТВУЮЩЕЙ записи по id и печатает `patch: entry \"%s\" not "
+            "found`, то есть сервер не монтируется. Новую строку задаёт только список insert: "
+            "`- insert:` -> `- id: %s` (README %s, раздел «Changing the defaults»)"
+            % (path, server_name, ", ".join(flat), flat[0], flat[0], MCP_CLIENT_PLUGIN))
     if not found:
         return None, ("в %s нет записи сервера '%s' пакета %s; есть: %s"
                       % (path, server_name, MCP_CLIENT_PLUGIN, ", ".join(names) or "ничего"))

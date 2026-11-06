@@ -328,24 +328,38 @@ def self_test():
     # The client record is a dsh profile patch layer. A missing, duplicated or unsupported entry is a
     # refusal with a reason: an empty record would read as "the client runs nothing", which is a
     # different fact. The layer is built HERE, so the control measures the rule, not this machine.
+    #
+    # DOC: `@deepseek-ai/dsh-base` README, "Changing the defaults" - a NEW line exists only inside
+    # `insert`; a flat `- id:` item is applied as a patch of an EXISTING line by id. MEASURED: the flat
+    # form was read as a present entry while dsh mounted nothing.
+    # History: docs/decisions/tests.md#dsh-insert-form
     import tempfile
 
     dsh_sample = (
-        "- id: mcp-other\n"
-        "  name: '@deepseek-ai/dsh-mcp-client'\n"
-        "  config:\n"
-        "    serverName: other\n"
-        "    transport: stdio\n"
-        "    command: C:\\install\\other.exe\n"
+        "- insert:\n"
+        "    - id: mcp-other\n"
+        "      name: '@deepseek-ai/dsh-mcp-client'\n"
+        "      config:\n"
+        "        serverName: other\n"
+        "        transport: stdio\n"
+        "        command: C:\\install\\other.exe\n"
+        "    - id: mcp-kompas\n"
+        "      name: '@deepseek-ai/dsh-mcp-client'\n"
+        "      config:\n"
+        "        serverName: kompas\n"
+        "        transport: stdio\n"
+        "        command: C:\\install\\current\\KompasMcp.Host.exe\n"
+        "        args: ['--config', 'C:\\Users\\A B\\kompas.json']\n"
+        "        env:\n"
+        "          KOMPAS_MCP_LOG: C:\\logs\\host.jsonl\n"
+    )
+    flat_sample = (
         "- id: mcp-kompas\n"
         "  name: '@deepseek-ai/dsh-mcp-client'\n"
         "  config:\n"
         "    serverName: kompas\n"
         "    transport: stdio\n"
         "    command: C:\\install\\current\\KompasMcp.Host.exe\n"
-        "    args: ['--config', 'C:\\Users\\A B\\kompas.json']\n"
-        "    env:\n"
-        "      KOMPAS_MCP_LOG: C:\\logs\\host.jsonl\n"
     )
     with tempfile.TemporaryDirectory(prefix="_client-entry-dsh-") as scratch:
         path = os.path.join(scratch, "cordis.patch.yml")
@@ -367,6 +381,11 @@ def self_test():
         entry, problem = dsh_mcp_entry(path, "kompas")
         check("две записи одного serverName - отказ, а не выбор первой",
               entry is None and "несколько записей" in problem, str(problem))
+        write(flat_sample)
+        entry, problem = dsh_mcp_entry(path, "kompas")
+        check("плоская запись верхнего уровня - FAIL с подсказкой формы insert",
+              entry is None and "ПЛОСКОЙ" in (problem or "") and "insert" in (problem or ""),
+              str(problem))
         write("- id: broken\n  just text\n")
         entry, problem = dsh_mcp_entry(path, "kompas")
         check("неподдерживаемый слой - отказ с причиной, а не пустая запись",

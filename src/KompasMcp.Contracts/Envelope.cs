@@ -34,6 +34,49 @@ public static class KompJson
     /// without a string round-trip re-camel-casing anything. A null result is represented by a null node —
     /// System.Text.Json has no non-null "JSON null" JsonNode value. </summary>
     public static JsonNode? ToNode<T>(T value) => JsonSerializer.SerializeToNode(value, Options);
+
+    /// <summary>Replace negative zero with zero everywhere in an already-built result tree.</summary>
+    /// <remarks>INVARIANT: the wire carries no <c>-0</c>. MEASURED: a normal read as <c>(0,0,-1)</c> is
+    /// written <c>[-0,-0,-1]</c> (a component multiplied by −1 keeps its sign of zero), and a strict client
+    /// rejects that value: JavaScript <c>JSON.stringify(-0)</c> is <c>"0"</c>, so the value does not survive
+    /// its own round trip. A read-only normal and a valid measurement must not be refused for that sign.
+    /// DOC: <c>kssurface_getnormal.html</c> — the normal components are unconstrained reals, so −0 is not a
+    /// value the caller asked for. History: docs/decisions/host.md#lossless-json</remarks>
+    public static void NormalizeNegativeZero(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var (key, value) in obj.ToArray())
+            {
+                if (IsNegativeZero(value))
+                {
+                    obj[key] = JsonValue.Create(0d);
+                }
+                else
+                {
+                    NormalizeNegativeZero(value);
+                }
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (IsNegativeZero(array[i]))
+                {
+                    array[i] = JsonValue.Create(0d);
+                }
+                else
+                {
+                    NormalizeNegativeZero(array[i]);
+                }
+            }
+        }
+    }
+
+    private static bool IsNegativeZero(JsonNode? node) => node is JsonValue value
+        && ((value.TryGetValue<double>(out var d) && d == 0d && double.IsNegative(d))
+            || (value.TryGetValue<float>(out var f) && f == 0f && float.IsNegative(f)));
 }
 
 /// <summary>One named verification performed by the server (spec 2.2).</summary>

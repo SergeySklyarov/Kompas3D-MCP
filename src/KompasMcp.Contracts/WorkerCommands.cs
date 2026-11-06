@@ -1,4 +1,4 @@
-﻿namespace KompasMcp.Contracts.Ipc;
+namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Command names on the Host→Worker pipe. Adding a command means adding a handler in the Worker; an unhandled
 /// name fails as CAPABILITY_UNAVAILABLE rather than being ignored.</summary>
@@ -1665,8 +1665,9 @@ public sealed record RotatedDto(
     int? ProfileInputCount);
 
 
-/// <remarks><see cref="CountersinkDepthMm"/> is what the OBJECT returned, not what was written: in the "diameter +
-/// angle" mode the depth is derived, and writing 2/4/6 into it changes nothing (M.3).</remarks>
+/// <remarks><see cref="CountersinkDepthMm"/> is what the OBJECT returned, not what was written: in the
+/// "diameter + angle" mode the depth is derived, and writing 2/4/6 into it changes nothing (M.3). The
+/// counterdrill mode exposes no depth member, so the same formula is applied to its two diameters.</remarks>
 public sealed record HoleDto(
     string? HoleType,
     double? DiameterMm,

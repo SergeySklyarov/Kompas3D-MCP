@@ -1272,12 +1272,14 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>What the caller may assume about external-change detection for a document with this
     /// subscription.</summary>
-    /// <remarks>INVARIANT: <c>Reliable</c> is claimed only when the subscription really exists; a failed one
-    /// leaves the document on the fingerprint and answers <c>conservative</c> - the open is not refused.
-    /// TEST: DocumentEventSubscriptionTests.
+    /// <remarks>INVARIANT: <c>Reliable</c> is NOT claimed. MEASURED: a rebuild performed by ANOTHER process
+    /// through COM of the same instance raised NO event here, so the subscription cannot be relied on to
+    /// report a foreign rebuild: every document answers <c>conservative</c> and a divergence is caught by
+    /// the fingerprint comparison on every context read (<see cref="ApplyObservedFingerprint"/>). A failed
+    /// subscription is still not an error: the open is not refused. TEST: DocumentEventSubscriptionTests.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     internal static ExternalChangeDetection DetectionFor(DocumentEventSubscription? subscription) =>
-        subscription is null ? ExternalChangeDetection.Conservative : ExternalChangeDetection.Reliable;
+        ExternalChangeDetection.Conservative;
 
     /// <summary>The event source of a model document, or null when KOMPAS did not give one.</summary>
     /// <remarks>DOC: <c>ksdocument3d_getdocument3dnotify.html</c>. A drawing has no model notifications and
@@ -1350,6 +1352,14 @@ public sealed partial class Api5Session : IDisposable
         // reasons travel next to the values, so a null counter is never mistaken for "forgotten".
         // History: docs/decisions/adapter-core.md#unread-counters
         var unverified = new List<string>();
+        // A read that publishes the context verifies the model it publishes: a divergence noticed here
+        // moves the revision BEFORE the answer is built, so revision and fingerprint describe the model
+        // the same answer measures. History: docs/decisions/adapter-core.md#external-fingerprint-read
+        if (ApplyObservedFingerprint(document) is { } externalChange)
+        {
+            unverified.Add(externalChange);
+        }
+
         var bodies = ReadBodyCount(document, unverified);
         var features = ReadFeatureCount(document, unverified);
         var components = document.Kind == DocumentKind.Assembly ? ReadComponentCount(document, unverified) : 0;
@@ -1388,6 +1398,42 @@ public sealed partial class Api5Session : IDisposable
     }
 
     public bool IsDirty(DocumentEntry document) => DocumentSaveTracking.IsDirty(SaveStateOf(document));
+
+    /// <summary>Move the revision and the baseline when the LIVE model diverged from the last observation.</summary>
+    /// <remarks>INVARIANT: a context read publishes the state it just measured. MEASURED: a foreign process
+    /// changed the body's height through COM, the box read 60x40x30, and the answer still carried the OLD
+    /// revision and the OLD fingerprint; a client checking expected_revision saw "6 matches 6" on a different
+    /// model. The documented event does not arrive from a foreign caller (see <see cref="DetectionFor"/>), so
+    /// the divergence bumps the revision by one, makes the previous references unresolvable and moves the
+    /// baseline to the observed state. Returns the note, or null when the observation matched.
+    /// History: docs/decisions/adapter-core.md#external-fingerprint-read</remarks>
+    public string? ApplyObservedFingerprint(DocumentEntry document)
+    {
+        var observed = ComputeFingerprint(document);
+        if (observed == DocumentSaveTracking.UnreadableFingerprint)
+        {
+            return null;
+        }
+
+        if (document.Fingerprint is null)
+        {
+            document.Fingerprint = observed;
+            return null;
+        }
+
+        if (string.Equals(observed, document.Fingerprint, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        BumpRevision(document, "external.fingerprint", invalidateAll: true);
+        return ExternalChangeNote;
+    }
+
+    /// <summary>The note a context read carries when it noticed a change made outside the server.</summary>
+    public const string ExternalChangeNote =
+        "external_change_detected — отпечаток живой модели разошёлся с прежним (правка не через сервер): "
+        + "ревизия поднята на 1 без переоткрытия, прежние ссылки на грани и рёбра больше не разрешаются";
 
     /// <summary>Document save state: whether the model KOMPAS holds is exactly what is on disk. Kept by the
     /// server because the target version has no documented "document modified" flag.</summary>

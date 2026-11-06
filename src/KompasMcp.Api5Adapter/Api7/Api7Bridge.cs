@@ -473,10 +473,14 @@ internal static class Api7Hole
             // Its own interface, with ONE diameter for the spotfacing and the countersink: the two
             // fields below are filled from that single number, not from two.
             var counterdrill = hole.HoleParameters as ICountersinkSpotfacingHoleParameters;
+            var diameter = Read(() => hole.Diameter);
+            var countersinkAngle = countersink is not null
+                ? Read(() => countersink.CountersinkAngle)
+                : counterdrill is null ? null : Read(() => counterdrill.CountersinkAngle);
 
             return new HoleReadDto(
                 HoleType: Text(() => hole.HoleType.ToString()),
-                DiameterMm: Read(() => hole.Diameter),
+                DiameterMm: diameter,
                 DepthType: Text(() => hole.DepthType.ToString()),
                 DepthMm: Read(() => hole.Depth),
                 EndFaceType: Text(() => hole.EndFaceType.ToString()),
@@ -487,10 +491,12 @@ internal static class Api7Hole
                     ? Read(() => spotfacing.SpotfacingDepth)
                     : counterdrill is null ? null : Read(() => counterdrill.SpotfacingDepth),
                 CountersinkDiameterMm: countersink is null ? null : Read(() => countersink.CountersinkDiameter),
-                CountersinkAngleDeg: countersink is not null
-                    ? Read(() => countersink.CountersinkAngle)
-                    : counterdrill is null ? null : Read(() => counterdrill.CountersinkAngle),
-                CountersinkDepthMm: countersink is null ? null : Read(() => countersink.CountersinkDepth),
+                CountersinkAngleDeg: countersinkAngle,
+                CountersinkDepthMm: countersink is not null
+                    ? Read(() => countersink.CountersinkDepth)
+                    : counterdrill is null
+                        ? null
+                        : DerivedCounterdrillDepth(counterdrill, diameter, countersinkAngle),
                 CountersinkType: countersink is null ? null : Text(() => countersink.CountersinkType.ToString()),
                 ReadRoutes: new[] { "API7 IHole3D" },
                 ConicType: conic is null ? null : Text(() => conic.ConicType.ToString()),
@@ -501,6 +507,27 @@ internal static class Api7Hole
         {
             return null;
         }
+    }
+
+    /// <summary>Countersink depth of a counterdrill, derived from the diameters the mode DOES expose.</summary>
+    /// <remarks>INVARIANT: the value is COMPUTED, not read — <c>ICountersinkSpotfacingHoleParameters</c>
+    /// declares only the countersink diameter, the spotfacing diameter and the spotfacing depth (DOC:
+    /// <c>icountersinkspotfacingholeparameters_propers.html</c>), so there is no depth member to read.
+    /// The formula is the one the object itself returns on the countersink mode: <c>(rM − rP)/tan(angle/2)</c>,
+    /// with <c>rM</c> the countersink diameter over two and <c>rP</c> the pilot radius. MEASURED: the removed
+    /// volume of `through_counterdrill` matches this depth, so the number describes the built cone.
+    /// History: docs/decisions/adapter-api7.md#hole</remarks>
+    private static double? DerivedCounterdrillDepth(
+        ICountersinkSpotfacingHoleParameters counterdrill, double? pilotDiameterMm, double? angleDeg)
+    {
+        var mouth = Read(() => counterdrill.SpotfacingCountersinkDiameter);
+        if (mouth is not double mouthDiameter || pilotDiameterMm is not double pilot
+            || angleDeg is not double angle || angle <= 0d || mouthDiameter <= pilot)
+        {
+            return null;
+        }
+
+        return (mouthDiameter / 2d - pilot / 2d) / Math.Tan(angle * Math.PI / 360d);
     }
 
     /// <summary>Edit an EXISTING flat-bottomed blind hole (mode <c>blind_flat</c>).</summary>

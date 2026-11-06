@@ -1,43 +1,31 @@
-"""Проверка того, что РАБОЧИЙ КЛИЕНТ подтвердил запись `kompas` (шаг «Trust»).
+"""Применимость шага подтверждения записи клиента (Trust) у `dsh web`.
 
-Зачем отдельным шагом. `verify-client-entry.py` доказывает, что запись клиента рабочая: сервер
-отвечает, инструментов 32, CAD-канал живой. Но клиент запускает запись не потому, что она верна, а
-потому, что пользователь её подтвердил. Между этими двумя утверждениями стоит хранилище
-подтверждений клиента, и разница видна только в нём.
+Что изменилось. Прежний клиент приёмки (WorkBuddy AI) не запускал запись без подтверждения
+владельца: хранилище `mcp-approvals.json` держало ключ `<configHash>::<serverName>`, и прибор сверял
+с ним действующую запись. Клиент приёмки - `dsh web` (решение заказчика 06.11.2026), и такого
+хранилища у него НЕТ.
 
-Что именно измеряется. Клиент WorkBuddy AI хранит подтверждения в `mcp-approvals.json` — словарь
-вида `<configHash>::<serverName>` → время выдачи. Ключ считается по САМОЙ записи:
+Почему нет. Подтверждение у dsh - не свойство записи, а разовое решение на запрос: сессионная
+политика `ask`/`never`, ответчик спрашивается на каждый вызов (`@deepseek-ai/dsh-user-approval`,
+README «Setting the policy»); пакет `@deepseek-ai/dsh-mcp-client` поля подтверждения не имеет и
+описывает только подключение (README «Minimal configuration»). Записи, которую можно подтвердить
+заранее, не существует.
 
-    sha256( command + "|" + sorted(args).join(",") + "|" + sorted(env.keys()).join(",") )
-
-(`calculateConfigHash` в `ConnectorService`; env — только имена переменных, без значений). Поэтому
-любая правка команды, аргументов или набора переменных СНИМАЕТ прежнее подтверждение: старая запись
-остаётся в файле, но под новым хешем её нет. Отсюда строка A05.
-
-Почему это не «проверка настройки» и не дубль `verify-client-entry.py`. Тот скрипт запускает Host
-сам и потому проходит при ЛЮБОМ состоянии подтверждений. Здесь Host не запускается вовсе: строка
-A04 отвечает на вопрос «запустит ли клиент эту запись в сессии агента», и при пустом хранилище
-ответ «нет» — что и наблюдается: 32 инструмента есть у сервера и ни одного у агента.
-
-Подтверждение выдаёт только интерфейс клиента (`approveMcpServer` / `toggleMcpServer`). Записывать
-его скриптом запрещено: это и есть обход подтверждения доверия. Скрипт только читает.
+Что измеряется. Прибор не печатает PASS по несуществующему хранилищу: он называет ПРИМЕНИМОСТЬ шага
+и проверяет то, что проверить можно, - запись сервера в профиле dsh разобрана, транспорт stdio,
+команда названа. Отдельной строкой - отказ, если в известных местах появится хранилище
+подтверждений: тогда шаг снова нужен, а прибор его ещё не читает.
 
 КУДА ПИШЕТСЯ ОТЧЁТ (долг 61, исправлен 22.10.2026). Умолчание `--out` - каталог доказательств
 поставки, на которую указывает запись клиента: `<каталог доказательств поставки>/installed/`.
-Каталог поставки разрешается общим правилом (`localconfig.client_delivery`), тем же, что у
-`verify-client-entry.py`, - включая запись через `<InstallRoot>/current`. Поставку определить
-нельзя - прибор ОТКАЗЫВАЕТ и просит задать `--out`; в каталог «источника аудита» (последнего
-отчёта `--all`) он больше не пишет: 22.10.2026 отчёт лёг в каталог чужого наряда, и его переносили
-руками.
+Поставку определить нельзя - прибор ОТКАЗЫВАЕТ и просит задать `--out`.
 
 Usage:
-  PY -I scripts/verify-mcp-approval.py [--config <mcp.json>] [--name kompas]
-      [--approvals <mcp-approvals.json>]
+  PY -I scripts/verify-mcp-approval.py [--config <cordis.patch.yml>] [--name kompas]
       [--out <путь>]            # умолчание - <каталог доказательств поставки>/installed/
       [--self-test]
 """
 
-import hashlib
 import json
 import os
 import sys
@@ -47,7 +35,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # INVARIANT: the instrument runs as `PY -I scripts/<name>.py`; `-I` keeps the script directory off
 # `sys.path`, so the shared module is reachable only by adding that directory here.
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-from localconfig import client_delivery  # noqa: E402
+from localconfig import client_delivery, dsh_mcp_entry, dsh_profile_path  # noqa: E402
 
 for stream in (sys.stdout, sys.stderr):
     try:
@@ -55,20 +43,12 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-REQUIRED_ACTION = (
-    "Подтверждение выдаётся только интерфейсом клиента, и только в самом приложении WorkBuddy AI "
-    "(не в КОМПАС-3D и не в терминале): панель «Connector Management» → кнопка «Custom connectors» "
-    "(иконка «+» в шапке панели) → окно «MCP Server Management» → карточка kompas → текст «This MCP "
-    "server requires your trust before first connection.» → кнопка «Trust». Второй вход в то же "
-    "окно: панель плагинов → вкладка Skills → кнопка «MCP Servers» в правом верхнем углу (она "
-    "показывается не всегда, поэтому первый путь надёжнее). После этого нужна новая сессия: список "
-    "инструментов агента собирается при запуске сессии."
-)
-
-
-# The release step that removes stale approvals. The A05 detail points at it instead of describing
-# the cleanup here: removing them is the release order's job, and the instrument only reads.
-STALE_STEP = "docs/decisions/releases.md#stale-approval"
+# The whole answer of the instrument, said once and quoted into the report: the client has no
+# per-record approval, so there is nothing to be "not yet approved".
+NOT_APPLICABLE = (
+    "подтверждение записи у dsh не хранится: это разовое решение на запрос (сессионная политика "
+    "ask/never, пакет @deepseek-ai/dsh-user-approval), а не свойство записи; пакет "
+    "@deepseek-ai/dsh-mcp-client поля подтверждения не имеет. Шаг Trust не применим.")
 
 
 def argument(name, default=None):
@@ -79,53 +59,22 @@ def argument(name, default=None):
     return default
 
 
-def config_hash(entry):
-    """Хеш записи по алгоритму клиента — буква в букву, иначе ключ не совпадёт.
+def approval_store(config_path, home=None):
+    """First existing per-server approval store near the profile → path, else None.
 
-    `entry.args` сортируется как строки (в клиенте — `Array.prototype.sort()` по умолчанию), имена
-    переменных окружения сортируются отдельно и склеиваются запятыми. Значения переменных в хеш НЕ
-    входят — так задумано клиентом, и это надо повторять, а не «улучшать».
+    INVARIANT: the check stays SENSITIVE - a store that appears must turn the row into a FAIL that
+    names the file, not into a permanent "not applicable". LIMIT: only the name the previous client
+    used and the two obvious dsh names are looked for; a store elsewhere is not discovered.
     """
-    if entry.get("command"):
-        args = sorted(str(a) for a in (entry.get("args") or []))
-        env_keys = sorted(str(k) for k in (entry.get("env") or {}))
-        material = "%s|%s|%s" % (entry.get("command") or "", ",".join(args), ",".join(env_keys))
-    elif entry.get("url"):
-        try:
-            from urllib.parse import urlsplit
-            parts = urlsplit(entry["url"])
-            material = "%s://%s" % (parts.scheme, parts.netloc)
-        except Exception:  # noqa: BLE001 — правило разбора URL не должно ронять проверку
-            material = entry["url"]
-    else:
-        material = json.dumps(entry, sort_keys=True)
-    return hashlib.sha256(material.encode("utf-8")).hexdigest(), material
-
-
-def stale_approvals(approvals, key, name, config_path, command):
-    """Stale approvals of the same server name: (keys, detail for the A05 row).
-
-    INVARIANT: a stale approval stays a FAIL. It is not "expected until Trust": the entry was
-    edited after the user approved it, so the client matches this entry to no stored approval.
-    LIMIT: the store holds the hash and the issue time only, so the path a stale key was issued for
-    is not recoverable from it; the detail names the current entry instead of guessing a former one.
-    History: docs/decisions/releases.md#stale-approval
-    """
-    keys = sorted(k for k in approvals if k.endswith("::" + name) and k != key)
-    if not keys:
-        return keys, "нет"
-    named = []
-    for stale in keys:
-        try:
-            when = datetime.fromtimestamp(approvals[stale] / 1000, timezone.utc)
-            named.append("%s (выдано %s)" % (stale, when.isoformat(timespec="seconds")))
-        except (TypeError, ValueError, OverflowError, OSError):
-            named.append(stale)
-    return keys, ("есть %d под другим хешем - запись правилась после подтверждения: %s. "
-                  "Хранилище хранит только хеш и время выдачи, поэтому путь записи устаревшего "
-                  "ключа из него не восстанавливается; действующая запись - %s, команда %s. "
-                  "Снять устаревшие подтверждения: шаг выпуска %s"
-                  % (len(keys), "; ".join(named), config_path, command or "не названа", STALE_STEP))
+    profile_dir = os.path.dirname(os.path.abspath(config_path))
+    dsh_home = os.path.join(home or os.path.expanduser("~"), ".dsh")
+    for path in (os.path.join(profile_dir, "mcp-approvals.json"),
+                 os.path.join(profile_dir, "approvals.json"),
+                 os.path.join(dsh_home, "mcp-approvals.json"),
+                 os.path.join(dsh_home, "approvals.json")):
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 # ─────────────────────── DEFAULT `--out`: THE DELIVERY'S EVIDENCE DIRECTORY ───────────────────────
@@ -153,20 +102,53 @@ def default_out(command, root=ROOT):
 
 
 def self_test():
-    """Instrument battery: both halves of the default-`--out` rule, on trees built HERE.
+    """Instrument battery: the applicability rule and the store-sensitivity control, on trees built HERE.
 
-    Arm one: an entry through `<InstallRoot>/current` resolves to the delivery's evidence directory,
-    and the report lands in its `installed/` subdirectory. Arm two: a delivery that cannot be
-    resolved is a NAMED refusal, not a path - the negative control of debt 61, which must fire on
-    every input. The tree sits in a temporary directory because a control reading the real
-    installation would measure that machine, not the rule.
-    History: docs/decisions/tests.md#approval-report-path
+    Arm one: a profile layer yields the entry, and a missing one is a NAMED refusal. Arm two: a
+    store file at a known name makes `approval_store` find it - the row would then FAIL instead of
+    claiming "not applicable" forever. Arm three: the default `--out` follows the delivery the entry
+    points at and refuses to guess when the delivery cannot be resolved. The tree sits in a
+    temporary directory: a control reading the real installation would measure that machine.
     """
-    import json as _json
     import tempfile
 
     checks, results = [], []
+
+    def check(name, condition, detail=""):
+        checks.append(condition)
+        results.append((name, detail if not condition else "ok"))
+
+    layer = (
+        "- id: mcp-kompas\n"
+        "  name: '@deepseek-ai/dsh-mcp-client'\n"
+        "  config:\n"
+        "    serverName: kompas\n"
+        "    transport: stdio\n"
+        "    command: C:\\install\\current\\KompasMcp.Host.exe\n"
+        "    args: ['--config', 'C:\\install\\kompas.json']\n"
+    )
     with tempfile.TemporaryDirectory(prefix="_mcp-approval-selftest-") as scratch:
+        home = os.path.join(scratch, "home")
+        os.makedirs(home)
+        profile = os.path.join(scratch, "cordis.patch.yml")
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write(layer)
+        entry, problem = dsh_mcp_entry(profile, "kompas")
+        check("запись клиента разобрана из слоя dsh",
+              entry is not None and entry["command"].endswith("KompasMcp.Host.exe"), str(problem))
+        entry, problem = dsh_mcp_entry(profile, "absent")
+        check("нет записи - названный отказ, а не пустая запись",
+              entry is None and "нет записи" in problem, str(problem))
+
+        check("хранилища нет - шаг неприменим (прибор не выдумывает PASS)",
+              approval_store(profile, home) is None)
+        store = os.path.join(home, ".dsh", "mcp-approvals.json")
+        os.makedirs(os.path.dirname(store))
+        with open(store, "w", encoding="utf-8") as handle:
+            json.dump({}, handle)
+        check("появившееся хранилище прибор находит - строка станет отказом",
+              approval_store(profile, home) == store, str(approval_store(profile, home)))
+
         install = os.path.join(scratch, "install")
         repo = os.path.join(scratch, "repo")
         os.makedirs(os.path.join(install, "current"))
@@ -176,79 +158,50 @@ def self_test():
                                     "delivery-v9.9.9-selftest")
         os.makedirs(passport_dir)
         os.makedirs(evidence_dir)
-        with open(os.path.join(install, "installed.json"), "w", encoding="utf-8") as fh:
-            _json.dump({"tag": "v9.9.9"}, fh)
-        with open(os.path.join(passport_dir, "delivery-passport.json"), "w", encoding="utf-8") as fh:
-            _json.dump({"package": {"host_dll_sha256": "b"}}, fh)
+        with open(os.path.join(install, "installed.json"), "w", encoding="utf-8") as handle:
+            json.dump({"tag": "v9.9.9"}, handle)
+        with open(os.path.join(passport_dir, "delivery-passport.json"), "w", encoding="utf-8") as handle:
+            json.dump({"package": {"host_dll_sha256": "b"}}, handle)
         command = os.path.join(install, "current", "KompasMcp.Host.exe")
 
         out, source, problem = default_out(command, repo)
         expected = os.path.join(evidence_dir, "installed", "mcp-approval-check.json")
-        checks.append(out is not None and os.path.normcase(out) == os.path.normcase(expected))
-        results.append(("follows_delivery", command, out or problem))
+        check("отчёт по умолчанию идёт в каталог доказательств поставки",
+              out is not None and os.path.normcase(out) == os.path.normcase(expected), str(problem))
 
-        # (2) отказ: тег установки не найден - пути нет, причина названа
         os.remove(os.path.join(install, "installed.json"))
         out, source, problem = default_out(command, repo)
-        checks.append(out is None and bool(problem) and "тег установки не найден" in problem)
-        results.append(("refuses_unknown", command, out or problem))
-
-        # (3) ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ ДОЛГА 61: каталог прогона аудита не возвращается ни на одном входе.
+        check("поставка не опознана - отказ назван, а не угадан путь",
+              out is None and bool(problem) and "тег установки не найден" in problem, str(problem))
         legacy = os.path.join("scratch", "mcp-smoke")
-        leaked = [r for r in results if r[2] and legacy in str(r[2])]
-        checks.append(not leaked)
+        check("каталог прогона аудита не возвращается ни на одном входе",
+              not any(legacy in str(detail) for _name, detail in results))
 
-        # (4) A05: the stale key is NAMED and the row stays a FAIL; one active key is a PASS.
-        server = "kompas"
-        active, _ = config_hash({"command": "C:\\install\\current\\KompasMcp.Host.exe"})
-        former, _ = config_hash({"command": "C:\\repo\\artifacts\\publish\\KompasMcp.Host.exe"})
-        key = "%s::%s" % (active, server)
-        for label, store, want in (
-                ("один действующий", {key: 1792930000000}, 0),
-                ("действующий и устаревший", {key: 1792930000000,
-                                              "%s::%s" % (former, server): 1792900000000}, 1),
-                ("без действующего", {}, 0),
-        ):
-            got, detail = stale_approvals(store, key, server, command, command)
-            checks.append(len(got) == want and (want == 0 or former in detail))
-            results.append(("A05 " + label, command, "FAIL, назван ключ: " + detail if got else "PASS"))
-
-        print("=== батарея прибора (самопроверка) ===")
-        for label, subject, got in results:
-            print("  %-18s %-46s → %s" % (label, os.path.basename(subject), got))
-        print("  %-18s каталог прогона аудита `%s` не возвращается: %s"
-              % ("долг-61-контроль", legacy, "ДА" if not leaked else "НЕТ — ДЕФЕКТ НЕ ВЫЛЕЧЕН"))
-        ok = all(checks)
-        print("  проверок пройдено: %d из %d" % (sum(1 for c in checks if c), len(checks)))
-        print("  батарея: %s" % ("ЗЕЛЁНАЯ" if ok else "КРАСНАЯ"))
-        return 0 if ok else 1
+    print("=== батарея прибора (самопроверка) ===")
+    for name, detail in results:
+        print("  [%s] %s%s" % ("PASS" if detail == "ok" else "FAIL", name,
+                               "" if detail == "ok" else " - " + detail))
+    ok = all(checks)
+    print("  проверок пройдено: %d из %d" % (sum(1 for item in checks if item), len(checks)))
+    print("  батарея: %s" % ("ЗЕЛЁНАЯ" if ok else "КРАСНАЯ"))
+    return 0 if ok else 1
 
 
 def main():
     if "--self-test" in sys.argv:
         return self_test()
-    config_path = os.path.abspath(argument("--config") or os.path.join(os.path.expanduser("~"), ".workbuddy-ai", "mcp.json"))
+    config_path = os.path.abspath(argument("--config") or dsh_profile_path())
     name = argument("--name") or "kompas"
-    approvals_path = os.path.abspath(argument("--approvals") or os.path.join(os.path.dirname(config_path), "mcp-approvals.json"))
     out_arg = argument("--out")
+    entry, entry_problem = dsh_mcp_entry(config_path, name)
+    command = (entry or {}).get("command") or ""
 
     # INVARIANT: the entry is read BEFORE the report path is chosen - the default path is the
     # delivery the entry points at, so without the entry there is no path. LIMIT: no report is
     # written then; a directory taken by guesswork is exactly what the defect below was.
-    entry = None
-    config_error = None
-    try:
-        with open(config_path, encoding="utf-8-sig") as fh:
-            config = json.load(fh)
-        entry = (config.get("mcpServers") or {}).get(name)
-    except Exception as exc:  # noqa: BLE001 — причина отказа обязана быть названа
-        config_error = "%s: %s" % (type(exc).__name__, exc)
-
     if out_arg:
-        out = os.path.abspath(out_arg)
-        out_from = "переопределение --out"
+        out, out_from = os.path.abspath(out_arg), "переопределение --out"
     else:
-        command = (entry or {}).get("command") or ""
         out, out_from, problem = default_out(command) if command else (
             None, None, "в записи клиента нет команды - поставку определить нельзя")
         if out is None:
@@ -259,74 +212,47 @@ def main():
     report = {
         "run_id": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "client": "dsh web",
         "server_name": name,
-        "config_path": config_path,
-        "approvals_path": approvals_path,
-        "required_action": REQUIRED_ACTION,
-        # ОТКУДА ВЗЯТ ПУТЬ ОТЧЁТА — названо в самом отчёте, а не подразумевается. Читатель обязан
-        # видеть, легло ли доказательство в каталог текущего прогона или туда, куда указал --out.
+        "profile": config_path,
         "report_path": out,
         "report_path_from": out_from,
+        # Named in the report itself, not implied: the reader must see that "not applicable" is a
+        # measured fact about this client, not a missing check.
+        "trust_required": False,
+        "not_applicable_reason": NOT_APPLICABLE,
+        "approval_store": None,
         "rows": [],
     }
     rows = report["rows"]
 
     def row(cid, description, ok, detail=""):
-        rows.append({"id": cid, "check": description, "verdict": "PASS" if ok else "FAIL", "detail": detail})
+        rows.append({"id": cid, "check": description, "verdict": "PASS" if ok else "FAIL",
+                     "detail": detail})
         print("  [%s] %-4s %s" % ("PASS" if ok else "FAIL", cid, description))
         if detail:
             print("         %s" % detail)
 
-    digest = None
-    row("A01", "запись '%s' найдена в конфигурации клиента" % name, entry is not None,
-        config_error or config_path)
-
+    row("A01", "запись '%s' найдена в профиле клиента dsh" % name, entry is not None,
+        entry_problem or config_path)
     if entry is not None:
-        digest, material = config_hash(entry)
-        report["config_hash"] = digest
-        report["hash_material"] = material
-        row("A02", "запись — stdio-команда, хеш клиента вычислим",
-            bool(entry.get("command")), "command=%s hash=%s" % (entry.get("command"), digest))
+        row("A02", "запись — stdio-команда существующего Host",
+            entry.get("transport") == "stdio" and os.path.isfile(command),
+            "transport=%s command=%s" % (entry.get("transport"), command))
 
-        approvals = None
-        try:
-            with open(approvals_path, encoding="utf-8") as fh:
-                approvals = json.load(fh)
-            row("A03", "хранилище подтверждений клиента прочитано",
-                isinstance(approvals, dict), "%s, записей %d" % (approvals_path, len(approvals)))
-        except FileNotFoundError:
-            row("A03", "хранилище подтверждений клиента прочитано", False,
-                "файла нет: %s — ни одна запись не подтверждена" % approvals_path)
-            approvals = {}
-        except Exception as exc:  # noqa: BLE001
-            row("A03", "хранилище подтверждений клиента прочитано", False,
-                "%s: %s" % (type(exc).__name__, exc))
-            approvals = {}
-
-        key = "%s::%s" % (digest, name)
-        report["expected_key"] = key
-        approved_at = approvals.get(key)
-        report["approved_at_ms"] = approved_at
-        row("A04", "подтверждение '%s' выдано пользователем (ключ %s…)" % (name, digest[:12]),
-            approved_at is not None,
-            ("выдано, время %s" % datetime.fromtimestamp(approved_at / 1000, timezone.utc).isoformat(timespec="seconds")
-             if approved_at is not None
-             else "НЕ выдано: клиент пропускает эту запись при сборке конфигурации сессии "
-                  "(`buildDesiredConfigs: skipping untrusted server`), Host не запускается, "
-                  "инструменты агенту не видны"))
-
-        stale, stale_detail = stale_approvals(approvals, key, name, config_path,
-                                              entry.get("command") or "")
-        row("A05", "устаревших подтверждений того же имени нет", not stale, stale_detail)
+    store = approval_store(config_path)
+    report["approval_store"] = store
+    row("A03", "хранилища подтверждений записи у dsh нет — шаг не применим", store is None,
+        NOT_APPLICABLE if store is None else
+        "НАЙДЕНО хранилище %s: шаг снова применим, прибор его не читает - нужна доработка" % store)
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    failed = [r for r in rows if r["verdict"] != "PASS"]
+    failed = [item for item in rows if item["verdict"] != "PASS"]
     report["verdict"] = "PASS" if rows and not failed else "FAIL"
-    with open(out, "w", encoding="utf-8") as fh:
-        json.dump(report, fh, ensure_ascii=False, indent=2)
+    with open(out, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, ensure_ascii=False, indent=2)
 
-    if failed:
-        print("\nЧто нужно сделать: " + REQUIRED_ACTION)
+    print("\n" + NOT_APPLICABLE)
     print("\nИтог: %s — строк %d, отказов %d" % (report["verdict"], len(rows), len(failed)))
     print("Отчёт: %s  [путь: %s]" % (out, out_from))
     return 0 if report["verdict"] == "PASS" else 1

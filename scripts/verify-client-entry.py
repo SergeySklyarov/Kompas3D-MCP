@@ -10,11 +10,15 @@
 контракт (`initialize`/`tools/list`), самодиагностика, а затем реальный CAD-канал: подключение,
 создание документа, чтение контекста, отсоединение.
 
+Клиент - `dsh web` (решение заказчика 06.11.2026): запись живёт в слое правок профиля
+`~/.dsh/profiles/web/cordis.patch.yml` как запись пакета `@deepseek-ai/dsh-mcp-client` с
+`config.serverName: kompas` (формат - README пакета). Разбор и отказы - в `localconfig.dsh_mcp_entry`.
+
 Это НЕ заменяет §6.3 наряда: там инструменты вызывает клиент, а здесь — проверка того, что клиенту
 будет что вызывать. Разница названа в отчёте отдельной строкой.
 
 Usage:
-  PY -I scripts/verify-client-entry.py [--config <mcp.json>] [--name kompas]
+  PY -I scripts/verify-client-entry.py [--config <cordis.patch.yml>] [--name kompas]
       [--passport docs/acceptance/<поставка>/delivery-passport.json]
       [--out docs/acceptance/evidence/<поставка>/installed/client-entry-check.json]
   PY -I scripts/verify-client-entry.py --self-test
@@ -52,7 +56,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # INVARIANT: the instrument runs as `PY -I scripts/<name>.py`; `-I` keeps the script directory off
 # `sys.path`, so the shared modules are reachable only by adding that directory here.
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-from localconfig import client_delivery, isolate_config as shared_isolate_config  # noqa: E402
+from localconfig import client_delivery, isolate_config as shared_isolate_config, \
+    dsh_mcp_entry, dsh_profile_path  # noqa: E402
 
 for stream in (sys.stdout, sys.stderr):
     try:
@@ -301,6 +306,53 @@ def self_test():
           f"status={envelope.get('status')} waits={waits} waited={waited}")
     check("первый вызов и четыре повтора посчитаны", len(seen) == 5, f"вызовов={len(seen)}")
 
+    # The client record is a dsh profile patch layer. A missing, duplicated or unsupported entry is a
+    # refusal with a reason: an empty record would read as "the client runs nothing", which is a
+    # different fact. The layer is built HERE, so the control measures the rule, not this machine.
+    import tempfile
+
+    dsh_sample = (
+        "- id: mcp-other\n"
+        "  name: '@deepseek-ai/dsh-mcp-client'\n"
+        "  config:\n"
+        "    serverName: other\n"
+        "    transport: stdio\n"
+        "    command: C:\\install\\other.exe\n"
+        "- id: mcp-kompas\n"
+        "  name: '@deepseek-ai/dsh-mcp-client'\n"
+        "  config:\n"
+        "    serverName: kompas\n"
+        "    transport: stdio\n"
+        "    command: C:\\install\\current\\KompasMcp.Host.exe\n"
+        "    args: ['--config', 'C:\\Users\\A B\\kompas.json']\n"
+        "    env:\n"
+        "      KOMPAS_MCP_LOG: C:\\logs\\host.jsonl\n"
+    )
+    with tempfile.TemporaryDirectory(prefix="_client-entry-dsh-") as scratch:
+        path = os.path.join(scratch, "cordis.patch.yml")
+
+        def write(text):
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+        write(dsh_sample)
+        entry, problem = dsh_mcp_entry(path, "kompas")
+        check("запись dsh разобрана: команда, аргументы, переменная окружения",
+              entry is not None and entry["command"].endswith("KompasMcp.Host.exe")
+              and entry["args"] == ["--config", "C:\\Users\\A B\\kompas.json"]
+              and "KOMPAS_MCP_LOG" in entry["env"], str(problem))
+        entry, problem = dsh_mcp_entry(path, "absent")
+        check("нет записи - отказ называет файл и то, что в нём есть",
+              entry is None and "нет записи" in problem and "mcp-other/other" in problem, str(problem))
+        write(dsh_sample.replace("serverName: other", "serverName: kompas"))
+        entry, problem = dsh_mcp_entry(path, "kompas")
+        check("две записи одного serverName - отказ, а не выбор первой",
+              entry is None and "несколько записей" in problem, str(problem))
+        write("- id: broken\n  just text\n")
+        entry, problem = dsh_mcp_entry(path, "kompas")
+        check("неподдерживаемый слой - отказ с причиной, а не пустая запись",
+              entry is None and "ValueError" in (problem or ""), str(problem))
+
     # The measurement is read from the PERMANENT evidence root, where `verify-delivery.py` writes it:
     # a path under `scratch/` names a file nothing creates, and `scratch/` is cleaned.
     measured = measurement_path_for(os.path.join(ROOT, "artifacts", "publish-v0.10.0-f679843"))
@@ -362,8 +414,8 @@ def self_test():
 def main():
     if "--self-test" in sys.argv:
         return self_test()
-    config_path = os.path.abspath(argument("--config") or os.path.join(os.path.expanduser("~"), ".workbuddy-ai", "mcp.json"))
-    wanted = argument("--name")
+    config_path = os.path.abspath(argument("--config") or dsh_profile_path())
+    wanted = argument("--name") or "kompas"
     passport_arg = argument("--passport")
     out_arg = argument("--out")
     passport_path = os.path.abspath(passport_arg) if passport_arg else newest_passport()
@@ -382,36 +434,26 @@ def main():
         print(f"  [{'PASS' if ok else 'FAIL':4}] {cid:5} {description}" + (f"\n         {detail[:240]}" if detail else ""))
         return ok
 
-    report = {"config_path": config_path, "rows": rows, "calls": []}
+    report = {"client": "dsh web", "profile": config_path, "rows": rows, "calls": []}
 
-    if not os.path.isfile(config_path):
-        row("E01", "конфигурация клиента существует", False, f"нет файла {config_path}")
+    entry, entry_problem = dsh_mcp_entry(config_path, wanted)
+    if entry is None:
+        row("E01", f"запись сервера '{wanted}' есть в профиле клиента dsh", False, entry_problem)
         return finish(report, out)
 
-    with open(config_path, encoding="utf-8-sig") as fh:
-        config = json.load(fh)
-    servers = config.get("mcpServers") or {}
-    if wanted:
-        entry_name = wanted if wanted in servers else None
-    else:
-        candidates = [name for name, entry in servers.items()
-                      if os.path.basename(str(entry.get("command", ""))).lower() == "kompasmcp.host.exe"]
-        entry_name = candidates[0] if candidates else None
-    if entry_name is None:
-        row("E01", "в конфигурации клиента есть запись сервера КОМПАС", False,
-            f"записи с командой KompasMcp.Host.exe нет; есть: {sorted(servers)}")
-        return finish(report, out)
-
-    entry = servers[entry_name]
     command = entry.get("command")
     extra_args = entry.get("args") or []
-    report["entry"] = {"name": entry_name, "command": command, "args": extra_args,
-                       "timeout": entry.get("timeout"), "env_keys": sorted((entry.get("env") or {}).keys())}
-    row("E01", f"запись '{entry_name}' найдена и разобрана", True,
-        f"command={command} args={extra_args} timeout={entry.get('timeout')}")
+    report["entry"] = {"server_name": entry.get("server_name"), "plugin_id": entry.get("id"),
+                       "plugin": entry.get("plugin"), "transport": entry.get("transport"),
+                       "command": command, "args": extra_args,
+                       "env_keys": sorted((entry.get("env") or {}).keys())}
+    row("E01", f"запись '{wanted}' найдена и разобрана", True,
+        f"profile={config_path} id={entry.get('id')} transport={entry.get('transport')} "
+        f"command={command} args={extra_args}")
 
     exists = bool(command) and os.path.isfile(command)
-    row("E02", "команда записи — существующий файл", exists, str(command))
+    row("E02", "команда записи — существующий файл (транспорт stdio)", exists,
+        f"command={command} transport={entry.get('transport')}")
     if not exists:
         return finish(report, out)
 

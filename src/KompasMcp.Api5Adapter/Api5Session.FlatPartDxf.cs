@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -123,6 +123,12 @@ public partial class Api5Session
         {
             Directory.CreateDirectory(directory);
         }
+
+        // LIMIT: after Unfold a bent sheet-metal part IS a plate of constant thickness, so this route would
+        // reach the view build that does not complete in a visible instance. Unbent sheet metal is flat by
+        // itself and passes. History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal
+        RefuseBentPartViewInVisibleInstance(
+            document, SheetMetalBendsOf(document), "flat_part_dxf_export_in_visible_instance");
 
         var application = RequireApplication7(document);
         var bridge = BridgeFor(document);

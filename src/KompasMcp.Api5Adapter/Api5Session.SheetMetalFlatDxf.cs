@@ -97,35 +97,11 @@ public partial class Api5Session
             Directory.CreateDirectory(directory);
         }
 
+        // LIMIT: a view built from a part WITH BENDS does not complete in a VISIBLE instance; an unbent part
+        // is flat by itself and exports there. History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal
+        RefuseBentPartViewInVisibleInstance(document, bends, "flat_dxf_export_in_visible_instance");
+
         var application = RequireApplication7(document);
-        // LIMIT: the temporary-drawing route does not complete in a VISIBLE instance.
-        // MEASURED: 2 of 2 attempts in a visible instance answered OUTCOME_UNKNOWN after 300 s, wrote no file
-        // and left the session unable to answer even kompas_get_context; 2 of 2 attempts on the SAME file in
-        // an invisible instance succeeded at once. No documented parameter of IDocuments.Add or
-        // IViews.AddStandartViews chooses where the rebuild happens, so the refusal is NAMED here, BEFORE the
-        // call that hangs. DOC: iviews_addstandartviews.html, idocuments_add.html.
-        // History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal
-        var owner = TargetApplication(document.ApplicationId, document.Id);
-        var observedWindow = owner?.Observe();
-        if (owner is not null && (owner.DocumentsVisible || observedWindow?.Visible == true))
-        {
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                "Выгрузка развёртки в DXF не выполняется в ВИДИМОМ экземпляре КОМПАС: маршрут строит "
-                + "временный чертёж и перестраивает вид, и в видимом сеансе этот вызов не завершается "
-                + "(измерено: 2 из 2 за 300 с, файла нет, сеанс перестаёт отвечать даже на чтение "
-                + "контекста). Файл не создавался, модель не менялась. Подключитесь с make_visible=false: "
-                + "в невидимом экземпляре та же операция на том же файле проходит сразу.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["field"] = "make_visible",
-                    ["documents_visible"] = owner.DocumentsVisible,
-                    ["window_visible"] = observedWindow?.Visible,
-                    ["remedy"] = "kompas_disconnect, затем kompas_connect с make_visible=false",
-                    ["limit"] = "flat_dxf_export_in_visible_instance",
-                });
-        }
 
         var bridge = BridgeFor(document);
         var drawingPath = Path.Combine(

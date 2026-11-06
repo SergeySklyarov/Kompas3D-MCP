@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -35,6 +35,69 @@ public sealed partial class Api5Session
         ["dimetric"] = 10,
     };
 
+    /// <summary>Refuse a view build from a part WITH BENDS in a VISIBLE instance, before the call that hangs.</summary>
+    /// <remarks>MEASURED: a view built from a bent sheet-metal part does not return in a visible instance and
+    /// leaves the session unable to answer; an unbent part and every invisible instance return at once. The
+    /// refusal is NAMED, not attempted, because no documented parameter chooses where the rebuild happens.
+    /// LIMIT: a closed source file cannot be read for bends, so its description names that hole.
+    /// DOC: <c>iviews_addstandartviews.html</c>, <c>idocuments_add.html</c>.
+    /// History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal</remarks>
+    private void RefuseBentPartViewInVisibleInstance(DocumentEntry document, int? bends, string limit)
+    {
+        if (bends is not > 0)
+        {
+            return;
+        }
+
+        var owner = TargetApplication(document.ApplicationId, document.Id);
+        var observed = owner?.Observe();
+        if (owner is null || (!owner.DocumentsVisible && observed?.Visible != true))
+        {
+            return;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            "Вид по файлу листовой детали СО СГИБАМИ не строится в ВИДИМОМ экземпляре КОМПАС: построение "
+            + "стандартного вида не возвращает управление, и сеанс перестаёт отвечать даже на чтение "
+            + "контекста. Файл не создавался, модель не менялась. Подключитесь с make_visible=false: в "
+            + "невидимом экземпляре та же операция на том же файле проходит.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?>
+            {
+                ["field"] = "make_visible",
+                ["documents_visible"] = owner.DocumentsVisible,
+                ["window_visible"] = observed?.Visible,
+                ["bends"] = bends,
+                ["remedy"] = "kompas_disconnect, затем kompas_connect с make_visible=false",
+                ["limit"] = limit,
+            });
+    }
+
+    /// <summary>The bend count of an open sheet-metal part, or <c>null</c> when the document is not one.</summary>
+    /// <remarks>LIMIT: this reads the OPEN document; a file that is not open in this session is not opened
+    /// just to count its bends. History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal</remarks>
+    private int? SheetMetalBendsOf(DocumentEntry document)
+    {
+        if (document.Kind != DocumentKind.Part)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bridge = BridgeFor(document);
+            return bridge.ContainerFor(document.Document3D, document.Id, document.Revision)
+                is ISheetMetalContainer sheet
+                ? ReadCountOf(() => sheet.SheetMetalBends.Count)
+                : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Create standard associative views of a saved model file.</summary>
     /// <remarks>DOC: <c>iviews_addstandartviews.html</c> —
     /// <c>AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)</c>;
@@ -56,6 +119,15 @@ public sealed partial class Api5Session
                 $"Файл-источник вида не найден: '{command.SourcePath}'. Сохраните модель и повторите.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["source_path"] = command.SourcePath });
+        }
+
+        // LIMIT: a bent source is known only while it is OPEN — the file is not read for bends, so a closed
+        // bent part would reach the call that hangs in a visible instance. The description names that hole.
+        var source = TryFindDocumentByPath(command.SourcePath);
+        if (source is not null)
+        {
+            RefuseBentPartViewInVisibleInstance(
+                source, SheetMetalBendsOf(source), "drawing_views_from_bent_part_in_visible_instance");
         }
 
         var projectionName = string.IsNullOrWhiteSpace(command.ProjectionName)

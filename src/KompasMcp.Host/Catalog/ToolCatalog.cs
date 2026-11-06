@@ -1254,10 +1254,11 @@ public static class ToolCatalog
                 + "и вырезов — дело инструментов "
                 + "отверстия и выреза, а не выгрузки. Перезапись существующего файла — только с "
                 + "overwrite=true. LIMIT: в ВИДИМОМ экземпляре КОМПАС (make_visible=true при "
-                + "kompas_connect) выгрузка отказывает CAPABILITY_UNAVAILABLE до построения временного "
-                + "чертежа: там маршрут не завершается за 300 с и оставляет сеанс без ответа (измерено "
-                + "2 из 2; в невидимом экземпляре та же операция проходит сразу). Выход — сеанс с "
-                + "make_visible=false.",
+                + "kompas_connect) вид по файлу детали СО СГИБАМИ не строится: вызов не возвращает "
+                + "управление и оставляет сеанс без ответа даже на чтение контекста (измерено; то же на "
+                + "детали без сгибов и в невидимом экземпляре проходит сразу). Поэтому при наличии сгибов "
+                + "выгрузка отказывает CAPABILITY_UNAVAILABLE до построения вида (details.field="
+                + "make_visible); выход — сеанс с make_visible=false.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("body_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
@@ -1288,7 +1289,11 @@ public static class ToolCatalog
                 + "призмы постоянной толщины это та же деталь, перевёрнутая. Тело многотельной детали - "
                 + "через body_ref; без него "
                 + "деталь должна иметь ровно одно тело. Перезапись существующего файла - только с "
-                + "overwrite=true.",
+                + "overwrite=true. LIMIT: листовая деталь СО СГИБАМИ после развёртки - тоже пластина "
+                + "постоянной толщины, и в ВИДИМОМ экземпляре (make_visible=true при kompas_connect) вид "
+                + "по её файлу не строится: вызов не возвращает управление, сеанс перестаёт отвечать. "
+                + "Поэтому при наличии сгибов инструмент отказывает CAPABILITY_UNAVAILABLE до построения "
+                + "вида (details.field=make_visible); выход - сеанс с make_visible=false.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("body_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
@@ -3437,7 +3442,12 @@ public static class ToolCatalog
                 "читается (ksGetObjGabaritRect по указателю ksGetViewReference) и сверяется с местом внутри рамок " +
                 "листа (GetPlaceInsideFrames): проверка views_within_sheet называет числа, вид за рамкой даёт " +
                 "предупреждение view_outside_sheet с именем вида, а не молчаливый успех. Вид сам не переносится - " +
-                "куда его сдвинуть, решает клиент.",
+                "куда его сдвинуть, решает клиент. LIMIT: в ВИДИМОМ экземпляре (make_visible=true при " +
+                "kompas_connect) вид по файлу листовой детали СО СГИБАМИ не строится: вызов не возвращает " +
+                "управление, и сеанс перестаёт отвечать даже на чтение контекста. Признак сгибов читается у " +
+                "ОТКРЫТОЙ детали, поэтому такая деталь отказывает CAPABILITY_UNAVAILABLE до вызова " +
+                "(details.field=make_visible), а у ЗАКРЫТОГО файла признак неизвестен - источник не " +
+                "открывается ради него; выход в обоих случаях - сеанс с make_visible=false.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

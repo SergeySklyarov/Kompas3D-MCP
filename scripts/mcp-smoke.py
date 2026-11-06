@@ -11999,6 +11999,297 @@ def drawing_checks(client, rep, app_id, workdir):
             f"промежуточное_чтение_общего_цикла_ок={demand_reopen_ok} error={code}")
     call("kompas_close_document", {"document_id": drw06, "dirty_policy": "discard"})
 
+    # Маршруты, строящие временный чертёж или вид, проверяются ещё и в ВИДИМОМ экземпляре (находка F10).
+    visible_route_checks(client, rep, workdir)
+
+
+def visible_route_checks(client, rep, workdir):
+    """VIS.* — маршруты, строящие временный чертёж или вид, в ВИДИМОМ экземпляре КОМПАС.
+
+    ЗАЧЕМ. Находка F10 приёмки 0.13.0: выгрузка развёртки в видимом экземпляре не завершилась и оставила
+    сеанс без ответа, а прибор поднимал КОМПАС только невидимым и потому дефекта не видел. Здесь те же
+    маршруты идут ВТОРЫМ, видимым экземпляром (как `SMB.46`): экземпляр поднимается заново и снимается по
+    PID, а основной сеанс группы не трогается.
+
+    ЧТО СЧИТАЕТСЯ СТРОКОЙ. Положительная строка требует исхода без отказа И файла (для выгрузок): «не
+    отказал» само по себе не доказывает, что маршрут дошёл до конца. Строка отказа требует названного
+    `CAPABILITY_UNAVAILABLE` с `details.field=make_visible`, отсутствия файла и ОТВЕТА сеанса на чтение
+    после отказа — иначе отказ не лучше зависания.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Файл-источник, ЗАКРЫТЫЙ в сеансе, признака сгибов не отдаёт: маршрут вида от
+    закрытого файла со сгибами этой клеткой не проверяется, и описание инструмента называет это `LIMIT`.
+    History: docs/decisions/sheet-metal.md#flat-dxf-visible-refusal
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def details(env):
+        err = (env or {}).get("error")
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def emsg(env):
+        err = (env or {}).get("error")
+        return err.get("message") if isinstance(err, dict) else None
+
+    def solid_body(doc):
+        rows = result(call("kompas_list_bodies", {"document_id": doc})[0])
+        return rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+
+    def sketch_rect(doc, name, side):
+        env, _code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name})
+        sketch = result(env).get("id")
+        if not sketch:
+            return None
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [-side / 2.0, -side / 2.0],
+                          "width_mm": side, "height_mm": side}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": True})
+        return sketch
+
+    def plain_part(name, path):
+        env, _code = call("kompas_create_document", {"application_id": app, "kind": "part", "name": name})
+        doc = doc_id(env)
+        sketch = sketch_rect(doc, name + "-sk", 40.0) if doc else None
+        if not sketch:
+            return None
+        call("kompas_extrude", {"sketch_ref": sketch, "expected_revision": current_rev(doc),
+                                "operation": "base", "depth_mm": 10.0, "direction": "positive"})
+        call("kompas_save_document", {"document_id": doc, "expected_revision": current_rev(doc),
+                                      "target_path": path})
+        return doc
+
+    def sheet_part(name, path, with_bend):
+        """Листовая деталь: (документ, ЛИСТОВОЕ тело, ТВЁРДОЕ тело, ход сгиба и развёртки).
+
+        Ссылки не взаимозаменяемы: сгиб и выгрузка развёртки адресуют ЛИСТОВОЕ тело, топология - твёрдое
+        (раздел «Габарит по телу» в `docs/decisions/sheet-metal.md`). Опора развёртки читается ПОСЛЕ
+        сгиба: грани, прочитанные до него, сгиб обесценивает, и развёртка тогда не задаётся - постановка
+        без развёртки проверяла бы не то, что названо в строке. Ход обоих вызовов идёт в подробности."""
+        env, _code = call("kompas_create_document", {"application_id": app, "kind": "part", "name": name})
+        doc = doc_id(env)
+        sketch = sketch_rect(doc, name + "-sk", 40.0) if doc else None
+        if not sketch:
+            return None, None, None, "part_not_created"
+        env_b, _code_b = call("kompas_create_sheet_metal_body", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "thickness_mm": 1.5,
+            "bend_radius_mm": 2.0, "direction": "normal", "unfold_type": "coefficient",
+            "bend_coefficient": 0.4})
+        sheet_body = (result(env_b).get("body_ref") or {}).get("id")
+        body = solid_body(doc)
+        steps = []
+        if with_bend:
+            edges = sorted((edge for edge in (result(call("kompas_read_topology", {
+                "document_id": doc, "body_ref": body, "include": "edges"})[0]).get("edges") or [])
+                if edge.get("curve_type") == "line"),
+                key=lambda edge: edge.get("length_mm") or 0.0, reverse=True)
+            _env, code_bend = call("kompas_create_sheet_metal_bend", {
+                "document_id": doc, "expected_revision": current_rev(doc), "body_ref": sheet_body,
+                "edge_ref": edges[0].get("edge_ref") if edges else None, "angle_deg": 90.0,
+                "direction": True, "internal_radius": True, "radius_mm": 2.0,
+                "length_type": "contour", "length_mm": 5.0})
+            faces = sorted((face for face in (result(call("kompas_read_topology", {
+                "document_id": doc, "body_ref": body, "include": "faces"})[0]).get("faces") or [])
+                if face.get("surface_type") == "plane"),
+                key=lambda face: face.get("area_mm2") or 0.0, reverse=True)
+            _env_u, code_unfold = call("kompas_set_sheet_metal_unfold", {
+                "document_id": doc, "expected_revision": current_rev(doc), "body_ref": sheet_body,
+                "unfold": True, "fixed_face_ref": faces[0].get("face_ref") if faces else None})
+            steps.append(f"bend={code_bend} unfold={code_unfold}")
+        call("kompas_save_document", {"document_id": doc, "expected_revision": current_rev(doc),
+                                      "target_path": path})
+        return doc, sheet_body, body, " ".join(steps) or "no_bend"
+
+    def drawing_for(name):
+        env, _code = call("kompas_create_document", {"application_id": app, "kind": "drawing",
+                                                     "name": name})
+        return doc_id(env)
+
+    def create_views(doc, source, limit_expected=None):
+        env, code = call("kompas_create_drawing_views", {
+            "document_id": doc, "expected_revision": current_rev(doc), "source_path": source,
+            "projections": ["front"], "x": 100.0, "y": 100.0})
+        return env, code, result(env)
+
+    def still_answering(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"},
+                                  timeout=120)
+        return error_code(env) is None
+
+    work = os.path.join(workdir, "visible-routes")
+    os.makedirs(work, exist_ok=True)
+
+    env, code = call("kompas_connect", {"mode": "launch", "make_visible": True}, timeout=300)
+    app = result(env).get("application_id")
+    pid = result(env).get("process_id")
+    rep.add("VIS.instance.launch",
+            "второй экземпляр КОМПАС поднят ВИДИМЫМ (make_visible=true): без него маршруты ниже "
+            "проверялись бы только в невидимом режиме, где дефект F10 не воспроизводится",
+            "PASS" if app else "FAIL",
+            f"application_id={app} process_id={pid} error={code} message={(emsg(env) or '')[:120]}")
+    if not app:
+        return
+
+    try:
+        # ── VIS.DRW: чертёж, виды, перестроение — положительные строки ──────────────────────────────
+        drw = drawing_for("VIS-drawing")
+        rep.add("VIS.DRW.create_drawing",
+                "kompas_create_document(kind=drawing) в ВИДИМОМ экземпляре создаёт чертёж: сам по себе "
+                "IDocuments.Add видимого окна не боится",
+                "PASS" if drw else "FAIL", f"document_id={drw}")
+
+        src_plain = os.path.join(work, "vis-plain.m3d")
+        plain = plain_part("VIS-plain", src_plain)
+        env_v, code_v, views_v = (None, None, {})
+        if drw and plain:
+            env_v, code_v, views_v = create_views(drw, src_plain)
+        rows_v = views_v.get("views") or []
+        rep.add("VIS.DRW.create_views",
+                "стандартные виды из ОТКРЫТОЙ обычной детали в ВИДИМОМ экземпляре создаются: отказ "
+                "выдаётся только детали со сгибами, а не всякому видимому сеансу",
+                "PASS" if (not code_v and len(rows_v) > 0) else "FAIL",
+                f"code={code_v} видов={len(rows_v)} message={(emsg(env_v) or '')[:120]}")
+
+        view_ref = next((row.get("view_ref") for row in rows_v if row.get("view_ref")), None)
+        env_r, code_r = (None, None)
+        if drw and view_ref:
+            env_r, code_r = call("kompas_rebuild_drawing_views", {
+                "document_id": drw, "expected_revision": current_rev(drw), "view_ref": view_ref})
+        rep.add("VIS.DRW.rebuild_views",
+                "перестроение видов чертежа (IKompasDocument2D1.RebuildDocument) в ВИДИМОМ экземпляре "
+                "завершается",
+                "PASS" if (view_ref and not code_r) else "FAIL",
+                f"view_ref={view_ref} code={code_r} message={(emsg(env_r) or '')[:120]}")
+
+        drw_out = os.path.join(work, "vis-drawing.dxf")
+        drw_path = os.path.join(work, "vis-drawing.cdw")
+        if drw:
+            call("kompas_save_document", {"document_id": drw, "expected_revision": current_rev(drw),
+                                          "target_path": drw_path})
+        if os.path.exists(drw_out):
+            os.remove(drw_out)
+        env_d, code_d = (None, None)
+        if drw and os.path.isfile(drw_path):
+            env_d, code_d = call("kompas_export_drawing", {
+                "document_id": drw, "output_path": drw_out, "format": "dxf"})
+        rep.add("VIS.DRW.export_drawing",
+                "выгрузка СОХРАНЁННОГО чертежа конвертером в ВИДИМОМ экземпляре даёт файл: конвертер "
+                "видимого окна не боится, и предел касается построения вида, а не выгрузки",
+                "PASS" if (not code_d and os.path.isfile(drw_out)) else "FAIL",
+                f"code={code_d} файл={os.path.exists(drw_out)} message={(emsg(env_d) or '')[:120]}")
+
+        # ── VIS.FLT: контур плоской детали ─────────────────────────────────────────────────────────
+        flt_out = os.path.join(work, "vis-flat.dxf")
+        if os.path.exists(flt_out):
+            os.remove(flt_out)
+        env_f, code_f = (None, None)
+        if plain:
+            env_f, code_f = call("kompas_export_flat_dxf", {
+                "document_id": plain, "body_ref": solid_body(plain), "output_path": flt_out})
+        flat_level = ((result(env_f) or {}).get("verification") or {}).get("level")
+        rep.add("VIS.FLT.flat_dxf",
+                "выгрузка контура плоской детали в ВИДИМОМ экземпляре проходит и пишет файл: предел "
+                "касается детали со сгибами, а не всякой плоской детали",
+                "PASS" if (not code_f and os.path.isfile(flt_out)) else "FAIL",
+                f"code={code_f} файл={os.path.exists(flt_out)} уровень={flat_level} "
+                f"message={(emsg(env_f) or '')[:120]}")
+
+        # ── Отказы: деталь со сгибами в видимом экземпляре ────────────────────────────────────────
+        bent_doc, _bent_sheet_body, bent_body, bent_steps = sheet_part(
+            "VIS-bent", os.path.join(work, "vis-bent.m3d"), True)
+        flt_bent_out = os.path.join(work, "vis-flat-bent.dxf")
+        if os.path.exists(flt_bent_out):
+            os.remove(flt_bent_out)
+        env_fb, code_fb = (None, None)
+        if bent_doc:
+            env_fb, code_fb = call("kompas_export_flat_dxf", {
+                "document_id": bent_doc, "body_ref": bent_body, "output_path": flt_bent_out})
+        det_fb = details(env_fb)
+        rep.add("VIS.FLT.flat_dxf_refusal_bent",
+                "листовая деталь СО СГИБАМИ после развёртки — тоже пластина постоянной толщины, и "
+                "выгрузка контура в ВИДИМОМ экземпляре отказывает названным CAPABILITY_UNAVAILABLE до "
+                "построения вида, файла не создаёт, а сеанс после отказа отвечает",
+                "PASS" if (code_fb == "CAPABILITY_UNAVAILABLE" and det_fb.get("field") == "make_visible"
+                           and det_fb.get("limit") == "flat_part_dxf_export_in_visible_instance"
+                           and not os.path.exists(flt_bent_out)
+                           and bent_doc and still_answering(bent_doc)) else "FAIL",
+                f"code={code_fb} поле={det_fb.get('field')} предел={det_fb.get('limit')} "
+                f"сгибы={det_fb.get('bends')} файл={os.path.exists(flt_bent_out)} "
+                f"постановка={bent_steps} "
+                f"сеанс_отвечает={bool(bent_doc) and still_answering(bent_doc)}")
+
+        drw_bent = drawing_for("VIS-drawing-bent")
+        env_vb, code_vb, _views_vb = (None, None, {})
+        if drw_bent and bent_doc:
+            env_vb, code_vb, _views_vb = create_views(drw_bent, os.path.join(work, "vis-bent.m3d"))
+        det_vb = details(env_vb)
+        rep.add("VIS.DRW.views_refusal_bent",
+                "вид из ОТКРЫТОЙ листовой детали СО СГИБАМИ в ВИДИМОМ экземпляре отказывает названным "
+                "CAPABILITY_UNAVAILABLE с details.field=make_visible до построения вида, а сеанс после "
+                "отказа отвечает",
+                "PASS" if (code_vb == "CAPABILITY_UNAVAILABLE" and det_vb.get("field") == "make_visible"
+                           and det_vb.get("limit") == "drawing_views_from_bent_part_in_visible_instance"
+                           and drw_bent and still_answering(drw_bent)) else "FAIL",
+                f"code={code_vb} поле={det_vb.get('field')} предел={det_vb.get('limit')} "
+                f"сгибы={det_vb.get('bends')} подсказка={str(det_vb.get('remedy'))[:60]} "
+                f"постановка={bent_steps} "
+                f"сеанс_отвечает={bool(drw_bent) and still_answering(drw_bent)}")
+
+        # ── VIS.SMB: выгрузка развёртки детали БЕЗ сгибов проходит в видимом экземпляре ────────────
+        flat_doc, flat_sheet_body, _flat_solid, flat_steps = sheet_part(
+            "VIS-unbent", os.path.join(work, "vis-unbent.m3d"), False)
+        smb_out = os.path.join(work, "vis-unbent.dxf")
+        if os.path.exists(smb_out):
+            os.remove(smb_out)
+        env_s, code_s = (None, None)
+        if flat_doc:
+            env_s, code_s = call("kompas_export_sheet_metal_flat_dxf", {
+                "document_id": flat_doc, "body_ref": flat_sheet_body, "output_path": smb_out})
+        rep.add("VIS.SMB.unbent_export",
+                "выгрузка развёртки листовой детали БЕЗ сгибов в ВИДИМОМ экземпляре проходит и пишет "
+                "файл: отказ касается детали со сгибами, а не всякой листовой детали",
+                "PASS" if (not code_s and os.path.isfile(smb_out)) else "FAIL",
+                f"code={code_s} файл={os.path.exists(smb_out)} постановка={flat_steps} "
+                f"message={(emsg(env_s) or '')[:120]}")
+
+        # ── Описания: предел назван там, где клиент его прочитает ─────────────────────────────────
+        named = {}
+        for tool in ("kompas_export_sheet_metal_flat_dxf", "kompas_export_flat_dxf",
+                     "kompas_create_drawing_views"):
+            text = client.description_of(tool) or ""
+            named[tool] = ("СГИБАМИ" in text and "make_visible=false" in text)
+        rep.add("VIS.limit.named",
+                "описание каждого маршрута называет предел (деталь со сгибами + видимый экземпляр) и "
+                "выход make_visible=false: предел, о котором знает только отказ, клиент не прочитает",
+                "PASS" if all(named.values()) else "FAIL",
+                " ".join(f"{tool}={ok}" for tool, ok in named.items()))
+
+        # Видимый экземпляр снимается по PID: kompas_disconnect завершил бы ВЕСЬ сеанс группы.
+    finally:
+        if pid:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+            time.sleep(2.0)
+
+
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Группа VM: внешние переменные детали и материал (блок VM, профиль `variables-material-minimal-v1`)
@@ -58587,10 +58878,10 @@ def sheet_metal_checks(client, rep, app_id, workdir):
         call("kompas_close_document", {"document_id": doc0, "dirty_policy": "discard"})
 
         # ── SMB.46.visible_refusal: ВИДИМЫЙ экземпляр отказывает названно, а не висит ─────────────
-        # MEASURED (находка F10): в видимом экземпляре та же выгрузка дважды из двух не завершилась за
-        # 300 с, файла не создала и оставила сеанс без ответа даже на kompas_get_context; на том же
-        # файле в невидимом экземпляре проходит сразу. Документированного параметра, снимающего эту
-        # зависимость, нет (ни IDocuments.Add, ни IViews.AddStandartViews не выбирают, где перестраивается
+        # MEASURED (находка F10): вид по файлу листовой детали СО СГИБАМИ в видимом экземпляре не
+        # возвращает управление и оставляет сеанс без ответа даже на kompas_get_context; деталь без
+        # сгибов и невидимый экземпляр проходят сразу. Документированного параметра, снимающего эту
+        # зависимость, нет (ни IDocuments.Add, ни IViews.AddStandartViews не выбирают, где строится
         # вид), поэтому инструмент отказывает ДО вызова, который виснет, и называет выход. Строка
         # проверяет ОБЕ половины: названный отказ с подсказкой make_visible=false, файла нет, и СЕАНС
         # после отказа отвечает - иначе отказ не лучше зависания.

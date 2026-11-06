@@ -121,6 +121,25 @@ def newest_passport():
     return max(found, key=os.path.getmtime)
 
 
+def expected_command(root=ROOT):
+    """The `command` the entry must name; read from the newest measured delivery, never guessed.
+
+    INVARIANT: the refusal names a measured path - `host_path` of the newest
+    `docs/acceptance/evidence/delivery-*/package-check.json`. MEASURED: at the stop before client
+    acceptance the entry is normally absent, so E01 has to say WHICH command to write; the operator
+    writes the profile and restarts the client, the instrument does neither.
+    """
+    found = sorted(glob.glob(os.path.join(root, "docs", "acceptance", "evidence", "delivery-*",
+                                          "package-check.json")), key=os.path.getmtime)
+    if not found:
+        return None
+    try:
+        with open(found[-1], encoding="utf-8") as handle:
+            return (json.load(handle) or {}).get("host_path")
+    except (OSError, ValueError):
+        return None
+
+
 def delivery_dir_of(command):
     """Каталог поставки по команде записи: `<...>/artifacts/<поставка>/KompasMcp.Host.exe`."""
     return os.path.dirname(os.path.abspath(command))
@@ -362,6 +381,22 @@ def self_test():
     check("измерение поставки не ищется в scratch/",
           "scratch" not in measured.replace("\\", "/").split("/"), measured)
 
+    # The command to write is read from the newest measurement, not hardcoded: the stop before client
+    # acceptance has to name a path that a measurement described. THE TREE IS BUILT HERE.
+    with tempfile.TemporaryDirectory(prefix="_client-entry-expected-") as scratch:
+        for folder, host in (("delivery-old", "C:\\old\\KompasMcp.Host.exe"),
+                             ("delivery-new", "C:\\new\\KompasMcp.Host.exe")):
+            directory = os.path.join(scratch, "docs", "acceptance", "evidence", folder)
+            os.makedirs(directory)
+            path = os.path.join(directory, "package-check.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"host_path": host}, handle)
+            os.utime(path, (1, 1) if folder == "delivery-old" else None)
+        check("ожидаемая команда записи - Host самой свежей измеренной поставки",
+              expected_command(scratch) == "C:\\new\\KompasMcp.Host.exe", str(expected_command(scratch)))
+        check("без измерений ожидаемая команда не выдумывается",
+              expected_command(os.path.join(scratch, "empty")) is None)
+
     # The `current` layout: the junction name is not a delivery name, so the tag decides which
     # passport describes the installed delivery. THE TREE IS BUILT HERE - a control reading a real
     # installation would measure that machine, not the rule.
@@ -438,7 +473,10 @@ def main():
 
     entry, entry_problem = dsh_mcp_entry(config_path, wanted)
     if entry is None:
-        row("E01", f"запись сервера '{wanted}' есть в профиле клиента dsh", False, entry_problem)
+        want = expected_command()
+        report["expected_command"] = want
+        detail = entry_problem + (f"; ожидается запись с command={want}" if want else "")
+        row("E01", f"запись сервера '{wanted}' есть в профиле клиента dsh", False, detail)
         return finish(report, out)
 
     command = entry.get("command")

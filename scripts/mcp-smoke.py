@@ -54092,7 +54092,11 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # differs from them cannot say that the defect does not reproduce.
     # DOC: the client's acceptance R2.6 names the plan: s1 insert_component, s2 list_components,
     # s3 check_interference, and the detail is a plate 60x40x10.
-    client_dir = r"D:\work\KompasMCP\sandbox\acceptance"
+    # INVARIANT: the roots are the INSTALLER's own and come from the environment - `Install-KompasMcp.ps1`
+    # puts the writable roots under the user's Documents and the config with the copy directory under
+    # `%LOCALAPPDATA%`. A personal literal measures another machine's setup and reports it as a defect.
+    documents_root = _os.path.join(_os.path.expanduser("~"), "Documents", "KompasMCP")
+    client_dir = _os.path.join(documents_root, "sandbox", "acceptance")
     client_detail = _os.path.join(folder, "client-flat-886264b9.m3d")
     client_asm = _os.path.join(folder, "client-asm-check.m3d")
     client_others = ["plate-cd0aaadd.m3d", "bar.m3d", "rib.m3d"]
@@ -54372,11 +54376,12 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # session, the component is inserted, the assembly is saved, the scenario runs on it.
     # The scenario call itself is NOT in the journal - only its child operations are (checkpoint-save,
     # replace_component, checkpoint-resave, checkpoint-close); the outer call is missing there.
-    install_root = r"D:\work\KompasMCP"
+    local_app_data = _os.environ.get("LOCALAPPDATA") or ""
+    install_root = _os.path.join(local_app_data, "KompasMCP") if local_app_data else ""
     install_config_path = _os.path.join(install_root, "config", "kompas-mcp.json")
     copies_scenario = _os.path.join(install_root, "control-copies", "scenario")
     client_trace = _os.path.join(copies_scenario, "b4626f94-93d9-45e1-9eb9-7c8f54bb8695-r3")
-    sandbox_root = r"D:\work\KompasMCP\sandbox"
+    sandbox_root = _os.path.join(documents_root, "sandbox")
     # The cell's own directory is unique per run: the green run and the red run write the same file
     # names, and a leftover file would make the export refuse instead of measuring the scenario.
     cell_dir = _os.path.join(sandbox_root, "cp16",
@@ -54397,7 +54402,10 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     # installer's, the journals become the probe's (the install's journal is the client's evidence).
     install_config = None
     config_error = None
-    if _os.path.isfile(install_config_path):
+    if not install_root or not _os.path.isdir(install_root):
+        config_error = ("каталога установки нет: "
+                        + (install_root or "переменная LOCALAPPDATA не задана"))
+    elif _os.path.isfile(install_config_path):
         install_config = isolate_config(install_config_path, cell_dir, "cp-install")
     else:
         config_error = f"конфигурация установки не найдена: {install_config_path}"
@@ -54557,7 +54565,13 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         shutil.rmtree(target, ignore_errors=True)
         removed.append(name)
     trace_after = folder_state(client_trace)
-    if installed_answer.get("error"):
+    if config_error:
+        # The machine's setup is absent, the product is not: an absent setup cannot fail a row, so the
+        # row says it was NOT CHECKED and names what is missing. Faking the setup is not an option.
+        rep.add("CP.16.client_setup_installed",
+                "постановка клиента дословно: каталог копий установки, деталь создана в сеансе и не закрыта",
+                "NAMED", f"не проверено: {config_error}")
+    elif installed_answer.get("error"):
         row("CP.16.client_setup_installed",
             "постановка клиента дословно: каталог копий установки, деталь создана в сеансе и не закрыта",
             False, f"постановка не собрана: {installed_answer['error']}")

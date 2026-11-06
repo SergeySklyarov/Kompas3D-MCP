@@ -14308,6 +14308,31 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         rep.add("DC.08b", "чужой обрыв виден и не применён", "FAIL", "эталон не построен")
         rep.add("DC.09", "attach при записи погибшего экземпляра", "FAIL", "эталон не построен")
 
+    # ── DC.11: чтение по НЕИЗВЕСТНОМУ application_id в ЖИВОМ сеансе ────────────────────────────
+    # Контракт: «НЕИЗВЕСТНЫЙ ИЛИ ОТКЛЮЧЁННЫЙ application_id ... даёт названный отказ, а не пустой
+    # список». Проверка стоит ЗДЕСЬ, ДО обрыва, и это часть измерения: после обрыва любое чтение
+    # отвечает отказом по защёлке сеанса, и пустой список прежней ветки там уже не воспроизводится.
+    # Прежняя ветка строила ответ фильтром документов по id: незнакомый id не находил документов,
+    # COM не вызывался вовсе, и клиент получал УСПЕХ с пустым списком — «измеренный ноль» вместо
+    # «экземпляра больше нет». Сеанс после отказа обязан остаться рабочим.
+    unknown_app_dc11 = _uuid.uuid4().hex
+    env_u, code_u = call("kompas_list_documents", {"application_id": unknown_app_dc11}, timeout=120)
+    live_after_u = ctx(plate) if plate else {}
+    ok_dc11 = (code_u == "APPLICATION_DISCONNECTED" and status(env_u) != "succeeded"
+               and not result(env_u)
+               and err_of(env_u).get("retry_policy") == "reacquire_context"
+               and (not plate or live_after_u.get("body_count") == 1))
+    rep.add("DC.11",
+            "list_documents по НЕИЗВЕСТНОМУ application_id в ЖИВОМ сеансе отвечает "
+            "APPLICATION_DISCONNECTED с retry_policy=reacquire_context, а не успехом с пустым "
+            "списком; сеанс после отказа по-прежнему читает свой документ",
+            "PASS" if ok_dc11 else "FAIL",
+            f"unknown={unknown_app_dc11} code={code_u} status={status(env_u)} "
+            f"retry={err_of(env_u).get('retry_policy')!r} result={result(env_u)!r} "
+            f"body_count_after={live_after_u.get('body_count')!r} msg={emsg(env_u)}",
+            details={"application_id": unknown_app_dc11, "error": err_of(env_u),
+                     "result": result(env_u), "context_after": live_after_u})
+
     # ── обрыв: процесс СВОЕГО экземпляра завершается по PID ────────────────────────────────────
     killed = None
     if isinstance(process_id, int) and process_id > 0:
@@ -14477,15 +14502,19 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
     if new_app:
         call("kompas_disconnect", {"application_id": new_app, "close_owned_application": True},
              timeout=120)
-        # ── DC.11: чтение после ШТАТНОГО отключения (наряд CLIENT_FINDINGS_0_13_0) ─────────────
+        # ── DC.12: чтение после ШТАТНОГО отключения (наряд CLIENT_FINDINGS_0_13_0) ─────────────
         # Постановка клиента дословно: kompas_disconnect(close_owned_application=true), затем
         # kompas_list_documents по ПРЕЖНЕМУ application_id. Клиент получил УСПЕХ с пустым списком, то
         # есть «в экземпляре нет документов» вместо «экземпляра больше нет». Контракт (v0.8.0, «Чтение
-        # при потерянной связи») требует НАЗВАННЫЙ отказ у чтения, а не пустые данные.
+        # при потерянной связи») требует НАЗВАННЫЙ отказ у чтения, а не пустые данные. Строку о
+        # НЕИЗВЕСТНОМ id отличает DC.11: он стоит до обрыва, потому что здесь чтение отвечает уже по
+        # защёлке сеанса и собственный дефект прежней ветки тут не воспроизводится.
         env_ld, code_ld = call("kompas_list_documents", {"application_id": new_app}, timeout=120)
-        env_cx, code_cx = call("kompas_get_context", {"document_id": fresh_doc or plate}, timeout=120)
+        # get_context требует document_id И detail: без detail ответ INVALID_ARGUMENT, а не отказ чтения.
+        env_cx, code_cx = call("kompas_get_context", {"document_id": fresh_doc or plate,
+                                                     "detail": "minimal"}, timeout=120)
         ld_err = err_of(env_ld)
-        rep.add("DC.11",
+        rep.add("DC.12",
                 "чтение после ШТАТНОГО kompas_disconnect: list_documents по прежнему application_id "
                 "отвечает APPLICATION_DISCONNECTED с retry_policy=reacquire_context, а не успехом с "
                 "пустым списком; чтение документа — названный отказ, а не пустая модель",
@@ -14513,7 +14542,8 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         ("DC.08b", "чужой обрыв виден и не применён"),
         ("DC.09", "attach при записи погибшего экземпляра в ROT"),
         ("DC.10", "экспорт и чертёжное чтение при обрыве — APPLICATION_DISCONNECTED"),
-        ("DC.11", "чтение после штатного disconnect — APPLICATION_DISCONNECTED, а не пустой список"),
+        ("DC.11", "неизвестный application_id в живом сеансе — APPLICATION_DISCONNECTED, а не пустой список"),
+        ("DC.12", "чтение после штатного disconnect — APPLICATION_DISCONNECTED, а не пустой список"),
     ):
         if not any(row.get("id") == cid for row in rep.rows):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")

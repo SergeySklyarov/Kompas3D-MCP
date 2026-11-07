@@ -55217,7 +55217,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
 
 
 def ops_checks(host, config, workdir, rep):
-    """OPS.01…OPS.14 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
+    """OPS.01…OPS.17 — состояния операции, отмена и согласование (наряд `OPS_CONTRACT`).
 
     ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Длинная мутация, не уложившаяся в бюджет синхронизации, отвечает
     `running` с `operation_id`; вторая мутация того же документа, пока первая не закончилась, отвечает
@@ -55226,6 +55226,13 @@ def ops_checks(host, config, workdir, rep):
     выполняющейся — только запросом (`cancel_requested`, статус остаётся `running`); истечение бюджета
     не отменяет команду и не удваивает её след; журнал с незавершённой записью после старта требует
     согласования и НЕ повторяет команду; согласование называет исход или честно говорит «не определено».
+
+    ЧТО ДОБАВЛЕНО ПРИВЯЗКОЙ ДОКУМЕНТА (долг 84). `OPS.09.reconcile` теперь ставит запись с
+    неопределённым исходом на ЖИВОМ документе мутацией ПО ССЫЛКЕ и требует определённого исхода
+    `applied`: документ записи берётся из ссылки до отправки команды, а не из ответа. `OPS.16.reference_ban`
+    доказывает, что запрет мутаций видит и такую мутацию (и не задевает другой документ).
+    `OPS.17.document_gone` оставляет прежний случай — запись сеанса, документа которого здесь нет: там
+    `undetermined` с причиной и есть правильный ответ.
 
     ПОЧЕМУ СВОЙ ХОСТ. Бюджет синхронизации задаётся конфигурацией на старте процесса, а строки
     сравнивают поведение при МАЛОМ бюджете (200 мс) — в общем сеансе прогона он 40 с.
@@ -55646,6 +55653,160 @@ def ops_checks(host, config, workdir, rep):
                 f"вторая мутация: ответ={status_of(second_env)} err={err_of(second_env)}; её итог по статусу="
                 f"{op_status(dep_final)} код={second_code}; ревизия {rev_before_dep}->{rev_after_dep}, "
                 f"прирост {delta} (требуется ровно 1: вторая операция не должна оставить следа)")
+
+        # ── OPS.09.reconcile: a DEFINITE outcome on a live document ─────────────────────
+        # WHAT THIS PROVES. A mutation addressed by REFERENCE (sketch_ref, no document_id) gets its
+        # document into the journal BEFORE the command leaves, so reconciliation answers `applied` -
+        # the revision grew and no other record of that document started in the same window - instead
+        # of "undetermined". The previous edition of this row measured the opposite state of affairs
+        # ("a reference cannot be reconciled", debt line 84); `undetermined` and NAMED are no longer
+        # acceptable expectations here.
+        # HOW outcome_unknown IS PRODUCED ON A LIVE DOCUMENT. The TERMINAL journal write cannot land
+        # while the journal file is read-only, and the command is already applied: the record keeps
+        # needs_reconciliation although the model moved. The long sketch edit is the window - the
+        # `running` answer proves the INTENT line is durable, so the attribute is set after it and
+        # before the terminal write. The negative control is the same measurement: when the write DOES
+        # land the record comes back `succeeded`, and the row retries instead of claiming the route.
+        bind_journal = None
+        try:
+            with open(cfg_small, encoding="utf-8-sig") as fh:
+                bind_journal = _json.load(fh).get("journal_path") or None
+        except (OSError, ValueError):
+            bind_journal = None
+
+        bind_doc = bind_sketch = None
+        if bind_journal:
+            env = settle(probe, "kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": "OPS_BIND"})
+            bind_doc = result(env).get("document_id") or result(env).get("id")
+            bind_rev = result(env).get("revision") or (env or {}).get("revision_after") or 1
+            env = settle(probe, "kompas_create_sketch", {
+                "document_id": bind_doc, "expected_revision": bind_rev,
+                "plane": {"base": "xy", "offset_mm": 0}, "name": "bind"})
+            bind_sketch = result(env).get("id")
+            bind_sketch = bind_sketch.get("id") if isinstance(bind_sketch, dict) else bind_sketch
+
+        bind_op = bind_before = None
+        bind_status = {}
+        bind_attempts = []
+        if bind_doc and bind_sketch and bind_journal:
+            for attempt in range(1, 4):
+                bind_before = revision(probe, bind_doc)
+                bind_args = {"sketch_ref": bind_sketch, "expected_revision": bind_before,
+                             "mode": "append", "entities": long_entities,
+                             "operation_id": str(uuid.uuid4())}
+                rid = send(probe, "kompas_edit_sketch", bind_args)
+                bind_env = collect(probe, [rid], 600).get(rid) or {}
+                candidate = (bind_env or {}).get("operation_id")
+                read_only = False
+                try:
+                    os.chmod(bind_journal, 0o444)
+                    read_only = True
+                except OSError as exc:
+                    bind_attempts.append(f"попытка {attempt}: журнал не стал только для чтения ({exc})")
+                    read_only = False
+                try:
+                    if candidate:
+                        poll_until_done(probe, candidate)
+                finally:
+                    if read_only:
+                        os.chmod(bind_journal, 0o666)
+                bind_status = result(call(probe, "kompas_operation_status",
+                                          {"operation_id": candidate})) if candidate else {}
+                bind_attempts.append(f"попытка {attempt}: ответ={status_of(bind_env)} "
+                                     f"итог={bind_status.get('status')} "
+                                     f"документ_в_записи={bind_status.get('document_id')}")
+                if candidate and bind_status.get("status") == "outcome_unknown":
+                    bind_op = candidate
+                    break
+                bind_before = None
+
+            # ── OPS.16.reference_ban: the ban reaches a reference mutation ──────────────
+            # The mark is still set, so a second mutation of the SAME document addressed by sketch_ref
+            # must be refused BEFORE the journal and BEFORE the Worker, while a reference mutation of
+            # ANOTHER document must pass. The two halves tell "the ban works by document" from "the ban
+            # blocks everything" and from "the ban is blind to references".
+            banned_revision_ok = None
+            blocked = {}
+            other_code = None
+            other_rev_before = other_rev_after = None
+            if bind_op:
+                rev_marked = revision(probe, bind_doc)
+                blocked = call(probe, "kompas_edit_sketch", {
+                    "sketch_ref": bind_sketch, "expected_revision": rev_marked, "mode": "append",
+                    "entities": [{"kind": "line", "start_mm": [0.0, 9.0], "end_mm": [1.0, 9.0]}],
+                    "operation_id": str(uuid.uuid4())})
+                blocked_op = (blocked or {}).get("operation_id")
+                banned_known = err_of(call(probe, "kompas_operation_status",
+                                           {"operation_id": blocked_op})) if blocked_op else None
+                banned_revision_ok = revision(probe, bind_doc) == rev_marked
+
+                env = settle(probe, "kompas_create_document",
+                             {"application_id": app_id, "kind": "part", "name": "OPS_OTHER"})
+                other_doc = result(env).get("document_id") or result(env).get("id")
+                other_rev = result(env).get("revision") or (env or {}).get("revision_after") or 1
+                env = settle(probe, "kompas_create_sketch", {
+                    "document_id": other_doc, "expected_revision": other_rev,
+                    "plane": {"base": "xy", "offset_mm": 0}, "name": "other"})
+                other_sketch = result(env).get("id")
+                other_sketch = other_sketch.get("id") if isinstance(other_sketch, dict) else other_sketch
+                if other_sketch:
+                    other_rev_before = revision(probe, other_doc)
+                    other_env = settle(probe, "kompas_edit_sketch", {
+                        "sketch_ref": other_sketch, "expected_revision": other_rev_before,
+                        "mode": "append", "entities": [{"kind": "line", "start_mm": [0.0, 0.0],
+                                                       "end_mm": [1.0, 1.0]}],
+                        "operation_id": str(uuid.uuid4())})
+                    other_code = err_of(other_env)
+                    other_rev_after = revision(probe, other_doc)
+
+                rep.add("OPS.16.reference_ban",
+                        "мутация по ссылке в документ с несогласованной записью отклонена до журнала и "
+                        "до Worker; мутация по ссылке в ДРУГОЙ документ проходит",
+                        "PASS" if (err_of(blocked) == "DOCUMENT_NEEDS_RECONCILIATION"
+                                   and err_details(blocked).get("operation_id") == bind_op
+                                   and banned_known == "OPERATION_NOT_FOUND"
+                                   and banned_revision_ok is True
+                                   and other_code is None
+                                   and other_rev_after == (other_rev_before or 0) + 1) else "FAIL",
+                        f"тот же документ: код={err_of(blocked)} "
+                        f"details.operation_id={err_details(blocked).get('operation_id')} (ожидался "
+                        f"{bind_op}), в журнале={banned_known}, ревизия не менялась={banned_revision_ok}; "
+                        f"другой документ: код={other_code}, ревизия "
+                        f"{other_rev_before}->{other_rev_after}")
+            else:
+                rep.add("OPS.16.reference_ban",
+                        "мутация по ссылке в документ с несогласованной записью отклонена до журнала и "
+                        "до Worker; мутация по ссылке в ДРУГОЙ документ проходит",
+                        "FAIL", "запись с неопределённым исходом по ссылке не получена: " +
+                        "; ".join(bind_attempts or ["журнал или документ не созданы"]))
+
+            # ── OPS.09.reconcile: applied on the live document ─────────────────────────
+            bind_rec = {}
+            bind_cleared = None
+            bind_rev_after = None
+            if bind_op:
+                bind_rec = result(call(probe, "kompas_operation_reconcile", {"operation_id": bind_op}))
+                bind_rev_after = revision(probe, bind_doc)
+                bind_cleared = result(call(probe, "kompas_operation_status",
+                                           {"operation_id": bind_op})).get("needs_reconciliation")
+            rep.add("OPS.09.reconcile",
+                    "согласование мутации по ссылке: определённый исход applied на живом документе, "
+                    "документ записи взят из ссылки, метка снята только доказанным исходом",
+                    "PASS" if (bind_status.get("document_id") == bind_doc
+                               and bind_status.get("needs_reconciliation") is True
+                               and bind_rec.get("outcome") == "applied"
+                               and bind_rec.get("revision_before") == bind_before
+                               and bind_rec.get("revision_now") == bind_rev_after
+                               and bind_rev_after == (bind_before or 0) + 1
+                               and bind_cleared is False) else "FAIL",
+                    f"запись: статус={bind_status.get('status')} "
+                    f"документ={bind_status.get('document_id')} (ожидался {bind_doc}) "
+                    f"метка={bind_status.get('needs_reconciliation')}; согласование: "
+                    f"исход={bind_rec.get('outcome')} ревизии {bind_rec.get('revision_before')}->"
+                    f"{bind_rec.get('revision_now')}, фактическая {bind_rev_after}; метка после="
+                    f"{bind_cleared}; причина={str(bind_rec.get('reason'))[:200]}; "
+                    + "; ".join(bind_attempts))
     finally:
         if app_id:
             try:
@@ -55880,22 +56041,25 @@ def ops_checks(host, config, workdir, rep):
         finally:
             close_host(probe_rec)
 
-        # ── OPS.09.reconcile: три исхода ───────────────────────────────────────────────
-        # Доказать «применено» и «не применено» можно только на ЖИВОМ документе, а запись журнала
-        # ссылается на document_id ТОГО сеанса, в котором он был открыт: id выдаётся при открытии и
-        # другому Хосту неизвестен. Поэтому здесь измеряется третий исход - «не определено» с
-        # причиной, а два остальных ждут либо строки на живом документе, либо маршрута согласования
-        # по пути вместо id.
+        # ── OPS.17.document_gone: запись ПРЕЖНЕГО сеанса ───────────────────────────────
+        # A record whose document belongs to a CLOSED session: the id is unknown here, so the current
+        # revision cannot be read and the honest answer is `undetermined` WITH that reason - never a
+        # silent "no document". This is NOT the case debt line 84 named: the record DOES carry its
+        # document (the hand-written line above names one); only this session cannot see it. The
+        # definite outcomes are measured on a LIVE document by `OPS.09.reconcile`.
         probe_rec = open_host(cfg_rec)
         try:
             settle(probe_rec, "kompas_acquire_session", {}, 300)
             rec = call(probe_rec, "kompas_operation_reconcile", {"operation_id": stale_op})
-            rep.add("OPS.09.reconcile",
-                    "три исхода согласования, метка снята только при доказанном исходе",
-                    "NAMED" if result(rec).get("outcome") == "undetermined" else "FAIL",
-                    f"измерен исход {result(rec).get('outcome')} при недоступном документе: "
-                    f"{result(rec).get('reason')}. Исходы applied/not_applied требуют живого документа: "
-                    "document_id записи принадлежит прежнему сеансу")
+            gone_reason = str(result(rec).get("reason") or "")
+            rep.add("OPS.17.document_gone",
+                    "запись прежнего сеанса: исход undetermined с причиной, команда не повторяется, "
+                    "метка остаётся",
+                    "PASS" if (result(rec).get("outcome") == "undetermined"
+                               and result(rec).get("needs_reconciliation") is True
+                               and "Ревизию документа прочитать не удалось" in gone_reason) else "FAIL",
+                    f"исход {result(rec).get('outcome')}, needs_reconciliation="
+                    f"{result(rec).get('needs_reconciliation')}, причина: {gone_reason[:200]}")
         finally:
             close_host(probe_rec)
     except (OSError, ValueError) as exc:

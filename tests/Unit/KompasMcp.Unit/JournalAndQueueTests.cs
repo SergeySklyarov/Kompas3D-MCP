@@ -412,6 +412,35 @@ public class OperationJournalTests : IDisposable
         Assert.Contains("in_flight", ReadWhileOpen(_file), StringComparison.Ordinal);
     }
 
+    /// <summary>INVARIANT: a terminal write that did not land after a COMPLETED mutation claims NO partial
+    /// trace, so reconciliation names the outcome from the document instead of answering "undetermined"
+    /// forever for a command this process saw applied. The negative control is the same rule one line
+    /// away: an unknown outcome that may have left a trace (a timeout, a death) still claims one.</summary>
+    /// <remarks>History: docs/decisions/host.md#reference-document</remarks>
+    [Fact]
+    public void ATerminalWriteThatDidNotLandClaimsNoPartialTrace()
+    {
+        using var journal = new OperationJournal(_file, appendLockTimeout: TimeSpan.FromMilliseconds(200));
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+
+        using (new JournalLockHolder(_file))
+        {
+            journal.Complete(id, """{"body_count":1}""");
+        }
+
+        Assert.True(journal.TryGet(id, out var record));
+        Assert.False(record!.Error!.PartialEffects,
+            "терминальная запись не удалась у ВЫПОЛНЕННОЙ команды: след модели известен, частичного нет");
+
+        var unknown = Guid.NewGuid().ToString();
+        journal.TryBegin(unknown, "kompas_extrude", Args(11), "doc-1", 3);
+        journal.MarkUnknown(unknown, "бюджет истёк");
+        Assert.True(journal.TryGet(unknown, out var timedOut));
+        Assert.True(timedOut!.Error!.PartialEffects,
+            "истёкший бюджет может оставить след: запись обязана это заявлять");
+    }
+
     /// <summary>INVARIANT (FIX H2): a torn tail is not only marked but REPAIRED — otherwise the first write
     /// of a new process glues itself to the fragment, its intent is lost, and a repeat with the same
     /// operation_id applies the mutation a SECOND time.</summary>

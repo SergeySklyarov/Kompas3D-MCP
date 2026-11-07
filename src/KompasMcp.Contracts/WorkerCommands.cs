@@ -20,6 +20,15 @@ public static class WorkerCommands
     public const string CreateDocument = "doc.create";
     public const string OpenDocument = "doc.open";
     public const string GetContext = "doc.context";
+
+    /// <summary>Which document owns each minted reference. A REGISTRY lookup: no COM, no model change.</summary>
+    /// <remarks>WHY A SEPARATE COMMAND. The Host must journal the document of a mutation that addresses it by
+    /// reference (<c>sketch_ref</c>, <c>face_ref</c>, ...) BEFORE the command leaves for the Worker, because an
+    /// unknown outcome is exactly the case where no answer comes back. The reference-to-document mapping lives
+    /// in the Worker's registry, so the Host asks for it instead of guessing. A control-lane command: the
+    /// lookup is pure memory, so it must not queue behind a long CAD command.
+    /// History: docs/decisions/host.md#reference-document</remarks>
+    public const string ReferenceDocuments = "ref.documents";
     public const string SaveDocument = "doc.save";
     public const string CloseDocument = "doc.close";
     public const string ListFeatures = "feat.list";
@@ -859,6 +868,12 @@ public sealed record GetContextCommand
     public required string DocumentId { get; init; }
 
     public string Detail { get; init; } = "minimal";
+}
+
+/// <summary>References whose owning document the Host needs before it journals a mutation.</summary>
+public sealed record ReferenceDocumentsCommand
+{
+    public required IReadOnlyList<string> References { get; init; }
 }
 
 public sealed record SaveDocumentCommand

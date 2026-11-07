@@ -343,6 +343,7 @@ public sealed class CommandDispatcher
                     ["sta"] = new JsonObject(_sta.Statistics().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),
                     ["com_filter"] = new JsonObject(_sta.MessageFilter.Snapshot().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),
                 }),
+                WorkerCommands.ReferenceDocuments => KompJson.ToNode(ReferenceDocuments(request)),
                 _ => KompJson.ToNode(EnvironmentSnapshot.Collect()),
             };
         }
@@ -965,6 +966,27 @@ public sealed class CommandDispatcher
             .Where(d => d.ApplicationId == command.ApplicationId)
             .Select(d => _session.Context(d, includeTopology: false))
             .ToList();
+    }
+
+    /// <summary>Owning document of every reference the Host names. A control command: the registry is
+    /// memory, so the answer must not wait behind a CAD command.</summary>
+    private object? ReferenceDocuments(IpcFrame request)
+    {
+        var command = Argument<ReferenceDocumentsCommand>(request);
+        var documents = new JsonArray();
+        foreach (var reference in command.References.Distinct(StringComparer.Ordinal))
+        {
+            if (_session.OwningDocumentId(reference) is { Length: > 0 } documentId)
+            {
+                documents.Add(new JsonObject
+                {
+                    ["reference_id"] = reference,
+                    ["document_id"] = documentId,
+                });
+            }
+        }
+
+        return new JsonObject { ["documents"] = documents };
     }
 
     private object? Create(IpcFrame request)

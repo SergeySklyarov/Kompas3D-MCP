@@ -19,6 +19,10 @@ public enum JournalOutcome
 /// <param name="HostPid">The Host process that wrote the record, once the journal carried the marker. A
 /// record of an earlier process is history, not "this session"; a missing marker is reported as missing,
 /// never as the current process.</param>
+/// <param name="DocumentUnresolved">Why the record carries no document, when the Host could not determine it
+/// (an unknown reference, a reference spread over several documents, an unreachable registry). The reason
+/// travels WITH the record so reconciliation names it instead of answering a silent "no document".
+/// History: docs/decisions/host.md#reference-document</param>
 public sealed record JournalRecord(
     string OperationId,
     string Tool,
@@ -31,7 +35,8 @@ public sealed record JournalRecord(
     ErrorDto? Error,
     DateTimeOffset? FinishedUtc,
     bool NeedsReconciliation,
-    int? HostPid = null);
+    int? HostPid = null,
+    string? DocumentUnresolved = null);
 
 /// <summary>Unresolved outcomes left by PREVIOUS Host processes: how many, how old, and whose.</summary>
 /// <param name="HostPid">The marker of the oldest record's process, or <c>null</c> when it carried none.</param>
@@ -272,7 +277,10 @@ public sealed class OperationJournal : IDisposable
 
     /// <summary>Record the intent to mutate, or decide this call is a replay. INVARIANT: appends and flushes
     /// before returning, so the durable record exists no matter what happens next.</summary>
-    public StartDecision TryBegin(string operationId, string tool, string canonicalArguments, string? documentId, long? baseRevision)
+    /// <param name="documentUnresolved">Why <paramref name="documentId"/> is absent, when the Host could not
+    /// determine it. Recorded with the intent so reconciliation can name the cause.</param>
+    public StartDecision TryBegin(string operationId, string tool, string canonicalArguments, string? documentId, long? baseRevision,
+        string? documentUnresolved = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(tool);
@@ -340,7 +348,8 @@ public sealed class OperationJournal : IDisposable
                 null,
                 NeedsReconciliation: false,
                 // The marker lets the next process tell ITS unknown outcomes from this one's.
-                HostPid: Environment.ProcessId);
+                HostPid: Environment.ProcessId,
+                DocumentUnresolved: documentUnresolved);
 
             // INVARIANT: the intent record MUST be durable and locked, else the command does NOT leave —
             // a lost record makes a replay look like "never ran". With no lock nothing is appended and
@@ -402,12 +411,16 @@ public sealed class OperationJournal : IDisposable
 
     /// <summary>The error shape for an unknown outcome. Shared with crash recovery so a command that died with
     /// the server and one that timed out are reported identically.</summary>
-    private static ErrorDto ReconcileError(string reason) => new(
+    /// <param name="partialEffects">Whether the failure may have left part of its effect behind. The MODEL
+    /// effect of a command that ANSWERED is known — only the journal line did not land — so that case states
+    /// <c>false</c> and reconciliation can name the outcome from the document.
+    /// History: docs/decisions/host.md#reference-document</param>
+    private static ErrorDto ReconcileError(string reason, bool partialEffects = true) => new(
         ErrorCodes.OutcomeUnknown,
         reason,
         RetryPolicy.AfterReconciliation,
         null,
-        true,
+        partialEffects,
         new JsonObject { ["reconciliation_required"] = true, ["needs_reconciliation"] = true });
 
     private bool Finish(string operationId, JournalOutcome outcome, string? resultJson, ErrorDto? error, bool needsReconciliation)
@@ -437,14 +450,18 @@ public sealed class OperationJournal : IDisposable
             // INVARIANT: a failed TERMINAL write after a completed mutation is not a success — the
             // intent line is durable and says `in_flight`, so after a restart the journal demands
             // reconciliation. Named NeedsReconciliation; the caller gets `false`.
-            // History: docs/decisions/journaling.md#terminal-write
+            // INVARIANT: this record claims NO partial trace: the command answered, so the MODEL effect is
+            // known and only the line is missing. With a claimed trace reconciliation answered
+            // "undetermined" forever for a mutation this process knows applied.
+            // History: docs/decisions/journaling.md#terminal-write, docs/decisions/host.md#reference-document
             TerminalWriteFailures++;
             _byOperation[operationId] = updated with
             {
                 NeedsReconciliation = true,
                 Error = updated.Error ?? ReconcileError(
                     "Терминальная запись журнала не удалась: исход команды известен только в этом " +
-                    "процессе и после перезапуска потребует согласования."),
+                    "процессе и после перезапуска потребует согласования.",
+                    partialEffects: updated.Outcome == JournalOutcome.OutcomeUnknown),
             };
             return false;
         }

@@ -731,15 +731,26 @@ public sealed class ToolInvoker : IAsyncDisposable
         // next command would be applied on top of an unknown state — the double application the
         // `after_reconciliation` policy exists to prevent. Reads and other documents are unaffected.
         // A retry of the SAME operation_id is not a new command: the journal replays its recorded
-        // outcome, so the refusal must not swallow that path.
-        if (ReadString(arguments, "document_id") is { Length: > 0 } targetDocument
-            && !_journal.TryGet(operationId, out _)
-            && _journal.NeedsReconciliationFor(targetDocument) is { } blocking
-            && !tool.PassesReconciliationBan(ReadString(arguments, "dirty_policy")))
+        // outcome, so the refusal must not swallow that path. The document is the one the call MUTATES:
+        // named by document_id, or owned by the references it names.
+        // History: docs/decisions/host.md#reference-document
+        var replay = _journal.TryGet(operationId, out _);
+        var documentId = ReadString(arguments, "document_id");
+        string? documentUnresolved = null;
+        if (documentId is null && !replay)
+        {
+            var binding = await DocumentForMutationAsync(tool, arguments, cancellationToken).ConfigureAwait(false);
+            documentId = binding.DocumentId;
+            documentUnresolved = binding.Reason;
+        }
+
+        var blocking = documentId is null ? null : _journal.NeedsReconciliationFor(documentId);
+        if (blocking is not null
+            && ReconciliationBanApplies(documentId, replay, blocking, tool, ReadString(arguments, "dirty_policy")))
         {
             throw new KompasContractException(
                 ErrorCodes.DocumentNeedsReconciliation,
-                $"У документа {targetDocument} операция {blocking.OperationId} ({blocking.Tool}) имеет "
+                $"У документа {documentId} операция {blocking.OperationId} ({blocking.Tool}) имеет "
                 + "неопределённый исход: её эффект неизвестен, и новая мутация того же документа "
                 + "применилась бы поверх неизвестного состояния. Вызов отклонён до журнала и до Worker. "
                 + "Выход: kompas_run с tool=kompas_operation_reconcile и этим operation_id, либо "
@@ -753,12 +764,13 @@ public sealed class ToolInvoker : IAsyncDisposable
                 details: new Dictionary<string, object?>
                 {
                     ["operation_id"] = blocking.OperationId,
-                    ["document_id"] = targetDocument,
+                    ["document_id"] = documentId,
                     ["tool"] = blocking.Tool,
                 });
         }
 
-        var decision = _journal.TryBegin(operationId, tool.Name, Canonical(tool, arguments), ReadString(arguments, "document_id"), ReadLong(arguments, "expected_revision"));
+        var decision = _journal.TryBegin(operationId, tool.Name, Canonical(tool, arguments), documentId,
+            ReadLong(arguments, "expected_revision"), documentUnresolved);
 
         if (!decision.Proceed && decision.Existing is { } existing)
         {
@@ -812,6 +824,58 @@ public sealed class ToolInvoker : IAsyncDisposable
                 + "очередной операции подтверждается, отмена выполняющейся - только запросом: COM не "
                 + "прерывается.",
             });
+    }
+
+    /// <summary>The document a reference-addressed mutation changes, asked of the Worker BEFORE the
+    /// journal line and the dispatch.</summary>
+    /// <remarks>INVARIANT: the answer never comes from the REPLY to the mutation — an unknown outcome is
+    /// exactly the case where there is no reply. A failed lookup is not a refusal: the call proceeds and the
+    /// reason travels with the record (see <see cref="ReferenceDocument"/>).
+    /// History: docs/decisions/host.md#reference-document</remarks>
+    private async Task<ReferenceDocument.Decision> DocumentForMutationAsync(
+        ToolDefinition tool, JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var references = ReferenceDocument.Values(arguments, ReferenceDocument.Fields(tool.InputSchema));
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (references.Count == 0)
+        {
+            return ReferenceDocument.Decide(references, owners);
+        }
+
+        string? failure = null;
+        try
+        {
+            var payload = new JsonObject
+            {
+                ["references"] = new JsonArray(references.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+            };
+            var timeout = TimeSpan.FromMilliseconds(CommandBudgets.HostWaitMs(
+                WorkerCommands.ReferenceDocuments, _options.OperationBudgetMs));
+            var frame = await _worker.SendAsync(
+                WorkerCommands.ReferenceDocuments, payload, timeout, isMutation: false, cancellationToken).ConfigureAwait(false);
+
+            if (frame.Error is not null)
+            {
+                failure = frame.Error.Message;
+            }
+            else if (frame.Payload?["documents"] is JsonArray rows)
+            {
+                foreach (var row in rows)
+                {
+                    if (ReadString(row, "reference_id") is { Length: > 0 } reference
+                        && ReadString(row, "document_id") is { Length: > 0 } document)
+                    {
+                        owners[reference] = document;
+                    }
+                }
+            }
+        }
+        catch (KompasContractException contract)
+        {
+            failure = contract.Message;
+        }
+
+        return ReferenceDocument.Decide(references, owners, failure);
     }
 
     private async Task<ResultEnvelope<JsonNode?>> ExecuteAsync(ToolDefinition tool, JsonObject arguments, string operationId, CancellationToken cancellationToken)
@@ -1314,9 +1378,16 @@ public sealed class ToolInvoker : IAsyncDisposable
             };
         }
 
-        if (record.DocumentId is not { Length: > 0 } documentId || record.BaseRevision is not { } baseRevision)
+        if (record.DocumentId is not { Length: > 0 } documentId)
         {
-            return Undetermined(operationId, record, "Журнал не записал документ или исходную ревизию: "
+            return Undetermined(operationId, record, "Журнал не записал документ операции: "
+                + (record.DocumentUnresolved ?? "причина не записана")
+                + " Сравнивать не с чем, исход остаётся неизвестным.");
+        }
+
+        if (record.BaseRevision is not { } baseRevision)
+        {
+            return Undetermined(operationId, record, "Журнал не записал исходную ревизию: "
                 + "сравнивать не с чем, исход остаётся неизвестным.");
         }
 
@@ -1437,6 +1508,19 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         return node;
     }
+
+    /// <summary>Whether the reconciliation ban applies to this call at all.</summary>
+    /// <remarks>INVARIANT: the ban is decided on the document the call MUTATES — named by
+    /// <c>document_id</c> or owned by its references — and only for a NEW command: a retry of the same
+    /// <c>operation_id</c> replays the recorded outcome instead of being refused.
+    /// History: docs/decisions/host.md#reference-document</remarks>
+    internal static bool ReconciliationBanApplies(
+        string? documentId, bool replay, JournalRecord? blocking, ToolDefinition tool, string? dirtyPolicy) =>
+        documentId is not null
+        && !replay
+        && blocking is not null
+        && string.Equals(blocking.DocumentId, documentId, StringComparison.Ordinal)
+        && !tool.PassesReconciliationBan(dirtyPolicy);
 
     /// <summary>Journal outcome plus the Host phase, in one place: every reader of a state must agree.</summary>
     /// <param name="dispatched">Whether the command already left the Host for the Worker.</param>

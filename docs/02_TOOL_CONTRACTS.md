@@ -85,11 +85,14 @@ CONFIG_INVALID.
   `dirty_policy` `refuse` (по умолчанию) или `discard` - закрытие без сохранения прекращает держать
   неизвестное состояние в сеансе, и несохранённые изменения при `discard` теряются. `dirty_policy=save`
   и `kompas_save_document` остаются под запретом: это запись неизвестного состояния в файл клиента.
-  **Граница:** запрет и согласование работают только у мутаций с аргументом `document_id`; у 16
-  инструментов его нет (`kompas_extrude`, `kompas_fillet`, `kompas_chamfer`, `kompas_hole`,
-  `kompas_sweep`, `kompas_rib`, `kompas_rotated`, `kompas_edit_sketch`, `kompas_update_feature`,
-  `kompas_delete_feature` и подобные), они адресуют документ через ссылки, и у них остаётся только
-  `expected_revision`. Разрыв - долг 84 `docs/status/TECH_DEBT.md`.
+  **Граница (уточнена 07.11.2026, наряд `DEBT_DOCUMENT_BINDING_0_14`):** запрет и согласование работают
+  у ВСЕХ мутаций каталога. У мутаций без аргумента `document_id` документ берётся из ССЫЛОК, которые вызов
+  называет (`sketch_ref`, `face_ref`, `edge_refs`, `body_ref`, `feature_ref`), и берётся до журнальной
+  записи и до отправки команды: Хост спрашивает Worker (`ref.documents`), а реестр ссылок отвечает, какому
+  документу принадлежит каждая. Документ, который ссылками не определяется (устаревшая или чужая ссылка,
+  ссылки разных документов), в запись не попадает и не может: запись тогда несёт причину
+  (`document_unresolved`), и `kompas_operation_reconcile` называет её в `reason`. Пустого документа без
+  причины не бывает. Подробности - `docs/decisions/host.md#reference-document`.
 
 Метка `needs_reconciliation` видна снаружи в трёх местах: в `error.details.needs_reconciliation`
 конверта отказа (вместе с `retry_policy: after_reconciliation`), полем `needs_reconciliation` в ответе

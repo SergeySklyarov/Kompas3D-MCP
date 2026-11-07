@@ -1,4 +1,4 @@
-﻿namespace KompasMcp.Contracts.Ipc;
+namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Which lane of the Worker answers a command.</summary>
 public enum WorkerLane
@@ -117,6 +117,10 @@ public static class WorkerCommandTable
         // command. The row exists because every constant must be described, and the control lane is
         // where a command that touches no COM belongs. History: docs/decisions/scenario.md#scenario-run
         Control(WorkerCommands.Scenario, WorkerAction.Read, 0);
+        // A lookup in the reference registry: pure memory, no COM. It answers on the control lane so the
+        // Host gets the document of a reference-addressed mutation without waiting behind a CAD command.
+        // History: docs/decisions/host.md#reference-document
+        Control(WorkerCommands.ReferenceDocuments, WorkerAction.Read, 2_000);
 
         // ---- session and document lifecycle ----
         // Launching or attaching an instance starts a process and waits for its answer.

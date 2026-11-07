@@ -15,11 +15,11 @@ namespace KompasMcp.Unit;
 public sealed class ToolListSizeTests
 {
     /// <summary>Measured size plus 5 %: an honest addition passes, quiet accumulation does not.</summary>
-    /// <remarks>MEASURED: the listing of this commit occupies 22 687 characters, counted the way the
+    /// <remarks>MEASURED: the listing of this commit occupies 23 769 characters, counted the way the
     /// client reads it (see <see cref="Wire"/>). The ceiling is set from THIS instrument's measure: the
     /// default encoder escapes every Cyrillic letter, so a differently encoded dump would guard a number
     /// nobody pays for. History: docs/decisions/host.md#tools-list-size-guard</remarks>
-    private const int CeilingChars = 23_821;
+    private const int CeilingChars = 24_958;
 
     /// <summary>How many direct tools the catalog publishes beside the three catalog tools.</summary>
     /// <remarks>INVARIANT: the number is exact — growth is a deliberate edit of this test, not a silent

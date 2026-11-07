@@ -24,8 +24,11 @@
   ровно один релиз.
 - **Инструментов:** 14, операций **129** (из них через `run` 118), схем **129**, профилей **21**
   (**134/134** режимов, **82/82** зависимостей, `problems []`).
-- **Последний полный прогон:** **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
-  `b31cd7e` (`--all` на файлах поставки, 2166 строк, 63 группы, Release), каталог
+- **Последний полный прогон:** **PASS 2157 / NAMED 8 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
+  `f57a7ba` (`--all`, 2168 строк, 35 групп, Release этого же коммита: `ProductVersion 0.13.0+f57a7ba`,
+  сборка на 22 с позже коммита), каталог `scratch/mcp-smoke/runs/20261107-164901-all-f57a7ba`; NAMED 8 и
+  UNKNOWN 3 - прежние строки, новых отказов нет. Зачётный прогон поставки `v0.13.0` - **PASS 2154 /
+  NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
   `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`; доказательства -
   `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` - 36 PASS,
   «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
@@ -256,8 +259,9 @@ UNKNOWN 3 / FAIL 0.
 - **Долг.** Строка 84 **ЗАКРЫТ**; строк **87**, закрыто **76**, открыто **11** - бюджет 0.14 (11)
   держится ровно, запас 0.
 - **Проверки.** `long-comment-blocks.py` - 0, `lint-dashes.py` - 0, `check-evidence-links.py` - 0,
-  `contract-diff.py` до/после - 0 структурных ломок; полный прогон на Release этого коммита назван в
-  «Последний полный прогон». Отчёт - `DEBT_DOCUMENT_BINDING_0_14_REPORT_20261107.md`.
+  `contract-diff.py` до/после - 0 структурных ломок; полный прогон `--all` на Release `f57a7ba` -
+  **PASS 2157 / NAMED 8 / UNKNOWN 3 / FAIL 0**, каталог и сборка названы в «Последний полный прогон».
+  Отчёт - `DEBT_DOCUMENT_BINDING_0_14_REPORT_20261107.md`.
 - **Очередь:** `PVS_FINDINGS_CLEANUP` -> `DEBT_MATE_DELETE_ROUTE_0_14` ->
   `DEBT_EXTERNAL_MARKER_ORDER_0_14` -> `SONAR_ANALYZER_TRIAL` -> новые возможности.
 

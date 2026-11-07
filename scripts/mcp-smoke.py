@@ -57731,6 +57731,35 @@ def dismantle_checks(client, rep, app_id, workdir):
             else "FAIL",
             f"до_очистки={two_count} после={read10.get('steps_count')} ошибки={clear_code}")
 
+    # ===== DSM-10b: перезапись поверх существующих шагов =====
+    # Перезапись - «очистка, затем добавление»: шагов в интерфейсе не правят. Строка сравнивает ЗНАЧЕНИЯ
+    # перечитанных шагов, а не только отсутствие ошибки: после записи одного шага поверх двух прежних в
+    # документе ровно один шаг с запрошенным расстоянием и одним компонентом, прежних расстояний нет.
+    call("kompas_set_dismantle",
+         {"document_id": asm, "expected_revision": revision(asm), "mode": True,
+          "steps": [{"component_refs": [first], "distance_mm": 30, "direction_ref": x_axis},
+                    {"component_refs": [second], "distance_mm": 20, "direction_ref": y_axis}]})
+    rewrite, rewrite_code = call("kompas_set_dismantle",
+                                 {"document_id": asm, "expected_revision": revision(asm),
+                                  "mode": True,
+                                  "steps": [{"component_refs": [second], "distance_mm": 55,
+                                             "direction_ref": x_axis}]})
+    read_rewrite, read_rewrite_code = steps(asm)
+    rewrite_rows = read_rewrite.get("steps") or []
+    row_rewrite = rewrite_rows[0] if rewrite_rows else {}
+    rep.add("DSM-10b.rewrite_over_existing",
+            "перезапись поверх двух шагов: шагов 2 -> 1, расстояние и компоненты запрошенные, старых нет",
+            "PASS" if (not rewrite_code and not read_rewrite_code
+                       and read_rewrite.get("steps_count") == 1
+                       and result(rewrite).get("steps_count_after") == 1
+                       and len(rewrite_rows) == 1
+                       and near(row_rewrite.get("distance_mm"), 55)
+                       and row_rewrite.get("component_count") == 1) else "FAIL",
+            f"после={result(rewrite).get('steps_count_after')} "
+            f"прочитано={read_rewrite.get('steps_count')} "
+            f"расстояния={[row.get('distance_mm') for row in rewrite_rows]} "
+            f"компонентов={row_rewrite.get('component_count')} ошибки={rewrite_code or read_rewrite_code}")
+
     # ===== DSM-11: save -> close -> open =====
     call("kompas_set_dismantle",
          {"document_id": asm, "expected_revision": revision(asm), "mode": True,

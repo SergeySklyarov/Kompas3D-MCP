@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Assembly;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -85,7 +86,32 @@ public partial class Api5Session
             // THE DOCUMENTED INTERFACE HAS NO «EDIT A STEP»: a rewrite is «clear, then add».
             if (before is > 0)
             {
-                Bool(() => parameters.ClearDismantleParameters());
+                // INVARIANT: a step is added only over a CONFIRMED empty list. MEASURED defect: the BOOL of
+                // the clear was discarded, so a failed clear appended the new steps to the old ones while
+                // the note claimed the old ones were removed. History: docs/decisions/dismantle.md#rewrite
+                var cleared = Bool(() => parameters.ClearDismantleParameters());
+                var stepsAfterClear = Int(() => parameters.DismantleStepsCount);
+                if (!DismantleClearRule.IsConfirmed(cleared, stepsAfterClear))
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.VerificationFailed,
+                        "Шаги разнесения НЕ перезаписаны: очистка не подтверждена — " +
+                        $"ClearDismantleParameters() ответил «{cleared?.ToString() ?? "не читается"}», шагов " +
+                        $"после очистки «{stepsAfterClear?.ToString() ?? "не читается"}». Ни один шаг не " +
+                        "записан: прежние шаги могли остаться, а добавление к ним выдало бы чужую " +
+                        "геометрию за запрошенную.",
+                        RetryPolicy.AfterReconciliation,
+                        partialEffects: true,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["steps_before"] = before,
+                            ["steps_after_clear"] = stepsAfterClear,
+                            ["clear_returned"] = cleared,
+                        });
+                }
+
+                notes.Add("steps_cleared_before_rewrite — шагов до записи " + before +
+                          ", после очистки 0: очистка подтверждена ответом и пересчётом");
                 notes.Add("steps_rewritten — шагов до записи " + before +
                           ": документированный интерфейс не правит шаг, поэтому старые удалены и записаны " +
                           "заново (ClearDismantleParameters, затем AddDismantleStep)");
@@ -139,12 +165,18 @@ public partial class Api5Session
         unverified.Add("placement_change_not_verified — смещение компонентов проверяет приёмка " +
                        "(группа --dismantle-only), а не этот вызов");
 
+        // INVARIANT: the level names what was CONFIRMED — one failed check lowers it to CallReturned.
+        // MEASURED defect: StructureChecked was published for any outcome, so a failed
+        // steps_count_after (or mode_written) still read as a structure-checked result.
         return new SetDismantleResult(
             Bool(() => assembly.DismantleMode),
             before ?? 0,
             after ?? steps.Count,
             steps,
-            new VerificationDto(VerificationLevel.StructureChecked, checks, unverified),
+            new VerificationDto(
+                checks.All(check => check.Passed) ? VerificationLevel.StructureChecked
+                    : VerificationLevel.CallReturned,
+                checks, unverified),
             notes);
     }
 

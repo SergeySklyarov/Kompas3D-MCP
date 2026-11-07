@@ -705,17 +705,6 @@ public partial class Api5Session
             unverified.Add("placement_not_applied — размещение при вставке НЕ задавалось " +
                            "(Transform=null в запросе): компонент стоит по умолчанию КОМПАСа");
         }
-        else if (!placementApplied)
-        {
-            unverified.Add("placement_not_read_back — перечитанное размещение не совпало с заданным: " +
-                           "запись не подтверждена");
-        }
-
-        if (!fixedApplied)
-        {
-            unverified.Add("fixed_not_read_back — перечитанный признак фиксации не совпал с заданным " +
-                           "или не прочитан");
-        }
 
         unverified.Add("reference_numbering_unverified — IPart7.Reference — ДИАГНОСТИЧЕСКОЕ число, а не " +
                        "адрес: адресация идёт по номеру в ksDocument3D.PartCollection(true) и " +
@@ -732,10 +721,9 @@ public partial class Api5Session
             componentRef,
             inserted,
             after,
-            new VerificationDto(
-                placementApplied && fixedApplied ? VerificationLevel.StructureChecked
-                    : VerificationLevel.CallReturned,
-                checks, unverified));
+            // An unapplied placement or fixing was REFUSED above, so reaching here means both matched:
+            // the level is not a second opinion on a check that already threw.
+            new VerificationDto(VerificationLevel.StructureChecked, checks, unverified));
     }
 
     // ── ASM-04 ──
@@ -832,18 +820,13 @@ public partial class Api5Session
         {
             "component_address_by_ordinal — " + lookupNote,
         };
-        if (!matched)
-        {
-            unverified.Insert(0, "placement_not_read_back — перечитанное размещение не совпало с " +
-                                 "заданным: запись не подтверждена");
-        }
 
         return new SetComponentPlacementResult(
             ToDto(stored, "component"),
             beforeMatrix,
             afterMatrix,
-            new VerificationDto(matched ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
-                checks, unverified));
+            // A mismatched placement was REFUSED above: reaching here means the re-read matched.
+            new VerificationDto(VerificationLevel.StructureChecked, checks, unverified));
     }
 
     // ── ASM-05 ──
@@ -1003,7 +986,7 @@ public partial class Api5Session
         var sourcePath = Ref(() => part5.fileName);
 
         var notes = new List<string>();
-        var dependents = ReadDependentMates(document, part5, payload, notes,
+        var dependents = ReadDependentMates(document, part5, notes,
             out var objectConstraintsCount, out var crossCheckNote);
 
         // THE REFUSAL COMES BEFORE COM MUTATES ANYTHING: with dependent mates and no agreement the model is
@@ -1175,10 +1158,7 @@ public partial class Api5Session
             disposition,
             before.Count,
             after.Count,
-            new VerificationDto(
-                removedIsAddressed && countFell && survivorsPreserved ? VerificationLevel.StructureChecked
-                    : VerificationLevel.CallReturned,
-                checks, unverified),
+            new VerificationDto(VerificationLevel.StructureChecked, checks, unverified),
             Warnings: notes.Count == 0 ? null : notes);
     }
 
@@ -1219,7 +1199,6 @@ public partial class Api5Session
     private List<MateRowDto> ReadDependentMates(
         DocumentEntry document,
         ksPart part5,
-        ComponentPayload payload,
         List<string> notes,
         out int? objectConstraintsCount,
         out string crossCheckNote)

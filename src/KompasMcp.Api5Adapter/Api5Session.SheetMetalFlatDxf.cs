@@ -259,6 +259,8 @@ public partial class Api5Session
             new("contour_matches_flat", verdict == FlatDxfVerdict.Match,
                 Observed: DescribeBox(contour?.Box),
                 Expected: flatBox is null ? "независимый габарит не прочитан" : DescribeBox(flatBox)),
+            // KEPT: a substituted view is REFUSED above, so this flag cannot fail; the acceptance line
+            // SMB.40 reads it, and dropping it would weaken the row rather than the product.
             new("view_is_not_front_view", verdict != FlatDxfVerdict.Substituted,
                 Observed: verdict == FlatDxfVerdict.Substituted ? "контур равен согнутому телу" : "не совпал",
                 Expected: "контур развёртки"),

@@ -202,9 +202,9 @@ public partial class Api5Session
         // material moved and — if the caller supplied one — the analytic volume matched. A growth, not
         // "+N faces": a chamfer that meets at a vertex leaves a corner face.
         // History: docs/decisions/adapter-features.md#face-count-growth-rule
+        // An uncreated chamfer was REFUSED above, so created.Created is not a second opinion here.
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
-        var geometryConfirmed = created.Created
-            && parametersStored
+        var geometryConfirmed = parametersStored
             && checks.Exists(c => c.Name == "face_count_grew" && c.Passed)
             && volumeMoved
             && numericMatch is not false;

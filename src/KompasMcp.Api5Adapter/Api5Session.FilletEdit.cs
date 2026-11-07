@@ -1079,7 +1079,7 @@ public partial class Api5Session
                 ErrorCodes.CapabilityUnavailable,
                 "Набор не перечитался в запрошенном составе: записано " +
                 $"[{string.Join(", ", targetRefs)}], на модели " +
-                (afterRefs is null ? "набор не читается" : $"[{string.Join(", ", afterRefs)}]") +
+                $"[{string.Join(", ", afterRefs)}]" +
                 ". Набор рёбер ТЕЛА задаёт скругление ЗАНОВО по указанным рёбрам, а не «оставь " +
                 "прежнее и добавь»: расширение набора им не выражается (сокращение и замена — " +
                 "выражаются, они идут через base_object_refs). " +
@@ -1122,10 +1122,6 @@ public partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
-        else if (!edgesSet)
-        {
-            unverified.Add("edges_not_read_back — набор не перечитался в ожидаемом составе");
-        }
 
         if (!declared.IsDeclared)
         {
@@ -1134,8 +1130,8 @@ public partial class Api5Session
                 "может быть подтверждена геометрически");
         }
 
-        var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
-
+        // Both the erased feature (afterRefs is null) and a set that did not read back were REFUSED above,
+        // so the only open question is the declared volume.
             return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             FilletFamily,
@@ -1146,7 +1142,7 @@ public partial class Api5Session
             DepthReadBackMm: null,
             EndConditionReadBack: null,
             new VerificationDto(
-                geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
+                volumeMatched ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
             // The radius was not touched: the edge set and the radius are different edit subjects, and the

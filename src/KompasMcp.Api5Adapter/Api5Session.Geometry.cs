@@ -420,7 +420,8 @@ public sealed partial class Api5Session
         // INVARIANT: the calls' answers are not evidence — probe G.9 saw every one succeed while the
         // dependent body vanished entirely. Losing the body is a refusal, not a geometry_checked result.
         // History: docs/decisions/adapter-core.md#guard-dependent-body-survived
-        if (command.Mode == SketchEditMode.Replace || command.Mode == SketchEditMode.DeleteEntities)
+        // DeleteEntities RETURNED above, so only Replace reaches this guard.
+        if (command.Mode == SketchEditMode.Replace)
         {
             GuardDependentBodySurvived(document, command, bodiesBefore);
         }

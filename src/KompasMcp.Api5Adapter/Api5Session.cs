@@ -919,7 +919,9 @@ public sealed partial class Api5Session : IDisposable
         {
             true => DocumentKind.Part,
             false => DocumentKind.Assembly,
-            null => command.Access == DocumentAccess.ReadOnly ? DocumentKind.Part : DocumentKind.Part,
+            // An unread kind is a PART, the same fallback RegisterImportedDocument uses: `command.Access`
+            // has no say in the kind, and both branches used to return Part anyway.
+            null => DocumentKind.Part,
         };
 
         if (kind == DocumentKind.Part && command.Access == DocumentAccess.Edit && IsReadOnlyHint(command.Path))

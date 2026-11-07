@@ -505,12 +505,8 @@ public sealed partial class Api5Session
             ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate"),
             before,
             after,
-            new VerificationDto(matched ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
-                checks,
-                matched ? new List<string>() : new List<string>
-                {
-                    "param_value_not_read_back — перечитанное значение не совпало с заданным",
-                }));
+            // A mismatched parameter was REFUSED above: reaching here means the re-read matched.
+            new VerificationDto(VerificationLevel.StructureChecked, checks, Array.Empty<string>()));
     }
 
     /// <summary>Why the requested field group does not fit the mate, with the field named.</summary>
@@ -761,16 +757,15 @@ public sealed partial class Api5Session
             ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate"),
             FixedName(before),
             FixedName(after),
-            new VerificationDto(matched ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
+            // An unconfirmed fixing flag was REFUSED above: reaching here means the re-read matched.
+            new VerificationDto(
+                VerificationLevel.StructureChecked,
                 new List<NamedCheck>
                 {
                     new("fixed_read_back", matched,
                         Observed: FixedName(after) ?? "не читается", Expected: command.Fixed),
                 },
-                matched ? new List<string>() : new List<string>
-                {
-                    "fixed_not_read_back — перечитанный признак не прочитан или не совпал с заданным",
-                }));
+                Array.Empty<string>()));
     }
 
     // ── MATE-05 ──

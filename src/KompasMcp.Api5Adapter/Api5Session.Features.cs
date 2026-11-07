@@ -643,8 +643,9 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["definition"] = definition?.GetType().Name });
         }
 
-        if (chamferRequested || filletRequested || sweepRequested || loftRequested || couplingsRequested
-            || shellRequested || holeRequested)
+        // The sweep, loft and shell families RETURNED above, so only the families with an API5 definition
+        // left can be named here as a foreign field on an extrusion.
+        if (chamferRequested || filletRequested || couplingsRequested || holeRequested)
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,

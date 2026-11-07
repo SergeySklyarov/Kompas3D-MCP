@@ -188,8 +188,7 @@ internal static class Api7SketchConstraints
         IDrawingObject? axis,
         double? value,
         string? expression,
-        string? variable,
-        List<string> notes)
+        string? variable)
     {
         IParametriticConstraint? constraint;
         try

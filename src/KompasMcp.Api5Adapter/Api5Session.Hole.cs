@@ -99,7 +99,7 @@ public partial class Api5Session
 
         var placementNotes = new List<string>();
         var (created, failure, reportedCountersinkDepth) =
-            CreateHoleMode(bridge, container, command, baseSurface, placementNotes);
+            CreateHoleMode(container, command, baseSurface, placementNotes);
 
         if (!created)
         {
@@ -416,7 +416,6 @@ public partial class Api5Session
     /// triple, not a pair, because the countersink has a field the object computes itself, and losing
     /// it would pass a written number off as the effective one.</summary>
     private static (bool Created, string? Failure, double? ReportedDepth) CreateHoleMode(
-        Api7Bridge bridge,
         IModelContainer container,
         HoleCommand command,
         IModelObject baseSurface,

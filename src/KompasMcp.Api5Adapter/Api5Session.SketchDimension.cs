@@ -591,12 +591,12 @@ public sealed partial class Api5Session
 
             // The documented precondition of the value (iparametriticconstraint_value.html).
             var fixedDim = Api7SketchConstraints.Create(
-                host, ksConstraintTypeEnum.ksCFixedDim, null, null, null, null, null, null, null, notes);
+                host, ksConstraintTypeEnum.ksCFixedDim, null, null, null, null, null, null, null);
             notes.Add($"ksCFixedDim: {Describe(fixedDim)}");
 
             var valueDim = Api7SketchConstraints.Create(
                 host, ksConstraintTypeEnum.ksCDimWithVariable, null, null, null, null, value,
-                value.ToString(System.Globalization.CultureInfo.InvariantCulture), null, notes);
+                value.ToString(System.Globalization.CultureInfo.InvariantCulture), null);
             notes.Add($"ksCDimWithVariable: {Describe(valueDim)}");
 
             // MEASURED and named rather than left unsaid: the association is REFUSED for these kinds,
@@ -867,14 +867,13 @@ public sealed partial class Api5Session
             //    is the SAFEARRAY form, and the partner IS the measured segment.
             var association = Api7SketchConstraints.Create(
                 dimensionHost, ksConstraintTypeEnum.ksCAssociation, null,
-                new object[] { segmentHost }, null, null, null, null, null, notes);
+                new object[] { segmentHost }, null, null, null, null, null);
             var associationCreated = association.Created == true;
             notes.Add($"ksCAssociation: {Describe(association)}");
 
             // 2. The fixed dimension — the documented precondition of the value.
             var fixedDim = Api7SketchConstraints.Create(
-                dimensionHost, ksConstraintTypeEnum.ksCFixedDim, null, null, null, null, null, null, null,
-                notes);
+                dimensionHost, ksConstraintTypeEnum.ksCFixedDim, null, null, null, null, null, null, null);
             var fixedDimCreated = fixedDim.Created == true;
             notes.Add($"ksCFixedDim: {Describe(fixedDim)}");
 
@@ -882,7 +881,7 @@ public sealed partial class Api5Session
             var valueDim = Api7SketchConstraints.Create(
                 dimensionHost, ksConstraintTypeEnum.ksCDimWithVariable, null, null, null, null,
                 valueMm, valueMm.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                null, notes);
+                null);
             var valueDimCreated = valueDim.Created == true;
             notes.Add($"ksCDimWithVariable: {Describe(valueDim)}");
 

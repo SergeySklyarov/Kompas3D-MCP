@@ -56,7 +56,7 @@ public sealed partial class Api5Session
         var pairs = new List<InterferencePairDto>();
         foreach (var (a, b) in InterferenceRules.Pairs(components.Count))
         {
-            pairs.Add(CheckInterferencePair(document, components[a], components[b], command, notes));
+            pairs.Add(CheckInterferencePair(components[a], components[b], command, notes));
         }
 
         return new CheckInterferenceResult(
@@ -128,7 +128,6 @@ public sealed partial class Api5Session
     }
 
     private InterferencePairDto CheckInterferencePair(
-        DocumentEntry document,
         InterferenceComponent a,
         InterferenceComponent b,
         CheckInterferenceCommand command,

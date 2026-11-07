@@ -77,7 +77,7 @@ public sealed partial class Api5Session
         var toRead = Math.Min(limit, total);
         for (var index = 0; index < toRead; index++)
         {
-            var row = ReadVariableAt(document, collection, index, notes);
+            var row = ReadVariableAt(collection, index, notes);
             if (row is not null)
             {
                 rows.Add(row);
@@ -697,7 +697,7 @@ public sealed partial class Api5Session
 
     /// <summary>Read one variable by index, naming an unread field rather than filling it.</summary>
     private static VariableRowDto? ReadVariableAt(
-        DocumentEntry document, ksVariableCollection collection, int index, List<string> notes)
+        ksVariableCollection collection, int index, List<string> notes)
     {
         ksVariable? variable;
         try

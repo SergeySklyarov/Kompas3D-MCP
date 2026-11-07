@@ -166,7 +166,7 @@ public sealed partial class Api5Session
 
             var created = Api7SketchConstraints.Create(
                 host, type, command.PointIndex, partner, command.PartnerPointIndex, axis,
-                command.Value, command.Expression, command.Variable, notes);
+                command.Value, command.Expression, command.Variable);
 
             // CONFIRMATION — the RE-READ LIST **AND** THE RETURN OF Create(), and BOTH are required.
             // MEASURED: for ksCFixedDim the kernel answers Create() = FALSE and yet a record of that type

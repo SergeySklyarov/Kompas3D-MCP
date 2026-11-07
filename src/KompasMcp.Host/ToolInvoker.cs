@@ -28,7 +28,9 @@ public sealed class ToolInvoker : IAsyncDisposable
     // truncated empty file, and a missing directory it created itself; the only defence is a HOST
     // refusal before COM. source_path (order C1) is a READ, like input_path — named because the path
     // policy judges a field by its NAME. History: docs/decisions/host.md#path-fields
-    private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
+    // internal, not private: the catalog guard test (ToolPathFieldGuardTests) checks every published
+    // field against THIS list, so it cannot drift from the policy.
+    internal static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 
     /// <summary>Result size a status answer carries whole. Beyond it the answer holds a bounded excerpt
     /// and says so: <c>result_truncated</c> plus the original <c>result_size_bytes</c>.

@@ -18,6 +18,11 @@ namespace KompasMcp.Api5Adapter;
 /// History: docs/decisions/geometry.md#stl</remarks>
 public sealed partial class Api5Session
 {
+    /// <summary>Tolerance of the re-read tessellation parameters: the parameter object keeps reals, so an
+    /// exact comparison reports "not applied" for a value that was applied. The level does not depend on
+    /// it; the note <c>tessellation_parameters_not_applied</c> does.</summary>
+    private const double TessellationToleranceMm = 1e-9;
+
     public ExportStlResultDto ExportStl(ExportStlCommand command)
     {
         // The write parameters (format code, binary flag, accuracy) are built by a PURE function so that
@@ -193,7 +198,11 @@ public sealed partial class Api5Session
                 + "противоположным значением");
         }
 
-        if (readLength != plan.LengthMm || readAngle != plan.AngleDeg)
+        // A re-read parameter is compared with a TOLERANCE, not by exact equality: the parameter object
+        // stores reals, and an exact comparison published tessellation_parameters_not_applied for a value
+        // the object had applied. The level does not depend on this note.
+        if (Math.Abs(readLength - plan.LengthMm) > TessellationToleranceMm
+            || Math.Abs(readAngle - plan.AngleDeg) > TessellationToleranceMm)
         {
             unverified.Add(
                 "tessellation_parameters_not_applied — параметры триангуляции не удержались в объекте "

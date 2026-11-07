@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-01T18:43:44+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-07T12:31:57+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 166, маршрутов 774.
-- Измеряемая сборка: `release_build`, коммит `a40171a`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `70ab659207b2fa8b8fe3eabd981b2047664f6a56a52f83a8ac45d3e3ab67cb28`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 167, маршрутов 777.
+- Измеряемая сборка: `release_build`, коммит `b31cd7e`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `ff257fe394dfaa464bc4a0490a17ac5f4f298c98a839dba2ea32ef04a28baa72`.
 
 ## 2. Сверка полноты
 
@@ -21,9 +21,9 @@
 | schemas_matching_wire_by_shape | 11 |
 | matrix_rows | 226 |
 | catalog_modes_and_variants | 236 |
-| com_routes | 785 |
-| com_routes_confirmed_by_documentation | 769 |
-| com_routes_confirmed_over_wire | 769 |
+| com_routes | 788 |
+| com_routes_confirmed_by_documentation | 772 |
+| com_routes_confirmed_over_wire | 772 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 5 |
 | com_routes_confirmed_by_name | 6 |
@@ -37,16 +37,16 @@
 | rows_action_without_dedicated_row | 23 |
 | rows_actions_without_required_calls | 28 |
 | rows_status_lowered_by_unsupported_actions | 28 |
-| acceptance_rows | 2133 |
-| acceptance_calls_journal | 19285 |
-| acceptance_rows_with_call_window | 2133 |
+| acceptance_rows | 2166 |
+| acceptance_calls_journal | 19629 |
+| acceptance_rows_with_call_window | 2166 |
 | required_of_mismatches_matrix_vs_profile | 16 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 9, 'route_field': 5}.
-COM-маршрутов по сборкам: {'api7': 496, 'api5': 278, 'adapter-twins': 11}.
+COM-маршрутов по сборкам: {'api7': 495, 'api5': 282, 'adapter-twins': 11}.
 
 ## 3. Инструменты
 
@@ -1376,7 +1376,6 @@ COM-маршрутов по сборкам: {'api7': 496, 'api5': 278, 'adapter-
 | `ksMathPointParam.y` | api5 | property | `prop Double y` | 2 | Подтверждено | групповая страница |
 | `IView.Valid` | api7 | property | `prop Boolean Valid` | 1 | Подтверждено | перечень интерфейса |
 | `ILayoutSheets.Count` | api7 | property | `prop Int32 Count` | 2 | Подтверждено | перечень интерфейса |
-| `ILayoutSheet.Stamp` | api7 | property | `prop _Stamp Stamp` | 1 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.BlocksGabarits` | api7 | property | `prop Object BlocksGabarits` | 2 | Подтверждено | перечень интерфейса |
 | `ILayoutSheet.GetPlaceInsideFrames` | api7 | method | `Boolean GetPlaceInsideFrames(Double& Left, Double& Top, Double& Right,` | 1 | Подтверждено | перечень интерфейса |
 | `IDimensionText.AutoNominalValue` | api7 | property | `prop Boolean AutoNominalValue` | 1 | Подтверждено | перечень интерфейса |
@@ -1387,16 +1386,20 @@ COM-маршрутов по сборкам: {'api7': 496, 'api5': 278, 'adapter-
 | `ksVertexDefinition.GetPoint` | api5 | method | `Boolean GetPoint(Double& x, Double& y, Double& z)` | 3 | Подтверждено | перечень интерфейса |
 | `ksEdgeDefinition.IsStraight` | api5 | method | `Boolean IsStraight()` | 2 | Подтверждено | перечень интерфейса |
 | `ksFaceCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 15 | Подтверждено | перечень интерфейса |
-| `ksFaceDefinition.GetSurface` | api5 | method | `Object GetSurface()` | 9 | Подтверждено | перечень интерфейса |
-| `ksSurface.GetSurfaceParam` | api5 | method | `Object GetSurfaceParam()` | 8 | Подтверждено | перечень интерфейса |
+| `ksFaceDefinition.GetSurface` | api5 | method | `Object GetSurface()` | 10 | Подтверждено | перечень интерфейса |
+| `ksSurface.GetSurfaceParam` | api5 | method | `Object GetSurfaceParam()` | 9 | Подтверждено | перечень интерфейса |
 | `ksCylinderParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 5 | Подтверждено | перечень интерфейса |
-| `ksPlacement.GetOrigin` | api5 | method | `Boolean GetOrigin(Double& x, Double& y, Double& z)` | 9 | Подтверждено | перечень интерфейса |
-| `ksPlacement.GetVector` | api5 | method | `Boolean GetVector(Int32 type, Double& x, Double& y, Double& z)` | 6 | Подтверждено | перечень интерфейса |
+| `ksPlacement.GetOrigin` | api5 | method | `Boolean GetOrigin(Double& x, Double& y, Double& z)` | 10 | Подтверждено | перечень интерфейса |
+| `ksPlacement.GetVector` | api5 | method | `Boolean GetVector(Int32 type, Double& x, Double& y, Double& z)` | 7 | Подтверждено | перечень интерфейса |
 | `ksCylinderParam.radius` | api5 | property | `prop Double radius` | 8 | Подтверждено | перечень интерфейса |
 | `ksPlaneParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 3 | Подтверждено | перечень интерфейса |
 | `ksFaceDefinition.GetArea` | api5 | method | `Double GetArea(UInt32 bitVector)` | 5 | Подтверждено | перечень интерфейса |
 | `ksSurface.IsCylinder` | api5 | method | `Boolean IsCylinder()` | 5 | Подтверждено | перечень интерфейса |
 | `ksCylinderParam.height` | api5 | property | `prop Double height` | 5 | Подтверждено | перечень интерфейса |
+| `ksSurface.IsCone` | api5 | method | `Boolean IsCone()` | 1 | Подтверждено | перечень интерфейса |
+| `ksConeParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 1 | Подтверждено | перечень интерфейса |
+| `ksConeParam.radius` | api5 | property | `prop Double radius` | 1 | Подтверждено | перечень интерфейса |
+| `ksConeParam.height` | api5 | property | `prop Double height` | 1 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.Init` | api5 | method | `Boolean Init()` | 4 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.format` | api5 | property | `prop Int16 format` | 4 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.Create` | api5 | method | `Boolean Create(Boolean invisible, Boolean typeDoc)` | 2 | Подтверждено | перечень интерфейса |
@@ -1835,14 +1838,14 @@ COM-маршрутов по сборкам: {'api7': 496, 'api5': 278, 'adapter-
 | `IModelContainer.Holes3D` | api7 | property | `prop Holes3D Holes3D` | 6 | Подтверждено | перечень интерфейса |
 | `IHole3D.HoleParameters` | api7 | property | `prop IKompasAPIObject HoleParameters` | 12 | Подтверждено | перечень интерфейса |
 | `IHole3D.Diameter` | api7 | property | `prop Double Diameter` | 11 | Подтверждено | перечень интерфейса |
+| `ICountersinkHoleParameters.CountersinkAngle` | api7 | property | `prop Double CountersinkAngle` | 3 | Подтверждено | перечень интерфейса |
+| `ICountersinkSpotfacingHoleParameters.CountersinkAngle` | api7 | property | `prop Double CountersinkAngle` | 3 | Подтверждено | перечень интерфейса |
 | `IHole3D.Depth` | api7 | property | `prop Double Depth` | 3 | Подтверждено | перечень интерфейса |
 | `ISpotfacingHoleParameters.SpotfacingDiameter` | api7 | property | `prop Double SpotfacingDiameter` | 3 | Подтверждено | перечень интерфейса |
-| `ICountersinkSpotfacingHoleParameters.SpotfacingCountersinkDiameter` | api7 | property | `prop Double SpotfacingCountersinkDiameter` | 3 | Подтверждено | перечень интерфейса |
+| `ICountersinkSpotfacingHoleParameters.SpotfacingCountersinkDiameter` | api7 | property | `prop Double SpotfacingCountersinkDiameter` | 4 | Подтверждено | перечень интерфейса |
 | `ISpotfacingHoleParameters.SpotfacingDepth` | api7 | property | `prop Double SpotfacingDepth` | 3 | Подтверждено | перечень интерфейса |
 | `ICountersinkSpotfacingHoleParameters.SpotfacingDepth` | api7 | property | `prop Double SpotfacingDepth` | 3 | Подтверждено | перечень интерфейса |
 | `ICountersinkHoleParameters.CountersinkDiameter` | api7 | property | `prop Double CountersinkDiameter` | 3 | Подтверждено | перечень интерфейса |
-| `ICountersinkHoleParameters.CountersinkAngle` | api7 | property | `prop Double CountersinkAngle` | 3 | Подтверждено | перечень интерфейса |
-| `ICountersinkSpotfacingHoleParameters.CountersinkAngle` | api7 | property | `prop Double CountersinkAngle` | 3 | Подтверждено | перечень интерфейса |
 | `ICountersinkHoleParameters.CountersinkDepth` | api7 | property | `prop Double CountersinkDepth` | 4 | Подтверждено | перечень интерфейса |
 | `IConicHoleParameters.ConicAngle` | api7 | property | `prop Double ConicAngle` | 3 | Подтверждено | перечень интерфейса |
 | `IConicHoleParameters.ConicDiameter` | api7 | property | `prop Double ConicDiameter` | 1 | Подтверждено | перечень интерфейса |

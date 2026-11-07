@@ -349,7 +349,7 @@ def self_test():
         "        serverName: kompas\n"
         "        transport: stdio\n"
         "        command: C:\\install\\current\\KompasMcp.Host.exe\n"
-        "        args: ['--config', 'C:\\Users\\A B\\kompas.json']\n"
+        "        args: ['--config', 'D:\\Kompas Data\\A B\\kompas.json']\n"
         "        env:\n"
         "          KOMPAS_MCP_LOG: C:\\logs\\host.jsonl\n"
     )
@@ -372,7 +372,7 @@ def self_test():
         entry, problem = dsh_mcp_entry(path, "kompas")
         check("запись dsh разобрана: команда, аргументы, переменная окружения",
               entry is not None and entry["command"].endswith("KompasMcp.Host.exe")
-              and entry["args"] == ["--config", "C:\\Users\\A B\\kompas.json"]
+              and entry["args"] == ["--config", "D:\\Kompas Data\\A B\\kompas.json"]
               and "KOMPAS_MCP_LOG" in entry["env"], str(problem))
         entry, problem = dsh_mcp_entry(path, "absent")
         check("нет записи - отказ называет файл и то, что в нём есть",

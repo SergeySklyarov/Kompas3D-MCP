@@ -381,7 +381,11 @@ internal sealed class EVProbe : IDisposable
                 return 4;
             }
 
-            var height = mode == "--mutate-norebuild" ? Height + 1 : Height + 10;
+            // An explicit `--height N` lets a caller change a model whose depth already equals the default target.
+            var heightArg = Array.IndexOf(args, "--height");
+            var height = heightArg > 0 && heightArg + 1 < args.Length
+                ? double.Parse(args[heightArg + 1], System.Globalization.CultureInfo.InvariantCulture)
+                : mode == "--mutate-norebuild" ? Height + 1 : Height + 10;
             extrusion.SetSideParam(true, 0, height, 0, false);
             item.Update();
             part.Update();

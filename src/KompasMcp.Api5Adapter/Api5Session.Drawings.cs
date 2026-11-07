@@ -818,8 +818,6 @@ public sealed partial class Api5Session
         var p2 = command.Point2;
         var position = command.Position;
 
-        double? valueMm = null;
-        string kindWire;
         switch (kind)
         {
             case "linear":
@@ -850,9 +848,8 @@ public sealed partial class Api5Session
                     }
 
                     ConfirmUpdate(dim.Update(), kind);
-                    valueMm = Distance(p1, p2);
-                    kindWire = "linear";
-                    var row = ReadLineDimension(document, command.ViewRef, dim, kindWire, valueMm);
+                    var valueMm = Distance(p1, p2);
+                    var row = ReadLineDimension(document, command.ViewRef, dim, "linear", valueMm);
                     RefusePointMismatch(document, p1, p2, row);
                     BumpRevision(document, "drawing.add_dimension");
                     return FinishDimension(document, row, valueMm);
@@ -955,9 +952,7 @@ public sealed partial class Api5Session
                 ConfirmUpdate(updated, kind);
                 RefuseDimensionMismatch(kind, document, centreX, centreY, sheetRadius, nominal, writeNominal,
                     readXc, readYc, readRadius, readNumber);
-                kindWire = kind;
                 var value = readRadius is { } read ? ViewDimensionScale.ModelRadius(read, scale) : readRadius;
-                valueMm = value;
                 var label = isRadial ? "radial" : "diametral";
                 var row = new DimensionRowDto
                 {
@@ -2125,7 +2120,7 @@ public sealed partial class Api5Session
             IView? view = null;
             try
             {
-                view = views.get_View(i) as IView;
+                view = views.get_View(i);
                 if (view is null)
                 {
                     continue;
@@ -2332,7 +2327,7 @@ public sealed partial class Api5Session
             IView? view = null;
             try
             {
-                view = views.get_View(i) as IView;
+                view = views.get_View(i);
                 if (view is not null)
                 {
                     ids.Add(((int)view.Reference).ToString(CultureInfo.InvariantCulture));
@@ -2383,7 +2378,7 @@ public sealed partial class Api5Session
             IView? candidate = null;
             try
             {
-                candidate = views.get_View(i) as IView;
+                candidate = views.get_View(i);
             }
             catch (COMException)
             {

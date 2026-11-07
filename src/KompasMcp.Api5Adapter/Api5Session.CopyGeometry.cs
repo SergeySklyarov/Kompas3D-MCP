@@ -51,7 +51,6 @@ public partial class Api5Session
 
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision)
-                        as IModelContainer
                         ?? throw new KompasContractException(
                             ErrorCodes.CapabilityUnavailable,
                             "IModelContainer приёмника не получен: "
@@ -85,7 +84,7 @@ public partial class Api5Session
             // add call takes the coclass. MEASURED: null is accepted here, the source CS is not required.
             LocalCoordinateSystem? externalCs = source.Document7 is null
                 ? null
-                : operation.GetExternalLocalCooordinateSystem(source.Document7) as LocalCoordinateSystem;
+                : operation.GetExternalLocalCooordinateSystem(source.Document7);
             var returned = source.Document7 is not null
                            && SafeBool(() => operation.AddInitialObjectsFromExternalDocument(
                                source.Document7, externalCs!, new object[] { source.Object })) == true;
@@ -239,7 +238,6 @@ public partial class Api5Session
 
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision)
-                        as IModelContainer
                         ?? throw new KompasContractException(
                             ErrorCodes.CapabilityUnavailable,
                             "IModelContainer приёмника не получен: "

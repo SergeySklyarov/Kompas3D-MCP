@@ -482,9 +482,11 @@ public sealed partial class Api5Session
         }
         else
         {
-            _sketchProfileBox[command.SketchRef] = ProfileBox.Union(
+            // Union ignores a null side, and the footprint is non-null here, so the merge exists.
+            var merged = ProfileBox.Union(
                 _sketchProfileBox.TryGetValue(command.SketchRef, out var previousBox) ? previousBox : null,
-                footprint) ?? footprint.Value;
+                footprint);
+            _sketchProfileBox[command.SketchRef] = merged!.Value;
         }
 
         // The composition is re-read from the model BEFORE the profile is remembered: a sketch that does
@@ -2607,9 +2609,9 @@ public sealed partial class Api5Session
             foreach (var index in _delta.Keys.Where(k => k != exceptIndex).OrderBy(k => k))
             {
                 var parts = new List<string>();
-                if (VolumeMoved(_delta[index], MatchedOf(index)?.Volume))
+                if (_delta[index] is double moved && VolumeMoved(moved, MatchedOf(index)?.Volume))
                 {
-                    parts.Add("ΔV(после−до)=" + (_delta[index] ?? 0d).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " мм³");
+                    parts.Add("ΔV(после−до)=" + moved.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " мм³");
                 }
 
                 if (BoxChangedOf(index))

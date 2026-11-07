@@ -455,6 +455,8 @@ public partial class Api5Session
 
         return new EditSheetMetalBodyResult(
             ToDto(stored, "sheet metal body (edit)"),
+            // KEPT: ReadBody returns a non-null DTO, but the nullable annotation of the property does not
+            // say so — without this fallback the build warns CS8604.
             before ?? new SheetMetalBodyDto(),
             after!,
             new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));

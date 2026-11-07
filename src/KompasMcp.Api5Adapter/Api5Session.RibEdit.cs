@@ -137,7 +137,7 @@ public partial class Api5Session
                 && Math.Abs(readThickness - targetThickness) <= 1e-6,
                 Observed: Num(readBack?.NormalThicknessMm) + " мм", Expected: Num(targetThickness) + " мм"),
             new("thin_type_read_back", readBack?.ThinType == thinType,
-                Observed: Num(readBack?.ThinType) ?? "не прочитано",
+                Observed: Num(readBack?.ThinType),
                 Expected: thinType.ToString(CultureInfo.InvariantCulture)),
         };
 

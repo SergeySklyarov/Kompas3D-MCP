@@ -37,8 +37,7 @@ public sealed class Api5SessionVisibilityGuardTests
     private static IEnumerable<string> CodeLines(params string[] paths) => paths
         .SelectMany(path => File.ReadLines(path))
         .Select(line => line.TrimStart())
-        .Where(line => !line.StartsWith("//", StringComparison.Ordinal)
-                       && !line.StartsWith("///", StringComparison.Ordinal));
+        .Where(line => !line.StartsWith("//", StringComparison.Ordinal));
 
     [Fact]
     public void Adapter_NeverCallsZoom_MustNotResetUserCamera()

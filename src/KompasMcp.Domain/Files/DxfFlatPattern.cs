@@ -203,7 +203,7 @@ public static class DxfFlatPattern
         foreach (var (start, end) in Blocks(lines, region.Value.Start, region.Value.End))
         {
             var entity = ParseBlock(lines, start, end);
-            if (entity is null || (window is { } box && !Inside(entity, box)))
+            if (window is { } box && !Inside(entity, box))
             {
                 continue;
             }
@@ -245,10 +245,6 @@ public static class DxfFlatPattern
         foreach (var (blockStart, blockEnd) in Blocks(lines, start, end))
         {
             var entity = ParseBlock(lines, blockStart, blockEnd);
-            if (entity is null)
-            {
-                continue;
-            }
 
             if (entity.Type == "VERTEX")
             {
@@ -380,7 +376,7 @@ public static class DxfFlatPattern
         }
     }
 
-    private static DxfFlatEntity? ParseBlock(string[] lines, int start, int end)
+    private static DxfFlatEntity ParseBlock(string[] lines, int start, int end)
     {
         var type = lines[start + 1].Trim();
         var layer = "0";

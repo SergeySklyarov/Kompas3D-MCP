@@ -44,7 +44,7 @@ public sealed partial class Api5Session
     {
         try
         {
-            return (modelObject?.Owner as IFeature7)?.ObjectError;
+            return modelObject?.Owner?.ObjectError;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

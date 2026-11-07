@@ -176,7 +176,7 @@ public partial class Api5Session
     /// and a saved object would edit the wrong feature. The index comes from the match made in this same
     /// call, before the write.</remarks>
     private static IFeaturePattern PatternAt(IModelContainer container, int index) =>
-        container.FeaturePatterns?.FeaturePattern[index] as IFeaturePattern
+        container.FeaturePatterns?.FeaturePattern[index]
         ?? throw new KompasContractException(
             ErrorCodes.GeometryFailed,
             $"Элемент FeaturePatterns[{index}] не читается как признак массива.",

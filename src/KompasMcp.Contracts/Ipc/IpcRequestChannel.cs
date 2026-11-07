@@ -53,7 +53,6 @@ public sealed class IpcRequestChannel : IAsyncDisposable
 
         var waiter = new TaskCompletionSource<IpcFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[requestId] = waiter;
-        var written = false;
         try
         {
             // A request that arrives after the reader has already stopped would wait for an answer
@@ -73,10 +72,9 @@ public sealed class IpcRequestChannel : IAsyncDisposable
             // The write runs with CancellationToken.None: half a written frame corrupts the stream
             // (length prefix read, payload not), and a mid-write cancel would break the whole
             // channel rather than cancel one command.
+            // From this moment the command is ALREADY SENT: every catch below is a cancellation AFTER the
+            // write, because a cancellation before it leaves through the earlier ThrowIfCancellationRequested.
             await WriteAsync(request, CancellationToken.None).ConfigureAwait(false);
-
-            // From this moment the command is ALREADY SENT.
-            written = true;
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
@@ -95,7 +93,7 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                         partialEffects: true,
                         details: new Dictionary<string, object?> { ["request_id"] = requestId });
                 }
-                catch (OperationCanceledException) when (written && isMutation)
+                catch (OperationCanceledException) when (isMutation)
                 {
                     // The client cancelled, but the command is ALREADY in the Worker: cancelling the
                     // token does not abort the COM call. Calling this "never sent" would let the
@@ -113,7 +111,7 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                             ["cancelled_after_send"] = true,
                         });
                 }
-                catch (OperationCanceledException) when (written)
+                catch (OperationCanceledException)
                 {
                     // Read: the model did not change, but the answer is still missing; "cancelled"
                     // is not confirmation, only absence of observation.

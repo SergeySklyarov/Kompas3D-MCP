@@ -33,7 +33,7 @@ public static class Program
         {
             // KOMPAS v24 is x64: a 32-bit worker would fail later with messages that do not mention
             // bitness at all.
-            log.Write("fatal", "bitness mismatch", new { process = Environment.Is64BitProcess ? "x64" : "x86" });
+            log.Write("fatal", "bitness mismatch", new { process = "x86" });
             Console.Error.WriteLine("[worker] процесс x86, а КОМПАС v24 — x64: COM-подключение невозможно.");
             return 4;
         }

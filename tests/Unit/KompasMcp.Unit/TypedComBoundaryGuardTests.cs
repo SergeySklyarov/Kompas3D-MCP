@@ -37,8 +37,7 @@ public sealed class TypedComBoundaryGuardTests
     /// <summary>Executable code lines: a comment or XML doc counts as a reference, not a call.</summary>
     private static IEnumerable<(string Path, int Number, string Line)> CodeLines(IEnumerable<string> paths) =>
         paths.SelectMany(path => File.ReadLines(path).Select((line, number) => (path, number, line)))
-            .Where(row => !row.line.TrimStart().StartsWith("//", StringComparison.Ordinal)
-                          && !row.line.TrimStart().StartsWith("///", StringComparison.Ordinal));
+            .Where(row => !row.line.TrimStart().StartsWith("//", StringComparison.Ordinal));
 
     [Theory]
     [InlineData("KompasMcp.Api5Adapter")]

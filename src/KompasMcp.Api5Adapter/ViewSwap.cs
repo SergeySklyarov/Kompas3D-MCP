@@ -35,6 +35,16 @@ internal sealed class ViewSwapState
 
     public long? Scheme { get; init; }
 
+    /// <summary>How many projections were read looking for the current one, and how many of those reads
+    /// refused. Published with the answer so "no current projection" and "the read failed" can be told
+    /// apart without a second run.</summary>
+    public int ReadAttempts { get; init; }
+
+    public int ReadFailures { get; init; }
+
+    /// <summary>What the read established (see <see cref="ViewCauses"/>).</summary>
+    public string? Cause { get; init; }
+
     public bool? Restored { get; set; }
 
     public string? RestoreNote { get; set; }
@@ -61,7 +71,8 @@ internal static class ViewSwap
                 + "и применить вид нечем.",
                 RetryPolicy.SameOperationId);
 
-        var previous = FindCurrentType(collection);
+        var previous = ReadCurrent(collection, out var previousAttempts, out var previousFailures);
+        var previousCause = CauseOf(previous, previousAttempts, previousFailures);
         var target = FindByType(collection, wanted.Type);
         if (target is null)
         {
@@ -91,14 +102,20 @@ internal static class ViewSwap
         var previousRestorable = previousWire is not null && ViewProjections.TryResolve(previousWire, out _);
         if (!keepView && !previousRestorable)
         {
-            var readBack = previousWire is null
-                ? "ни одна проекция не ответила IsCurrent=true"
-                : $"прочитан тип {previous}, которому не соответствует ни одно опубликованное имя";
+            // INVARIANT: the refusal names CAUSE, the number of reads it rests on and the restore outcome,
+            // so "no projection reported IsCurrent" and "the read refused" cannot be confused and the
+            // caller's window state is never a guess.
+            // History: docs/decisions/adapter-core.md#view-swap
+            var readBack = previousCause == ViewCauses.Unpublished
+                ? $"прочитан тип {previous}, которому не соответствует ни одно опубликованное имя"
+                : DescribeCause(previousCause);
             throw new KompasContractException(
                 ErrorCodes.ViewUnavailable,
-                $"Текущую проекцию документа вернуть после снимка нечем: {readBack}. Вид окна НЕ "
-                + $"изменён: вызов отказал до SetCurrent('{wanted.Wire}'). Повторите с keep_view=true — "
-                + "это согласие оставить запрошенную проекцию после снимка.",
+                $"Текущую проекцию документа вернуть после снимка нечем: {readBack} (прочитано проекций "
+                + $"с попыткой определить текущую: {previousAttempts}, чтений отказало: {previousFailures}). "
+                + $"Вид окна НЕ изменён: вызов отказал до SetCurrent('{wanted.Wire}'), прежний вид "
+                + "восстанавливать не понадобилось. Повторите с keep_view=true — это согласие оставить "
+                + "запрошенную проекцию после снимка.",
                 RetryPolicy.SameOperationId,
                 details: new Dictionary<string, object?>
                 {
@@ -108,6 +125,11 @@ internal static class ViewSwap
                     ["previous_type"] = previous,
                     ["keep_view"] = false,
                     ["available_types"] = AllTypes(collection),
+                    ["view_cause"] = previousCause,
+                    ["read_attempts"] = previousAttempts,
+                    ["read_failures"] = previousFailures,
+                    ["view_switch_attempted"] = false,
+                    ["previous_view_restored"] = false,
                     ["keep_view_required_without_previous_view"] = true,
                     ["remedy"] = "keep_view=true — согласие оставить запрошенную проекцию после снимка; "
                         + "прежний вид окна вернуть нечем: он либо не читается до первого SetCurrent, "
@@ -130,7 +152,8 @@ internal static class ViewSwap
         }
 
         collection.refresh();
-        var afterType = FindCurrentType(collection);
+        var afterType = ReadCurrent(collection, out var attempts, out var failures);
+        var afterCause = CauseOf(afterType, attempts, failures);
 
         if (afterType != wanted.Type)
         {
@@ -153,8 +176,9 @@ internal static class ViewSwap
             throw new KompasContractException(
                 ErrorCodes.ViewUnavailable,
                 $"Проекция '{wanted.Wire}' не подтверждена обратным чтением: SetCurrent()={switched}, "
-                + $"прочитан тип {afterType?.ToString() ?? "null"}, ожидался {wanted.Type}. "
-                + "Снимок не снят: подписывать картинку не тем видом нельзя. "
+                + $"прочитан тип {afterType?.ToString() ?? "null"}, ожидался {wanted.Type}; причина чтения — "
+                + $"{DescribeCause(afterCause)} (проекций с попыткой чтения {attempts}, из них чтений "
+                + $"отказало {failures}). Снимок не снят: подписывать картинку не тем видом нельзя. "
                 + DescribeUnconfirmedRestore(restoredBack, backNote),
                 RetryPolicy.SameOperationId,
                 details: new Dictionary<string, object?>
@@ -164,6 +188,10 @@ internal static class ViewSwap
                     ["set_current_returned"] = switched,
                     ["type_after"] = afterType,
                     ["keep_view"] = keepView,
+                    ["view_cause"] = afterCause,
+                    ["read_attempts"] = attempts,
+                    ["read_failures"] = failures,
+                    ["view_switch_attempted"] = true,
                     ["previous_view_restored"] = restoredBack,
                     ["previous_view_restore_note"] = backNote,
                 });
@@ -176,6 +204,9 @@ internal static class ViewSwap
             AppliedView = ViewProjections.Describe(wanted.Type),
             PreviousView = previous is int p ? ViewProjections.Describe(p) : null,
             Scheme = ReadScheme(collection),
+            ReadAttempts = attempts,
+            ReadFailures = failures,
+            Cause = afterCause,
             Note = keepView
                 ? $"проекция '{wanted.Wire}' применена и оставлена по keep_view"
                 : $"проекция '{wanted.Wire}' применена на время снимка; прежний вид "
@@ -217,7 +248,7 @@ internal static class ViewSwap
 
             target.SetCurrent();
             collection.refresh();
-            restored = FindCurrentType(collection) == previous.Type;
+            restored = ReadCurrent(collection, out _, out _) == previous.Type;
             if (restored != true)
             {
                 note = "previous_view_not_restored — обратное чтение после возврата не подтвердило "
@@ -301,7 +332,7 @@ internal static class ViewSwap
 
             target.SetCurrent();
             collection.refresh();
-            restored = FindCurrentType(collection) == previous.Type;
+            restored = ReadCurrent(collection, out _, out _) == previous.Type;
             if (restored != true)
             {
                 note = "previous_view_not_restored — обратное чтение после возврата не подтвердило "
@@ -349,33 +380,71 @@ internal static class ViewSwap
         return null;
     }
 
-    private static int? FindCurrentType(ksViewProjectionCollection collection)
+    /// <summary>Reads the CURRENT projection's type, counting the reads it rests on: a <c>null</c> type is
+    /// either "none reported IsCurrent" or "the read refused", and the two counts tell them apart.</summary>
+    private static int? ReadCurrent(ksViewProjectionCollection collection, out int attempts, out int failures)
     {
+        attempts = 0;
+        failures = 0;
         var count = collection.GetCount();
         for (var i = 0; i < count; i++)
         {
-            var projection = collection.GetByIndex(i) as ksViewProjection;
+            attempts++;
+            ksViewProjection? projection;
+            try
+            {
+                projection = collection.GetByIndex(i) as ksViewProjection;
+            }
+            catch (COMException)
+            {
+                failures++;
+                continue;
+            }
+
             if (projection is null)
             {
+                failures++;
                 continue;
             }
 
             try
             {
-                if (projection.IsCurrent())
+                if (!projection.IsCurrent())
                 {
-                    return SafeType(projection);
+                    continue;
                 }
+
+                return (int)projection.GetViewProjectonType();
             }
             catch (COMException)
             {
-                // One unreadable entry must not abort the scan: the remaining entries are still evidence.
-                continue;
+                // One unreadable entry is evidence about the READ, not about the view: counted, not thrown.
+                failures++;
             }
         }
 
         return null;
     }
+
+    /// <summary>What the read established, in the vocabulary published by the answer.</summary>
+    private static string CauseOf(int? type, int attempts, int failures)
+    {
+        if (type is int current)
+        {
+            return ViewProjections.Describe(current) is null ? ViewCauses.Unpublished : ViewCauses.Named;
+        }
+
+        return failures > 0 && failures == attempts ? ViewCauses.ReadFailed : ViewCauses.NotCurrent;
+    }
+
+    private static string DescribeCause(string cause) => cause switch
+    {
+        ViewCauses.NotCurrent => "ни одна проекция не ответила IsCurrent=true (проекция не найдена текущей)",
+        ViewCauses.ReadFailed => "чтение проекций отказало (чтение отказало)",
+        ViewCauses.Unpublished =>
+            "текущая проекция прочитана, но опубликованного имени у её типа нет",
+        _ => "текущая проекция прочитана и названа",
+    };
 
     private static IReadOnlyList<int> AllTypes(ksViewProjectionCollection collection)
     {
@@ -415,4 +484,21 @@ internal static class ViewSwap
             return null;
         }
     }
+}
+
+/// <summary>The measurements a read of the projection collection establishes, in the vocabulary the answer
+/// publishes: the refusal and the success use the same names, so no two places can disagree.</summary>
+internal static class ViewCauses
+{
+    /// <summary>A current projection was read and the document carries its published name.</summary>
+    public const string Named = "current_projection_named";
+
+    /// <summary>No projection reported IsCurrent=true.</summary>
+    public const string NotCurrent = "no_current_projection";
+
+    /// <summary>Every read of the collection refused (COM failure or an unreadable type).</summary>
+    public const string ReadFailed = "read_failed";
+
+    /// <summary>A current type was read, but it has no published wire name and cannot be restored by name.</summary>
+    public const string Unpublished = "unpublished_current_projection";
 }

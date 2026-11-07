@@ -245,9 +245,20 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
         if (-not $seen.Add($key)) { [Environment]::SetEnvironmentVariable($key, $null, "Process") }
     }
     $psi = New-Object Diagnostics.ProcessStartInfo
+    # The report exists BEFORE the launch: a launch that never returns must still leave its facts behind.
+    $report = @{}
     $psi.FileName = $hostExe
     $psi.Arguments = "--config `"$configPath`""
     $psi.UseShellExecute = $false
+    # INVARIANT: the child's working directory is an EXISTING fully-qualified path, not the caller's
+    # current directory. DOC: .NET ProcessStartInfo.WorkingDirectory - "If the WorkingDirectory property
+    # is not set, the current directory of the calling process is used"; Win32 CreateProcess -
+    # "lpCurrentDirectory ... must be a full path that includes the drive letter", and a missing one fails
+    # the call with ERROR_PATH_NOT_FOUND ("The system cannot find the path specified"). MEASURED (client
+    # report): a launch through <InstallRoot>\current answered exactly that message where the same exe
+    # started by its absolute path, and the inherited directory was the one thing the installer never set.
+    # History: docs/decisions/releases.md#current-junction-launch
+    $psi.WorkingDirectory = Split-Path -Parent $hostExe
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -255,7 +266,37 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
     # INVARIANT: the Worker must be the one beside this Host; an inherited override would test
     # a different build. LIMIT: only this child process is affected.
     $psi.EnvironmentVariables.Remove("KOMPAS_MCP_WORKER_PATH")
-    $p = [Diagnostics.Process]::Start($psi)
+    $p = $null
+    try {
+        $p = [Diagnostics.Process]::Start($psi)
+    } catch {
+        # The launch failed BEFORE any MCP exchange. Every fact an operator needs to name the cause is
+        # recorded here, because the next occurrence must not need another repro to be understood.
+        # History: docs/decisions/releases.md#current-junction-launch
+        $errorRecord = $_
+        $ex = $errorRecord.Exception
+        $native = $null
+        if ($ex -is [ComponentModel.Win32Exception]) { $native = $ex.NativeErrorCode }
+        $report.failed = $true
+        $report.launch_error = [ordered]@{
+            message = $ex.Message
+            type = $ex.GetType().FullName
+            hresult = ('0x{0:X8}' -f $ex.HResult)
+            native_error_code = $native
+            file_name = $psi.FileName
+            arguments = $psi.Arguments
+            working_directory = $psi.WorkingDirectory
+            working_directory_source = 'explicit (каталог самого Host)'
+            invoking_process_directory = (Get-Location).Path
+            file_exists_at_file_name = (Test-Path -LiteralPath $psi.FileName)
+            file_name_resolved = $(try { (Get-Item -LiteralPath $psi.FileName -Force).FullName } catch { $null })
+        }
+        Bad "запуск Host не состоялся: $($ex.GetType().Name): $($ex.Message) (HRESULT $('0x{0:X8}' -f $ex.HResult)$(if ($null -ne $native) { ", NativeErrorCode $native" }))"
+        Say "  FileName:          $($psi.FileName)"
+        Say "  Рабочий каталог:   $($psi.WorkingDirectory) (задан явно: каталог самого Host)"
+        Say "  ARGUMENTS:         $($psi.Arguments)"
+        return $report
+    }
     $stderr = $p.StandardError.ReadToEndAsync()
     $utf8 = New-Object Text.UTF8Encoding($false)
     $script:rpcId = 0
@@ -276,7 +317,14 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
         }
         throw "нет ответа на $method"
     }
-    $report = @{}
+    $report.launch = [ordered]@{
+        file_name = $psi.FileName
+        arguments = $psi.Arguments
+        working_directory = $psi.WorkingDirectory
+        working_directory_source = 'explicit (каталог самого Host)'
+        use_shell_execute = $psi.UseShellExecute
+    }
+    $report.went_through = $hostExe
     try {
         $init = Send "initialize" @{ protocolVersion = "2025-06-18"; capabilities = @{}; clientInfo = @{ name = "kompasmcp-installer"; version = "1" } }
         $report.server = "$($init.result.serverInfo.name) $($init.result.serverInfo.version), протокол $($init.result.protocolVersion)"
@@ -310,12 +358,14 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
                 $status = $r.result.structuredContent.status
             }
             $isError = ($r.result.PSObject.Properties.Name -contains "isError") -and $r.result.isError
-            if ($isError) { Bad "${tool}: ошибка: $text"; $report.failed = $true }
+            if ($isError) { Bad "${tool}: ошибка: $text"; $report.failed = $true; $report.stage_failed = "$tool" }
             else { Ok "${tool}: $status" }
         }
     } catch {
         Bad "самопроверка не прошла: $($_.Exception.Message)"
         $report.failed = $true
+        $report.stage_failed = "обмен по MCP: $($_.Exception.Message)"
+        $report.launch_problem = "$($_.Exception.GetType().Name): $($_.Exception.Message)"
     } finally {
         try { $p.StandardInput.Close() } catch { }
         if (-not $p.WaitForExit(15000)) { $p.Kill() }
@@ -327,8 +377,59 @@ function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
     return $report
 }
 
-# --- 6. Codex registration -------------------------------------------------------------------
+# --- 5c. Facts of a failed launch through the `current` point --------------------------------
+#
+# WHY. MEASURED (client 22.10.2026 and 07.11.2026): a launch through <InstallRoot>\current answered
+# "The system cannot find the path specified" on a machine where the same exe started by its absolute
+# path, the cause was never established, and the refusal only named the absolute path as a workaround.
+# INVARIANT: the next occurrence NAMES the cause instead of asking for another repro: the exact
+# FileName, the working directory and where it came from, the junction's target, whether the EXE is
+# reachable by both paths, and the exception with its HRESULT/NativeErrorCode.
+# History: docs/decisions/releases.md#current-junction-launch
+function Write-LaunchDiagnosis($hostExe, $currentLink, $versionDir, $report, $thrown) {
+    Say ""
+    Say "Диагностика запуска через current (факты, а не догадка):"
+    $report = if ($null -eq $report) { @{} } else { $report }
+    $launch = $report.launch
+    if ($null -ne $launch) {
+        Say "  FileName:               $($launch.file_name)"
+        Say "  Arguments:              $($launch.arguments)"
+        Say "  WorkingDirectory:       $($launch.working_directory) [$($launch.working_directory_source)]"
+        Say "  UseShellExecute:        $($launch.use_shell_execute)"
+    } else {
+        Say "  FileName:               $hostExe (запуск не дошёл до ProcessStartInfo)"
+        Say "  WorkingDirectory:       не измерен"
+    }
+    $target = $null
+    if (Test-Path -LiteralPath $currentLink) {
+        try { $target = @((Get-Item -LiteralPath $currentLink -Force).Target) } catch { $target = $null }
+        $item = Get-Item -LiteralPath $currentLink -Force
+        Say "  Точка current:          $currentLink (тип: $($item.LinkType); цель: $($target -join '; '))"
+    } else {
+        Say "  Точка current:          $currentLink - НЕТ"
+    }
+    $expectedTarget = Join-Path $versionDir "KompasMcp.Host.exe"
+    Say "  EXE у ожидаемой цели:   $expectedTarget -> $(Test-Path -LiteralPath $expectedTarget)"
+    Say "  EXE через current:      $hostExe -> $(Test-Path -LiteralPath $hostExe)"
+    $cwd = (Get-Location).Path
+    Say "  Текущий каталог установщика: $cwd -> $(Test-Path -LiteralPath $cwd)"
+    if ($report.ContainsKey('launch_error') -and $null -ne $report.launch_error) {
+        $le = $report.launch_error
+        Say "  Исключение:             $($le.type): $($le.message)"
+        Say "  HRESULT / NativeErrorCode: $($le.hresult) / $($le.native_error_code)"
+        Say "  EXE по FileName:        $($le.file_name) -> $($le.file_exists_at_file_name)"
+        Say "  Разрешённый путь:       $($le.file_name_resolved)"
+        Say "  Каталог вызывающего:    $($le.invoking_process_directory)"
+    } elseif ($null -ne $launch -and $report.launch_problem) {
+        Say "  Причина:                $($report.launch_problem)"
+    }
+    $failed = $report.stage_failed
+    if ($null -ne $failed) { Say "  Отказ на шаге самопроверки: $failed" }
+    if ($thrown) { Say "  Исключение вне самопроверки: $thrown" }
+    Say ""
+}
 
+# --- 6. Codex registration -------------------------------------------------------------------
 function Get-TomlBlockRange([string[]]$lines, [string]$name) {
     # The block is the [mcp_servers.<name>] table plus its [mcp_servers.<name>.*] subtables.
     $head = "[mcp_servers.$name]"
@@ -553,14 +654,27 @@ if (-not $SkipSelfTest) {
     if ($null -ne $currentFailure -or [bool]$viaCurrent.failed) {
         $absoluteHost = Join-Path $versionDir "KompasMcp.Host.exe"
         $why = if ($null -ne $currentFailure) { "прерван ошибкой: $currentFailure" } else { "не прошёл самопроверку" }
+        # INVARIANT: the facts of the failed launch are printed BEFORE the refusal, so the next
+        # occurrence names its cause and does not need another repro.
+        # History: docs/decisions/releases.md#current-junction-launch
+        Write-LaunchDiagnosis $hostExe $currentLink $versionDir $viaCurrent $currentFailure
+        $diagnosis = if ($viaCurrent -and $viaCurrent.launch_error) {
+            "; FileName=$($viaCurrent.launch_error.file_name); WorkingDirectory=$($viaCurrent.launch_error.working_directory); " +
+            "цель current=$((Get-Item -LiteralPath $currentLink -Force -ErrorAction SilentlyContinue).Target); " +
+            "EXE у цели=$(Test-Path -LiteralPath $absoluteHost); EXE через current=$(Test-Path -LiteralPath $hostExe); " +
+            "исключение=$($viaCurrent.launch_error.type) $($viaCurrent.launch_error.message); " +
+            "HRESULT=$($viaCurrent.launch_error.hresult); NativeErrorCode=$($viaCurrent.launch_error.native_error_code)"
+        } elseif ($viaCurrent -and $viaCurrent.stage_failed) {
+            "; отказ на шаге: $($viaCurrent.stage_failed)"
+        } else { "" }
         if ($previousTarget) {
             Set-CurrentLink $previousTarget | Out-Null
-            Stop-Install "запуск через current $why; точка возвращена на $previousTarget. Если клиент не запускает сервер через current, укажите ему абсолютный путь $absoluteHost"
+            Stop-Install "запуск через current $why$diagnosis; точка возвращена на $previousTarget. Если клиент не запускает сервер через current, укажите ему абсолютный путь $absoluteHost"
         }
         # FIRST INSTALL: there is no verified version to return to, so an unverified link is removed
         # rather than left as the client's entry point. The reparse point goes; the version stays.
         [IO.Directory]::Delete($currentLink, $false)
-        Stop-Install "запуск через current $why; проверенной версии ещё нет, поэтому точка current удалена. Укажите клиенту абсолютный путь $absoluteHost"
+        Stop-Install "запуск через current $why$diagnosis; проверенной версии ещё нет, поэтому точка current удалена. Укажите клиенту абсолютный путь $absoluteHost"
     }
     Ok "Host и Worker работают через current"
 }

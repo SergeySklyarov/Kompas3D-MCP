@@ -66,6 +66,21 @@ public static class ToolCatalog
         "заявленным, измеренным, разностью и допуском, в warnings - предупреждение, уровень не выше " +
         "structure_checked (модель могла отстать на операцию). Сравнивать нечем - аспект непроверен.";
 
+    /// <summary>The ONE sign rule of <c>expected_volume_delta_mm3</c>, shared by the field descriptions.</summary>
+    /// <remarks>INVARIANT: the answer's <c>volume_delta_mm3</c> means exactly what the expectation means.
+    /// MEASURED: a cut wrote the removed material POSITIVE while the field's description did not name the
+    /// sign, so a caller declaring the mirrored value got "the model may lag one operation behind".
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
+    private const string VolumeDeltaSignRule =
+        " ПРАВИЛО ЗНАКА (одно для всех инструментов): величина - СКОЛЬКО материала сдвинул признак. У признака " +
+        "с ОДНИМ направлением (base/boss только добавляют, cut и отверстие только снимают) она ВСЕГДА " +
+        "ПОЛОЖИТЕЛЬНА, и отрицательное значение отвергается INVALID_ARGUMENT до обращения к КОМПАС. У признака, " +
+        "который умеет и снимать, и добавлять (фаска, правка отверстия), она знаковая как «объём до минус объём " +
+        "после»: снятое положительно, добавленное отрицательно. Ответ volume_delta_mm3 несёт тот же смысл. " +
+        "ЗЕРКАЛЬНЫЙ ЗНАК (модули совпали, знаки противоположны) назван отдельно - " +
+        "declared_expectation_sign_mismatch: это несовпадение ПРАВИЛА ЗНАКА, и «модель могла отстать» к нему " +
+        "не относится.";
+
     /// <summary>The section-coupling schema — ONE for creation (<c>kompas_loft</c>) and edit
     /// (<c>kompas_update_feature</c>), so the descriptions cannot drift between tools.</summary>
     /// <remarks>MEASURED: <c>ICoupling.SetPoint</c> is documented (<c>icoupling_setpoint.html</c>:
@@ -1459,8 +1474,10 @@ public static class ToolCatalog
                 "(expected_volume_not_computed в unverified_aspects), уровень остаётся call_returned. БОЛЬШЕ " +
                 "призмы, ноль и обратный знак - провал. Точного объёма пересечения инструмента с телом " +
                 "документированного маршрута нет, поэтому призма не выдаётся за точное ожидание. ОТДЕЛЬНО от призмы " +
-                "принимается ЯВНОЕ ожидание expected_volume_delta_mm3 - знаковая величина сдвинутого материала " +
-                "(положительная у base/boss, у cut - снятое): с ним сравнение на равенство в допуске проекта, и " +
+                "принимается ЯВНОЕ ожидание expected_volume_delta_mm3 - величина сдвинутого материала: у " +
+                "base/boss ПОЛОЖИТЕЛЬНАЯ (сколько добавлено), у cut - СНЯТОЕ и тоже ПОЛОЖИТЕЛЬНОЕ " +
+                "(сколько снято), а отрицательное значение отвергается INVALID_ARGUMENT до обращения к " +
+                "КОМПАС. С ним сравнение на равенство в допуске проекта, и " +
                 "призму оно НЕ ослабляет. Сторону материала ответ называет полями material_removed_toward и " +
                 "material_added_toward и источником material_toward_source (measured_box_shift - по сдвигу " +
                 "габарита, sketch_normal_rule - по документированному правилу нормали плоскости эскиза, оно " +
@@ -1530,12 +1547,13 @@ public static class ToolCatalog
                         "поэтому требование сформулировано здесь.")),
                     ("expected_volume_delta_mm3", Sch.Nullable(Sch.Num(
                         "Аналитическое ожидание СДВИНУТОГО признаком материала, мм³: положительная величина - "
-                        + "добавленное базовым выдавливанием или приклеиванием, у вырезания - снятое. ЗНАК - ЧАСТЬ "
-                        + "ВЕЛИЧИНЫ, сравнивать модуль нельзя. Принимается ОТДЕЛЬНО от призмы профиля, которая без "
+                        + "добавленное базовым выдавливанием или приклеиванием, у вырезания - снятое; отрицательное "
+                        + "значение здесь смысла не имеет и отвергается INVALID_ARGUMENT до обращения к КОМПАС. "
+                        + "Принимается ОТДЕЛЬНО от призмы профиля, которая без "
                         + "него служит только верхней границей: пересекающийся boss добавляет меньше призмы, а cut "
                         + "через полость снимает меньше, и это не провал. С ожиданием проверка численная (равенство "
                         + "в допуске проекта), без него - верхняя граница."
-                        + DeclaredExpectationRule, -1e18d, 1e18d)))),
+                        + VolumeDeltaSignRule + DeclaredExpectationRule, -1e18d, 1e18d)))),
                 WorkerCommands.Extrude,
                 requiresDocument: false,
                 requiresRevision: true),
@@ -1550,7 +1568,7 @@ public static class ToolCatalog
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("radius_mm", Sch.PositiveMm("Радиус скругления")),
                     ("expected_volume_delta_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание изменения объёма как «до − после», если выводимо у вызывающего (например 4·(1−π/4)·r²·h для четырёх выпуклых параллельных рёбер). Знак несёт сторона угла: на ВЫПУКЛОМ ребре скругление материал снимает, и ожидание положительно; на ВХОДЯЩЕМ добавляет, и то же выражение входит со знаком минус. С ожиданием проверка численная, без него — только изменение объёма." + DeclaredExpectationRule,
+                        "Аналитическое ожидание изменения объёма как «до − после», если выводимо у вызывающего (например 4·(1−π/4)·r²·h для четырёх выпуклых параллельных рёбер). Знак несёт сторона угла: на ВЫПУКЛОМ ребре скругление материал снимает, и ожидание положительно; на ВХОДЯЩЕМ добавляет, и то же выражение входит со знаком минус. С ожиданием проверка численная, без него — только изменение объёма." + VolumeDeltaSignRule + DeclaredExpectationRule,
                         -1e18d, 1e18d)))),
                 WorkerCommands.Fillet,
                 requiresDocument: false,
@@ -1597,7 +1615,8 @@ public static class ToolCatalog
                         "Аналитическое ожидание изменения объёма как «до − после»: N·(d₁·d₂/2)·L для N параллельных выпуклых " +
                         "рёбер длиной L. Знак несёт сторона угла: на ВЫПУКЛОМ ребре фаска материал снимает " +
                         "(ожидание положительно), на ВХОДЯЩЕМ добавляет (то же выражение со знаком минус). С ним " +
-                        "проверка численная, без него - только изменение объёма." + DeclaredExpectationRule,
+                        "проверка численная, без него - только изменение объёма." + VolumeDeltaSignRule
+                        + DeclaredExpectationRule,
                         -1e18d, 1e18d)))),
                 WorkerCommands.Chamfer,
                 requiresDocument: false,
@@ -1721,7 +1740,7 @@ public static class ToolCatalog
                         "не пересекает её плоскость — отказ GEOMETRY_FAILED " +
                         "(details.code = hole_on_other_face) со ссылкой на оставшийся признак. " +
                         "Проверка положения (center_mm) этим не заменяется: она про точку, эта — " +
-                        "про грань." + DeclaredExpectationRule,
+                        "про грань." + VolumeDeltaSignRule + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.Hole,
                 requiresDocument: false,
@@ -3158,7 +3177,7 @@ public static class ToolCatalog
                         "мельче» отрицательна, модуль сравнивать нельзя. Дельта отличает «применилось ровно " +
                         "запрошенное» от «применилось не то»; expected_volume_mm3 проверяется отдельно. Без " +
                         "ожидания уровень остаётся call_returned, в unverified_aspects - " +
-                        "expected_volume_delta_not_supplied." + DeclaredExpectationRule,
+                        "expected_volume_delta_not_supplied." + VolumeDeltaSignRule + DeclaredExpectationRule,
                         -1e18d, 1e18d)))),
                 WorkerCommands.UpdateFeature,
                 requiresDocument: false,

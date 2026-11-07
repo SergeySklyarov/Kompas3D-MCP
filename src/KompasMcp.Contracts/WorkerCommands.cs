@@ -2992,6 +2992,21 @@ public sealed record ExportImageResultDto
     /// <summary>Whether the previous projection was restored after the snapshot.</summary>
     public bool? ViewRestored { get; init; }
 
+    /// <summary>How many projections were read looking for the CURRENT one (<c>IsCurrent</c> plus the
+    /// type of each entry): the number of read attempts the answer is based on.</summary>
+    public int? ViewReadAttempts { get; init; }
+
+    /// <summary>How many of those reads REFUSED (a COM failure or an unreadable type): "no current
+    /// projection" and "the read failed" are different facts, and this number separates them.</summary>
+    public int? ViewReadFailures { get; init; }
+
+    /// <summary>What the read of the current projection established: <c>current_projection_named</c> (a
+    /// current projection was read and the document carries its published name), <c>no_current_projection</c>
+    /// (none reported <c>IsCurrent=true</c>), <c>read_failed</c> (every read refused) or
+    /// <c>unpublished_current_projection</c> (a type was read with no published name, so it cannot be
+    /// restored by name).</summary>
+    public string? ViewCause { get; init; }
+
     /// <summary>Value of the collection's <c>viewProjectionScheme</c> — the document's orientation
     /// scheme, read alongside the projection type.</summary>
     public long? ViewProjectionScheme { get; init; }

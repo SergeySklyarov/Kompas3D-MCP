@@ -934,6 +934,10 @@ RUN_GROUPS = (
      "Приёмка CB27: дефекты клиента на 0.11.0 - ссылка создания пригодна сразу (MCP-01), ложное "
      "«не совпало» без ожидания (MCP-02), критерий числа тел у приклеенного loft (MCP-03), "
      "условная обязательность target_body_ref (MCP-04)"),
+    ("client_bugs_20261107", "client-bugs-20261107", "client-bugs-20261107-acceptance.json",
+     "Приёмка CB13: дефекты пользователя MCP на 0.13.0 (клиент Codex) - отпечаток пустой детали, "
+     "знак expected_volume_delta_mm3 у выреза, изометрия сразу после сохранения сборки, открытие "
+     "после потери экземпляра"),
     ("pattern_orientation", "pattern-orientation", "pattern-orientation-acceptance.json",
      "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)"),
     ("release_040", "release-040", "release-040-acceptance.json",
@@ -1056,6 +1060,9 @@ ALL_GROUPS_EXTRA = (
     ("export_inertia", ["--export-inertia-only"]),
     ("client_bugs_20261010", ["--client-bugs-20261010"]),
     ("client_bugs_20261027", ["--client-bugs-20261027"]),
+    # Группа CB13 завершает СВОЙ экземпляр КОМПАС (строки §4 проверяют открытие после потери
+    # экземпляра), поэтому идёт в своём свежем сеансе, как DC. Внутри группы это ПОСЛЕДНИЕ строки.
+    ("client_bugs_20261107", ["--client-bugs-20261107"]),
     ("suppress", ["--suppress-repeat", "3"]),
     # Группа DC ЗАВЕРШАЕТ процесс своего КОМПАС: общий сеанс после неё недействителен, поэтому идёт
     # в своём свежем сеансе, как `client_bugs_20261010` (см. run_extra_group_fresh).
@@ -2326,6 +2333,7 @@ FLAGS = (
     ("--export-inertia-only", False, "группа EI: экспорт STL и моменты инерции"),
     ("--client-bugs-20261010", False, "группа CB10: дефекты клиента на 0.6.0"),
     ("--client-bugs-20261027", False, "группа CB27: дефекты клиента на 0.11.0"),
+    ("--client-bugs-20261107", False, "группа CB13: дефекты пользователя MCP на 0.13.0"),
     ("--disconnect-only", False, "группа DC: чтение при потерянной связи с КОМПАС"),
     ("--shutdown-only", False, "группа SD: завершение сеанса без висящего КОМПАСа"),
     ("--catalog-only", False, "группа CT: механизм каталога инструментов"),
@@ -14405,6 +14413,653 @@ def client_bugs_20261027_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
 
 
+# Наряд CLIENT_BUGS_0_13_0_CODEX: дефекты пользователя MCP на выпуске 0.13.0 (клиент Codex).
+#
+# ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Пять утверждений о ПРОДУКТЕ, каждое на СВОЕЙ синтетической геометрии
+# (модели пользователя не используются; каждая строится через MCP):
+#
+# §1 - отпечаток ПУСТОЙ детали компактен и стабилен, и «габарит не определён» решается ОДНИМ правилом
+# у поля `gabarit` и в отпечатке. Строки CB13.1-CB13.2.
+# §2 - знак `expected_volume_delta_mm3` у выреза объявлен, ответ пишет ту же величину, а зеркальный
+# знак назван несовпадением знака, а не «модель отстала». Строки CB13.3-CB13.6.
+# §3 - изометрия сразу после сохранения сборки: частота отказа на 20 новых сборках и диагностика
+# отказа вида (какая именно причина: текущая проекция не найдена / чтение отказало). CB13.7-CB13.8.
+# §4 - открытие после потери экземпляра: отказ называет «экземпляр потерян ДО начала открытия» и
+# записывает попытку в журнал раньше, чем появится document_id. CB13.9-CB13.11.
+CB13_REFERENCE = {
+    # Брусок 20x20x10 = 4000 мм³; сквозной вырез 10x10 на всю глубину снимает 1000 мм³.
+    "block_width_mm": 20.0,
+    "block_height_mm": 20.0,
+    "block_depth_mm": 10.0,
+    "block_volume_mm3": 20.0 * 20.0 * 10.0,
+    "cut_size_mm": 10.0,
+    "cut_depth_mm": 10.0,
+    "cut_removed_mm3": 10.0 * 10.0 * 10.0,
+    # Фаска 4x4 по одному вертикальному ребру длиной 10: снято 4*4/2*10 = 80 мм³.
+    "chamfer_leg_mm": 4.0,
+    "chamfer_removed_mm3": 4.0 * 4.0 / 2.0 * 10.0,
+    # Предел «разумной длины» отпечатка: 9 чисел по 8 значащих цифр + разделители. Отпечаток длиннее
+    # читается как «в него попали служебные числа» (у пустой детали их было 400+ знаков на число).
+    "fingerprint_max_chars": 160,
+    "assemblies": 20,
+    # Пауза второго плеча строки CB13.7: «немедленно против после паузы» (наряд §1.3). Число названо,
+    # а не подобрано по ответу: секунда - это заведомо больше времени доставки событий перестроения.
+    "pause_s": 1.0,
+    "volume_tolerance_mm3": 0.01,
+}
+
+
+def client_bugs_20261107_checks(client, rep, app_id, workdir, process_id=None):
+    """CB13.* - дефекты пользователя MCP на выпуске 0.13.0 (наряд CLIENT_BUGS_0_13_0_CODEX).
+
+    ПОСТАНОВКА. Своя синтетическая геометрия (брусок 20x20x10, вырез 10x10, фаска 4x4, две детали и
+    сборки из них), свои файлы в каталоге прогона. `process_id` - PID экземпляра, поднятого общим
+    запуском группы: последние строки (CB13.9-CB13.11) НАМЕРЕННО завершают его, чтобы проверить
+    открытие после потери экземпляра, поэтому группа идёт последней в своём сеансе.
+    """
+    ref = dict(CB13_REFERENCE)
+    killed = False
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def edet(env):
+        err = (env or {}).get("error") or {}
+        return (err.get("details") or {}) if isinstance(err, dict) else {}
+
+    def ctx(doc, detail="minimal"):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": detail})
+        return result(env)
+
+    def rev_of(doc):
+        return ctx(doc).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("id") or r.get("document_id") or (env or {}).get("document_id")
+
+    def body_rows(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else (rows.get("rows") or rows.get("bodies") or [])
+
+    def volume_of(body_ref):
+        if not body_ref:
+            return None
+        _e, env, _r = client.tool("kompas_measure",
+                                  {"target_ref": body_ref, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def mk_rectangle(doc, name, z, start, w, h):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev_of(doc),
+            "plane": {"base": "xy", "offset_mm": z}, "name": name})
+        sketch = doc_id(env) or result(env).get("sketch_ref")
+        if not sketch:
+            return None, f"create_sketch: {code} {emsg(env)}"
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev_of(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": start, "width_mm": w, "height_mm": h}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        return sketch, None
+
+    def build_block(name):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"create_document: {code} {emsg(env)}"
+        sketch, err = mk_rectangle(doc, name + "-base", 0.0, [0.0, 0.0],
+                                   ref["block_width_mm"], ref["block_height_mm"])
+        if err:
+            return doc, err
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": rev_of(doc), "operation": "base",
+            "depth_mm": ref["block_depth_mm"], "direction": "positive",
+            "end_condition": "blind"})
+        if code:
+            return doc, f"extrude base: {code} {emsg(env)}"
+        return doc, None
+
+    def check_named(env, name):
+        checks = ((env or {}).get("verification") or {}).get("checks") or []
+        return next((c for c in checks if c.get("name") == name), {})
+
+    def unverified(env):
+        return ((env or {}).get("verification") or {}).get("unverified_aspects") or []
+
+    def warnings(env):
+        return (env or {}).get("warnings") or []
+
+    def vertical_edges(doc, body, depth):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body, "include": "edges"})
+        rows = (result(env) or {}).get("edges") or []
+        picked = []
+        for edge in rows:
+            vs = edge.get("vertices_mm")
+            if not vs or len(vs) < 2:
+                continue
+            a, b = vs[0], vs[1]
+            if abs(a[0] - b[0]) > 1e-6 or abs(a[1] - b[1]) > 1e-6:
+                continue
+            zs = sorted([a[2], b[2]])
+            if abs(zs[0]) <= 1e-3 and abs(zs[1] - depth) <= 1e-3:
+                picked.append(edge.get("edge_ref"))
+        return picked, error_code(env)
+
+    # ── CB13.1: отпечаток ПУСТОЙ детали компактен, стабилен и без служебных чисел (§1) ─────────
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "CB13-empty"})
+    empty_doc = doc_id(env)
+    if not empty_doc:
+        for cid, what in (("CB13.1", "отпечаток пустой детали компактен и стабилен"),
+                          ("CB13.2", "смена отпечатка при первом теле видна")):
+            rep.add(cid, what, "FAIL", f"пустая деталь не создана: {code} {emsg(env)}")
+    else:
+        first = ctx(empty_doc, "full")
+        second = ctx(empty_doc, "minimal")
+        f1 = first.get("fingerprint")
+        f2 = second.get("fingerprint")
+        longest = max((len(t) for t in str(f1 or "").replace(";", ":").split(":")), default=0)
+        ok = (f1 == "0:0:n/a" and f2 == f1 and len(str(f1)) <= ref["fingerprint_max_chars"]
+              and longest <= 12 and first.get("gabarit") is None
+              and first.get("body_count") == 0 and first.get("feature_count") == 0)
+        rep.add("CB13.1",
+                "§1: у ПУСТОЙ детали отпечаток - 0:0:n/a (без служебных чисел), два чтения дают одно "
+                "и то же, а gabarit=null при body_count=0: «габарит не определён» - одно правило",
+                "PASS" if ok else "FAIL",
+                f"fingerprint={str(f1)[:120]!r} длина={len(str(f1))} самый_длинный_токен={longest} "
+                f"второе_чтение={str(f2)[:60]!r} gabarit={first.get('gabarit')!r} "
+                f"тел={first.get('body_count')} признаков={first.get('feature_count')}",
+                details={"fingerprint_first": f1, "fingerprint_second": f2,
+                         "fingerprint_chars": len(str(f1)), "longest_token": longest})
+
+        # ── CB13.2: первое тело ПО-ПРЕЖНЕМУ меняет отпечаток (маркер чужого изменения жив) ────
+        sketch, err = mk_rectangle(empty_doc, "CB13-first-body", 0.0, [0.0, 0.0],
+                                   ref["block_width_mm"], ref["block_height_mm"])
+        ex_env, ex_code = (None, None)
+        if not err:
+            ex_env, ex_code = call("kompas_extrude", {
+                "sketch_ref": sketch, "expected_revision": rev_of(empty_doc), "operation": "base",
+                "depth_mm": ref["block_depth_mm"], "direction": "positive",
+                "end_condition": "blind"})
+        after = ctx(empty_doc)
+        f3 = after.get("fingerprint")
+        ok = (not err and ex_code is None and f3 != "0:0:n/a" and f3 != f1
+              and after.get("body_count") == 1 and len(str(f3)) <= ref["fingerprint_max_chars"])
+        rep.add("CB13.2",
+                "§1: первое тело по-прежнему меняет отпечаток: после выдавливания он не 0:0:n/a и не "
+                "равен пустому (маркер чужого изменения и STALE_REFERENCE этим правилом не сломаны)",
+                "PASS" if ok else "FAIL",
+                f"до={str(f1)[:60]!r} после={str(f3)[:90]!r} тел={after.get('body_count')} "
+                f"ошибка_выдавливания={ex_code or err}",
+                details={"fingerprint_empty": f1, "fingerprint_after_body": f3})
+        empty_doc = None  # дальше он не нужен; закрывается общей уборкой каталога прогона
+
+    # ── CB13.3-CB13.4: знак ожидания у выреза (§2) ─────────────────────────────────────────────
+    block, build_error = build_block("CB13-cut-sign")
+    cut_sketch = None
+    if block and not build_error:
+        cut_sketch, cut_err = mk_rectangle(block, "CB13-cut", ref["block_depth_mm"],
+                                           [5.0, 5.0], ref["cut_size_mm"], ref["cut_size_mm"])
+        if cut_err:
+            build_error = cut_err
+    if not block or build_error or not cut_sketch:
+        for cid, what in (("CB13.3", "§2: отрицательное ожидание выреза отвергнуто до КОМАС"),
+                          ("CB13.4", "§2: положительное ожидание выреза подтверждено"),
+                          ("CB13.5", "§2: описание поля называет знак у cut и у add")):
+            rep.add(cid, what, "FAIL", f"постановка не построена: {build_error or 'нет выреза'}")
+    else:
+        before_volume = volume_of((body_rows(block) or [{}])[0].get("body_ref"))
+        before_rev = rev_of(block)
+        features_before = ctx(block).get("feature_count")
+        body_ref = (body_rows(block) or [{}])[0].get("body_ref")
+
+        negative_env, negative_code = call("kompas_extrude", {
+            "sketch_ref": cut_sketch, "expected_revision": before_rev, "operation": "cut",
+            "depth_mm": ref["cut_depth_mm"], "material_toward": "-z", "end_condition": "blind",
+            "target_body_ref": body_ref,
+            "expected_volume_delta_mm3": -ref["cut_removed_mm3"]})
+        after_refusal_volume = volume_of(body_ref)
+        after_refusal_rev = rev_of(block)
+        features_after = ctx(block).get("feature_count")
+        message = str(emsg(negative_env) or "")
+        sign_named = ("положительн" in message.lower() and "снят" in message.lower())
+        ok = (negative_code == "INVALID_ARGUMENT" and sign_named
+              and near(after_refusal_volume, before_volume, ref["volume_tolerance_mm3"])
+              and after_refusal_rev == before_rev and features_after == features_before)
+        rep.add("CB13.3",
+                "§2: вырез с ОТРИЦАТЕЛЬНЫМ ожиданием (снято записывается положительным) отвергается "
+                "INVALID_ARGUMENT до КОМПАС, сообщение называет правило знака, модель не тронута - "
+                "объём, ревизия и число признаков те же",
+                "PASS" if ok else "FAIL",
+                f"code={negative_code} сообщение={message[:180]!r} V={before_volume}->"
+                f"{after_refusal_volume} ревизия={before_rev}->{after_refusal_rev} "
+                f"признаков={features_before}->{features_after}",
+                details={"code": negative_code, "message": message,
+                         "volume_mm3": [before_volume, after_refusal_volume],
+                         "revision": [before_rev, after_refusal_rev],
+                         "feature_count": [features_before, features_after]})
+
+        positive_env, positive_code = call("kompas_extrude", {
+            "sketch_ref": cut_sketch, "expected_revision": rev_of(block), "operation": "cut",
+            "depth_mm": ref["cut_depth_mm"], "material_toward": "-z", "end_condition": "blind",
+            "target_body_ref": body_ref,
+            "expected_volume_delta_mm3": ref["cut_removed_mm3"]})
+        positive_res = result(positive_env)
+        delta = positive_res.get("volume_delta_mm3")
+        warned = " ".join(str(w) for w in warnings(positive_env))
+        expected_check = check_named(positive_env, "expected_volume_delta")
+        level = ((positive_env or {}).get("verification") or {}).get("level")
+        ok = (positive_code is None
+              and near(delta, ref["cut_removed_mm3"], ref["volume_tolerance_mm3"])
+              and near(positive_res.get("volume_mm3"), ref["block_volume_mm3"] - ref["cut_removed_mm3"],
+                       ref["volume_tolerance_mm3"])
+              and expected_check.get("passed") is True
+              and level == "geometry_checked"
+              and "могло отстать" not in warned)
+        rep.add("CB13.4",
+                "§2: вырез с ожиданием +1000 проходит: volume_delta_mm3 = +1000 (тот же смысл, что у "
+                "ожидания), проверка expected_volume_delta пройдена, уровень geometry_checked, "
+                "предупреждения «модель могла отстать» нет",
+                "PASS" if ok else "FAIL",
+                f"code={positive_code} delta={delta} V={positive_res.get('volume_mm3')} "
+                f"проверка={expected_check} уровень={level} warnings={warnings(positive_env)}",
+                details={"delta_mm3": delta, "volume_mm3": positive_res.get("volume_mm3"),
+                         "check": expected_check, "level": level,
+                         "warnings": warnings(positive_env)})
+
+        # ── CB13.5: описания поля называют знак для cut и для add (текст схемы, не догадка) ───
+        extrude_desc = ((((client.schema_of("kompas_extrude") or {}).get("properties") or {})
+                         .get("expected_volume_delta_mm3")) or {}).get("description") or ""
+        hole_desc = ((((client.schema_of("kompas_hole") or {}).get("properties") or {})
+                      .get("expected_volume_delta_mm3")) or {}).get("description") or ""
+        extrude_ok = ("cut" in extrude_desc and "снят" in extrude_desc.lower()
+                      and "положительн" in extrude_desc.lower()
+                      and "base" in extrude_desc and "boss" in extrude_desc)
+        hole_ok = ("положительн" in hole_desc.lower() and "уменьшен" in hole_desc.lower())
+        rep.add("CB13.5",
+                "§2: описание expected_volume_delta_mm3 у kompas_extrude называет знак ЯВНО для cut "
+                "(снятое - положительное) и для base/boss, у kompas_hole - уменьшение положительное; "
+                "отрицательное значение объявлено отказом",
+                "PASS" if (extrude_ok and hole_ok) else "FAIL",
+                f"extrude: cut={'cut' in extrude_desc} снят={'снят' in extrude_desc.lower()} "
+                f"положительн={'положительн' in extrude_desc.lower()} | "
+                f"hole: уменьшен={'уменьшен' in hole_desc.lower()} "
+                f"положительн={'положительн' in hole_desc.lower()} | фрагмент={extrude_desc[:200]!r}",
+                details={"extrude_description": extrude_desc, "hole_description": hole_desc})
+
+        close(block)
+
+    # ── CB13.6: зеркальный знак там, где отказ до COM невозможен, назван НЕ «модель отстала» ──
+    chamfer_doc, chamfer_error = build_block("CB13-mirror-sign")
+    mirror_code = None
+    if chamfer_doc and not chamfer_error:
+        body_ref = (body_rows(chamfer_doc) or [{}])[0].get("body_ref")
+        edges, topo_error = vertical_edges(chamfer_doc, body_ref, ref["block_depth_mm"])
+        if not edges:
+            chamfer_error = f"вертикальных рёбер нет: {topo_error}"
+        else:
+            # У kompas_chamfer нет document_id: документ адресуется рёбрами, а ревизия - полем
+            # expected_revision. Лишнее поле отвергается схемой (измерено первым прогоном строки).
+            env, mirror_code = call("kompas_chamfer", {
+                "expected_revision": rev_of(chamfer_doc),
+                "edge_refs": edges[:1], "mode": "two_distances",
+                "distance1_mm": ref["chamfer_leg_mm"], "distance2_mm": ref["chamfer_leg_mm"],
+                "expected_volume_delta_mm3": -ref["chamfer_removed_mm3"]})
+            mirror_res = result(env)
+            uv = " ".join(str(u) for u in unverified(env))
+            warned = " ".join(str(w) for w in warnings(env))
+            # Имя проверки сравнения у инструментов РАЗНОЕ (expected_volume_delta у выдавливания,
+            # volume_delta у фаски/отверстия) - строка берёт ту, которую инструмент действительно выдал.
+            check = check_named(env, "expected_volume_delta") or check_named(env, "volume_delta")
+            named_sign = "declared_expectation_sign_mismatch" in uv
+            no_lag = ("могло отстать" not in warned) and ("могло отстать" not in uv)
+            rep.add("CB13.6",
+                    "§2: зеркальный знак ожидания (фаска: снято записано положительным, заявлено "
+                    "отрицательное) назван несовпадением ЗНАКА, а не «модель могла отстать»: вызов не "
+                    "отвергнут, ожидание не подтверждено, причина названа",
+                    "PASS" if (mirror_code is None and named_sign and no_lag
+                              and check.get("passed") is False) else "FAIL",
+                    f"code={mirror_code} проверка={check} unverified={uv[:160]!r} "
+                    f"warnings={warned[:160]!r}",
+                    details={"code": mirror_code, "check": check, "unverified": unverified(env),
+                             "warnings": warnings(env)})
+        close(chamfer_doc)
+    if not (chamfer_doc and not chamfer_error and mirror_code is None):
+        if not any(row.get("id") == "CB13.6" for row in rep.rows):
+            rep.add("CB13.6", "§2: зеркальный знак назван несовпадением знака", "FAIL",
+                    f"постановка фаски не удалась: {chamfer_error}")
+
+    # ── CB13.7: 20 новых сборок - изометрия СРАЗУ после сохранения (§3) ────────────────────────
+    part_dir = os.path.join(workdir, "cb13-assembly-src")
+    os.makedirs(part_dir, exist_ok=True)
+    part_paths = []
+    for index in (1, 2):
+        doc, error = build_block("CB13-part%d" % index)
+        path = os.path.join(part_dir, "cb13-part%d.m3d" % index)
+        if doc and not error:
+            save_env, save_code = call("kompas_save_document", {
+                "document_id": doc, "expected_revision": rev_of(doc), "target_path": path})
+            if save_code or not os.path.isfile(path):
+                error = f"сохранение детали {index}: {save_code} {emsg(save_env)}"
+            close(doc)
+        if error:
+            part_paths = []
+            break
+        part_paths.append(path)
+
+    attempts = []
+    if len(part_paths) == 2:
+        for index in range(1, ref["assemblies"] + 1):
+            attempt = {"iteration": index}
+            env, code = call("kompas_create_document", {
+                "application_id": app_id, "kind": "assembly", "name": "CB13-asm%02d" % index})
+            asm = doc_id(env)
+            attempt["assembly_created"] = bool(asm)
+            if not asm:
+                attempt["error"] = f"create_document: {code} {emsg(env)}"
+                attempts.append(attempt)
+                continue
+            for part_index, path in enumerate(part_paths, start=1):
+                _e, ins_env, _r = client.tool("kompas_insert_component", {
+                    "document_id": asm, "expected_revision": rev_of(asm),
+                    "source_path": path, "fixed": False,
+                    "operation_id": str(uuid.uuid4())}, timeout=300)
+                if error_code(ins_env) is not None:
+                    attempt["error"] = (f"insert_component {part_index}: {error_code(ins_env)} "
+                                        f"{emsg(ins_env)}")
+                    break
+            if "error" not in attempt:
+                asm_path = os.path.join(workdir, "cb13-asm%02d.a3d" % index)
+                save_env, save_code = call("kompas_save_document", {
+                    "document_id": asm, "expected_revision": rev_of(asm), "target_path": asm_path})
+                attempt["saved"] = not save_code and os.path.isfile(asm_path)
+                if not attempt["saved"]:
+                    attempt["error"] = f"save: {save_code} {emsg(save_env)}"
+                else:
+                    shot_env, shot_code = call("kompas_export_image", {
+                        "document_id": asm, "expected_revision": rev_of(asm), "format": "png",
+                        "view": "isometric", "keep_view": True, "return_image_content": True})
+                    shot_res = result(shot_env)
+                    attempt["code"] = shot_code
+                    attempt["bytes"] = shot_res.get("bytes_count")
+                    attempt["has_content"] = bool(shot_res.get("image_base64")
+                                                 or shot_res.get("image_content"))
+                    attempt["error_message"] = emsg(shot_env)
+                    attempt["details"] = edet(shot_env)
+                    # ВТОРОЕ ПЛЕЧО: тот же документ и тот же вид, но после НАЗВАННОЙ паузы. Наряд §1.3
+                    # требует «немедленный вызов против вызова после паузы»: различие частоты и есть
+                    # ответ на вопрос «готовность окна или момент чтения».
+                    time.sleep(ref["pause_s"])
+                    pause_env, pause_code = call("kompas_export_image", {
+                        "document_id": asm, "expected_revision": rev_of(asm), "format": "png",
+                        "view": "isometric", "keep_view": True, "return_image_content": False,
+                        "save_path": os.path.join(workdir, "cb13-asm%02d-pause.png" % index)})
+                    attempt["pause_code"] = pause_code
+                    attempt["pause_bytes"] = result(pause_env).get("bytes_count")
+                    attempt["pause_details"] = edet(pause_env)
+                    attempt["pause_error"] = emsg(pause_env)
+            close(asm)
+            attempts.append(attempt)
+
+    failures = [a for a in attempts if a.get("code") is not None or "error" in a]
+    ok_count = len(attempts) - len(failures)
+    pause_failures = [a for a in attempts if a.get("pause_code") is not None or "error" in a]
+    pause_ok = len(attempts) - len(pause_failures)
+    # Диагностика отказа вида (когда отказ случился) обязана назвать ПРИЧИНУ, число чтений и итог
+    # восстановления прежнего вида - тогда следующий отказ разбирается без повторного прогона.
+    diagnosed = all(
+        isinstance(a.get("details"), dict)
+        and "view_cause" in a["details"]
+        and "read_attempts" in a["details"]
+        and "previous_view_restored" in a["details"]
+        for a in failures)
+    rep.add("CB13.7",
+            "§3: двадцать НОВЫХ сборок (две детали, сохранение), снимок view=isometric keep_view=true "
+            "СРАЗУ после сохранения и второй снимок того же вида после паузы %.1f с: частота отказа "
+            "названа для ОБОИХ плеч" % ref["pause_s"],
+            "PASS" if (len(attempts) == ref["assemblies"] and ok_count == ref["assemblies"]
+                       and pause_ok == ref["assemblies"]) else "FAIL",
+            f"немедленно={ok_count}/{len(attempts)} после_паузы={pause_ok}/{len(attempts)} "
+            + "; ".join("%s/%s" % (f["iteration"], f.get("code") or f.get("error"))
+                        for f in failures[:5]),
+            details={"attempts": [{k: v for k, v in a.items() if k not in ("details", "pause_details")}
+                                  for a in attempts],
+                     "failures": [{k: v for k, v in a.items() if k not in ("details", "pause_details")}
+                                  for a in failures],
+                     "pause_failures": [{k: v for k, v in a.items()
+                                         if k not in ("details", "pause_details")}
+                                        for a in pause_failures],
+                     "pause_seconds": ref["pause_s"],
+                     "diagnosed": diagnosed})
+
+    # ── CB13.8: диагностика вида - в ЛЮБОМ ответе, отказ или успех (§3) ───────────────────────
+    # Постановка, которая отвечает ВСЕГДА: новая сборка после сохранения и снимок изометрии. Ответ
+    # обязан назвать, СКОЛЬКО проекций прочитано (read attempts), СКОЛЬКО чтений отказало и КАКАЯ
+    # причина у прежнего вида (view_cause: прочитан и назван / не найдена текущей / чтение отказало /
+    # имени нет). Отказ вида обязан нести те же сведения в details - тем строку и держим.
+    diag_assembly = None
+    diag_error = None
+    diag_code = None
+    diag_result = {}
+    diag_details = {}
+    diag_message = ""
+    if len(part_paths) == 2:
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                    "name": "CB13-view-diag"})
+        diag_assembly = doc_id(env)
+        if not diag_assembly:
+            diag_error = f"create_document: {code} {emsg(env)}"
+        else:
+            for path in part_paths:
+                _e, ins_env, _r = client.tool("kompas_insert_component", {
+                    "document_id": diag_assembly, "expected_revision": rev_of(diag_assembly),
+                    "source_path": path, "fixed": False,
+                    "operation_id": str(uuid.uuid4())}, timeout=300)
+                if error_code(ins_env) is not None:
+                    diag_error = f"insert_component: {error_code(ins_env)} {emsg(ins_env)}"
+                    break
+            if not diag_error:
+                diag_path = os.path.join(workdir, "cb13-view-diag.a3d")
+                save_env, save_code = call("kompas_save_document", {
+                    "document_id": diag_assembly, "expected_revision": rev_of(diag_assembly),
+                    "target_path": diag_path})
+                if save_code or not os.path.isfile(diag_path):
+                    diag_error = f"save: {save_code} {emsg(save_env)}"
+            if not diag_error:
+                shot_env, diag_code = call("kompas_export_image", {
+                    "document_id": diag_assembly, "expected_revision": rev_of(diag_assembly),
+                    "format": "png", "view": "isometric", "keep_view": True,
+                    "return_image_content": False,
+                    "save_path": os.path.join(workdir, "cb13-view-diag.png")})
+                diag_result = result(shot_env)
+                diag_details = edet(shot_env)
+                diag_message = str(emsg(shot_env) or "")
+            close(diag_assembly)
+    else:
+        diag_error = "детали сборки не сохранены"
+    read_attempts = diag_result.get("view_read_attempts")
+    read_failures = diag_result.get("view_read_failures")
+    view_cause = diag_result.get("view_cause")
+    ok = (diag_error is None and diag_code is None
+          and isinstance(read_attempts, int) and read_attempts >= 1
+          and isinstance(read_failures, int)
+          and view_cause == "current_projection_named"
+          and diag_result.get("applied_view") == "isometric"
+          and (not failures or diagnosed))
+    rep.add("CB13.8",
+            "§3: ответ вида называет число прочитанных проекций (view_read_attempts), число отказов "
+            "чтения (view_read_failures) и причину (view_cause: current_projection_named / "
+            "no_current_projection / read_failed / unpublished_current_projection), а отказ вида несёт "
+            "те же сведения и итог восстановления прежнего вида в details",
+            "PASS" if ok else "FAIL",
+            f"code={diag_code} view_cause={view_cause!r} read_attempts={read_attempts!r} "
+            f"read_failures={read_failures!r} applied={diag_result.get('applied_view')!r} "
+            f"restored={diag_result.get('view_restored')!r} "
+            f"отказов_за_20={len(failures)} все_с_разбором={diagnosed} err={diag_error} "
+            f"msg={diag_message[:140]!r}",
+            details={"code": diag_code, "result": {k: v for k, v in diag_result.items()
+                                                   if k != "image_base64"},
+                     "details": diag_details, "message": diag_message,
+                     "error": diag_error, "failures": len(failures)})
+
+    if not attempts:
+        rep.add("CB13.7", "§3: 20 сборок и снимок изометрии сразу после сохранения", "FAIL",
+                f"постановка не построена: {part_paths or 'детали не сохранены'}")
+
+    # ── CB13.9-CB13.11: открытие после потери экземпляра (§4) ─────────────────────────────────
+    # Файл открытия - СОХРАНЁННАЯ СБОРКА ИЗ ДВУХ ДЕТАЛЕЙ из строки CB13.8 (постановка наряда §1.4:
+    # сборка из двух деталей); если она не сохранилась, строится деталь с телом, и это названо.
+    open_path = os.path.join(workdir, "cb13-view-diag.a3d")
+    open_error = None
+    open_kind = "сборка из двух деталей (сохранена строкой CB13.8)"
+    if not os.path.isfile(open_path):
+        open_kind = "деталь с одним телом (сборка CB13.8 не сохранена)"
+        open_path = os.path.join(workdir, "cb13-open.m3d")
+        open_doc, open_error = build_block("CB13-open")
+        if open_doc and not open_error:
+            save_env, save_code = call("kompas_save_document", {
+                "document_id": open_doc, "expected_revision": rev_of(open_doc),
+                "target_path": open_path})
+            if save_code or not os.path.isfile(open_path):
+                open_error = f"сохранение файла открытия: {save_code} {emsg(save_env)}"
+            close(open_doc)
+    if not open_path or open_error:
+        for cid, what in (("CB13.9", "§4: открытие живого экземпляра проходит (контроль)"),
+                          ("CB13.10", "§4: отказ называет потерю экземпляра ДО начала открытия"),
+                          ("CB13.11", "§4: журнал попытки открытия несёт путь, режим, PID и живость")):
+            rep.add(cid, what, "FAIL", f"файл для открытия не подготовлен: {open_error}")
+    else:
+        live_env, live_code = call("kompas_open_document", {
+            "application_id": app_id, "path": open_path, "access": "read_only"})
+        live_doc = doc_id(live_env)
+        rep.add("CB13.9",
+                "§4: КОНТРОЛЬ - открытие того же файла (%s) в ЖИВОМ экземпляре проходит (read_only), "
+                "постановка «экземпляр потерян» проверяется на том же файле" % open_kind,
+                "PASS" if (live_code is None and live_doc) else "FAIL",
+                f"code={live_code} document_id={live_doc} path={open_path} msg={emsg(live_env)}")
+        if live_doc:
+            close(live_doc)
+
+        pid = process_id
+        killed_ok = False
+        if pid:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+            for _ in range(30):
+                if wait_pid_gone(pid, 0.2):
+                    killed_ok = True
+                    break
+            killed = killed_ok
+        dead_env, dead_code = call("kompas_open_document", {
+            "application_id": app_id, "path": open_path, "access": "read_only"})
+        dead_details = edet(dead_env)
+        dead_message = str(emsg(dead_env) or "")
+        dead_status = (dead_env or {}).get("status")
+        says_before = ("до начала" in dead_message
+                       or dead_details.get("open_attempt") == "not_started")
+        # ИНВАРИАНТ строки: определённый исход - это FAILED/OPERATION_NOT_APPLIED, а не OUTCOME_UNKNOWN.
+        # Статус outcome_unknown с кодом «ничего не применено» противоречил бы сам себе.
+        ok = (killed_ok and dead_status == "failed" and dead_code == "OPERATION_NOT_APPLIED"
+              and dead_details.get("instance_alive_before_call") is False
+              and dead_details.get("open_attempt") == "not_started"
+              and dead_details.get("outcome") == "not_applied"
+              and says_before)
+        rep.add("CB13.10",
+                "§4: экземпляр завершён ДО вызова - открытие отвечает ОПРЕДЕЛЁННЫМ отказом "
+                "OPERATION_NOT_APPLIED (status=failed, не outcome_unknown) и называет «экземпляр "
+                "потерян до начала открытия»: details.instance_alive_before_call=false, "
+                "open_attempt=not_started, outcome=not_applied",
+                "PASS" if ok else "FAIL",
+                f"pid={pid} убит={killed_ok} status={dead_status} code={dead_code} "
+                f"details={ {k: dead_details.get(k) for k in ('open_attempt', 'instance_pid', 'instance_alive_before_call', 'outcome') } } "
+                f"msg={dead_message[:160]!r}",
+                details={"pid": pid, "killed": killed_ok, "status": dead_status, "code": dead_code,
+                         "details": dead_details, "message": dead_message})
+
+        # Журнал: строка НАМЕРЕНИЯ пишется ДО получения document_id, поэтому в ней и лежит попытка.
+        operation_id = (dead_env or {}).get("operation_id")
+        evidence = None
+        journal_note = None
+        try:
+            with open(client.config, encoding="utf-8") as fh:
+                journal_path = json.load(fh).get("journal_path")
+            journal_lines = []
+            if journal_path and os.path.isfile(journal_path):
+                with open(journal_path, encoding="utf-8") as fh:
+                    for line in fh:
+                        try:
+                            row = json.loads(line)
+                        except ValueError:
+                            continue
+                        if operation_id and row.get("operation_id") == operation_id:
+                            journal_lines.append(row)
+            else:
+                journal_note = f"журнал не найден: {journal_path}"
+            # The intent line carries the attempt under `attempt` (JournalRecord.Attempt, snake_case in
+            # the journal); the older key name is accepted too so a record written by an older build is
+            # still evidence rather than "no field".
+            evidence = next((row.get("attempt") or row.get("attempt_evidence") for row in journal_lines
+                             if row.get("attempt") or row.get("attempt_evidence")), None)
+            if evidence is None and journal_lines:
+                journal_note = "строки операции есть, поля attempt нет"
+        except (OSError, ValueError) as error:  # noqa: BLE001 - причина называется, а не глотается
+            journal_note = f"журнал не прочитан: {error}"
+        ev = evidence if isinstance(evidence, dict) else {}
+        ok = (isinstance(evidence, dict)
+              and os.path.normcase(str(ev.get("path"))) == os.path.normcase(open_path)
+              and ev.get("access") == "read_only"
+              and ev.get("instance_pid") == pid
+              and ev.get("instance_alive_before_call") is False)
+        rep.add("CB13.11",
+                "§4: строка НАМЕРЕНИЯ журнала (до document_id) несёт попытку открытия: путь файла, "
+                "режим доступа, PID экземпляра и проверку его живости ДО начала вызова - по этим "
+                "сведениям согласование решает исход, не переоткрывая модель",
+                "PASS" if ok else "FAIL",
+                f"operation_id={operation_id} evidence={str(evidence)[:220]!r} "
+                f"{(journal_note or '')}",
+                details={"operation_id": operation_id, "attempt_evidence": evidence,
+                         "note": journal_note})
+
+    for cid, desc in (
+        ("CB13.1", "§1: отпечаток пустой детали"),
+        ("CB13.2", "§1: первое тело меняет отпечаток"),
+        ("CB13.3", "§2: отрицательное ожидание выреза отвергнуто до COM"),
+        ("CB13.4", "§2: положительное ожидание выреза подтверждено"),
+        ("CB13.5", "§2: описания поля называют знак"),
+        ("CB13.6", "§2: зеркальный знак назван"),
+        ("CB13.7", "§3: изометрия сразу после сохранения сборки"),
+        ("CB13.8", "§3: диагностика отказа вида"),
+        ("CB13.9", "§4: контроль открытия живого экземпляра"),
+        ("CB13.10", "§4: отказ называет потерю до начала открытия"),
+        ("CB13.11", "§4: журнал попытки открытия"),
+    ):
+        if not any(row.get("id") == cid for row in rep.rows):
+            rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
+    if killed:
+        # Сеанс этой группы завершён НАМЕРЕННО: строки CB13.10-CB13.11 проверяют потерю экземпляра.
+        print("  CB13: экземпляр КОМПАС завершён строкой CB13.10 (постановка §4)")
+
+
 # Эталон группы DC. Числа объявлены ЗДЕСЬ, ДО прогона: плита 100x80x10 = 80000 мм³ на XY.
 DC_REFERENCE = {
     "plate_width_mm": 100.0,
@@ -19819,6 +20474,11 @@ def main():
     # сеанс, своя синтетическая геометрия; данные клиента не используются (наряд §5).
     client_bugs_20261027_only = "--client-bugs-20261027" in sys.argv
 
+    # Наряд CLIENT_BUGS_0_13_0_CODEX: дефекты пользователя MCP на выпуске 0.13.0 (клиент Codex).
+    # Последние строки группы НАМЕРЕННО завершают свой экземпляр КОМПАС, поэтому группа идёт своим
+    # свежим сеансом (см. ALL_GROUPS_EXTRA).
+    client_bugs_20261107_only = "--client-bugs-20261107" in sys.argv
+
     # Наряд READ_DISCONNECT: чтение при потерянной связи с КОМПАС отвечает APPLICATION_DISCONNECTED,
     # а не ложным успехом с пустыми данными. Группа завершает СВОЙ экземпляр КОМПАС по PID, поэтому
     # идёт своим свежим сеансом и последней среди групп вне вертикали.
@@ -19897,6 +20557,7 @@ def main():
         "export_inertia": export_inertia_only,
         "client_bugs_20261010": client_bugs_20261010_only,
         "client_bugs_20261027": client_bugs_20261027_only,
+        "client_bugs_20261107": client_bugs_20261107_only,
         "pattern_orientation": pattern_orientation_only,
         "release_040": release_040_only,
         "client_bugs_20261008": client_bugs_only,
@@ -20787,6 +21448,16 @@ def main():
 
         if client_bugs_20261027_only:
             client_bugs_20261027_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if client_bugs_20261107_only:
+            # Последние строки группы завершают экземпляр КОМПАС намеренно (постановка §4 наряда
+            # CLIENT_BUGS_0_13_0_CODEX), поэтому штатное гашение после группы уже не подтвердится.
+            client_bugs_20261107_checks(client, rep, app_id, workdir, process_id=app_pid)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -61876,6 +62547,9 @@ EXTRA_GROUP_CHECKS = {
     "export_inertia": lambda c, r, a, w, v, p: export_inertia_checks(c, r, a, w),
     "client_bugs_20261010": lambda c, r, a, w, v, p: client_bugs_20261010_checks(c, r, a, w),
     "client_bugs_20261027": lambda c, r, a, w, v, p: client_bugs_20261027_checks(c, r, a, w),
+    # `p` - PID экземпляра, поднятого общим запуском группы: строки §4 завершают ИМЕННО его, чтобы
+    # воспроизвести открытие после потери экземпляра (чужие PID сюда не попадают).
+    "client_bugs_20261107": lambda c, r, a, w, v, p: client_bugs_20261107_checks(c, r, a, w, process_id=p),
     "suppress": lambda c, r, a, w, v, p: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
     # `p` — PID экземпляра, поднятого общим запуском группы: только группа DC его использует, чтобы
     # завершить СВОЙ процесс КОМПАС и воспроизвести обрыв связи.

@@ -1568,8 +1568,8 @@ public sealed partial class Api5Session : IDisposable
             new[] { max[0] - min[0], max[1] - min[1], max[2] - min[2] });
     }
 
-    /// <summary>Corners of the document box; <paramref name="full"/> chooses the documented mode. Corners are
-    /// normalised (min ≤ max on every axis): the kernel does not promise which corner is which.</summary>
+    /// <summary>Corners of the document box; <paramref name="full"/> chooses the documented mode. The
+    /// normalisation and the "no box" rule live in <see cref="ModelBox"/>, shared with the fingerprint.</summary>
     private static bool TryReadGabaritCorners(
         DocumentEntry document, bool full, bool customizable, out double[] min, out double[] max)
     {
@@ -1582,9 +1582,10 @@ public sealed partial class Api5Session : IDisposable
                 return false;
             }
 
-            min = new[] { Math.Min(x1, x2), Math.Min(y1, y2), Math.Min(z1, z2) };
-            max = new[] { Math.Max(x1, x2), Math.Max(y1, y2), Math.Max(z1, z2) };
-            return true;
+            // INVARIANT: a box the kernel answers with service values is NOT a measurement — the same
+            // rule must hold for the published gabarit and for the fingerprint.
+            // History: docs/decisions/adapter-core.md#gabarit-scope
+            return ModelBox.TryNormalise(x1, y1, z1, x2, y2, z2, out min, out max);
         }
         catch (Exception ex) when (ex is COMException or TargetInvocationException)
         {

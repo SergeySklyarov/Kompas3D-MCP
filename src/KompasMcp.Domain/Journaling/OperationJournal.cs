@@ -15,14 +15,29 @@ public enum JournalOutcome
     OutcomeUnknown,
 }
 
+/// <summary>What the Host established about the call BEFORE it left for the Worker, for an operation that
+/// has no document yet: a call that dies while opening a file leaves no document_id behind.</summary>
+/// <param name="InstanceAliveBeforeCall">A liveness check before dispatch. <c>false</c> proves the call
+/// could not have opened anything; <c>null</c> - not measured. The same check when the answer was built is
+/// <see cref="InstanceAliveAtAnswer"/>.</param>
+public sealed record JournalAttemptEvidence(
+    string Tool,
+    string? Path,
+    string? Access,
+    string? ApplicationId,
+    int? InstancePid,
+    bool? InstanceAliveBeforeCall,
+    bool? InstanceAliveAtAnswer,
+    DateTimeOffset CheckedUtc);
+
 /// <summary>What the journal remembers about one mutation (spec 1.8).</summary>
 /// <param name="HostPid">The Host process that wrote the record, once the journal carried the marker. A
 /// record of an earlier process is history, not "this session"; a missing marker is reported as missing,
 /// never as the current process.</param>
-/// <param name="DocumentUnresolved">Why the record carries no document, when the Host could not determine it
-/// (an unknown reference, a reference spread over several documents, an unreachable registry). The reason
-/// travels WITH the record so reconciliation names it instead of answering a silent "no document".
+/// <param name="DocumentUnresolved">Why the record carries no document, when the Host could not determine
+/// it: the reason travels WITH the record so reconciliation names it instead of a silent "no document".
 /// History: docs/decisions/host.md#reference-document</param>
+/// <param name="Attempt">The pre-dispatch evidence of an operation that names no document yet (an open).</param>
 public sealed record JournalRecord(
     string OperationId,
     string Tool,
@@ -36,7 +51,8 @@ public sealed record JournalRecord(
     DateTimeOffset? FinishedUtc,
     bool NeedsReconciliation,
     int? HostPid = null,
-    string? DocumentUnresolved = null);
+    string? DocumentUnresolved = null,
+    JournalAttemptEvidence? Attempt = null);
 
 /// <summary>Unresolved outcomes left by PREVIOUS Host processes: how many, how old, and whose.</summary>
 /// <param name="HostPid">The marker of the oldest record's process, or <c>null</c> when it carried none.</param>
@@ -280,7 +296,7 @@ public sealed class OperationJournal : IDisposable
     /// <param name="documentUnresolved">Why <paramref name="documentId"/> is absent, when the Host could not
     /// determine it. Recorded with the intent so reconciliation can name the cause.</param>
     public StartDecision TryBegin(string operationId, string tool, string canonicalArguments, string? documentId, long? baseRevision,
-        string? documentUnresolved = null)
+        string? documentUnresolved = null, JournalAttemptEvidence? attempt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(tool);
@@ -349,7 +365,8 @@ public sealed class OperationJournal : IDisposable
                 NeedsReconciliation: false,
                 // The marker lets the next process tell ITS unknown outcomes from this one's.
                 HostPid: Environment.ProcessId,
-                DocumentUnresolved: documentUnresolved);
+                DocumentUnresolved: documentUnresolved,
+                Attempt: attempt);
 
             // INVARIANT: the intent record MUST be durable and locked, else the command does NOT leave —
             // a lost record makes a replay look like "never ran". With no lock nothing is appended and

@@ -29,7 +29,8 @@ public readonly record struct DeclaredExpectationOutcome(
     double? ExpectedMm3,
     double? MeasuredMm3,
     double ToleranceMm3,
-    string? Reason = null)
+    string? Reason = null,
+    bool SignMirrored = false)
 {
     public bool IsDeclared => Verdict != DeclaredExpectationVerdict.NotDeclared;
 
@@ -40,6 +41,11 @@ public readonly record struct DeclaredExpectationOutcome(
 
     /// <summary>Declared but not comparable — named in <c>unverified_aspects</c>, never a refusal.</summary>
     public bool IsUnverifiable => Verdict == DeclaredExpectationVerdict.Unverifiable;
+
+    /// <summary>Declared and contradicted by the SIGN alone: the modules agree within the tolerance, so the
+    /// model is where the caller said, and "the model may lag one operation behind" is NOT a possible cause
+    /// of the mismatch.</summary>
+    public bool IsSignMismatch => IsNotConfirmed && SignMirrored;
 
     /// <summary>Measured minus declared, or null when one of the two is missing.</summary>
     public double? DifferenceMm3 => ExpectedMm3 is double expected && MeasuredMm3 is double measured
@@ -84,8 +90,14 @@ public static class DeclaredExpectation
             ? new DeclaredExpectationOutcome(
                 DeclaredExpectationVerdict.Confirmed, expected, measured, tolerance)
             : new DeclaredExpectationOutcome(
-                DeclaredExpectationVerdict.NotConfirmed, expected, measured, tolerance);
+                DeclaredExpectationVerdict.NotConfirmed, expected, measured, tolerance,
+                SignMirrored: IsMirror(expected, measured, tolerance));
     }
+
+    /// <summary>True when the modules agree within the tolerance and only the sign differs: the model holds
+    /// the declared amount of material, and the expectation contradicts the field's sign rule.</summary>
+    private static bool IsMirror(double expected, double measured, double tolerance) =>
+        expected != 0d && Math.Abs(measured + expected) <= tolerance;
 
     /// <summary>Compare a declared expectation with a measurement that may be RE-READ once when the first
     /// read did not confirm it; <paramref name="rereadMm3"/> repeats the MEASUREMENT by the same route.</summary>
@@ -144,17 +156,40 @@ public static class DeclaredExpectation
 
     /// <summary>The named gap for a declared expectation that did not hold: the same numbers as the
     /// failed check, and the reason the call is still a success.</summary>
+    /// <remarks>INVARIANT: a mismatch of the SIGN only is NOT "the model may lag" — the amount matched, so a
+    /// stale read cannot explain it; the expectation contradicts the field's sign rule, and the reason says
+    /// which rule. «Модель могла отстать» stays only where the amount itself disagreed.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
     public static string NotConfirmedReason(string quantity, DeclaredExpectationOutcome outcome) =>
-        NotConfirmedCode + " — заявленное ожидание (" + quantity + ") не подтверждено: заявлено "
-        + Num(outcome.ExpectedMm3) + ", измерено " + Num(outcome.MeasuredMm3) + ", разность "
-        + Num(outcome.DifferenceMm3) + ", допуск " + Num(outcome.ToleranceMm3) + ". Вызов НЕ отвергнут: "
-        + "модель могла отстать на одну операцию.";
+        outcome.IsSignMismatch
+            ? SignMismatchCode + " — заявленное ожидание (" + quantity + ") не подтверждено: заявлено "
+                + Num(outcome.ExpectedMm3) + ", измерено " + Num(outcome.MeasuredMm3)
+                + " — модули совпадают, а ЗНАКИ противоположны. Величина этого поля пишется по правилу "
+                + "своего признака: у признака с одним направлением (вырез, отверстие, base/boss) она "
+                + "ВСЕГДА ПОЛОЖИТЕЛЬНА (сколько материала сдвинуто), у признака, который умеет и снимать, и "
+                + "добавлять (фаска), она знаковая как «объём до минус объём после». Зеркальное ожидание "
+                + "правилу не соответствует; вызов НЕ отвергнут, модель не перечитывается заново."
+            : NotConfirmedCode + " — заявленное ожидание (" + quantity + ") не подтверждено: заявлено "
+                + Num(outcome.ExpectedMm3) + ", измерено " + Num(outcome.MeasuredMm3) + ", разность "
+                + Num(outcome.DifferenceMm3) + ", допуск " + Num(outcome.ToleranceMm3) + ". Вызов НЕ отвергнут: "
+                + "модель могла отстать на одну операцию.";
+
+    /// <summary>The one code a mirrored-sign mismatch carries: a named expectation defect, not a stale
+    /// model read.</summary>
+    public const string SignMismatchCode = "declared_expectation_sign_mismatch";
 
     /// <summary>The warning a caller reads first among the geometry-related ones.</summary>
+    /// <remarks>INVARIANT: the "model may lag" sentence is published only for a mismatch of the AMOUNT; the
+    /// mirrored sign names the rule instead (see <see cref="NotConfirmedReason"/>).</remarks>
     public static string NotConfirmedWarning(DeclaredExpectationOutcome outcome) =>
-        "Заявленное ожидание не подтверждено: заявлено " + Num(outcome.ExpectedMm3) + ", измерено "
-        + Num(outcome.MeasuredMm3) + ", разность " + Num(outcome.DifferenceMm3) + "; модель могла "
-        + "отстать на одну операцию - перечитайте объём перед выводом.";
+        outcome.IsSignMismatch
+            ? "Заявленное ожидание не подтверждено: заявлено " + Num(outcome.ExpectedMm3) + ", измерено "
+                + Num(outcome.MeasuredMm3) + " — модули совпадают, знаки противоположны. Снятый материал "
+                + "записывается ПОЛОЖИТЕЛЬНЫМ, добавленный - отрицательным только у признака, который умеет и "
+                + "то и другое; пересчитайте знак ожидания."
+            : "Заявленное ожидание не подтверждено: заявлено " + Num(outcome.ExpectedMm3) + ", измерено "
+                + Num(outcome.MeasuredMm3) + ", разность " + Num(outcome.DifferenceMm3) + "; модель могла "
+                + "отстать на одну операцию - перечитайте объём перед выводом.";
 
     /// <summary>The warning list a result publishes: empty unless an outcome did not hold. One entry per
     /// unconfirmed outcome, so a tool with two declared expectations names both.</summary>

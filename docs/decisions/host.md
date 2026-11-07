@@ -1459,3 +1459,27 @@ if (detached === void 0) throw new ToolOutputError(toolName, ["value is not loss
 `host_pid` (метка процесса в записи; у записей, написанных до её появления, `null` и
 `host_pid_note`). Метку пишет `OperationJournal` (`JournalRecord.HostPid`), разбор - там же
 (`UnresolvedOfPreviousProcesses`), тест - `JournalAndQueueTests`, строка прибора - `OPS.15.history`.
+
+## <a id="open-attempt-evidence"></a>Открытие после потери экземпляра: попытка записывается ДО `document_id` (07.11.2026, наряд `CLIENT_BUGS_0_13_0_CODEX`)
+
+MEASURED у пользователя: `attach` → `kompas_open_document access=read_only` → `OUTCOME_UNKNOWN`, COM
+`0x800706BA`; в журнале нет ни `document_id`, ни исходной ревизии, поэтому согласование ответило
+«сравнивать не с чем», а следующий `attach` нашёл 0 процессов. Причина гибели процесса не установлена.
+
+**Решение.** Строка намерения журнала теперь несёт `attempt` (`JournalAttemptEvidence`): путь файла,
+режим доступа, `application_id`, PID экземпляра и проверку его живости ДО отправки команды. PID Host
+берёт из ответа `kompas_connect` (сам он COM не трогает); PID, узнанный прежним процессом Хоста, не
+переносится, и это названо в записи. Правило согласования - `Domain/Documents/OpenAttemptPolicy`:
+экземпляр не был жив ДО вызова → исход определён (`not_applied`, код `open_not_started`, модель не
+тронута); был жив, а теперь мёртв → связь потеряна ПОСЛЕ начала (`open_lost_after_start`, исход
+остаётся неизвестным); не измерено → `unknown` с названной причиной. Ответ открытия несёт
+`details.open_attempt` (`not_started`/`started`/`undetermined`), `instance_pid`,
+`instance_alive_before_call` и `outcome`, а `kompas_operation_reconcile` по этим сведениям отвечает
+`not_applied` вместо «сравнивать не с чем».
+
+**Границы.** LIMIT: PID может быть переиспользован ОС, поэтому «жив» доказывает только «процесс с этим
+PID есть»; «мёртв» - доказательство. LIMIT: потеря ровно ВО ВРЕМЯ открытия на этой машине не
+воспроизведена (убийство между `attach` и `open` воспроизводит случай «до начала»); случай «после
+начала» назван по сведениям, а не выдан за измеренный. Строки `CB13.9`-`CB13.11`, тест
+`OpenAttemptPolicyTests`.
+

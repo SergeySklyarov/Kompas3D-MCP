@@ -1,4 +1,4 @@
-﻿using KompasMcp.Contracts;
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Geometry;
 using Xunit;
 
@@ -240,5 +240,51 @@ public class DeclaredExpectationTests
         Assert.Equal(2, warnings!.Count);
         Assert.Contains("заявлено 100", warnings[0], StringComparison.Ordinal);
         Assert.Contains("заявлено 200", warnings[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MirroredSign_IsNamedAsASignMismatch_NotAsAStaleModelRead()
+    {
+        // MEASURED (client report): a cut removes 1000 mm3 and writes it POSITIVE; the caller declared
+        // -1000 and read "модель могла отстать на одну операцию" - a cause that cannot explain a mirrored
+        // sign, because the AMOUNT matched. The rule: the sign is a property of the field, and the mirrored
+        // value is a mismatch of the RULE, published with its own code.
+        var outcome = DeclaredExpectation.Evaluate(-1000d, 1000d);
+
+        Assert.Equal(DeclaredExpectationVerdict.NotConfirmed, outcome.Verdict);
+        Assert.True(outcome.IsSignMismatch);
+
+        var reason = DeclaredExpectation.NotConfirmedReason("приращение объёма выдавливания", outcome);
+        Assert.Contains(DeclaredExpectation.SignMismatchCode, reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("модель могла отстать", reason, StringComparison.Ordinal);
+        Assert.Contains("ПОЛОЖИТЕЛЬНА", reason, StringComparison.Ordinal);
+
+        var warnings = DeclaredExpectation.Warnings(outcome);
+        Assert.NotNull(warnings);
+        Assert.Single(warnings!);
+        Assert.DoesNotContain("модель могла отстать", warnings![0], StringComparison.Ordinal);
+        Assert.Contains("знаки противоположны", warnings[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AGenuineAmountMismatch_StillSaysTheModelMayLag()
+    {
+        var outcome = DeclaredExpectation.Evaluate(1000d, 800d);
+
+        Assert.Equal(DeclaredExpectationVerdict.NotConfirmed, outcome.Verdict);
+        Assert.False(outcome.IsSignMismatch);
+        Assert.Contains("модель могла отстать",
+            DeclaredExpectation.NotConfirmedReason("приращение объёма", outcome), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MirroredSignSurvivesTheReread_WhenBothReadsAgree()
+    {
+        // Two agreeing reads of the same amount and the same mirrored declaration: the sign mismatch stands,
+        // and it is NOT softened into "the reads disagreed".
+        var outcome = DeclaredExpectation.Evaluate(-80d, 80d, () => 80.000001d);
+
+        Assert.Equal(DeclaredExpectationVerdict.NotConfirmed, outcome.Verdict);
+        Assert.True(outcome.IsSignMismatch);
     }
 }

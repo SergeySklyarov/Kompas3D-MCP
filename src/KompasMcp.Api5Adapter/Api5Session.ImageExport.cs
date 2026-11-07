@@ -409,6 +409,12 @@ public sealed partial class Api5Session
             AppliedView = viewState.AppliedView,
             PreviousView = viewState.PreviousView,
             ViewRestored = viewState.Restored,
+            // The reads the view answer rests on, published on SUCCESS too: the count and the cause are
+            // what let a caller (and the acceptance row) tell "no current projection" from "the read
+            // refused" without a second run. History: docs/decisions/adapter-core.md#view-swap
+            ViewReadAttempts = requestedView is null ? null : viewState.ReadAttempts,
+            ViewReadFailures = requestedView is null ? null : viewState.ReadFailures,
+            ViewCause = requestedView is null ? null : viewState.Cause,
             ViewProjectionScheme = viewState.Scheme,
             ImageBase64 = base64,
             Sha256 = FileHash.Sha256(data),

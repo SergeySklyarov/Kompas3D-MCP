@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.Journaling;
 using KompasMcp.Domain.Queueing;
@@ -177,9 +178,79 @@ public sealed class ToolInvoker : IAsyncDisposable
                 .RunAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
-        return tool.IsMutation
+        var envelope = tool.IsMutation
             ? await RunMutationAsync(tool, arguments, operationId!, cancellationToken).ConfigureAwait(false)
             : await RunReadAsync(tool, arguments, cancellationToken).ConfigureAwait(false);
+        RememberInstance(tool, envelope);
+        return envelope;
+    }
+
+    /// <summary>PID of the KOMPAS instance behind each application id, as reported by <c>kompas_connect</c>.
+    /// The Host keeps it because it cannot ask COM, and an open attempt must name the instance it
+    /// addressed; a pid learnt by an EARLIER Host process is not carried over, and the evidence says so.</summary>
+    private readonly Dictionary<string, int> _instanceProcessIds = new(StringComparer.Ordinal);
+
+    private void RememberInstance(ToolDefinition tool, ResultEnvelope<JsonNode?> envelope)
+    {
+        if (tool.Name != "kompas_connect" || envelope.Status != OperationStatus.Succeeded)
+        {
+            return;
+        }
+
+        if (ReadString(envelope.Result, "application_id") is { Length: > 0 } applicationId
+            && ReadInt(envelope.Result, "process_id") is int processId)
+        {
+            _instanceProcessIds[applicationId] = processId;
+        }
+    }
+
+    /// <summary>What the Host knows about the instance an operation addresses, measured BEFORE the command
+    /// leaves: the journal's intent line carries it, so a lost answer is still reconcileable.</summary>
+    private JournalAttemptEvidence? DescribeAttempt(ToolDefinition tool, JsonObject arguments)
+    {
+        if (tool.Name != "kompas_open_document")
+        {
+            return null;
+        }
+
+        var applicationId = ReadString(arguments, "application_id");
+        var pid = applicationId is not null && _instanceProcessIds.TryGetValue(applicationId, out var known)
+            ? known
+            : (int?)null;
+        return new JournalAttemptEvidence(
+            tool.Name,
+            ReadString(arguments, "path"),
+            ReadString(arguments, "access"),
+            applicationId,
+            pid,
+            ProcessAlive(pid),
+            null,
+            DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>Whether the pid names a live process, as a measurement: <c>false</c> proves the instance is
+    /// gone, <c>null</c> means it was not measured (no pid known). LIMIT: a recycled pid would name a
+    /// foreign live process — Windows does not offer a pid-generation check here.</summary>
+    private static bool? ProcessAlive(int? pid)
+    {
+        if (pid is not int value)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(value);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     // ---- Validation ----
@@ -195,7 +266,37 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
 
         violations.AddRange(ModeViolations(tool, arguments));
+        violations.AddRange(SignViolations(tool, arguments));
         return violations;
+    }
+
+    /// <summary>The sign rule of <c>expected_volume_delta_mm3</c> for the tools that can move material in
+    /// ONE direction only: their expectation is a positive amount, so a negative value is a refused argument,
+    /// not a "not confirmed" measurement.</summary>
+    /// <remarks>INVARIANT: the refusal happens before the journal and before COM, so the model is untouched
+    /// and the caller learns the rule instead of the "model may lag one operation behind" warning. LIMIT: the
+    /// tools whose feature can BOTH add and remove (chamfer, an edit of a hole) keep a signed expectation, and
+    /// their mirrored sign is named by <c>DeclaredExpectation</c> instead.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
+    private static IEnumerable<SchemaViolation> SignViolations(ToolDefinition tool, JsonObject arguments)
+    {
+        if (tool.Name is not ("kompas_extrude" or "kompas_hole"))
+        {
+            yield break;
+        }
+
+        if (ReadDouble(arguments, "expected_volume_delta_mm3") is not < 0d)
+        {
+            yield break;
+        }
+
+        var rule = tool.Name == "kompas_extrude"
+            ? "Снятый вырезом материал записывается ПОЛОЖИТЕЛЬНЫМ (сколько снято), добавленный base/boss - тоже положительным."
+            : "Отверстие только снимает материал, и снятое записывается ПОЛОЖИТЕЛЬНЫМ.";
+        yield return new SchemaViolation(
+            "/expected_volume_delta_mm3", "sign",
+            "Ожидание изменения объёма отрицательно, а у этого признака оно всегда положительно: " + rule
+            + " Значение отвергнуто до обращения к КОМПАС, модель не тронута.");
     }
 
     /// <summary>Folds the minus sign of <c>material_toward</c> to the published ASCII hyphen BEFORE the schema
@@ -771,8 +872,9 @@ public sealed class ToolInvoker : IAsyncDisposable
                 });
         }
 
+        var attempt = DescribeAttempt(tool, arguments);
         var decision = _journal.TryBegin(operationId, tool.Name, Canonical(tool, arguments), documentId,
-            ReadLong(arguments, "expected_revision"), documentUnresolved);
+            ReadLong(arguments, "expected_revision"), documentUnresolved, attempt);
 
         if (!decision.Proceed && decision.Existing is { } existing)
         {
@@ -780,7 +882,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
 
         _dispatched[operationId] = false;
-        var execution = ExecuteAsync(tool, arguments, operationId, cancellationToken);
+        var execution = ExecuteAsync(tool, arguments, operationId, attempt, cancellationToken);
         if (!_inFlight.TryAdd(operationId, execution))
         {
             // The journal said "never saw this operation_id", yet a task with it exists. The command
@@ -880,7 +982,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         return ReferenceDocument.Decide(references, owners, failure);
     }
 
-    private async Task<ResultEnvelope<JsonNode?>> ExecuteAsync(ToolDefinition tool, JsonObject arguments, string operationId, CancellationToken cancellationToken)
+    private async Task<ResultEnvelope<JsonNode?>> ExecuteAsync(ToolDefinition tool, JsonObject arguments, string operationId,
+        JournalAttemptEvidence? attempt, CancellationToken cancellationToken)
     {
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var queued = new QueuedCommand(operationId, tool.Name, cancellation);
@@ -922,13 +1025,25 @@ public sealed class ToolInvoker : IAsyncDisposable
                 }
 
                 bool terminalRecorded;
-                if (frame.Error.Code == ErrorCodes.OutcomeUnknown)
+                var failure = frame.Error;
+                var unknown = failure.Code == ErrorCodes.OutcomeUnknown;
+                if (attempt is not null && failure.Code is ErrorCodes.OutcomeUnknown or ErrorCodes.ApplicationDisconnected)
                 {
-                    terminalRecorded = _journal.MarkUnknown(operationId, frame.Error.Message);
+                    // INVARIANT: the attempt evidence decides between "nothing could have been opened" (a
+                    // definite refusal) and "unknown", instead of answering OUTCOME_UNKNOWN whenever the
+                    // instance is gone. History: docs/decisions/host.md#open-attempt-evidence
+                    var verdict = OpenAttemptPolicy.Decide(attempt.InstanceAliveBeforeCall, ProcessAlive(attempt.InstancePid), out var reason);
+                    failure = WithOpenAttempt(failure, attempt, verdict, reason);
+                    unknown = verdict != OpenAttemptVerdict.NotStarted;
+                }
+
+                if (unknown)
+                {
+                    terminalRecorded = _journal.MarkUnknown(operationId, failure.Message);
                 }
                 else
                 {
-                    terminalRecorded = _journal.Fail(operationId, frame.Error);
+                    terminalRecorded = _journal.Fail(operationId, failure);
                 }
 
                 // INVARIANT: a failed terminal write after a completed mutation is not a normal refusal.
@@ -936,8 +1051,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                 // error must not carry the "retry as is" policy — a retry after restart would apply the
                 // mutation twice. The policy becomes "after reconciliation", named in a warning.
                 // History: docs/decisions/host.md#terminal-write
-                var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
-                return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
+                var error = terminalRecorded ? failure : ForceReconciliation(failure);
+                return Envelope(unknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
                     tool, operationId, null, arguments, error,
                     warnings: terminalRecorded ? null : new[] { TerminalWriteNotDurable });
             }
@@ -961,9 +1076,24 @@ public sealed class ToolInvoker : IAsyncDisposable
             // History: docs/decisions/host.md#worker-death-mutation
             if (contract.Code == ErrorCodes.OutcomeUnknown || contract.Code == ErrorCodes.ApplicationDisconnected)
             {
+                var refusal = contract.Code == ErrorCodes.ApplicationDisconnected ? DisconnectedAsUnknown(contract) : contract.ToErrorDto();
+                if (attempt is not null)
+                {
+                    // Same rule as the answer above: a dead instance before dispatch makes the outcome
+                    // DEFINITE, so an OUTCOME_UNKNOWN here would hide a known "not applied".
+                    var verdict = OpenAttemptPolicy.Decide(attempt.InstanceAliveBeforeCall, ProcessAlive(attempt.InstancePid), out var reason);
+                    refusal = WithOpenAttempt(refusal, attempt, verdict, reason);
+                    if (verdict == OpenAttemptVerdict.NotStarted)
+                    {
+                        var notStartedRecorded = _journal.Fail(operationId, refusal);
+                        return Envelope(OperationStatus.Failed, tool, operationId, null, arguments,
+                            notStartedRecorded ? refusal : ForceReconciliation(refusal),
+                            warnings: notStartedRecorded ? null : new[] { TerminalWriteNotDurable });
+                    }
+                }
+
                 var recorded = _journal.MarkUnknown(operationId, contract.Message);
-                return Envelope(OperationStatus.OutcomeUnknown, tool, operationId, null, arguments,
-                    contract.Code == ErrorCodes.ApplicationDisconnected ? DisconnectedAsUnknown(contract) : contract.ToErrorDto(),
+                return Envelope(OperationStatus.OutcomeUnknown, tool, operationId, null, arguments, refusal,
                     warnings: recorded ? null : new[] { TerminalWriteNotDurable });
             }
 
@@ -990,6 +1120,33 @@ public sealed class ToolInvoker : IAsyncDisposable
             _queue.Complete(operationId);
             cancellation.Dispose();
         }
+    }
+
+    /// <summary>The same refusal with the attempt evidence attached: which instance, whether it was alive
+    /// before the call, and whether anything could have been opened.</summary>
+    /// <remarks>INVARIANT: a refusal that PROVES nothing was opened is not an unknown outcome — its code is
+    /// <c>OPERATION_NOT_APPLIED</c> with no partial effects, so the client neither waits for reconciliation
+    /// nor loses the model. Everything else keeps the code the Worker gave and stays unknown.
+    /// History: docs/decisions/host.md#open-attempt-evidence</remarks>
+    private static ErrorDto WithOpenAttempt(
+        ErrorDto error, JournalAttemptEvidence attempt, OpenAttemptVerdict verdict, string reason)
+    {
+        var details = error.Details is JsonObject existing ? (JsonObject)existing.DeepClone() : new JsonObject();
+        details["open_attempt"] = verdict switch
+        {
+            OpenAttemptVerdict.NotStarted => "not_started",
+            OpenAttemptVerdict.LostAfterStart => "started",
+            _ => "undetermined",
+        };
+        details["instance_pid"] = attempt.InstancePid;
+        details["instance_alive_before_call"] = attempt.InstanceAliveBeforeCall;
+        details["outcome"] = verdict == OpenAttemptVerdict.NotStarted ? "not_applied" : "unknown";
+        details["open_attempt_reason"] = reason;
+        return verdict == OpenAttemptVerdict.NotStarted
+            ? new ErrorDto(ErrorCodes.OperationNotApplied, error.Message + " " + reason,
+                RetryPolicy.SameOperationId, error.Hresult, false, details)
+            : new ErrorDto(error.Code, error.Message + " " + reason, error.RetryPolicy, error.Hresult,
+                error.PartialEffects, details);
     }
 
     private ResultEnvelope<JsonNode?> Replayed(ToolDefinition tool, JournalRecord record, JsonObject arguments)
@@ -1229,6 +1386,9 @@ public sealed class ToolInvoker : IAsyncDisposable
     private static int? ReadInt(JsonNode? node, string key) =>
         node is JsonObject obj ? JsonScalars.ReadInt(obj[key]) : null;
 
+    private static double? ReadDouble(JsonNode? node, string key) =>
+        node is JsonObject obj ? JsonScalars.ReadDouble(obj[key]) : null;
+
     // ---- Operation control: status, cancel, reconcile ----
 
     /// <summary>The state one operation is in right now, from the durable journal plus the Host's own
@@ -1382,6 +1542,47 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (record.DocumentId is not { Length: > 0 } documentId)
         {
+            // An OPEN has no document_id by definition, so the generic comparison can never be made there.
+            // The attempt evidence recorded BEFORE the command left is what decides: a dead instance proves
+            // nothing was opened; a live one leaves the outcome unknown with that reason NAMED.
+            // History: docs/decisions/host.md#open-attempt-evidence
+            if (record.Attempt is { } attempt)
+            {
+                var verdict = OpenAttemptPolicy.Decide(
+                    attempt.InstanceAliveBeforeCall, ProcessAlive(attempt.InstancePid), out var attemptReason);
+                if (verdict == OpenAttemptVerdict.NotStarted)
+                {
+                    var notApplied = new ErrorDto(
+                        ErrorCodes.OperationNotApplied,
+                        "Согласование: " + attemptReason,
+                        RetryPolicy.SameOperationId,
+                        null,
+                        false,
+                        new JsonObject
+                        {
+                            ["reconciled"] = "not_applied",
+                            ["open_attempt"] = "not_started",
+                            ["instance_pid"] = attempt.InstancePid,
+                            ["instance_alive_before_call"] = attempt.InstanceAliveBeforeCall,
+                            ["path"] = attempt.Path,
+                            ["access"] = attempt.Access,
+                        });
+                    var failedRecorded = _journal.Fail(operationId, notApplied);
+                    return new JsonObject
+                    {
+                        ["operation_id"] = operationId,
+                        ["status"] = Wire(OperationStatus.Failed),
+                        ["outcome"] = "not_applied",
+                        ["needs_reconciliation"] = !failedRecorded,
+                        ["open_attempt"] = "not_started",
+                        ["instance_pid"] = attempt.InstancePid,
+                        ["reason"] = attemptReason,
+                    };
+                }
+
+                return Undetermined(operationId, record, attemptReason);
+            }
+
             return Undetermined(operationId, record, "Журнал не записал документ операции: "
                 + (record.DocumentUnresolved ?? "причина не записана")
                 + " Сравнивать не с чем, исход остаётся неизвестным.");

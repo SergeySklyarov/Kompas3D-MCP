@@ -91,6 +91,35 @@ public partial class Api5Session
         var faceArea = SumFaceAreas(faces, unverified);
         var perimeter = SumFacePerimeters(faces, unverified);
 
+        // INVARIANT: a move that must leave no solid body is refused BEFORE the operation exists.
+        // MEASURED: an inward move equal to the wall thickness is accepted by the kernel (Update() = true),
+        // leaves volume 0 and keeps the feature in the tree, so the refusal arrived after the mutation.
+        // The side is the measured one: reverse = false goes against the outward normal, true along it.
+        var signedOffsetMm = command.Reverse ? Math.Abs(command.OffsetMm) : -Math.Abs(command.OffsetMm);
+        var collapseVolume = volumeBefore is double intactVolume && faceArea is double namedArea
+            ? FaceMoveEffect.ExpectedVolume(intactVolume, namedArea, signedOffsetMm)
+            : (double?)null;
+        if (!command.TangentGroup
+            && FaceMoveEffect.CollapsesBody(volumeBefore, faceArea, signedOffsetMm))
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Смещение снимает тело с себя: ожидаемый объём V + d·A при площади граней " +
+                Num(faceArea) + " мм² и смещении " + Num(command.OffsetMm) + " мм равен " +
+                Num(collapseVolume) + " мм³, то есть не больше нуля. Это отказ ДО операции: признак не " +
+                "создавался, модель не тронута. К режиму tangent_group проверка не применяется: там " +
+                "набор шире названных граней, и V + d·A его не описывает.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["face_area_mm2"] = faceArea,
+                    ["offset_mm"] = command.OffsetMm,
+                    ["reverse"] = command.Reverse,
+                    ["expected_volume_mm3"] = collapseVolume,
+                });
+        }
+
         // ROUTE: the container comes from IPart7, not from the document container: the documented entry
         // is «Дополнительный интерфейс компонента … у IPart7 посредством IUnknown::QueryInterface».
         var bridge = BridgeFor(document);

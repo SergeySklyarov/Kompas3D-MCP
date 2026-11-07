@@ -6,8 +6,8 @@ namespace KompasMcp.Unit;
 /// <summary>The two numbers a moved face must produce, and the tolerance they are compared with.</summary>
 /// <remarks>WHY. <c>Update() = true</c> is «accepted», not «applied»: the same route answered true for a
 /// removal that changed nothing. The move is therefore confirmed by the swept volume <c>d·A</c> and the
-/// lateral band <c>d·P</c>, and the sign of <c>d</c> is the displacement the volume shows — which side
-/// <c>Direction = false</c> means is not established by measurement.
+/// lateral band <c>d·P</c>, and the sign of <c>d</c> is the displacement the volume shows — MEASURED:
+/// <c>Direction = false</c> goes against the outward normal, <c>true</c> along it.
 /// History: docs/decisions/direct-faces.md#implementation</remarks>
 public class FaceMoveEffectTests
 {
@@ -86,6 +86,24 @@ public class FaceMoveEffectTests
         Assert.False(FaceMoveEffect.GroupWider(1, 1));
         Assert.False(FaceMoveEffect.GroupWider(null, 1));
         Assert.False(FaceMoveEffect.GroupWider(0, 1));
+    }
+
+    /// <summary>A move whose expected volume is not above zero is refused BEFORE the operation exists:
+    /// the kernel accepts it, degenerates the body and keeps its feature in the tree.</summary>
+    /// <remarks>MEASURED: a 60 x 40 x 10 bar, its z=10 face (2400 mm²) moved 10 mm inward, answered
+    /// <c>Update() = true</c> and left volume 0 with the feature in the tree.
+    /// History: docs/decisions/direct-faces.md#collapse-refusal</remarks>
+    [Fact]
+    public void CollapsesBody_IsTheThicknessBoundaryAndNothingLess()
+    {
+        Assert.True(FaceMoveEffect.CollapsesBody(24000d, 2400d, -10d));
+        Assert.True(FaceMoveEffect.CollapsesBody(24000d, 2400d, -15d));
+        Assert.False(FaceMoveEffect.CollapsesBody(24000d, 2400d, 10d));
+        Assert.False(FaceMoveEffect.CollapsesBody(24000d, 2400d, -9d));
+        Assert.False(FaceMoveEffect.CollapsesBody(null, 2400d, -10d));
+        Assert.False(FaceMoveEffect.CollapsesBody(24000d, null, -10d));
+        Assert.False(FaceMoveEffect.CollapsesBody(24000d, 0d, -10d));
+        Assert.False(FaceMoveEffect.CollapsesBody(24000d, 2400d, double.NaN));
     }
 
     /// <summary>MEASURED: a single-mode move on a face with tangent neighbours reads back 6.25 mm for

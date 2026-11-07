@@ -89,6 +89,10 @@ public sealed partial class Api5Session : IDisposable
 
         // After BumpRevision, which names an ordinary mutation: what arrived here came from outside.
         document.SaveState = DocumentSaveTracking.AfterExternalChange();
+
+        // BumpRevision took the new fingerprint and counted the change as OUR own, so the fingerprint
+        // comparison can no longer report it: the note travels to the next context read instead.
+        document.ExternalChangePending = true;
     }
 
     public DocumentEntry TryFindDocumentByPath(string normalizedPath)
@@ -1272,11 +1276,11 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>What the caller may assume about external-change detection for a document with this
     /// subscription.</summary>
-    /// <remarks>INVARIANT: <c>Reliable</c> is NOT claimed. MEASURED: a rebuild performed by ANOTHER process
-    /// through COM of the same instance raised NO event here, so the subscription cannot be relied on to
-    /// report a foreign rebuild: every document answers <c>conservative</c> and a divergence is caught by
-    /// the fingerprint comparison on every context read (<see cref="ApplyObservedFingerprint"/>). A failed
-    /// subscription is still not an error: the open is not refused. TEST: DocumentEventSubscriptionTests.
+    /// <remarks>INVARIANT: <c>Reliable</c> is NOT claimed. MEASURED: both a window edit and an edit by
+    /// ANOTHER process through COM of the same instance raised the rebuild event; delivery is nevertheless
+    /// not guaranteed for every route that changes the model, and an edit that never rebuilds is caught only
+    /// by the fingerprint on every context read. Every document answers <c>conservative</c>, and a failed
+    /// subscription is not an error. TEST: DocumentEventSubscriptionTests.
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     internal static ExternalChangeDetection DetectionFor(DocumentEventSubscription? subscription) =>
         ExternalChangeDetection.Conservative;
@@ -1359,6 +1363,14 @@ public sealed partial class Api5Session : IDisposable
         {
             unverified.Add(externalChange);
         }
+        else if (document.ExternalChangePending)
+        {
+            // The event path already moved the revision, so the marker is published here, once: the note
+            // appears in the FIRST context read after the burst and a repeat changes nothing.
+            unverified.Add(ExternalChangeNote);
+        }
+
+        document.ExternalChangePending = false;
 
         var bodies = ReadBodyCount(document, unverified);
         var features = ReadFeatureCount(document, unverified);
@@ -1403,8 +1415,8 @@ public sealed partial class Api5Session : IDisposable
     /// <remarks>INVARIANT: a context read publishes the state it just measured. MEASURED: a foreign process
     /// changed the body's height through COM, the box read 60x40x30, and the answer still carried the OLD
     /// revision and the OLD fingerprint; a client checking expected_revision saw "6 matches 6" on a different
-    /// model. The documented event does not arrive from a foreign caller (see <see cref="DetectionFor"/>), so
-    /// the divergence bumps the revision by one, makes the previous references unresolvable and moves the
+    /// model. The event that names such a change need not arrive (see <see cref="DetectionFor"/>), so the
+    /// divergence bumps the revision by one, makes the previous references unresolvable and moves the
     /// baseline to the observed state. Returns the note, or null when the observation matched.
     /// History: docs/decisions/adapter-core.md#external-fingerprint-read</remarks>
     public string? ApplyObservedFingerprint(DocumentEntry document)
@@ -1436,8 +1448,9 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>The note a context read carries when it noticed a change made outside the server.</summary>
     public const string ExternalChangeNote =
-        "external_change_detected — отпечаток живой модели разошёлся с прежним (правка не через сервер): "
-        + "ревизия поднята на 1 без переоткрытия, прежние ссылки на грани и рёбра больше не разрешаются";
+        "external_change_detected — модель изменилась не через сервер (событие перестроения либо "
+        + "разошедшийся отпечаток): ревизия поднята на 1 без переоткрытия, прежние ссылки на грани и "
+        + "рёбра больше не разрешаются";
 
     /// <summary>Document save state: whether the model KOMPAS holds is exactly what is on disk. Kept by the
     /// server because the target version has no documented "document modified" flag.</summary>
@@ -2277,6 +2290,13 @@ public sealed class DocumentEntry
 
     /// <summary>Marks raised by the event handler, applied before the next command.</summary>
     public DocumentEventMark Events { get; } = new();
+
+    /// <summary>True when the EVENT path already bumped the revision for a change made outside the server,
+    /// and the note for the caller has not been published yet.</summary>
+    /// <remarks>INVARIANT: the marker is published exactly once, by the first context read after the burst,
+    /// and a repeat neither repeats the note nor moves the revision.
+    /// History: docs/decisions/adapter-core.md#document-events</remarks>
+    public bool ExternalChangePending { get; set; }
 
     /// <summary>The subscription itself, released when the document leaves the session.</summary>
     public DocumentEventSubscription? EventsSubscription { get; set; }

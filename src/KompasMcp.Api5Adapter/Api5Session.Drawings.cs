@@ -2070,12 +2070,27 @@ public sealed partial class Api5Session
         }
     }
 
+    /// <remarks>DOC: <c>iviews_addstandartviews.html</c> - <c>ProjectionsTypes</c> is «массив SAFEARRAY
+    /// VT | VT_I4 типов проекций», and the KsAPI page of the same method lists the seven types
+    /// (0x1…0x40); a default set for an EMPTY array is documented nowhere.
+    /// MEASURED: an empty array reached the call and the kernel answered FALSE («AddStandartViews вернул
+    /// false»), so the refusal is made before COM and names the published list instead.
+    /// History: docs/decisions/drawings.md#create-views</remarks>
     private static object[] ResolveProjectionTypes(IReadOnlyList<string> requested)
     {
         if (requested.Count == 0)
         {
-            // Empty means "the document default set": an empty VARIANT array, not a made-up list.
-            return Array.Empty<object>();
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Поле projections пустое: справка v24 описывает ProjectionsTypes как массив типов "
+                + "проекций и НЕ документирует набора по умолчанию для пустого массива. Назовите хотя бы "
+                + "один тип из перечня: " + string.Join(", ", ProjectionTypeByName.Keys) + ".",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["field"] = "projections",
+                    ["published_projections"] = ProjectionTypeByName.Keys.ToArray(),
+                });
         }
 
         var resolved = new object[requested.Count];

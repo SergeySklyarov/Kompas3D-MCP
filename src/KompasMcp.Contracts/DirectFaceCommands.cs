@@ -22,8 +22,9 @@ public sealed record MoveFacesCommand
     /// nothing, which must not read as a completed move.</summary>
     public required double OffsetMm { get; init; }
 
-    /// <summary>Passed through to <c>IFaceMover.Direction</c> unchanged. Which side <c>false</c> means is
-    /// not established, so the result reports the displacement that was actually measured.</summary>
+    /// <summary>Passed through to <c>IFaceMover.Direction</c> unchanged. MEASURED: <c>false</c> moves the
+    /// face against the outward normal (the volume falls), <c>true</c> along it; the result still reports the
+    /// displacement that was actually measured.</summary>
     public bool Reverse { get; init; }
 
     /// <summary>Tangent faces — <c>IFaceMover.SetFaces(Faces, TangentFaces)</c>. <c>true</c> widens the

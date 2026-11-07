@@ -6,8 +6,8 @@ namespace KompasMcp.Domain.Geometry;
 /// never passes a vector. INVARIANT: a planar face moved along its normal keeps its own area and sweeps a
 /// prism of base <c>A</c> and height <c>d</c>, so the body gains <c>d·A</c> of volume and <c>d·P</c> of
 /// lateral area — both are predictions the caller compares the read-back with, not a description of the
-/// answer. INVARIANT: the sign of <c>d</c> is the OBSERVED displacement, because which side
-/// <c>Direction = false</c> means is not established by measurement.
+/// answer. INVARIANT: the sign of <c>d</c> is the OBSERVED displacement, and the side is MEASURED:
+/// <c>Direction = false</c> goes against the outward normal (the volume falls), <c>true</c> along it.
 /// History: docs/decisions/direct-faces.md#implementation</remarks>
 public static class FaceMoveEffect
 {
@@ -33,6 +33,19 @@ public static class FaceMoveEffect
 
         return (after - before) / area;
     }
+
+    /// <summary>Whether the move must leave no solid body: the expected volume <c>V + d·A</c> is not above
+    /// zero, so the operation can only degenerate the body.</summary>
+    /// <remarks>INVARIANT: such a move is refused BEFORE the operation exists. MEASURED: the kernel accepts an
+    /// inward move equal to the wall thickness (<c>Update() = true</c>), leaves volume 0 and keeps its feature
+    /// in the tree; the arithmetic above is available without COM. An unreadable volume or area is not a
+    /// prediction - the refusal is then left to the numbers read back after the move.
+    /// History: docs/decisions/direct-faces.md#collapse-refusal</remarks>
+    public static bool CollapsesBody(double? volumeBeforeMm3, double? faceAreaMm2, double signedDisplacementMm) =>
+        volumeBeforeMm3 is double volume && faceAreaMm2 is double area
+        && double.IsFinite(volume) && double.IsFinite(area) && double.IsFinite(signedDisplacementMm)
+        && Math.Abs(area) > 1e-9d
+        && ExpectedVolume(volume, area, signedDisplacementMm) <= 0d;
 
     /// <summary>Whether the body changed at all: <c>Update() = true</c> alone is «accepted», and a
     /// tangent-group move is confirmed by this sign instead of by the volume formula.</summary>

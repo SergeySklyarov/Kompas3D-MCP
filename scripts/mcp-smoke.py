@@ -11597,6 +11597,27 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
             f"error={code} published={(detail_of(env) or {}).get('published_projections')}")
 
+    # ПУСТОЙ набор: справка v24 (iviews_addstandartviews.html) описывает ProjectionsTypes как МАССИВ типов
+    # проекций и набора по умолчанию для пустого массива не документирует. ДО ПРАВКИ строка ПАДАЕТ: пустой
+    # массив доходил до COM и ядро отвечало GEOMETRY_FAILED «AddStandartViews вернул false» (клиентская
+    # приёмка 0.13.0, part2 F4). После правки - INVALID_ARGUMENT с details.field=projections до COM.
+    empty_before = len(result(call("kompas_list_drawing_views", {"document_id": drw2})[0])
+                       .get("views") or [])
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "source_path": src, "projections": [], "x": 0.0, "y": 0.0})
+    empty_details = detail_of(env) or {}
+    empty_after = len(result(call("kompas_list_drawing_views", {"document_id": drw2})[0])
+                      .get("views") or [])
+    rep.add("DRW-01.views.create_standard.empty_projections",
+            "пустой projections отвергнут ДО COM названным INVALID_ARGUMENT (details.field=projections) — "
+            "набора по умолчанию для пустого массива справка v24 не документирует; коллекция видов "
+            "не изменилась",
+            "PASS" if (code == "INVALID_ARGUMENT" and empty_details.get("field") == "projections"
+                       and empty_after == empty_before) else "FAIL",
+            f"error={code} field={empty_details.get('field')} видов {empty_before}->{empty_after} "
+            f"published={empty_details.get('published_projections')}")
+
     env, code = call("kompas_create_drawing_views", {
         "document_id": drw2, "expected_revision": current_rev(drw2),
         "source_path": "D:\\Windows\\System32\\not-allowed.m3d", "projections": ["front"],
@@ -59146,6 +59167,44 @@ def e5_checks(client, rep, app_id, workdir):
     rep.add("E5.NEG.zero_offset", "e5: нулевое смещение отвергнуто INVALID_ARGUMENT",
             "PASS" if zero_code == "INVALID_ARGUMENT" else "FAIL", "error=%s" % (zero_code,))
 
+    # ── E5.NEG.collapse_before_com: сдвиг РОВНО на толщину (наряд CLIENT_FINDINGS_0_13_0_EXT, §1.4) ──
+    # ДО ПРАВКИ строка ПАДАЕТ: ядро ПРИНИМАЕТ такой ход (Update() = true), тело вырождается, и продукт
+    # отказывает УЖЕ ПОСЛЕ мутации - объём 0, признак остаётся в дереве, partial_effects=true. После
+    # правки ожидание V + d·A = 0 выводится до COM: отказ тот же GEOMETRY_FAILED, модель не тронута.
+    thin_desc = ("сдвиг ровно на толщину (60 x 40 x 10, грань z=10, 10 мм, reverse=false) отвергнут "
+                 "GEOMETRY_FAILED ДО COM: partial_effects=false, feature_left_in_tree=false, объём, "
+                 "число признаков и ревизия прежние")
+    thin, thin_problem = new_box("e5-thin", 60.0, 40.0, 10.0)
+    thin_refs, thin_lookup = (top_face(thin) if thin else ([], "документ не создан"))
+    if thin_problem or not thin_refs:
+        rep.add("E5.NEG.collapse_before_com", thin_desc, "NAMED",
+                thin_problem or ("верхняя грань 60x40 не найдена: %s" % (thin_lookup,)))
+    else:
+        thin_before, _e = ev_context(client, thin)
+        thin_rev = thin_before.get("revision")
+        thin_features = thin_before.get("feature_count")
+        env, code = call("kompas_move_faces", {
+            "document_id": thin, "expected_revision": thin_rev,
+            "face_refs": [thin_refs[0]], "offset_mm": 10.0, "reverse": False})
+        thin_error = (env or {}).get("error") or {}
+        thin_details = thin_error.get("details") or {}
+        thin_after, _e = ev_context(client, thin)
+        rep.add("E5.NEG.collapse_before_com", thin_desc,
+                "PASS" if (code == "GEOMETRY_FAILED"
+                           and thin_error.get("partial_effects") is False
+                           and thin_details.get("feature_left_in_tree") is False
+                           and near(volume(thin), 24000.0, TOL_V)
+                           and thin_after.get("revision") == thin_rev
+                           and thin_after.get("feature_count") == thin_features) else "FAIL",
+                "код=%s partial_effects=%s feature_left_in_tree=%s ожидаемый_объём=%s объём=%s "
+                "ревизия %s->%s признаки %s->%s"
+                % (code, thin_error.get("partial_effects"),
+                   thin_details.get("feature_left_in_tree"),
+                   thin_details.get("expected_volume_mm3"), volume(thin),
+                   thin_rev, thin_after.get("revision"),
+                   thin_features, thin_after.get("feature_count")))
+    close(thin)
+
     # tangent_group на этом бруске не проверяется: режим мутирует тело, а оно нужно строкам E5.DEL/E5.RES
     # в состоянии 24000 мм3. Строки режима касательных стоят ниже, на своих телах (E5.TAN.*).
 
@@ -61230,17 +61289,19 @@ EV_PROBE_EXE = os.path.join(ROOT, "scripts", "probes", "events", "bin", "x64", "
                             "net10.0-windows", "EVProbe.exe")
 
 
-def ev_probe_run(mode, doc_path, timeout=240):
+def ev_probe_run(mode, doc_path, timeout=240, extra=None):
     """Change the document from ANOTHER process: that is what an external change means here.
 
     The probe and its modes are defined in the order, EVENTS_FINGERPRINT_DEVELOPER_PROMPT.md §2.
+    `extra` carries arguments BETWEEN the mode and the path (`--height 40`): the probe reads the mode as
+    the first `--` argument, so an option appended after the path would be ignored.
     History: docs/decisions/adapter-core.md#document-events
     """
     if not os.path.exists(EV_PROBE_EXE):
         return None, "EVProbe.exe не собран: " + EV_PROBE_EXE
     try:
-        done = subprocess.run([EV_PROBE_EXE, mode, doc_path], capture_output=True,
-                              timeout=timeout)
+        done = subprocess.run([EV_PROBE_EXE, mode] + list(extra or []) + [doc_path],
+                              capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, f"{mode}: проба не ответила за {timeout} с"
 
@@ -61360,14 +61421,15 @@ def events_checks(client, rep, app_id, workdir):
     # ── EV.subscribed: the value the caller reads, per document kind ──────────────────────────────
     ctx, ctx_err = ev_context(client, doc)
     part_mode = str(ctx.get("external_change_detection") or "").lower()
-    # INVARIANT: `reliable` is NOT claimed for any kind. MEASURED: a rebuild performed by a FOREIGN process
-    # through COM of the same instance raised no event (the host log had none while the model changed), and
-    # that is exactly the change the value promises to catch. The document therefore answers
-    # `conservative`, and the route that catches a foreign rebuild is the fingerprint comparison on every
-    # context read (EV.external.revision). History: docs/decisions/adapter-core.md#document-events
+    # INVARIANT: `reliable` is NOT claimed for any kind. The reason is DELIVERY, not absence: MEASURED in
+    # клиентской приёмке 0.13.0 обе правки - в окне КОМПАС и чужим процессом через COM с RebuildDocument -
+    # прошли ПУТЁМ СОБЫТИЯ (ревизия +1 без маркера). Событие не приходит на правку без RebuildDocument
+    # (таблица docs/decisions/adapter-core.md#document-events), поэтому доставка не гарантирована для всех
+    # маршрутов, и документ отвечает `conservative`. Маркер чужого изменения держат строки
+    # EV.external.marker / EV.own.no_marker, сверку отпечатка - EV.external.revision.
     rep.add("EV.subscribed",
             "у детали и у чертежа external_change_detection=conservative: reliable не заявляется, "
-            "потому что чужая перестройка события не поднимает",
+            "потому что доставка события не гарантирована для всех маршрутов правки",
             "PASS" if (part_mode == "conservative" and drawing_mode == "conservative") else "FAIL",
             f"деталь={part_mode or 'нет'} (err={ctx_err}); чертёж={drawing_mode or 'нет'}")
 
@@ -61414,6 +61476,47 @@ def events_checks(client, rep, app_id, workdir):
             f"старая ссылка={stale}; отпечаток={new_fingerprint[:40]} размер30={grew_ok}; "
             f"мутация с прежней ревизией={stale_mutation}; повторное чтение={again.get('revision')}; "
             f"save={saved} ({save_err}); err={after_err}")
+
+    # ── EV.external.marker: маркер, который читает клиент, а не только ревизия ────────────────────
+    # ДО ПРАВКИ СТРОКА ПАДАЕТ: событие поднимало ревизию через BumpRevision, тот снимал новый
+    # отпечаток и считал изменение СВОИМ, поэтому unverified_aspects оставался пустым при живом
+    # изменении (клиентская приёмка 0.13.0, part2 F2). После правки событийный путь публикует маркер
+    # один раз - в первом чтении контекста. История: docs/decisions/adapter-core.md#external-change-marker
+    def marker_notes(ctx):
+        return [line for line in ((ctx or {}).get("unverified_aspects") or [])
+                if isinstance(line, str) and line.startswith("external_change_detected")]
+
+    mk_before, _e12 = ev_context(client, doc)
+    rm0 = mk_before.get("revision")
+    # `--height 40`: глубина абсолютная, поэтому второй `--mutate` (всегда 30) уже ничего не менял бы.
+    code_mk, out_mk = ev_probe_run("--mutate", path, extra=["--height", "40"])
+    mk_after, _e13 = ev_context(client, doc)
+    rm1 = mk_after.get("revision")
+    mk_again, _e14 = ev_context(client, doc)
+    rm2 = mk_again.get("revision")
+    rep.add("EV.external.marker",
+            "чужая правка чужим процессом: ревизия +1, и unverified_aspects НАЗЫВАЕТ "
+            "external_change_detected; повторное чтение маркер не повторяет и ревизию не двигает",
+            "PASS" if (code_mk == 0 and isinstance(rm0, int) and rm1 == rm0 + 1
+                       and marker_notes(mk_after) and not marker_notes(mk_again)
+                       and rm2 == rm1) else "FAIL",
+            f"проба={code_mk} «{out_mk[:80]}»; ревизия {rm0}->{rm1}->{rm2}; маркер в первом "
+            f"чтении={len(marker_notes(mk_after))}, в повторе={len(marker_notes(mk_again))}")
+
+    # Своя мутация маркера не даёт: своё перестроение поглощается окном ExpectOwnBurst, и ложной
+    # тревоги быть не должно. Строка держит вторую половину требования §1.1 наряда.
+    own_before, _e15 = ev_context(client, doc)
+    r_own = own_before.get("revision")
+    _e, rb_env, _r = client.tool("kompas_rebuild", {
+        "document_id": doc, "operation_id": str(uuid.uuid4())})
+    own_after, _e16 = ev_context(client, doc)
+    rep.add("EV.own.no_marker",
+            "своя мутация чужого изменения НЕ выдаёт (ложной тревоги нет), ревизия +1",
+            "PASS" if (error_code(rb_env) is None and isinstance(r_own, int)
+                       and own_after.get("revision") == r_own + 1
+                       and not marker_notes(own_after)) else "FAIL",
+            f"перестроение={error_code(rb_env)}; ревизия {r_own}->{own_after.get('revision')}; "
+            f"маркер={len(marker_notes(own_after))}")
 
     # ── EV.external.fingerprint_blind: the positive control ───────────────────────────────────────
     blind_before, _e3 = ev_context(client, doc)

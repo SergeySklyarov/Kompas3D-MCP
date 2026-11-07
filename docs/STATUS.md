@@ -192,8 +192,8 @@ UNKNOWN 3 / FAIL 0.
   4,7 КБ (файл 23 055 Б).
 - **Проверки.** `lint-dashes.py` - 0, `check-evidence-links.py` - 0; `--all` не нужен (код, приборы и
   тесты не менялись). Отчёт - `DEBT_REVIEW_0_13_0_REPORT_20261107.md`.
-- **Очередь** (поправка плана семьдесят четвёртая): `DEBT_DOCUMENT_BINDING_0_14` (выдан) ->
-  `DEBT_DESCRIPTION_HEADROOM_0_14` -> `PVS_FINDINGS_CLEANUP` -> `DEBT_MATE_DELETE_ROUTE_0_14` ->
+- **Очередь** (поправка плана семьдесят четвёртая): `DEBT_DESCRIPTION_HEADROOM_0_14` (выдан) ->
+  `DEBT_DOCUMENT_BINDING_0_14` -> `PVS_FINDINGS_CLEANUP` -> `DEBT_MATE_DELETE_ROUTE_0_14` ->
   `DEBT_EXTERNAL_MARKER_ORDER_0_14` -> `SONAR_ANALYZER_TRIAL` -> новые возможности.
 
 ## Архив журнала

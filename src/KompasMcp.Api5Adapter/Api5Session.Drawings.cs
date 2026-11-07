@@ -1811,7 +1811,7 @@ public sealed partial class Api5Session
             var (count, candidates) = SnapshotCollection(application);
             throw RefuseDrawing7(document, "document_not_found_in_api7_collection", bridge.BridgeFailure,
                                  document.Path, count, candidates,
-                                 (cachedStage ?? "no_match") + "; fresh=" + (freshStage ?? "resolved"),
+                                 (cachedStage ?? "no_match") + "; fresh=" + freshStage,
                                  stage1Outcome, ProbeApi5Side(document, application5));
         }
 

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Probe for the DEBT_FLAT_NORMAL_MATRIX_0_14 order: the 4x4 convention of IViewProjection7.SetMatrix3D.
+    INVARIANT: this project is NOT in KompasMcp.sln and references nothing in src/ - a probe that rode
+    the shipping graph could not be used to argue about what the product does.
+    DOC: reference/kompas-sdk-v24/docs-wire-20261024-dxf/ (IViewProjectionManager, IViewProjection7,
+    ksViewProjectionCollection, AddStandartViews, IAssociationView).
+    History: docs/decisions/flat-part.md#view-choice
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>FlatTiltProbe</RootNamespace>
+    <AssemblyName>FlatTiltProbe</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Vendor interop is referenced, never copied (build/KompasInterop.props convention). -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KompasAPI7">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasInteropDir" Value="$(KompasInteropDir)" />
+  </ItemGroup>
+
+  <Target Name="ThrowWhenInteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.Kompas6API5.dll') or !Exists('$(KompasInteropDir)\Interop.KompasAPI7.dll')"
+           Text="Не найден interop КОМПАС в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=..." />
+  </Target>
+
+</Project>

@@ -98,17 +98,18 @@ public partial class Api5Session
                     });
         }
 
-        // INVARIANT: the view is one of the six standard ones, so the normal must lie along an axis of the
-        // part. A tilted normal is refused here, before any drawing is created.
-        var view = FlatPartProjection.Choose(plan.Normal)
-            ?? throw new KompasContractException(
+        // INVARIANT: an axis normal keeps the measured standard-view route; any other direction goes
+        // through a user projection built from the measured 4×4 convention, because v24 has no
+        // documented member that turns a view normal to a face (OrientationNormalTo is absent).
+        var view = FlatPartProjection.Choose(plan.Normal);
+        var tilted = view is null ? TiltedRoute(flatFace, plan.Normal) : null;
+        var matrix = tilted?.Matrix;
+        if (view is null && matrix is null)
+        {
+            throw new KompasContractException(
                 ErrorCodes.FlatNormalNotAxis,
-                "Нормаль плоской детали "
-                + DescribeVector(plan.Normal)
-                + " не совпадает ни с одной осью X, Y, Z: вид по произвольной нормали в v24 не "
-                + "поддерживается (OrientationNormalTo описан в справке, но отсутствует в поставляемой "
-                + "библиотеке типов). Поверните деталь так, чтобы её плоская грань была перпендикулярна "
-                + "оси, и повторите.",
+                "Нормаль плоской детали " + DescribeVector(plan.Normal) + " не прочитана как направление: "
+                + "ни стандартный вид, ни матрица проекции не строятся.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
@@ -116,6 +117,7 @@ public partial class Api5Session
                     ["thickness_mm"] = plan.ThicknessMm,
                     ["field"] = "body_ref",
                 });
+        }
 
         var gabarit = ReadBodyGabarit(body);
         var directory = Path.GetDirectoryName(command.OutputPath);
@@ -137,6 +139,10 @@ public partial class Api5Session
         var unverified = new List<string>();
         IReadOnlyList<double>? frame = null;
         IKompasDocument2D? drawing7 = null;
+        // INVARIANT: the expected contour box is the FACE's own: the body's box is not the face's once the
+        // normal leaves the axes, and the axis route keeps the measured body extents.
+        var expected = view is null ? tilted?.Box : ExpectedFaceSize(gabarit, view.Axis);
+        var requestedName = view?.Name ?? TiltedProjectionName;
         try
         {
             drawing7 = application.Documents.Add(DocumentTypeEnum.ksDocumentDrawing, false) as IKompasDocument2D
@@ -155,6 +161,13 @@ public partial class Api5Session
                     RetryPolicy.ReacquireContext);
 
             var before = ViewNumbers(views);
+            // The route names the orientation either by a standard view or by a user projection; the
+            // projection is created on the PART, because the drawing is built from the part's file.
+            var projectionName = matrix is null
+                ? null
+                : PrepareTiltedProjection(document, matrix, unverified);
+            var requested = matrix is null ? FlatPartViewList(view!.Flag) : new object[] { 1 };
+            requestedName = projectionName ?? view!.Name;
             bool accepted;
             try
             {
@@ -164,32 +177,25 @@ public partial class Api5Session
                 // DOC: the list holds standard-view types (ksviewprojectiontype.html: 1 - Спереди,
                 // 2 - Сзади, 3 - Сверху, 4 - Снизу, 5 - Слева, 6 - Справа).
                 accepted = views.AddStandartViews(
-                    document.Path, view.Name, FlatPartViewList(view.Flag), 100d, 100d, 1d, 10d, 10d);
+                    document.Path, requestedName, requested, 100d, 100d, 1d, 10d, 10d);
             }
             catch (COMException ex)
             {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "AddStandartViews бросил исключение: " + ex.Message + ". Вид «" + view.Name
-                    + "» не построен.",
-                    RetryPolicy.SameOperationId);
+                throw TiltedRefusal(matrix, requestedName,
+                    "AddStandartViews бросил исключение: " + ex.Message, RetryPolicy.SameOperationId);
             }
 
             if (!accepted)
             {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "AddStandartViews вернул false: ядро отказало в построении вида «" + view.Name + "».",
-                    RetryPolicy.SameOperationId);
+                throw TiltedRefusal(matrix, requestedName,
+                    "AddStandartViews вернул false: ядро отказало в построении вида", RetryPolicy.SameOperationId);
             }
 
             var created = ViewNumbers(views).Except(before).ToArray();
             if (created.Length == 0)
             {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "AddStandartViews принят, но новых видов в чертеже нет: вид «" + view.Name
-                    + "» не появился.",
+                throw TiltedRefusal(matrix, requestedName,
+                    "AddStandartViews принят, но новых видов в чертеже нет: вид не появился",
                     RetryPolicy.SameOperationId);
             }
 
@@ -197,12 +203,10 @@ public partial class Api5Session
             // rim would otherwise arrive as a second, coincident circle.
             // INVARIANT: the exported contour is the view whose frame is the flat face, never the main
             // view that the group builds alongside it.
-            var target = PickFlatView(drawing5, document, created, gabarit, view.Axis)
-                ?? throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "Среди построенных видов нет вида по нормали «" + view.Name + "»: ни одна рамка не "
-                    + "совпала с размером плоской грани, выгрузка отменена, чтобы не опубликовать контур "
-                    + "чужой грани.",
+            var target = PickFlatView(drawing5, document, created, expected)
+                ?? throw TiltedRefusal(matrix, requestedName,
+                    "среди построенных видов нет вида по нормали: ни одна рамка не совпала с размером "
+                    + "плоской грани, выгрузка отменена, чтобы не опубликовать контур чужой грани",
                     RetryPolicy.SameOperationId);
 
             ApplyFlatView(views, target, unverified);
@@ -252,7 +256,9 @@ public partial class Api5Session
         var bytes = File.Exists(command.OutputPath) ? new FileInfo(command.OutputPath).Length : 0;
         var check = DxfFlatPattern.Check(command.OutputPath);
         var faceArea = faces.FirstOrDefault(face => face.FaceRef == plan.CandidateFaceRefs[0])?.AreaMm2;
-        var verdict = JudgeContour(check, faceArea, gabarit, plan.ThicknessMm);
+        // INVARIANT: a tilted view is judged by the FACE's box only; the body's axis-aligned box is not
+        // the face's once the normal leaves the axes, so it is not passed as a judge there.
+        var verdict = JudgeContour(check, faceArea, view is null ? null : gabarit, plan.ThicknessMm, expected);
 
         if (bytes == 0 || !check.Ok || verdict is not null)
         {
@@ -267,7 +273,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?>
                 {
                     ["output_path"] = command.OutputPath,
-                    ["view"] = view.Name,
+                    ["view"] = requestedName,
                     ["problems"] = check.Problems,
                     ["loops"] = check.Loops,
                     ["contour_area_mm2"] = check.AreaMm2,
@@ -285,8 +291,7 @@ public partial class Api5Session
                 Observed: string.Join(", ", check.EntityCounts.Select(pair => pair.Key + "=" + pair.Value)),
                 Expected: "LINE/ARC/CIRCLE/LWPOLYLINE/POLYLINE на слое " + DxfFlatPattern.CutLayer),
             new("loops_closed", check.Loops > 0, Observed: check.Loops + " петель", Expected: ">= 1"),
-            new("contour_size_matches_model", verdict is null && gabarit is not null,
-                Observed: DescribeBox(check.Box), Expected: DescribeExtents(gabarit)),
+
         };
 
         // INVARIANT: the area check exists only when the face's area was read — an unread value is named in
@@ -298,6 +303,22 @@ public partial class Api5Session
                 Math.Abs(check.AreaMm2 - area) <= Math.Max(area * AreaShareTolerance, SizeToleranceMm),
                 Observed: check.AreaMm2.ToString("0.###", CultureInfo.InvariantCulture) + " мм2",
                 Expected: area.ToString("0.###", CultureInfo.InvariantCulture) + " мм2"));
+        }
+
+        // INVARIANT: the box check exists only when the expected box was read; an unread box is named in
+        // unverified_aspects, never turned into a passing check.
+        if (expected is { Length: 2 })
+        {
+            checks.Add(new NamedCheck(
+                "contour_size_matches_model",
+                verdict is null,
+                Observed: DescribeBox(check.Box),
+                Expected: DescribeSize(expected)));
+        }
+        else
+        {
+            unverified.Add("face_box_not_read — габарит плоской грани по её рёбрам не прочитан: размер "
+                + "контура сверяется только по площади, а не по габариту");
         }
 
         return new ExportFlatDxfResult(
@@ -332,7 +353,8 @@ public partial class Api5Session
     /// fails both. A missing model value is «не прочитано» — the caller lowers the level and says so.
     /// History: docs/decisions/flat-part.md#contour-check</remarks>
     private static string? JudgeContour(
-        DxfFlatCheckResult check, double? faceArea, IReadOnlyList<double>? gabarit, double? thickness)
+        DxfFlatCheckResult check, double? faceArea, IReadOnlyList<double>? gabarit, double? thickness,
+        double[]? faceBox)
     {
         if (check.Box is null)
         {
@@ -347,16 +369,30 @@ public partial class Api5Session
                 + " %: вид построен не по нормали к грани.";
         }
 
+        // INVARIANT: a tilted view is judged by the FACE's own box, read from its edges; the body's box
+        // cannot serve there, because a plate turned away from the axes has a larger axis-aligned box.
+        var actual = new[] { check.Box.Width, check.Box.Height }.OrderBy(value => value).ToArray();
+        if (faceBox is { Length: 2 })
+        {
+            var wanted = faceBox.OrderBy(value => value).ToArray();
+            return Math.Abs(actual[0] - wanted[0]) > SizeToleranceMm
+                || Math.Abs(actual[1] - wanted[1]) > SizeToleranceMm
+                ? "Габарит контура " + DescribeBox(check.Box) + " разошёлся с габаритом плоской грани "
+                    + DescribeSize(faceBox) + " больше допуска "
+                    + SizeToleranceMm.ToString("0.###", CultureInfo.InvariantCulture) + " мм."
+                : null;
+        }
+
         if (gabarit is not { Count: 3 })
         {
             return null;
         }
 
-        var contour = new[] { check.Box.Width, check.Box.Height };
         var model = gabarit.OrderByDescending(value => value).ToArray();
         var expected = model.Take(2).OrderByDescending(value => value).ToArray();
-        var actual = contour.OrderByDescending(value => value).ToArray();
-        if (Math.Abs(actual[0] - expected[0]) > SizeToleranceMm || Math.Abs(actual[1] - expected[1]) > SizeToleranceMm)
+        var contour = new[] { check.Box.Width, check.Box.Height }.OrderByDescending(value => value).ToArray();
+        if (Math.Abs(contour[0] - expected[0]) > SizeToleranceMm
+            || Math.Abs(contour[1] - expected[1]) > SizeToleranceMm)
         {
             return "Габарит контура " + DescribeBox(check.Box) + " разошёлся с двумя наибольшими размерами тела "
                 + expected[0].ToString("0.###", CultureInfo.InvariantCulture) + " x "
@@ -402,15 +438,14 @@ public partial class Api5Session
     /// constant-thickness part spans the body's two extents across the normal; no such view means a named
     /// refusal instead of the first view in the list.
     /// History: docs/decisions/flat-part.md#view-choice</remarks>
-    private int? PickFlatView(ksDocument2D? editor, DocumentEntry document, int[] created,
-        IReadOnlyList<double>? extents, string axis)
+    private int? PickFlatView(ksDocument2D? editor, DocumentEntry document, int[] created, double[]? expected)
     {
-        var expected = ExpectedFaceSize(extents, axis);
         if (expected is null)
         {
             return created.Length == 1 ? created[0] : null;
         }
 
+        var wanted = expected.OrderBy(value => value).ToArray();
         var matches = new List<int>();
         foreach (var number in created)
         {
@@ -421,8 +456,8 @@ public partial class Api5Session
 
             var size = new[] { Math.Abs(frame[2] - frame[0]), Math.Abs(frame[3] - frame[1]) };
             Array.Sort(size);
-            if (Math.Abs(size[0] - expected[0]) <= FrameToleranceMm
-                && Math.Abs(size[1] - expected[1]) <= FrameToleranceMm)
+            if (Math.Abs(size[0] - wanted[0]) <= FrameToleranceMm
+                && Math.Abs(size[1] - wanted[1]) <= FrameToleranceMm)
             {
                 matches.Add(number);
             }
@@ -430,6 +465,223 @@ public partial class Api5Session
 
         return matches.Count == 1 ? matches[0] : null;
     }
+
+    /// <summary>Name of the projection a tilted view is built from, as it appears in the part's list.</summary>
+    /// <remarks>INVARIANT: the name is stable per machine, because the drawing is built by that name from
+    /// the part's file; the suffix only appears when the name is already taken in this document.
+    /// History: docs/decisions/flat-part.md#view-choice</remarks>
+    private const string TiltedProjectionName = "KompasMcpFlat";
+
+    /// <summary>A user projection with the measured 4×4, added to the PART the view is built from.</summary>
+    /// <remarks>DOC: <c>iviewprojectionmanager_add.html</c> («Добавить новую пользовательскую проекцию»,
+    /// returns <c>IViewProjection7</c>), <c>iviewprojection7_name.html</c>, <c>iviewprojection7_update.html</c>
+    /// («Создать пользовательскую проекцию»), <c>ksviewprojectioncollection_getbyname.html</c>,
+    /// <c>iviews_addstandartviews.html</c> — the view is built by that name «из списка проекций в документе
+    /// источнике». MEASURED: the matrix of the 4×4 is the convention of
+    /// <see cref="FlatPartProjection.Matrix"/>; SetMatrix3D and Update both return true and the view then
+    /// comes out in that orientation; adding a projection does NOT mark the document changed, while
+    /// deleting it does — so it is left in place.
+    /// History: docs/decisions/flat-part.md#tilted-normal</remarks>
+    private string PrepareTiltedProjection(DocumentEntry document, double[] matrix, List<string> unverified)
+    {
+        var document7 = BridgeFor(document).TransferTo7(document.Document3D) as IKompasDocument3D;
+        var manager = (document7 as IKompasDocument3D1)?.ViewProjectionManager as IViewProjectionManager;
+        if (manager is null)
+        {
+            throw TiltedRefusal(matrix, TiltedProjectionName,
+                "документ-деталь не отдал IViewProjectionManager: пользовательская проекция не создана",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var name = TiltedProjectionName;
+        for (var attempt = 2; attempt < 100 && Taken(manager, name); attempt++)
+        {
+            name = TiltedProjectionName + attempt.ToString(CultureInfo.InvariantCulture);
+        }
+
+        IViewProjection7? projection;
+        try
+        {
+            projection = manager.Add() as IViewProjection7;
+        }
+        catch (COMException ex)
+        {
+            throw TiltedRefusal(matrix, name, "IViewProjectionManager.Add() бросил исключение: " + ex.Message,
+                RetryPolicy.SameOperationId);
+        }
+
+        if (projection is null)
+        {
+            throw TiltedRefusal(matrix, name, "IViewProjectionManager.Add() не вернул IViewProjection7",
+                RetryPolicy.SameOperationId);
+        }
+
+        projection.Name = name;
+        if (SafeBool(() => projection.SetMatrix3D(matrix)) != true)
+        {
+            throw TiltedRefusal(matrix, name, "IViewProjection7.SetMatrix3D вернул не true",
+                RetryPolicy.SameOperationId);
+        }
+
+        if (SafeBool(() => projection.Update()) != true)
+        {
+            throw TiltedRefusal(matrix, name, "IViewProjection7.Update вернул не true: проекция не создана",
+                RetryPolicy.SameOperationId);
+        }
+
+        return name;
+    }
+
+    /// <summary>Whether this projection name is already in the document's list.</summary>
+    private static bool Taken(IViewProjectionManager manager, string name)
+    {
+        try
+        {
+            return manager.ViewProjection[name] is not null;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The 4×4 of a tilted view and the face's own box, both built on the FACE's own edge.</summary>
+    /// <remarks>INVARIANT: the in-plane X is the face's longest edge, so the view comes out square to the
+    /// part and the contour's box is the face's box; with any other in-plane turn the outline is the same
+    /// rectangle turned inside its frame, and a box check could not be made. The turn is FREE in the
+    /// measured convention (rows = the view's axes, <see cref="FlatPartProjection.Matrix"/>), so it is
+    /// taken from the geometry. DOC: <c>ksfacedefinition_edgecollection.html</c>,
+    /// <c>ksedge_getvertex.html</c>, <c>ksvertexdefinition_getpoint.html</c>.
+    /// History: docs/decisions/flat-part.md#tilted-normal</remarks>
+    private (double[] Matrix, double[]? Box)? TiltedRoute(ksFaceDefinition? face, double[]? normal)
+    {
+        var unit = FlatPartProjection.Unit(normal);
+        if (unit is null)
+        {
+            return null;
+        }
+
+        var segments = FaceSegments(face);
+        double[]? xAxis = null;
+        var longest = 0d;
+        foreach (var (a, b) in segments ?? new List<(double[] A, double[] B)>())
+        {
+            var delta = new[] { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+            var length = Math.Sqrt(Dot(delta, delta));
+            // LIMIT: an edge of the face lies IN the face plane, so a candidate that is not perpendicular
+            // to the normal is a curved edge, not a direction the view can be squared to.
+            if (length <= longest || Math.Abs(Dot(delta, unit)) > 1e-6 * Math.Max(length, 1d))
+            {
+                continue;
+            }
+
+            longest = length;
+            xAxis = new[] { delta[0] / length, delta[1] / length, delta[2] / length };
+        }
+
+        if (xAxis is null)
+        {
+            return FlatPartProjection.Matrix(normal) is { } fallback ? (fallback, null) : null;
+        }
+
+        var yAxis = Cross(unit, xAxis);
+        var matrix = new[]
+        {
+            xAxis[0], xAxis[1], xAxis[2], 0d,
+            yAxis[0], yAxis[1], yAxis[2], 0d,
+            unit[0], unit[1], unit[2], 0d,
+            0d, 0d, 0d, 1d,
+        };
+
+        var us = new List<double>();
+        var vs = new List<double>();
+        foreach (var (a, b) in segments!)
+        {
+            us.Add(Dot(xAxis, a[0], a[1], a[2]));
+            vs.Add(Dot(yAxis, a[0], a[1], a[2]));
+            us.Add(Dot(xAxis, b[0], b[1], b[2]));
+            vs.Add(Dot(yAxis, b[0], b[1], b[2]));
+        }
+
+        return (matrix, us.Count == 0 ? null : new[] { us.Max() - us.Min(), vs.Max() - vs.Min() });
+    }
+
+    /// <summary>The flat face's edges as point pairs, or <c>null</c> when they are not read.</summary>
+    private List<(double[] A, double[] B)>? FaceSegments(ksFaceDefinition? face)
+    {
+        var collection = face?.EdgeCollection() as ksEdgeCollection;
+        if (collection is null)
+        {
+            return null;
+        }
+
+        var segments = new List<(double[] A, double[] B)>();
+        for (var index = 0; index < collection.GetCount(); index++)
+        {
+            if (AsInterface<ksEdgeDefinition>(collection.GetByIndex(index)) is not { } edge)
+            {
+                continue;
+            }
+
+            var a = VertexPoint(edge, true);
+            var b = VertexPoint(edge, false);
+            if (a is not null && b is not null)
+            {
+                segments.Add((a, b));
+            }
+        }
+
+        return segments;
+    }
+
+    private static double[]? VertexPoint(ksEdgeDefinition edge, bool start)
+    {
+        if (SafeObject(() => edge.GetVertex(start)) is not { } vertexObject
+            || AsInterface<ksVertexDefinition>(vertexObject) is not { } vertex
+            || SafeBool(() => vertex.GetPoint(out _, out _, out _)) != true)
+        {
+            return null;
+        }
+
+        vertex.GetPoint(out var x, out var y, out var z);
+        return new[] { x, y, z };
+    }
+
+    private static double[] Cross(double[] left, double[] right) => new[]
+    {
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    };
+
+    private static double Dot(double[] axis, double x, double y, double z) =>
+        axis[0] * x + axis[1] * y + axis[2] * z;
+
+    /// <summary>The refusal of a tilted route, naming the step that failed; an axis route keeps its codes.</summary>
+    /// <remarks>INVARIANT: a failed matrix route refuses with <c>FLAT_NORMAL_NOT_AXIS</c> and the measured
+    /// values, so the absent route stays named instead of turning into another code.
+    /// History: docs/decisions/flat-part.md#view-choice</remarks>
+    private KompasContractException TiltedRefusal(double[]? matrix, string name, string why, RetryPolicy retry) =>
+        new(matrix is null ? ErrorCodes.GeometryFailed : ErrorCodes.FlatNormalNotAxis,
+            matrix is null
+                ? "Вид «" + name + "» не построен: " + why + "."
+                : "Вид по нормали через пользовательскую проекцию «" + name + "» не построен: " + why
+                  + ". Матрица проекции - " + DescribeMatrix(matrix) + ".",
+            retry,
+            details: matrix is null
+                ? new Dictionary<string, object?> { ["view"] = name, ["step"] = why }
+                : new Dictionary<string, object?>
+                {
+                    ["normal_matrix"] = matrix,
+                    ["projection"] = name,
+                    ["step"] = why,
+                    ["field"] = "body_ref",
+                });
+
+    private static string DescribeMatrix(double[] matrix) =>
+        matrix is { Length: 16 }
+            ? string.Join(" ", matrix.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)))
+            : "не прочитана";
 
     /// <summary>The two body extents across the normal, ascending; <c>null</c> when they are unknown.</summary>
     private static double[]? ExpectedFaceSize(IReadOnlyList<double>? extents, string axis)
@@ -596,6 +848,12 @@ public partial class Api5Session
             ? "не прочитана"
             : "(" + string.Join(", ", vector.Select(value =>
                 value.ToString("0.####", CultureInfo.InvariantCulture))) + ")";
+
+    private static string DescribeSize(double[]? size) =>
+        size is { Length: 2 }
+            ? string.Join(" x ", size.OrderBy(value => value)
+                .Select(value => value.ToString("0.###", CultureInfo.InvariantCulture))) + " мм"
+            : "не прочитан";
 
     private static string DescribeExtents(IReadOnlyList<double>? extents) =>
         extents is null

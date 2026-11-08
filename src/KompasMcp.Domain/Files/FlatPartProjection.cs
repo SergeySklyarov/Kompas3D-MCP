@@ -8,8 +8,8 @@ public sealed record FlatPartView(int Flag, string Name, string Axis);
 /// «0x1 - Спереди, 0x2 - Сзади, 0x4 - Сверху, 0x8 - Снизу, 0x10 - Слева, 0x20 - Справа»;
 /// <c>projectiontype.html</c> names the planes: «Спереди - Фронтальная плоскость» (XZ),
 /// «Сверху - Горизонтальная плоскость» (XY), «Слева - Профильная плоскость» (YZ).
-/// INVARIANT: only the six axis directions are projected. A tilted normal is refused by name, because the
-/// shipped v24 type library has no documented route to a view normal to an arbitrary direction.
+/// INVARIANT: only the six axis directions are named here. A tilted normal goes through
+/// <see cref="Matrix"/>, the route measured for an arbitrary direction.
 /// MEASURED: the list takes the <c>ksViewProjectionType</c> ordinals (1..6), not the mask, and a side view
 /// is built only next to the main «Спереди» one — the caller adds it. The sign of the normal picks the view
 /// of the opposite side, and that side sees the face mirrored; the box is the same for both sides, so the
@@ -67,4 +67,54 @@ public static class FlatPartProjection
                 : new FlatPartView(4, "Снизу", "Z"),
         };
     }
+
+    /// <summary>The 4×4 of a view whose line of sight is this normal, or <c>null</c> when it is not a direction.</summary>
+    /// <remarks>DOC: <c>iviewprojection7_setmatrix3d.html</c> — «16 элементов SafeAttray типа
+    /// (VT_ARRAY | VT_R8). Матрица имеет размер 4х4», and nothing about the order of the elements.
+    /// MEASURED (probe <c>scripts/probes/flat-tilt</c>): rows 0..2 are the view's X, Y and Z axes in model
+    /// coordinates, row 3 is the translation — index 12 moved the view by 10 mm while indices 3, 7 and 11
+    /// changed nothing, and element 15 was not read. The third ROW is the line of sight: writing the same
+    /// numbers by columns changed which face the view shows. Agreement with the standard views was checked
+    /// on all six axis directions; the arrangement «rows» was the only one that matched.
+    /// INVARIANT: the triple is right-handed, so the face is seen from outside, never mirrored.
+    /// History: docs/decisions/flat-part.md#tilted-normal</remarks>
+    public static double[]? Matrix(double[]? normal)
+    {
+        var z = Unit(normal);
+        if (z is null)
+        {
+            return null;
+        }
+
+        // MEASURED: a reference straight along the normal has no in-plane X, so the world Z is used where
+        // it is not parallel to the normal and world Y where it is.
+        var reference = Math.Abs(z[2]) < 0.9d ? new[] { 0d, 0d, 1d } : new[] { 0d, 1d, 0d };
+        var x = Unit(Cross(reference, z));
+        if (x is null)
+        {
+            return null;
+        }
+
+        var y = Cross(z, x);
+        return new[] { x[0], x[1], x[2], 0d, y[0], y[1], y[2], 0d, z[0], z[1], z[2], 0d, 0d, 0d, 0d, 1d };
+    }
+
+    /// <summary>The normal as a unit vector, or <c>null</c> when it is not a readable direction.</summary>
+    public static double[]? Unit(double[]? vector)
+    {
+        if (vector is not { Length: 3 } || vector.Any(value => !double.IsFinite(value)))
+        {
+            return null;
+        }
+
+        var length = Math.Sqrt(vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]);
+        return length <= 0d ? null : new[] { vector[0] / length, vector[1] / length, vector[2] / length };
+    }
+
+    private static double[] Cross(double[] left, double[] right) => new[]
+    {
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    };
 }

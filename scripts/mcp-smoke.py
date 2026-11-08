@@ -17907,15 +17907,19 @@ def flat_part_checks(client, rep, app_id, workdir):
             "перезапись=" + str(code_o) + " sha256 до=" + str(before)[:16] + " после="
             + str(after)[:16] + " несохранённый=" + str(code_d))
 
-    # ── FLT.07: наклонная нормаль - отказ по имени, файла нет ────────────────────────────────────
-    # INVARIANT: the refusal must come from the normal, not from the thickness: a 5x40 rectangle turned
-    # 30 degrees in the sketch plane and extruded 30 mm has constant thickness and tilted large faces.
+    # ── FLT.07: наклонная нормаль - вид по матрице 4x4, контур 40x30 ─────────────────────────────
+    # INVARIANT: the largest faces must be the tilted ones, not the refusal: a 5x40 rectangle turned 30
+    # degrees in the sketch plane and extruded 30 mm has constant thickness and faces 40x30 whose normal
+    # is (cos30, sin30, 0). The axis route cannot show them, the matrix route must; the contour is
+    # judged by geometry, never by an accepted call.
     # LIMIT: the normal is compared by component modulus, because its sign comes from the face order.
+    # History: docs/decisions/flat-part.md#view-choice
     tilt_deg, tilt_length_mm, tilt_width_mm, tilt_height_mm = 30.0, 40.0, 5.0, 30.0
     tilt_angle = math.radians(tilt_deg)
     tilt_path = os.path.join(workdir, "flt-tilt.dxf")
     tilt = new_part("FLT-tilt")
-    tilt_env, code_t, tilt_normal, tilt_thickness = {}, None, None, None
+    tilt_env, code_t, tilt_normal, tilt_thickness, tilt_contour = {}, None, None, None, {}
+    tilt_loops = None
     if tilt:
         env_k, _code_k = call("kompas_create_sketch", {
             "document_id": tilt, "expected_revision": current_rev(tilt),
@@ -17938,22 +17942,27 @@ def flat_part_checks(client, rep, app_id, workdir):
                 "document_id": tilt, "expected_revision": current_rev(tilt),
                 "target_path": os.path.join(workdir, "flt-tilt.m3d")})
             tilt_env, code_t = export(tilt, main_body(tilt), tilt_path)
-            tilt_details = edetails(tilt_env)
-            tilt_normal = tilt_details.get("normal")
-            tilt_thickness = tilt_details.get("thickness_mm")
+            got_t = result(tilt_env)
+            tilt_contour = got_t.get("contour") or {}
+            tilt_normal = got_t.get("normal")
+            tilt_thickness = got_t.get("thickness_mm")
+            tilt_loops = got_t.get("loops")
     tilt_expected = [math.cos(tilt_angle), math.sin(tilt_angle), 0.0]
     normal_ok = (isinstance(tilt_normal, list) and len(tilt_normal) == 3
                  and all(abs(abs(tilt_normal[i]) - abs(tilt_expected[i])) <= 1e-3
                          for i in range(3)))
-    ok07 = (code_t == "FLAT_NORMAL_NOT_AXIS" and normal_ok
-            and near(tilt_thickness, tilt_width_mm, 0.01) and not os.path.exists(tilt_path))
+    tilt_size = sorted([tilt_contour.get("width_mm") or 0.0, tilt_contour.get("height_mm") or 0.0])
+    tilt_size_ok = near(tilt_size[0], tilt_height_mm, 0.05) and near(tilt_size[1], tilt_length_mm, 0.05)
+    ok07 = (not code_t and os.path.exists(tilt_path) and normal_ok and tilt_size_ok
+            and near(tilt_thickness, tilt_width_mm, 0.01) and tilt_loops == 1)
     rep.add("FLT.07.tilted_normal",
-            "плита 5x40x30 с поворотом 30° в плоскости эскиза: наибольшие грани наклонены, толщина "
-            "постоянна - отказ FLAT_NORMAL_NOT_AXIS, нормаль в details совпадает с (cos30, sin30, 0) "
-            "по модулю компонент с допуском 1e-3, толщина 5 мм, файла нет",
+            "плита 5x40x30 с поворотом 30° в плоскости эскиза: наибольшие грани 40x30 наклонены, "
+            "нормаль (cos30, sin30, 0) по модулю компонент (допуск 1e-3), толщина 5 мм; вид построен "
+            "по матрице 4x4, контур 40x30 (порядок сторон любой) и одна петля, файл создан",
             "PASS" if ok07 else "FAIL",
             "code=" + str(code_t) + " нормаль=" + str(tilt_normal) + " ожидалось="
             + str([round(value, 4) for value in tilt_expected]) + " толщина=" + str(tilt_thickness)
+            + " контур=" + str(tilt_size) + " петель=" + str(tilt_loops)
             + " файл=" + str(os.path.exists(tilt_path)) + " " + str(emsg(tilt_env) or ""))
 
     # ── FLT.08: зеркальность контура - несимметричная плита с нормалью по X ─────────────────────
@@ -18076,6 +18085,119 @@ def flat_part_checks(client, rep, app_id, workdir):
                 + str(got_a["contour"].get("height_mm")) + " нормаль=" + str(got_a["normal"])
                 for got_a, (name_a, _direction) in zip(measured, sides))
             + " | зеркало: " + (", ".join(mirror_sides) if mirror_sides else "нет ни на одной стороне"))
+
+
+    # ── FLT.09: наклон в двух осях - отверстия разного радиуса ──────────────────────────────────
+    # INVARIANT: the plate is built on an AUXILIARY plane tilted 30° about an in-plane axis set at 20°, so
+    # its normal has two non-zero components, and the holes are cut along THAT normal - only then do they
+    # arrive as circles of the given radii. The contour is compared with the model through one of the
+    # eight reflections/rotations; the determinant of the found transform is the answer about mirroring,
+    # and only a rotation (+1) is accepted. History: docs/decisions/flat-part.md#view-choice
+    tilt2_path = os.path.join(workdir, "flt-tilt2.dxf")
+    tilt2 = new_part("FLT-tilt2")
+    tilt2_holes = [(12.0, -6.0, 4.0), (-6.0, 9.0, 3.0)]
+    tilt2_env, code_t2, tilt2_contour, tilt2_circles, tilt2_step = {}, None, {}, {}, "деталь не создана"
+    tilt2_loops = None
+    if tilt2:
+        axis_angle = math.radians(20.0)
+        env_axis, _code_axis = call("kompas_create_aux_geometry", {
+            "document_id": tilt2, "expected_revision": current_rev(tilt2), "kind": "axis",
+            "mode": "by_2_points", "point1_mm": [0.0, 0.0, 0.0],
+            "point2_mm": [math.cos(axis_angle), math.sin(axis_angle), 0.0]})
+        axis_ref = result(env_axis).get("reference_id")
+        tilt2_step = "ось наклона: " + str(axis_ref) + " " + str(emsg(env_axis) or "")
+        if axis_ref:
+            env_plane, _code_plane = call("kompas_create_aux_geometry", {
+                "document_id": tilt2, "expected_revision": current_rev(tilt2), "kind": "plane",
+                "mode": "angle", "base_plane": "xy", "base_axis_ref": axis_ref, "angle_deg": 30.0})
+            plane_ref = result(env_plane).get("reference_id")
+            tilt2_step += "; плоскость 30°: " + str(plane_ref) + " " + str(emsg(env_plane) or "")
+            if plane_ref:
+                env_pk, _code_pk = call("kompas_create_sketch", {
+                    "document_id": tilt2, "expected_revision": current_rev(tilt2),
+                    "plane": {"reference": plane_ref}, "name": "tilt2-plate"})
+                plate_sketch = result(env_pk).get("id")
+                tilt2_step += "; эскиз плиты: " + str(plate_sketch)
+                if plate_sketch:
+                    call("kompas_edit_sketch", {
+                        "sketch_ref": plate_sketch, "expected_revision": current_rev(tilt2),
+                        "mode": "append",
+                        "entities": [{"kind": "rectangle",
+                                      "start_mm": [-width_mm / 2.0, -height_mm / 2.0],
+                                      "width_mm": width_mm, "height_mm": height_mm}]})
+                    call("kompas_finish_sketch",
+                         {"sketch_ref": plate_sketch, "require_closed_profile": True})
+                    call("kompas_extrude", {
+                        "sketch_ref": plate_sketch, "expected_revision": current_rev(tilt2),
+                        "operation": "base", "depth_mm": 5.0, "direction": "positive"})
+                    tilt2_body = main_body(tilt2)
+                    env_hk, _code_hk = call("kompas_create_sketch", {
+                        "document_id": tilt2, "expected_revision": current_rev(tilt2),
+                        "plane": {"reference": plane_ref}, "name": "tilt2-holes"})
+                    holes_sketch = result(env_hk).get("id")
+                    if holes_sketch:
+                        call("kompas_edit_sketch", {
+                            "sketch_ref": holes_sketch, "expected_revision": current_rev(tilt2),
+                            "mode": "append",
+                            "entities": [{"kind": "circle", "center_mm": [cx, cy], "radius_mm": r}
+                                         for cx, cy, r in tilt2_holes]})
+                        call("kompas_finish_sketch",
+                             {"sketch_ref": holes_sketch, "require_closed_profile": True})
+                        call("kompas_extrude", {
+                            "sketch_ref": holes_sketch, "expected_revision": current_rev(tilt2),
+                            "operation": "cut", "end_condition": "through", "direction": "symmetric",
+                            "target_body_ref": tilt2_body})
+                    call("kompas_save_document", {
+                        "document_id": tilt2, "expected_revision": current_rev(tilt2),
+                        "target_path": os.path.join(workdir, "flt-tilt2.m3d")})
+                    tilt2_env, code_t2 = export(tilt2, main_body(tilt2), tilt2_path)
+                    got_t2 = result(tilt2_env)
+                    tilt2_contour = got_t2.get("contour") or {}
+                    tilt2_loops = got_t2.get("loops")
+                    tilt2_circles = [(float(dict(entity["values"])[10]),
+                                      float(dict(entity["values"])[20]),
+                                      float(dict(entity["values"])[40]))
+                                     for entity in (dxf_entities(tilt2_path)
+                                                    if os.path.exists(tilt2_path) else [])
+                                     if entity["type"] == "CIRCLE"]
+                    tilt2_step += "; code=" + str(code_t2) + " " + str(emsg(tilt2_env) or "")
+
+    # INVARIANT: the checks are ROTATION-INVARIANT on purpose — the matrix convention fixes the direction
+    # of the sight, not the turn of the part inside the frame, so the row judges what the order names:
+    # the distances between the hole centres and their radii, plus the contour's extents.
+    def tilt2_measure():
+        if len(tilt2_circles) != 2 or tilt2_contour.get("width_mm") is None:
+            return None
+        centre_x = tilt2_contour["min_x_mm"] + tilt2_contour["width_mm"] / 2.0
+        centre_y = tilt2_contour["min_y_mm"] + tilt2_contour["height_mm"] / 2.0
+        actual = {round(radius, 3): (cx - centre_x, cy - centre_y) for cx, cy, radius in tilt2_circles}
+        model = {round(radius, 3): (cx, cy) for cx, cy, radius in tilt2_holes}
+        if sorted(actual) != sorted(model):
+            return {"radii_ok": False, "actual": actual, "model": model}
+        pair = sorted(actual)
+        distance_actual = math.hypot(actual[pair[0]][0] - actual[pair[1]][0],
+                                     actual[pair[0]][1] - actual[pair[1]][1])
+        distance_model = math.hypot(model[pair[0]][0] - model[pair[1]][0],
+                                    model[pair[0]][1] - model[pair[1]][1])
+        radius_ok = all(near(math.hypot(*actual[radius]), math.hypot(*model[radius]), 0.05) for radius in pair)
+        return {"radii_ok": True, "distance_actual": distance_actual, "distance_model": distance_model,
+                "radius_ok": radius_ok, "actual": actual, "model": model}
+
+    tilt2_got = tilt2_measure()
+    tilt2_size = sorted([tilt2_contour.get("width_mm") or 0.0, tilt2_contour.get("height_mm") or 0.0])
+    tilt2_size_ok = near(tilt2_size[0], height_mm, 0.05) and near(tilt2_size[1], width_mm, 0.05)
+    ok09 = (not code_t2 and os.path.exists(tilt2_path) and tilt2_size_ok and tilt2_loops == 3
+            and tilt2_got is not None and tilt2_got.get("radii_ok") and tilt2_got.get("radius_ok")
+            and near(tilt2_got.get("distance_actual"), tilt2_got.get("distance_model"), 0.05))
+    rep.add("FLT.09.two_axis_tilt",
+            "плита 40x30x5 на вспомогательной плоскости, наклонённой на 30° вокруг оси под 20° "
+            "(нормаль наклонена в двух осях), два сквозных отверстия R4 и R3 по нормали: контур 40x30, "
+            "петли 3 (внешняя и две внутренние), радиусы R4/R3 и расстояние между центрами отверстий "
+            "совпадают с моделью (допуск 0,05 мм), расстояние каждого центра от центра контура тоже",
+            "PASS" if ok09 else "FAIL",
+            "построение: " + tilt2_step + " контур=" + str(tilt2_size) + " петель=" + str(tilt2_loops)
+            + " круги=" + str([(round(x, 3), round(y, 3), round(r, 3)) for x, y, r in tilt2_circles])
+            + " замер=" + str(tilt2_got) + " файл=" + str(os.path.exists(tilt2_path)))
 
 
 def iges_checks(client, rep, app_id, workdir):

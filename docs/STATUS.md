@@ -568,8 +568,9 @@ UNKNOWN 3 / FAIL 0.
 - **Проверки.** `dotnet build -c Release` - 0 предупреждений / 0 ошибок; `dotnet test -c Release
   --no-build` - **1874/1874**, 0 отказов; `--self-test` - **109 проверок, 0 FAIL**; `--flat-part-only`
   на Release-хосте - **38 PASS / 0 FAIL** (все девять прежних строк `FLT` PASS); стражи
-  `lint-dashes.py`, `check-evidence-links.py`, `long-comment-blocks.py` - 0/0/0. Зачётный `--all` - на
-  этом коммите; итог дописывается в отчёт наряда и в эту запись после прогона.
+  `lint-dashes.py`, `check-evidence-links.py`, `long-comment-blocks.py` - 0/0/0. Зачётный `--all` на
+  чистом `e7398ac` (Release того же коммита): **2172 PASS / 0 FAIL / 10 NAMED / 3 UNKNOWN**, 80 минут;
+  `FLT.10` в прогоне PASS, прежний `CH29` вне области наряда не повторился.
 - **Долг.** Строка 89 закрыта, новых строк нет. Пересчёт по таблице: строк 91, закрыто 89, открыто 2
   (38, 90) - бюджет 0.14 (не больше 11) держится с запасом. Отчёт -
   `FLAT_AXIS_VIEWS_0_14_REPORT_20261108.md`.

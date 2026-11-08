@@ -60880,7 +60880,9 @@ def e5_checks(client, rep, app_id, workdir):
             "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "cut",
             "end_condition": "through", "direction": "symmetric",
             "target_body_ref": body_ref(doc),
-            "expected_volume_delta_mm3": -math.pi * radius * radius * DEPTH})
+            # INVARIANT: a cut records the REMOVED material as a positive amount, so the expectation
+            # here is positive too; a negative value is a refused argument before COM.
+            "expected_volume_delta_mm3": math.pi * radius * radius * DEPTH})
         if code:
             return doc, "вырез отверстия: %s" % (code,)
         return doc, None

@@ -62422,6 +62422,52 @@ def events_checks(client, rep, app_id, workdir):
             f"проба={code_mk} «{out_mk[:80]}»; ревизия {rm0}->{rm1}->{rm2}; маркер в первом "
             f"чтении={len(marker_notes(mk_after))}, в повторе={len(marker_notes(mk_again))}")
 
+    # ── EV.external.marker_after_conflict: the foreign change, a refused client mutation, reads ───
+    # INVARIANT: REVISION_CONFLICT neither moves the revision nor swallows the marker - the first read
+    # after it names external_change_detected ONCE, and a mutation with the new revision passes +1 and
+    # gives no marker. MEASURED: the STA pump runs between commands, so the pause lets the foreign event
+    # become current before the refusal; without it the client would compare r0 with r0 and rightly pass.
+    # History: docs/decisions/adapter-core.md#external-change-marker
+    ac_before, _e17 = ev_context(client, doc)
+    ac0 = ac_before.get("revision")
+    # `--height 50`: the probe writes an ABSOLUTE depth, and the marker row left it at 40.
+    code_ac, out_ac = ev_probe_run("--mutate", path, extra=["--height", "50"])
+    time.sleep(3.0)
+    _e, ac_refusal_env, _r = client.tool("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": ac0, "plane": {"base": "xy", "offset_mm": 0},
+        "name": "EV_marker_after_conflict", "operation_id": str(uuid.uuid4())})
+    refusal = error_code(ac_refusal_env)
+    ac_marked, _e18 = ev_context(client, doc)
+    ac1 = ac_marked.get("revision")
+    ac_again, _e19 = ev_context(client, doc)
+    ac2 = ac_again.get("revision")
+    _e, ac_own_env, _r = client.tool("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": ac1, "plane": {"base": "xy", "offset_mm": 0},
+        "name": "EV_after_conflict", "operation_id": str(uuid.uuid4())})
+    ac_own_after, _e20 = ev_context(client, doc)
+    rep.add("EV.external.marker_after_conflict",
+            "чужая правка, затем мутация клиента с прежней ревизией: отказ REVISION_CONFLICT не "
+            "двигает ревизию и не гасит маркер (он есть в первом чтении и не повторяется), а мутация "
+            "с новой ревизией проходит +1 и маркера не даёт",
+            "PASS" if (code_ac == 0 and isinstance(ac0, int) and refusal == "REVISION_CONFLICT"
+                       and ac1 == ac0 + 1 and marker_notes(ac_marked)
+                       and not marker_notes(ac_again) and ac2 == ac1
+                       and error_code(ac_own_env) is None
+                       and ac_own_after.get("revision") == ac1 + 1
+                       and not marker_notes(ac_own_after)) else "FAIL",
+            f"проба={code_ac} «{out_ac[:70]}»; ревизия {ac0}; отказ={refusal}; после отказа {ac1} "
+            f"(ждали {ac0 + 1 if isinstance(ac0, int) else '?'}); маркер в первом "
+            f"чтении={len(marker_notes(ac_marked))}, в повторе={len(marker_notes(ac_again))}; "
+            f"повтор={ac2}; своя мутация={error_code(ac_own_env)} -> "
+            f"{ac_own_after.get('revision')}, маркер={len(marker_notes(ac_own_after))}",
+            details={"probe": code_ac, "before": ac0, "refusal": refusal,
+                     "after_refusal": ac1, "repeat": ac2,
+                     "marker_first_read": len(marker_notes(ac_marked)),
+                     "marker_repeat_read": len(marker_notes(ac_again)),
+                     "own_mutation": error_code(ac_own_env),
+                     "own_mutation_revision": ac_own_after.get("revision"),
+                     "marker_after_own": len(marker_notes(ac_own_after))})
+
     # Своя мутация маркера не даёт: своё перестроение поглощается окном ExpectOwnBurst, и ложной
     # тревоги быть не должно. Строка держит вторую половину требования §1.1 наряда.
     own_before, _e15 = ev_context(client, doc)

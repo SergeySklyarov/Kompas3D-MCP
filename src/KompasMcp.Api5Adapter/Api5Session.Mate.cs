@@ -770,44 +770,37 @@ public sealed partial class Api5Session
 
     // ── MATE-05 ──
     /// <summary>Delete a mate.</summary>
+    /// <remarks>ROUTE — two documented removals, chosen by the mate's OWN type: an ordinary mate goes
+    /// through <c>ksDocument3D.RemoveMateConstraint</c> (<c>ksdocument3d_removemateconstraint.html</c>),
+    /// a mechanical TRANSMISSION through <c>ksDocument3D.DeleteObject</c>
+    /// (<c>ksdocument3d_deleteobject.html</c>: «Удалить объект: деталь, операцию, сопряжение»), because
+    /// <c>RemoveMateConstraint</c> answers False on it and leaves it in the model.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
     public DeleteMateResult DeleteMate(DeleteMateCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
         RequireRevision(document, command.ExpectedRevision);
 
         var payload = RequireMate(document, command.MateRef);
-        var before = MateConstraintCount(document, "до удаления");
-
-        // Deletion is the documented ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2)
-        // (ksdocument3d_removemateconstraint.html). The objects are taken from the mate itself by the
-        // same documented GetBaseObj(1|2) — "the first one found" would be an address substitution.
-        var first = Ref(() => payload.Mate5.GetBaseObj(1));
-        var second = Ref(() => payload.Mate5.GetBaseObj(2));
-        if (first is null || second is null)
-        {
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                "Базовые объекты сопряжения не прочитаны (GetBaseObj вернул null): удалять нечем — " +
-                "RemoveMateConstraint требует оба объекта.",
-                RetryPolicy.ReacquireContext);
-        }
+        // THE TYPE COMES FROM THE MODEL, not from the call: the two documented removals are not
+        // interchangeable, and the wrong one answers False while the mate stays.
+        var isTransmission = payload.ConstraintType == (short)MateConstraintType.mc_Transmission;
+        var before = MateCountForDeletion(document, isTransmission, "до удаления");
 
         bool removed;
-        try
+        if (isTransmission)
         {
-            removed = document.Document3D.RemoveMateConstraint(payload.ConstraintType, first, second);
+            // THE OBJECT IS THE MATE THE REFERENCE NAMES — the same API5 ksMateConstraint the product
+            // already addresses the transmission with; DeleteObject takes an object, not a type pair.
+            removed = DeleteObjectOfMate(document, payload);
         }
-        catch (COMException ex)
+        else
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                $"RemoveMateConstraint прервался: {ex.Message}. Сопряжение не удалено.",
-                RetryPolicy.AfterReconciliation,
-                partialEffects: true);
+            removed = RemoveByConstraint(document, payload);
         }
 
         document.Document3D.RebuildDocument();
-        var after = MateConstraintCount(document, "после удаления");
+        var after = MateCountForDeletion(document, isTransmission, "после удаления");
 
         if (!removed || after >= before)
         {
@@ -820,11 +813,14 @@ public sealed partial class Api5Session
 
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
-                $"Сопряжение НЕ удалено: RemoveMateConstraint={removed}, сопряжений {before} → {after}.",
+                $"Сопряжение НЕ удалено: {(isTransmission ? "DeleteObject" : "RemoveMateConstraint")}="
+                + $"{removed}, сопряжений {before} → {after}.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true,
                 details: new Dictionary<string, object?>
                 {
+                    ["route"] = isTransmission ? "delete_object" : "remove_mate_constraint",
+                    ["constraint_type"] = MateTypeName(payload.ConstraintType),
                     ["mate_count_before"] = before,
                     ["mate_count_after"] = after,
                 });
@@ -850,6 +846,72 @@ public sealed partial class Api5Session
                 },
                 new List<string>()));
     }
+
+    /// <summary>Remove a mate by <c>RemoveMateConstraint(constraintType, obj1, obj2)</c>, the objects
+    /// taken from the mate itself by the documented <c>GetBaseObj(1|2)</c>.</summary>
+    private static bool RemoveByConstraint(DocumentEntry document, MatePayload payload)
+    {
+        // "The first one found" would be an address substitution, so an unread base object is a refusal.
+        var first = Ref(() => payload.Mate5.GetBaseObj(1));
+        var second = Ref(() => payload.Mate5.GetBaseObj(2));
+        if (first is null || second is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Базовые объекты сопряжения не прочитаны (GetBaseObj вернул null): удалять нечем — " +
+                "RemoveMateConstraint требует оба объекта.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        try
+        {
+            return document.Document3D.RemoveMateConstraint(payload.ConstraintType, first, second);
+        }
+        catch (COMException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"RemoveMateConstraint прервался: {ex.Message}. Сопряжение не удалено.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true);
+        }
+    }
+
+    /// <summary>Remove a mate as an object by the documented <c>DeleteObject(obj)</c>.</summary>
+    private static bool DeleteObjectOfMate(DocumentEntry document, MatePayload payload)
+    {
+        if (payload.Mate5 is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Объект сопряжения не сохранён в ссылке: DeleteObject удаляет объект, а не пару "
+                + "«тип и базовые объекты», — передавать нечего.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        try
+        {
+            return document.Document3D.DeleteObject(payload.Mate5);
+        }
+        catch (COMException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"DeleteObject прервался: {ex.Message}. Передача не удалена.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true);
+        }
+    }
+
+    /// <summary>The mate count that confirms a deletion, from the counter that follows the removal.</summary>
+    /// <remarks>MEASURED: after <c>DeleteObject</c> the API5 collection still answers the PRE-deletion
+    /// number on the first read and only then drops, while the API7 count follows the removal at once;
+    /// judging by the lagging number would report a deletion that happened as a failure.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
+    private int MateCountForDeletion(DocumentEntry document, bool viaDeleteObject, string stage) =>
+        viaDeleteObject
+            ? RequireMateCount(document, RequireMateConstraints(document), stage)
+            : MateConstraintCount(document, stage);
 
     // ── helpers ──
 

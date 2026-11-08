@@ -64,6 +64,12 @@ internal sealed class MechanicalMatesProbe
 
         try
         {
+            if (_options.MateDelete)
+            {
+                DeleteRoute();
+                return;
+            }
+
             if (BuildSourcePart("gear", GearRadius, GearHeight) is not { } gear
                 || BuildSourcePart("follower", -1d, FollowerThickness) is not { } follower)
             {
@@ -658,6 +664,355 @@ internal sealed class MechanicalMatesProbe
             : twice
                 ? $"связь наблюдаема маршрутом {route}: компонент 2 повернулся на alpha*2 (коэффициенты связаны наоборот)"
                 : $"компонент 2 двинулся маршрутом {route}, но соотношение не alpha/2 и не alpha*2 — привязка коэффициентов иная");
+    }
+
+    // ══════════════════════════════════════════════════════ deletion ══
+
+    /// <summary><c>--mate-delete</c>: the G4 stand reduced to what the deletion measurement needs —
+    /// two gears and a follower, one transmission and one ordinary mate beside it.</summary>
+    /// <remarks>A mode of its own, not a branch of the G4 chain: the chain stops at its positioner control
+    /// (G4.9), which guards the LINKAGE claim and says nothing about deletion.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
+    private void DeleteRoute()
+    {
+        if (BuildSourcePart("gear", GearRadius, GearHeight) is not { } gear
+            || BuildSourcePart("follower", -1d, FollowerThickness) is not { } follower)
+        {
+            return;
+        }
+
+        if (BuildAssembly(gear, follower) is not { } path || Reopen(path) is not { } document)
+        {
+            return;
+        }
+
+        _doc = document;
+        var components = Components();
+        if (components.Count < 3)
+        {
+            var blocked = _report.Begin("G7.0", "Компоненты для опыта удаления", "Есть ли что адресовать?");
+            blocked.Fail($"компонентов {components.Count}, нужно 3 (две шестерни и толкатель).");
+            return;
+        }
+
+        TransmissionCreate(components[0], components[1]);
+        CoincidenceCreate(components[0], components[2]);
+        TransmissionDelete();
+        ReopenAfterDelete(Path.Combine(_options.WorkDir, "mech-mates", "mech-deleted.m3d"));
+    }
+
+    /// <summary>A second, ORDINARY mate beside the transmission — the neighbour whose survival after the
+    /// deletion is what makes "only the transmission went" measurable.</summary>
+    /// <remarks>DOC: the same route ordinary mates already take: <c>IMateConstraints3D.Add</c> →
+    /// <c>BaseObject1/2</c> → <c>Update()</c>. Planar faces are preferred, so the mate is a valid one and a
+    /// neighbour that disappeared would be visible.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
+    private void CoincidenceCreate(ksPart first, ksPart second)
+    {
+        var step = _report.Begin("G7.1", "Обычное сопряжение рядом с передачей",
+            "Есть ли второе сопряжение, сохранность которого видно после удаления?");
+        _current = step;
+
+        var faces1 = Faces(first, step, "компонент 1");
+        var faces2 = Faces(second, step, "компонент 2");
+        var face1 = faces1.FirstOrDefault(f => !f.IsCylinder) ?? faces1.FirstOrDefault();
+        var face2 = faces2.FirstOrDefault(f => !f.IsCylinder) ?? faces2.FirstOrDefault();
+        if (face1 is null || face2 is null || Mates7() is not { } mates)
+        {
+            step.Fail("грани или коллекция сопряжений не получены — второго сопряжения нет.");
+            return;
+        }
+
+        IMateConstraint3D? mate = null;
+        try
+        {
+            mate = mates.Add(MateConstraintType.mc_Coincidence);
+            mate.BaseObject1 = face1.Model;
+            mate.BaseObject2 = face2.Model;
+            mate.Update();
+        }
+        catch (Exception ex)
+        {
+            step.Observe("создание обычного сопряжения бросило: " + ex.GetType().Name + ": " + ex.Message);
+        }
+
+        _doc.RebuildDocument();
+        var count = Api5.SafeInt(() => mates.Count);
+        var valid = mate is null ? (bool?)null : Api5.SafeBool(() => mate.Valid);
+        step.Data["mates_after"] = count;
+        step.Data["valid"] = valid;
+        step.Observe($"сопряжений после обычного: {count}, Valid={valid}");
+        if (mate is not null && count == 2)
+        {
+            step.Pass($"обычное сопряжение добавлено: сопряжений 2, Valid={valid}");
+        }
+        else
+        {
+            step.Fail($"второе сопряжение не подтверждено: сопряжений {count}, объект "
+                + (mate is null ? "не получен" : "получен"));
+        }
+    }
+
+    /// <summary>G7.2 — is a TRANSMISSION mate removable by the documented
+    /// <c>ksDocument3D.DeleteObject</c>?</summary>
+    /// <remarks>DOC: <c>ksdocument3d_deleteobject.html</c> — «Удалить объект: деталь, операцию,
+    /// сопряжение», «Удалить можно любой трехмерный объект»; the object handed over is the one the
+    /// product already addresses the transmission with — <c>MateConstraintCollection</c> →
+    /// <c>ksMateConstraint</c>. The same object first takes the OTHER documented route
+    /// (<c>RemoveMateConstraint</c>) as a control, so one stand answers both.
+    /// INVARIANT: a <c>true</c> answer proves nothing — the criterion is the mate count minus one, the
+    /// other mate unchanged and the components with their placements untouched.
+    /// LIMIT: <c>ksGetLastErrorResult</c> is not a member of the v24 interop, so a <c>false</c> answer is
+    /// reported as such, without a core error text.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
+    private void TransmissionDelete()
+    {
+        var step = _report.Begin("G7.2", "Удаление передачи документированным DeleteObject",
+            "Удаляет ли DeleteObject объект передачи, который RemoveMateConstraint оставляет в модели?");
+        _current = step;
+
+        var componentsBefore = Components();
+        var placementsBefore = componentsBefore.Select(Placement).ToList();
+        step.Data["components_before"] = componentsBefore.Count;
+
+        if (Api5.SafeObject(() => _doc.MateConstraintCollection()) is not ksMateConstraintCollection collection)
+        {
+            step.Fail("MateConstraintCollection не дала ksMateConstraintCollection: объект передачи не адресовать.");
+            return;
+        }
+
+        var countBefore = Api5.SafeInt(() => collection.GetCount());
+        var typesBefore = MateTypes(collection);
+        var validBefore = Validities();
+        step.Data["mates_before"] = countBefore;
+        step.Data["types_before"] = typesBefore;
+        step.Data["valid_before"] = validBefore;
+        step.Observe($"до удаления: сопряжений {countBefore} ({string.Join(", ", typesBefore)}), Valid "
+            + string.Join("/", validBefore.Select(one => one?.ToString() ?? "не читается")));
+
+        var ordinal = typesBefore.FindIndex(type => type == (int)MateConstraintType.mc_Transmission);
+        if (ordinal < 0)
+        {
+            step.Fail("передачи в коллекции нет — удалять нечего.");
+            return;
+        }
+
+        if (Api5.SafeObject(() => collection.GetByIndex(ordinal)) is not ksMateConstraint mate5)
+        {
+            step.Fail($"сопряжение[{ordinal}] не получено как ksMateConstraint — объект передачи не адресован.");
+            return;
+        }
+
+        step.Data["ordinal"] = ordinal;
+
+        // CONTROL ON THE SAME OBJECT: the route the product uses today is answered by the very mate
+        // DeleteObject then receives, so the two documented answers are comparable.
+        var first = Api5.SafeObject(() => mate5.GetBaseObj(1));
+        var second = Api5.SafeObject(() => mate5.GetBaseObj(2));
+        var removedByControl = first is null || second is null
+            ? (bool?)null
+            : Api5.SafeBool(() => _doc.RemoveMateConstraint((short)MateConstraintType.mc_Transmission, first, second));
+        _doc.RebuildDocument();
+        var afterControl = Api5.SafeInt(() => collection.GetCount());
+        step.Data["remove_mate_constraint"] = removedByControl;
+        step.Data["mates_after_control"] = afterControl;
+        step.Observe($"контроль на том же объекте: RemoveMateConstraint = {removedByControl}, "
+            + $"сопряжений {countBefore} → {afterControl}");
+
+        var deleted = Api5.SafeBool(() => _doc.DeleteObject(mate5));
+        _doc.RebuildDocument();
+
+        // THE FIRST READING AFTER THE REBUILD CAN STILL ANSWER THE OLD NUMBER. The same documented
+        // question is therefore asked three times in a row on BOTH counters and every answer is
+        // published; the judgement stands on the last one, and the lag itself is a measured fact the
+        // product's confirmation must survive.
+        var api5Reads = new List<int?>();
+        var api7Reads = new List<int?>();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            api5Reads.Add(Api5.SafeInt(() => collection.GetCount()));
+            api7Reads.Add(Mates7() is { } counted ? Api5.SafeInt(() => counted.Count) : null);
+        }
+
+        var staleTypes = MateTypes(collection);
+        var componentsAfter = Components();
+        var placementsMoved = PlacementsDiffer(placementsBefore, componentsAfter.Select(Placement).ToList());
+
+        // THE COLLECTION OBJECT IS THE SAME ONE the deletion was issued on, and yet the count it answers
+        // lags: the deleted slot reads as an element that is no longer a ksMateConstraint and the number
+        // drops only on a later reading. The product's confirmation must survive exactly this, so every
+        // reading is published and the LAST one is judged.
+        var sameObject = ReferenceEquals(
+            Api5.SafeObject(() => _doc.MateConstraintCollection()), collection);
+        var typesAfter = MateTypes(collection);
+        var validAfter = Validities();
+        var freshCount = api5Reads[^1];
+        var api7Count = api7Reads[^1];
+
+        step.Data["delete_object"] = deleted;
+        step.Data["mates_api5_readings"] = api5Reads;
+        step.Data["mates_api7_readings"] = api7Reads;
+        step.Data["collection_same_object"] = sameObject;
+        step.Data["types_after"] = typesAfter;
+        step.Data["valid_after"] = validAfter;
+        step.Data["components_after"] = componentsAfter.Count;
+        step.Data["placements_changed"] = placementsMoved;
+        step.Observe($"DeleteObject(сопряжение[{ordinal}]) = {deleted}, компонентов {componentsBefore.Count} → "
+            + $"{componentsAfter.Count}, размещения изменились: {placementsMoved?.ToString() ?? "не сверены"}");
+        step.Observe($"сопряжений по чтениям API5: {string.Join(", ", api5Reads)}; API7: "
+            + $"{string.Join(", ", api7Reads)}; типы после удаления: {string.Join(", ", typesAfter)} "
+            + $"(тот же объект коллекции: {sameObject})");
+
+        var modelCount = freshCount ?? api7Count;
+        var removedOne = modelCount is int after && countBefore is int before && after == before - 1;
+        var componentsIntact = placementsMoved == false && componentsAfter.Count == componentsBefore.Count;
+
+        if (deleted == true && removedOne && componentsIntact)
+        {
+            step.Pass($"DeleteObject удалил передачу: сопряжений {countBefore} → {modelCount}, компоненты с "
+                + "размещениями целы; RemoveMateConstraint на том же объекте ответил "
+                + $"{removedByControl}; первое чтение после перестроения ещё отвечало {api5Reads[0]}");
+        }
+        else if (deleted != true && api5Reads[0] == countBefore)
+        {
+            step.Fail($"DeleteObject передачу НЕ удалил: ответ {deleted}, сопряжений {countBefore} → "
+                + $"{api5Reads[0]}; RemoveMateConstraint на том же объекте — {removedByControl}");
+        }
+        else
+        {
+            step.Fail($"ответ DeleteObject={deleted}, но состояние модели не сходится: сопряжений {countBefore} → "
+                + $"API5 {freshCount} / API7 {api7Count}, компонентов {componentsBefore.Count} → "
+                + $"{componentsAfter.Count}, размещения изменились: {placementsMoved?.ToString() ?? "не сверены"}");
+        }
+    }
+
+    /// <summary>G7.3 — save, close and reopen: does the file still hold the transmission?</summary>
+    /// <remarks>The COM answers can be cached; the file on disk is the independent reading, so the
+    /// deletion is confirmed by what comes back from it, not by what the live document answers.
+    /// History: docs/decisions/mates.md#delete-route</remarks>
+    private void ReopenAfterDelete(string path)
+    {
+        var step = _report.Begin("G7.3", "Сохранение и переоткрытие после удаления передачи",
+            "Возвращается ли передача из файла и цело ли обычное сопряжение?");
+        _current = step;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var saved = Api5.SafeBool(() => _doc.SaveAs(path));
+        step.Observe($"SaveAs({path}) = {saved}");
+        if (saved != true)
+        {
+            step.Fail("сборка после удаления не сохранена — переоткрывать нечего.");
+            return;
+        }
+
+        Try("close", () => _doc.close());
+
+        var document = (ksDocument3D)_app.Document3D();
+        var opened = Api5.SafeBool(() => document.Open(path));
+        step.Observe($"Open({path}) = {opened}");
+        if (opened != true)
+        {
+            step.Fail("файл после удаления не открылся.");
+            return;
+        }
+
+        // The object Open was called on does not become the document (MEASURED in probe M).
+        if (Api5.SafeObject(() => _app.GetType().InvokeMember(
+                "ActiveDocument", System.Reflection.BindingFlags.GetProperty, null, _app, null)) is ksDocument3D active)
+        {
+            document = active;
+        }
+
+        document.RebuildDocument();
+        _doc = document;
+
+        if (Api5.SafeObject(() => document.MateConstraintCollection()) is not ksMateConstraintCollection collection)
+        {
+            step.Fail("после переоткрытия коллекция сопряжений не получена.");
+            return;
+        }
+
+        var count = Api5.SafeInt(() => collection.GetCount());
+        var types = MateTypes(collection);
+        var valid = Validities();
+        var components = Api5.SafeInt(() => (document.PartCollection(true) as ksPartCollection)?.GetCount() ?? -1);
+        step.Data["mates_after_reopen"] = count;
+        step.Data["types_after_reopen"] = types;
+        step.Data["valid_after_reopen"] = valid;
+        step.Data["components_after_reopen"] = components;
+        step.Observe($"после переоткрытия: сопряжений {count} ({string.Join(", ", types)}), Valid "
+            + string.Join("/", valid.Select(one => one?.ToString() ?? "не читается"))
+            + $", компонентов по PartCollection(true): {components}");
+
+        var transmissionGone = types.Count == 1 && types[0] == (int)MateConstraintType.mc_Coincidence;
+        if (count == 1 && transmissionGone)
+        {
+            step.Pass("в файле осталось одно обычное сопряжение: передача после удаления не вернулась");
+        }
+        else
+        {
+            step.Fail($"ожидалось одно обычное сопряжение: прочитано {count} ({string.Join(", ", types)})");
+        }
+    }
+
+    /// <summary>Constraint-type numbers of the whole API5 mate collection, in ordinal order; an
+    /// unreadable element is <c>-1</c>.</summary>
+    private static List<int> MateTypes(ksMateConstraintCollection collection)
+    {
+        var types = new List<int>();
+        var count = Api5.SafeInt(() => collection.GetCount());
+        for (var index = 0; index < (count ?? 0); index++)
+        {
+            types.Add(Api5.SafeInt(() => collection.GetByIndex(index) is ksMateConstraint mate
+                ? mate.constraintType
+                : -1) ?? -1);
+        }
+
+        return types;
+    }
+
+    /// <summary>Every mate's <c>Valid</c> by ordinal through API7; <c>null</c> where it was not read.</summary>
+    private List<bool?> Validities()
+    {
+        var list = new List<bool?>();
+        if (Mates7() is not { } mates)
+        {
+            return list;
+        }
+
+        var count = Api5.SafeInt(() => mates.Count) ?? 0;
+        for (var index = 0; index < count; index++)
+        {
+            var mate = Api5.SafeObject(() => mates.MateConstraint3D[index]) as IMateConstraint3D;
+            list.Add(mate is null ? null : Api5.SafeBool(() => mate.Valid));
+        }
+
+        return list;
+    }
+
+    /// <summary>Whether a component placement moved; <c>null</c> when the two snapshots are not comparable
+    /// (different counts or an unread matrix), never "moved".</summary>
+    private static bool? PlacementsDiffer(List<double[]?> before, List<double[]?> after)
+    {
+        if (before.Count != after.Count || before.Any(matrix => matrix is null) || after.Any(matrix => matrix is null))
+        {
+            return null;
+        }
+
+        for (var index = 0; index < before.Count; index++)
+        {
+            var left = before[index]!;
+            var right = after[index]!;
+            for (var element = 0; element < 16; element++)
+            {
+                if (Math.Abs(left[element] - right[element]) > 1e-9)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // ══════════════════════════════════════════════════════ cam gear ══

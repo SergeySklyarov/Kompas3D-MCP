@@ -7075,7 +7075,7 @@
       "context": "assembly",
       "catalog_ref": "MATE",
       "parameters_schema": null,
-      "adapter_route": "kompas_delete_mate: ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+      "adapter_route": "kompas_delete_mate: обычное сопряжение - ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html); механическая передача - ksDocument3D.DeleteObject(obj) того же объекта сопряжения (ksdocument3d_deleteobject.html), потому что RemoveMateConstraint на передаче отвечает FALSE",
       "actions": {
         "discover": "verified",
         "create": "not_applicable",
@@ -7252,7 +7252,8 @@
         "MM.07.reopen",
         "MM.04.linear_refused",
         "MM.05.cam_gear_refused",
-        "MM.08.delete_refused",
+        "MM.08.delete",
+        "MM.08.delete_reopen",
         "MM.09.idempotent",
         "MM.11.edit_ratio",
         "MM.11.edit_direction",
@@ -7275,13 +7276,13 @@
         "Живой прогон 19.10.2026: группа --mech-mates-only на Release-сборке 2a041e0 - 13 строк, PASS 38 / FAIL 0; зачётный --all на 7a0dc15 - группа mech_mates PASS 15 / FAIL 0, всего PASS 1708 / NAMED 6 / FAIL 0, дерево чистое.",
         "Кинематика НЕ заявляется: поворот ведущего маршрутом размещения ведомый не двигает (0 град / 0 мм), а маршрут IComponentPositioner7 отказал и на компоненте без сопряжений, в том числе в видимом документе.",
         "Объект сопряжения - ГРАНЬ: с конструктивными осями в BaseObject1/2 и RotationAxis1/2 то же сопряжение читается Valid=FALSE.",
-        "Удаление передачи недостижимо: RemoveMateConstraint возвращает FALSE, сопряжение остаётся в модели, продукт отвечает VERIFICATION_FAILED (MM.08 проверяет именно отказ). Действие delete_dependencies принадлежит MATE-05; для передачи и там недостижимо - техдолг 53.",
+        "Удаление передачи - вторая документированная дорога ksDocument3D.DeleteObject (наряд DEBT_MATE_DELETE_ROUTE_0_14, проба --mate-delete): RemoveMateConstraint на передачи отвечает FALSE и оставляет её в модели, DeleteObject того же объекта сопряжения удаляет её (счёт 2 -> 1, прочее сопряжение и компоненты целы, после сохранения и переоткрытия не возвращается). Строки MM.08.delete и MM.08.delete_reopen; техдолг 53 закрыт.",
         "Правка существующей передачи поддержана нарядом MATE_TRANSMISSION_EDIT: kompas_set_mate_parameter принимает scale1/scale2 (парой) и direction1/direction2, успех - сравнение перечитанных чисел, поля чужой группы отвергаются INVALID_ARGUMENT с именем поля (MM.11).",
         "Вторая передача на той же паре компонентов не создаётся: Update()=False, Valid=False, отказ VERIFICATION_FAILED."
       ],
       "not_applicable_reasons": {
         "suppress_restore": "подавление механических сопряжений в блок не входит",
-        "delete_dependencies": "удаление сопряжения - MATE-05; для передачи продукт отвечает отказом (MM.08), удаление вне объёма варианта (А)",
+        "delete_dependencies": "удаление сопряжения - MATE-05; передача удаляется тем же инструментом kompas_delete_mate дорогой DeleteObject, отдельного действия не заводится (строки MM.08.delete, MM.08.delete_reopen)",
         "geometry_validation": "передача не меняет положение компонентов (измерено: ведомый не двигается); геометрия эталона сверена строкой MM.PREP.gear (объём цилиндра 28 274,33 мм3)"
       },
       "catalog_level": "mcp_verified",

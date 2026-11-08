@@ -8684,21 +8684,44 @@ def mech_mates_checks(client, rep, app_id, workdir):
             f"{row1 and row1.get('motion2')} scale={row1 and row1.get('scale1')}:"
             f"{row1 and row1.get('scale2')} valid={row1 and row1.get('valid')} count={mate_count}")
 
-    # ========= MM-08: удаление — измеренный отказ =========
-    # ИЗМЕРЕНО: `RemoveMateConstraint` возвращает FALSE для передачи, сопряжение остаётся в модели.
-    # Продукт отвечает отказом, а не успехом — проверяется именно это, а не «связь пропала».
-    before_del = mate_count
+    # ========= MM-08: удаление передачи документированным DeleteObject =========
+    # ИЗМЕРЕНО (проба MD, docs/acceptance/api7/mate-delete.md): `RemoveMateConstraint` на передаче
+    # отвечает FALSE и оставляет её в модели, а `ksDocument3D.DeleteObject` того же объекта сопряжения
+    # её удаляет (счёт 2 → 1, прочее сопряжение и компоненты целы). Продукт обязан выбрать дорогу по
+    # виду сопряжения и подтвердить удаление счётом.
+    #
+    # СОСЕД: сохранность «прочих» сопряжений видна только тогда, когда они есть, поэтому рядом с
+    # передачей ставится обычное сопряжение. Его отказ назван в подробностях строки, а не выдан за
+    # успех: удаление проверяется и без соседа.
+    neighbour_note = "сосед: плоскость грани не найдена"
+    if plane_face is not None:
+        refs_asm = component_refs(asm)
+        env_n, code_n = call("kompas_create_mate", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "constraint_type": "coincidence",
+            "first_component_ref": refs_asm[0], "first_face_index": plane_face,
+            "second_component_ref": refs_asm[1], "second_face_index": plane_face})
+        neighbour_note = ("сосед: обычное сопряжение создано" if not code_n
+                          else f"сосед: не создан ({code_n} {emsg(env_n)})")
+
+    # ССЫЛКА БЕРЁТСЯ ЗАНОВО: сосед изменил ревизию, и прежняя ссылка передачи стала устаревшей.
+    mates_before_del, before_del = mates_of(asm)
+    types_before_del = [row.get("constraint_type") for row in mates_before_del]
     env, code = call("kompas_delete_mate", {"document_id": asm,
                                             "expected_revision": current_rev(asm),
-                                            "mate_ref": (row1 or {}).get("mate_ref")})
-    _mates, mate_count = mates_of(asm)
-    delete_refused = (code == "VERIFICATION_FAILED"
-                      and "RemoveMateConstraint" in (emsg(env) or ""))
-    rep.add("MM.08.delete_refused",
-            "удаление передачи отвергнуто названной причиной (RemoveMateConstraint=FALSE), "
-            "сопряжение осталось: ложного успеха нет",
-            "PASS" if (delete_refused and mate_count == before_del) else "FAIL",
-            f"код={code} сопряжений {before_del} → {mate_count} msg={emsg(env)}")
+                                            "mate_ref": (transmission_row(asm, 1.0, 2.0)
+                                                         or {}).get("mate_ref")})
+    mates_after_del, mate_count = mates_of(asm)
+    types_after_del = [row.get("constraint_type") for row in mates_after_del]
+    expected_rest = [kind for kind in types_before_del if kind != "transmission"]
+    rep.add("MM.08.delete",
+            "передача удалена документированным DeleteObject: счётчик сопряжений уменьшился на "
+            "единицу, прочие сопряжения на месте, ложного успеха нет",
+            "PASS" if ((not code) and mate_count == before_del - 1
+                       and "transmission" not in types_after_del
+                       and types_after_del == expected_rest) else "FAIL",
+            f"код={code} сопряжений {before_del} → {mate_count} типы {types_before_del} → "
+            f"{types_after_del} {neighbour_note} msg={emsg(env)}")
 
     # ========= MM-04: линейное движение — названный отказ =========
     env, code = call("kompas_create_mate", transmission_args(asm, 1.0, 2.0, motion2="linear"))
@@ -8706,8 +8729,8 @@ def mech_mates_checks(client, rep, app_id, workdir):
     linear_named = any(word in (emsg(env) or "") for word in ("linear", "Линейное"))
     rep.add("MM.04.linear_refused",
             "линейное движение отвергнуто названной причиной, сопряжений не прибавилось",
-            "PASS" if (code and after_linear == before_del and linear_named) else "FAIL",
-            f"код={code} сообщение={emsg(env)} сопряжений {before_del} → {after_linear}")
+            "PASS" if (code and after_linear == mate_count and linear_named) else "FAIL",
+            f"код={code} сообщение={emsg(env)} сопряжений {mate_count} → {after_linear}")
 
     # ========= MM-05: кулачок — названный отказ =========
     refs = component_refs(asm)
@@ -8719,9 +8742,39 @@ def mech_mates_checks(client, rep, app_id, workdir):
     _mates, after_cam = mates_of(asm)
     rep.add("MM.05.cam_gear_refused",
             "кулачок отвергнут названной причиной (вне объёма), сопряжений не прибавилось",
-            "PASS" if (code and after_cam == before_del
+            "PASS" if (code and after_cam == mate_count
                        and "cam_gear" in (emsg(env) or "")) else "FAIL",
             f"код={code} сообщение={emsg(env)} сопряжений={after_cam}")
+
+    # ========= MM-08b: сохранение и переоткрытие после удаления =========
+    # Удалённая передача не возвращается из файла — независимая сверка удаления, поверх счётчика.
+    # Последней строкой на этой сборке: переоткрытие выдаёт ДРУГОЙ document_id, и прежний здесь
+    # больше не адресует ничего.
+    asm_deleted_path = os.path.join(src_dir, "mm-asm-deleted.a3d")
+    env, code = call("kompas_save_document", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "target_path": asm_deleted_path})
+    saved_after_del = (not code) and os.path.isfile(asm_deleted_path)
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id,
+                                              "path": asm_deleted_path, "access": "edit"})
+    reopened_del = doc_id(env)
+    rows_reopened, count_reopened_del = (mates_of(reopened_del) if reopened_del
+                                         else ([], None))
+    types_reopened_del = [row.get("constraint_type") for row in rows_reopened]
+    rep.add("MM.08.delete_reopen",
+            "после сохранения и переоткрытия удалённая передача из файла не возвращается, "
+            "обычное сопряжение читается на месте",
+            "PASS" if (saved_after_del and reopened_del
+                       and count_reopened_del == len(expected_rest)
+                       and types_reopened_del == expected_rest) else "FAIL",
+            f"сохранено={saved_after_del} path={asm_deleted_path} сопряжений="
+            f"{count_reopened_del} типы={types_reopened_del} error={code}")
+
+    # ДАЛЬШЕ РАБОТА ИДЁТ НА ПЕРЕОТКРЫТОМ ДОКУМЕНТЕ: прежний id закрыт и не адресует ничего, а
+    # строки MM.10 ниже берут компоненты из `asm`.
+    if reopened_del:
+        asm = reopened_del
 
     # ========= MM-03 и MM-07: другая передача на СВОЕЙ паре, затем переоткрытие =========
     pair_b, problem_b = new_pair("MM-asm-2")

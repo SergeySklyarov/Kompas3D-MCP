@@ -989,8 +989,11 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_delete_mate", "Удалить сопряжение",
-                "Удаляет сопряжение документированным RemoveMateConstraint(constraintType, obj1, obj2); "
-                + "оба объекта берутся у самого сопряжения через GetBaseObj(1|2).",
+                "Удаляет сопряжение документированным вызовом по виду сопряжения: обычное — "
+                + "RemoveMateConstraint(constraintType, obj1, obj2), оба объекта берутся у самого сопряжения "
+                + "через GetBaseObj(1|2); механическая передача — DeleteObject(объект сопряжения), потому что "
+                + "RemoveMateConstraint на передаче отвечает FALSE и оставляет её в модели. Успех — счётчик "
+                + "сопряжений уменьшился на единицу.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

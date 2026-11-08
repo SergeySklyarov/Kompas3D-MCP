@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
@@ -57,6 +57,8 @@ public static class Program
                     ? "Проба U — граница применимости обычного объединения: условие из справки продукта, ответ ядра на разнесённые тела и контроль на контактных"
                     : options.SketchCopy
                         ? "Проба SC — копирование геометрии между эскизами и проецирование объекта в эскиз: документированные маршруты IDrawingGroup и ISketch::AddProjectionOf"
+                        : options.MateDelete
+                            ? "Проба MD — удаление механической передачи документированным DeleteObject против RemoveMateConstraint"
                         : options.MechanicalMates
                             ? "Проба G4 — механические сопряжения: передача и кулачок-толкатель документированным маршрутом API7 и наблюдаемость связи"
                                                             : options.B5
@@ -249,7 +251,7 @@ public static class Program
                 var sectionsProbe = new SectionsProbe(report, options);
                 pump.Run(() => sectionsProbe.Run());
             }
-            else if (options.MechanicalMates)
+            else if (options.MechanicalMates || options.MateDelete)
             {
                 var mechanicalMates = new MechanicalMatesProbe(report, options);
                 pump.Run(() => mechanicalMates.Run());
@@ -581,6 +583,7 @@ public static class Program
             : options.FilletBaseObjects ? "fillet-base-objects"
             : options.Mate ? "mate"
             : options.DeleteComponent ? "delete-component"
+            : options.MateDelete ? "mate-delete"
             : options.Boolean ? "boolean-ops"
             : options.Split ? "split-plane"
             : options.Reposition ? "reposition"
@@ -689,6 +692,13 @@ public sealed class Options
     /// its component is deleted (probe DC, order COMPONENT_DELETE). History:
     /// docs/decisions/assembly.md#delete-component</summary>
     public bool DeleteComponent { get; private set; }
+
+    /// <summary><c>--mate-delete</c>: the stand of G4 reduced to one question — does the documented
+    /// <c>ksDocument3D.DeleteObject</c> remove a TRANSMISSION mate, which <c>RemoveMateConstraint</c>
+    /// leaves in the model?</summary>
+    /// <remarks>A mode of its own: the G4 chain stops at its positioner control, and that control guards
+    /// the linkage claim, not deletion. History: docs/decisions/mates.md#delete-route</remarks>
+    public bool MateDelete { get; private set; }
 
     /// <summary>--full-turn: is it true that a rotation sweep saturates at 180° (probe F2).</summary>
     /// <remarks>DOC: a separate entry because the question is about the PRODUCT, not about probe R.
@@ -954,6 +964,7 @@ public sealed class Options
         var filletBaseObjects = false;
         var mate = false;
         var deleteComponent = false;
+        var mateDelete = false;
         var sketchDefinition = false;
         var identity = false;
         var union = false;
@@ -1023,6 +1034,9 @@ public sealed class Options
                     break;
                 case "--delete-component":
                     deleteComponent = true;
+                    break;
+                case "--mate-delete":
+                    mateDelete = true;
                     break;
                 case "--rotation":
                     rotation = true;
@@ -1236,6 +1250,7 @@ public sealed class Options
             FilletBaseObjects = filletBaseObjects,
             Mate = mate,
             DeleteComponent = deleteComponent,
+            MateDelete = mateDelete,
             Boolean = boolean,
             Split = split,
             Reposition = reposition,

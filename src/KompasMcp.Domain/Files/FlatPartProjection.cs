@@ -6,8 +6,11 @@ public sealed record FlatPartView(int Flag, string Name, string Axis);
 /// <summary>Picks the standard view that looks along a flat part's normal.</summary>
 /// <remarks>DOC: <c>ksapi_iviews_addstandartviews.html</c> — the projection list is a bit mask,
 /// «0x1 - Спереди, 0x2 - Сзади, 0x4 - Сверху, 0x8 - Снизу, 0x10 - Слева, 0x20 - Справа»;
-/// <c>projectiontype.html</c> names the planes: «Спереди - Фронтальная плоскость» (XZ),
-/// «Сверху - Горизонтальная плоскость» (XY), «Слева - Профильная плоскость» (YZ).
+/// <c>projectiontype.html</c> names the plane of three of them: «Спереди - Фронтальная плоскость»,
+/// «Сверху - Горизонтальная плоскость», «Слева - Профильная плоскость». Neither page says which model
+/// axes those planes span, so the layout used here is measured, not quoted.
+/// MEASURED: «Спереди» and «Сзади» show the XY plane, «Сверху» and «Снизу» - XZ, «Слева» and «Справа» -
+/// YZ; each pair is the view that looks ALONG the normal's axis, and the sign picks one member of it.
 /// INVARIANT: only the six axis directions are named here. A tilted normal goes through
 /// <see cref="Matrix"/>, the route measured for an arbitrary direction.
 /// MEASURED: the list takes the <c>ksViewProjectionType</c> ordinals (1..6), not the mask, and a side view
@@ -60,11 +63,11 @@ public static class FlatPartProjection
                 ? new FlatPartView(6, "Справа", "X")
                 : new FlatPartView(5, "Слева", "X"),
             1 => positive
-                ? new FlatPartView(2, "Сзади", "Y")
-                : new FlatPartView(1, "Спереди", "Y"),
+                ? new FlatPartView(3, "Сверху", "Y")
+                : new FlatPartView(4, "Снизу", "Y"),
             _ => positive
-                ? new FlatPartView(3, "Сверху", "Z")
-                : new FlatPartView(4, "Снизу", "Z"),
+                ? new FlatPartView(1, "Спереди", "Z")
+                : new FlatPartView(2, "Сзади", "Z"),
         };
     }
 

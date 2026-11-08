@@ -17565,7 +17565,7 @@ def flat_part_checks(client, rep, app_id, workdir):
     плоской грани и публикует контур конечного тела, а не эскиза. Строки сравнивают ЗНАЧЕНИЯ: число
     петель, габарит, радиус отверстия и скруглений, площадь контура с площадью грани, слой; отдельная
     строка читает тот же файл СТОРОННИМ разборщиком (ezdxf), чтобы совпадение не держалось на одном
-    коде. Ось нормали проверяется двумя деталями - по Z и по X: выбор вида задаётся осью, и ошибка
+    коде. Ось нормали проверяется тремя деталями - по Z, по X и по Y: выбор вида задаётся осью, и ошибка
     выбора видна как чужой габарит контура.
     """
     import hashlib
@@ -17624,7 +17624,7 @@ def flat_part_checks(client, rep, app_id, workdir):
                           {"application_id": app_id, "kind": "part", "name": name})
         return doc_id(env)
 
-    def plate(name, base, width, height, thickness):
+    def plate(name, base, width, height, thickness, direction="positive"):
         """Заготовка: прямоугольник в плоскости base, выдавленный на thickness."""
         doc = new_part(name)
         if not doc:
@@ -17642,7 +17642,7 @@ def flat_part_checks(client, rep, app_id, workdir):
         call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": True})
         call("kompas_extrude", {"sketch_ref": sketch, "expected_revision": current_rev(doc),
                                 "operation": "base", "depth_mm": thickness,
-                                "direction": "positive"})
+                                "direction": direction})
         return doc
 
     def through_hole(doc, diameter_mm, base, offset_mm, depth_mm, body_ref):
@@ -18198,6 +18198,76 @@ def flat_part_checks(client, rep, app_id, workdir):
             "построение: " + tilt2_step + " контур=" + str(tilt2_size) + " петель=" + str(tilt2_loops)
             + " круги=" + str([(round(x, 3), round(y, 3), round(r, 3)) for x, y, r in tilt2_circles])
             + " замер=" + str(tilt2_got) + " файл=" + str(os.path.exists(tilt2_path)))
+
+    # ── FLT.10: нормаль по Y - пара «Сверху/Снизу», третья ось из шести ─────────────────────────────
+    # INVARIANT: the plate is built in the XZ plane, so its largest faces span X and Z and their normal is
+    # Y; the views of the pair that looks along Y are «Сверху» and «Снизу», and the main «Спереди» view
+    # spans X and Y instead - a 30x20 frame that cannot be mistaken for the 40x30 face. The hole is
+    # CENTRED on purpose: the side of the pair is decided by the face order, not by the geometry, so a
+    # mirror of the face is allowed here and only the radius and the centre are judged.
+    # LIMIT: the negative side is not exercised as a separate plate: extruding the other way keeps the
+    # normal sign (measured), so the side is not reachable from the model's construction; the -Y direction
+    # is covered by the unit test of Choose.
+    # History: docs/decisions/flat-part.md#view-choice
+    doc_y = plate("FLT-plate-y", "xz", width_mm, height_mm, thickness_mm)
+    body_y = main_body(doc_y) if doc_y else None
+    path_y = os.path.join(workdir, "flt-plate-y.dxf")
+    if doc_y and body_y:
+        env_h, _code_h = call("kompas_create_sketch", {
+            "document_id": doc_y, "expected_revision": current_rev(doc_y),
+            "plane": {"base": "xz", "offset_mm": 0}, "name": "FLT-plate-y-hole"})
+        hole_sketch = result(env_h).get("id")
+        if hole_sketch:
+            call("kompas_edit_sketch", {
+                "sketch_ref": hole_sketch, "expected_revision": current_rev(doc_y), "mode": "append",
+                "entities": [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": hole_d_mm / 2.0}]})
+            call("kompas_finish_sketch", {"sketch_ref": hole_sketch, "require_closed_profile": True})
+            call("kompas_extrude", {
+                "sketch_ref": hole_sketch, "expected_revision": current_rev(doc_y),
+                "operation": "cut", "end_condition": "through", "direction": "symmetric",
+                "target_body_ref": body_y})
+        call("kompas_save_document", {
+            "document_id": doc_y, "expected_revision": current_rev(doc_y),
+            "target_path": os.path.join(workdir, "flt-plate-y.m3d")})
+        env_y, code_y = export(doc_y, body_y, path_y)
+        got_y = result(env_y)
+        contour_y = got_y.get("contour") or {}
+        normal_y = got_y.get("normal") or []
+        checks_y = {row.get("name"): row.get("passed")
+                    for row in ((got_y.get("verification") or {}).get("checks") or [])}
+        circles_y = [(float(dict(entity["values"])[10]), float(dict(entity["values"])[20]),
+                      float(dict(entity["values"])[40]))
+                     for entity in (dxf_entities(path_y) if os.path.exists(path_y) else [])
+                     if entity["type"] == "CIRCLE"]
+        size_y = sorted([contour_y.get("width_mm") or 0.0, contour_y.get("height_mm") or 0.0])
+        centre_y = None
+        if contour_y.get("width_mm") is not None and circles_y:
+            centre_y = (circles_y[0][0] - (contour_y["min_x_mm"] + contour_y["width_mm"] / 2.0),
+                        circles_y[0][1] - (contour_y["min_y_mm"] + contour_y["height_mm"] / 2.0))
+        ok10 = (not code_y and os.path.exists(path_y)
+                and len(normal_y) == 3 and abs(abs(normal_y[1]) - 1.0) < 1e-4
+                and near(size_y[0], height_mm, 0.01) and near(size_y[1], width_mm, 0.01)
+                and got_y.get("loops") == 2 and got_y.get("outer_loops") == 1
+                and got_y.get("inner_loops") == 1
+                and len(circles_y) == 1 and near(circles_y[0][2], hole_d_mm / 2.0, 0.001)
+                and centre_y is not None and near(centre_y[0], 0.0, 0.01) and near(centre_y[1], 0.0, 0.01)
+                and near(got_y.get("thickness_mm"), thickness_mm, 0.01)
+                and got_y.get("reached_level") == "geometry_checked"
+                and checks_y.get("contour_area_matches_face") is True)
+        rep.add("FLT.10.axis_normal_y",
+                "деталь с нормалью по оси Y (толщина вдоль Y, пластина 40x30 в плоскости XZ со сквозным "
+                "отверстием D10 по центру): контур 40x30, петель 2 (внешняя 1, внутренняя 1), отверстие - "
+                "CIRCLE R5 в центре контура, толщина 20 мм, уровень geometry_checked; вид выбран парой "
+                "«Сверху/Снизу», а не «Спереди» по умолчанию",
+                "PASS" if ok10 else "FAIL",
+                "code=" + str(code_y) + " нормаль=" + str(normal_y) + " контур=" + str(size_y)
+                + " петель=" + str(got_y.get("loops")) + "/" + str(got_y.get("outer_loops")) + "/"
+                + str(got_y.get("inner_loops")) + " круги=" + str(circles_y) + " центр=" + str(centre_y)
+                + " толщина=" + str(got_y.get("thickness_mm")) + " уровень="
+                + str(got_y.get("reached_level")) + " проверки=" + str(checks_y)
+                + " файл=" + str(os.path.exists(path_y)) + " " + str(emsg(env_y) or ""))
+    else:
+        rep.add("FLT.10.axis_normal_y", "деталь с нормалью по оси Y", "FAIL", "деталь не создана")
 
 
 def iges_checks(client, rep, app_id, workdir):

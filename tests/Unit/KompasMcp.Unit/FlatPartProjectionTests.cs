@@ -4,15 +4,16 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>The standard view a flat part's normal selects.</summary>
-/// <remarks>TEST: docs/decisions/flat-part.md#view-choice — the axis decides the view, a tilted normal is
-/// refused, and the sign only swaps the opposite pair of the same axis.</remarks>
+/// <remarks>TEST: docs/decisions/flat-part.md#view-choice — the axis of the normal picks the pair of views
+/// that look along it («Спереди/Сзади» - XY, «Сверху/Снизу» - XZ, «Слева/Справа» - YZ), the sign picks the
+/// member of that pair, and a tilted normal is refused.</remarks>
 public sealed class FlatPartProjectionTests
 {
     [Theory]
-    [InlineData(0d, 0d, 1d, 3, "Сверху")]
-    [InlineData(0d, 0d, -1d, 4, "Снизу")]
-    [InlineData(0d, -1d, 0d, 1, "Спереди")]
-    [InlineData(0d, 1d, 0d, 2, "Сзади")]
+    [InlineData(0d, 0d, 1d, 1, "Спереди")]
+    [InlineData(0d, 0d, -1d, 2, "Сзади")]
+    [InlineData(0d, 1d, 0d, 3, "Сверху")]
+    [InlineData(0d, -1d, 0d, 4, "Снизу")]
     [InlineData(-1d, 0d, 0d, 5, "Слева")]
     [InlineData(1d, 0d, 0d, 6, "Справа")]
     public void ChoosesTheStandardViewOfTheNormalAxis(double x, double y, double z, int flag, string name)
@@ -29,7 +30,7 @@ public sealed class FlatPartProjectionTests
     {
         var view = FlatPartProjection.Choose(new[] { 0d, 0d, 5d });
 
-        Assert.Equal(3, view!.Flag);
+        Assert.Equal(1, view!.Flag);
         Assert.Equal("Z", view.Axis);
     }
 

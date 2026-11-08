@@ -550,6 +550,10 @@ public sealed partial class Api5Session : IDisposable
     /// History: docs/decisions/files.md#rescue-copies</remarks>
     private (bool Ok, string? Reason) RescueCopyTo(DocumentEntry document, string targetPath)
     {
+        // INVARIANT: the copy is a claim about the FILE, not about SaveAs' answer — the target is a fresh
+        // service path, so "it exists and is not empty" is the proof, read the same way as a client save.
+        // History: docs/decisions/files.md#save-file-write
+        var before = SavedFileWrite.Capture(targetPath);
         try
         {
             if (document.Document is not null)
@@ -576,10 +580,10 @@ public sealed partial class Api5Session : IDisposable
                 return (false, "у документа нет ни 3D-, ни 2D-дескриптора: сохранять нечем");
             }
 
-            var info = new FileInfo(targetPath);
-            if (!info.Exists || info.Length <= 0)
+            var notWritten = SavedFileWrite.UnconfirmedReason(before, SavedFileWrite.Capture(targetPath));
+            if (notWritten is not null)
             {
-                return (false, $"спасательная копия '{targetPath}' не появилась на диске");
+                return (false, $"спасательная копия '{targetPath}' не подтверждена файлом: {notWritten}");
             }
 
             return (true, null);
@@ -1937,6 +1941,13 @@ public sealed partial class Api5Session : IDisposable
                 });
         }
 
+        // INVARIANT: success is proved by the FILE, never by the call's answer. DOC: ksdocument3d_saveas.html
+        // («TRUE - в случае успешного завершения»); ksapi_ikompasdocument_saveas.html («false - неуспешное
+        // (например, нет прав на запись/перезапись файла)»). The write can also end in '<имя>.$$$' beside an
+        // untouched target while the call answers TRUE, which neither page covers — so the stamp is taken
+        // BEFORE the call and compared with the one after it.
+        // History: docs/decisions/files.md#save-file-write
+        var before = SavedFileWrite.Capture(path);
         bool ok;
         if (document.Document is not null)
         {
@@ -1956,8 +1967,8 @@ public sealed partial class Api5Session : IDisposable
             // An API7-created drawing has no API5 2D handle and saves through IKompasDocument.
             // DOC: ikompasdocument_save.html — Save() writes to the document's own file;
             // ikompasdocument_saveas.html — SaveAs(path) writes to a named file. MEASURED: both return
-            // Void, so the write is confirmed ONLY by the file re-read below (ReadBackSavedFile), never
-            // by a return value — the same discipline as the API5 3D route's boolean, taken further.
+            // Void, so the write is confirmed ONLY by the file stamped below (SavedFileWrite), never by a
+            // return value — the same discipline as the API5 3D route's boolean, taken further.
             if (targetPath is null)
             {
                 kompasDocument.Save();
@@ -1977,6 +1988,13 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
+        // INVARIANT: success is proved by the FILE, never by the call's answer. DOC: ikompasdocument_save.html
+        // — Save() writes to the document's own file; ikompasdocument_saveas.html — SaveAs(path) writes to a
+        // named file. MEASURED: both return Void, so the write is confirmed ONLY by the file read back below,
+        // never by a return value — the same discipline as the API5 3D route's boolean, taken further.
+        var mode = targetPath is null ? "Save" : "SaveAs";
+        var after = SavedFileWrite.Capture(path);
+
         if (!ok)
         {
             // A failed save does not clear the state: the document stays modified.
@@ -1984,31 +2002,48 @@ public sealed partial class Api5Session : IDisposable
             // a client sees WHY the save failed and not only that the boolean was false. DOC:
             // iapplication_kompaserror.html → IKompasError.Code/Description; ksapi_ikompasdocument_save.html —
             // «false - неуспешное (например, нет прав на перезапись файла)».
+            // MEASURED: a save onto a target another process holds answers false and can leave the target
+            // TRUNCATED (0 bytes), so the file state travels with the refusal as well.
             // History: docs/decisions/adapter-core.md#kompas-error-route
             var details = CodeDetails(new Dictionary<string, object?>
             {
                 ["document_id"] = document.Id,
                 ["path"] = path,
-                ["mode"] = targetPath is null ? "Save" : "SaveAs",
+                ["mode"] = mode,
             }, document);
+            details[SavedFileWrite.DetailKey] = SaveFailureSnapshot(
+                path, mode, callResult: false, reason: "call_returned_false", before, after);
 
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
-                $"Сохранение не подтверждено возвращаемым значением ({(targetPath is null ? "Save" : "SaveAs")}).",
+                $"Сохранение не подтверждено возвращаемым значением ({mode}). Файл-цель после вызова: "
+                + $"{DescribeFileState(after)}.",
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
                 details: details);
         }
 
-        var written = ReadBackSavedFile(path);
-        if (written is null)
+        var unconfirmed = SavedFileWrite.UnconfirmedReason(before, after);
+        if (unconfirmed is not null)
         {
+            // INVARIANT: the answer says the FILE was NOT saved and names where the model's content may be.
+            // The document stays open and unsaved in KOMPAS; a client that is told "succeeded" here would
+            // close the session over a file that never received the work.
+            var details = CodeDetails(new Dictionary<string, object?>
+            {
+                ["document_id"] = document.Id,
+                ["path"] = path,
+                ["mode"] = mode,
+            }, document);
+            var snapshot = SaveFailureSnapshot(path, mode, callResult: true, unconfirmed, before, after);
+            details[SavedFileWrite.DetailKey] = snapshot;
+
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
-                $"Сохранение вернуло успех, но файл не перечитан по пути '{path}'.",
+                SaveNotWrittenMessage(path, unconfirmed, after, snapshot),
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["path"] = path });
+                details: details);
         }
 
         document.Path = path;
@@ -2022,40 +2057,77 @@ public sealed partial class Api5Session : IDisposable
 
         BumpRevision(document, "save");
 
-        // The only place savedness is declared confirmed: the operation returned success AND the file was
-        // re-read from disk — it is the file that is read, not a flag inside CAD.
+        // The only place savedness is declared confirmed: the operation returned success AND the file proves
+        // THIS call wrote it — it is the file that is read, not a flag inside CAD.
         document.SaveState = DocumentSaveTracking.AfterConfirmedSave();
-        document.SavedFileSha256 = written.Value.Sha256;
-        document.SavedFileByteLength = written.Value.ByteLength;
-        document.SavedAtUtc = written.Value.WrittenUtc;
+        document.SavedFileSha256 = after!.Sha256;
+        document.SavedFileByteLength = after.ByteLength;
+        document.SavedAtUtc = after.WrittenUtcUtc;
 
-        var info = new FileInfo(path);
         return new SaveDocumentResult(
             path,
-            written.Value.ByteLength,
-            written.Value.Sha256,
+            after.ByteLength,
+            after.Sha256!,
             Context(document, includeTopology: false),
             document.Revision);
     }
 
-    /// <summary>Re-read the saved file: existence, size, hash and write time. This is the "subsequent read"
-    /// that confirms savedness, unlike a flag change inside CAD, which says nothing about the file.</summary>
-    private static (long ByteLength, string Sha256, DateTime WrittenUtc)? ReadBackSavedFile(string path)
+    /// <summary>What the file on disk holds, in words a client can act on: a size, or the reason it is not
+    /// there. Never a bare "0": "absent" and "empty" are different answers.</summary>
+    private static string DescribeFileState(SavedFileStamp? stamp) => stamp switch
     {
-        try
-        {
-            var info = new FileInfo(path);
-            if (!info.Exists || info.Length <= 0)
-            {
-                return null;
-            }
+        null => "не прочитан (файл занят или недоступен)",
+        { Exists: false } => "файла на диске нет",
+        { ByteLength: 0 } => "0 байт (файл пуст)",
+        { } present => $"{present.ByteLength} байт",
+    };
 
-            return (info.Length, FileHash.Sha256(path), info.LastWriteTimeUtc);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+    /// <summary>The file evidence of a save that did not land: the target before and after, the temporary
+    /// file beside it, the call's answer and the reason. Built AT the refusal, so a save that failed once
+    /// carries its own facts instead of a guess made afterwards.</summary>
+    /// <remarks>INVARIANT: the temporary file is described by its own stamp — its presence next to an
+    /// untouched target is where the model's content goes when KOMPAS does not replace the target.
+    /// History: docs/decisions/files.md#save-file-write</remarks>
+    private static Dictionary<string, object?> SaveFailureSnapshot(
+        string path, string mode, bool callResult, string reason,
+        SavedFileStamp? before, SavedFileStamp? after)
+    {
+        var temporaryPath = path + SavedFileWrite.TemporarySuffix;
+        return new Dictionary<string, object?>
         {
-            return null;
+            ["target_path"] = path,
+            ["mode"] = mode,
+            ["call_result"] = callResult,
+            ["reason"] = reason,
+            ["target_before"] = SavedFileWrite.Describe(before),
+            ["target_after"] = SavedFileWrite.Describe(after),
+            ["temporary_path"] = temporaryPath,
+            ["temporary_after"] = SavedFileWrite.Describe(SavedFileWrite.Capture(temporaryPath)),
+        };
+    }
+
+    /// <summary>The refusal text of a save the call reported as done and the file did not: it says the file
+    /// was NOT saved, names the reason, and says where the content most likely went.</summary>
+    private static string SaveNotWrittenMessage(
+        string path, string reason, SavedFileStamp? after, Dictionary<string, object?> snapshot)
+    {
+        var what = reason switch
+        {
+            "target_missing" => "файла-цели на диске нет после вызова",
+            "target_empty" => "файл-цель после вызова пуст",
+            "target_unchanged" => "цель не изменилась: её содержимое и время записи те же, что до вызова",
+            _ => "файл-цель не прочитан с диска",
+        };
+        var message = $"Файл НЕ сохранён: {what} (путь '{path}', причина: {reason}). "
+            + "Документ в КОМПАС остаётся открытым и несохранённым.";
+        if (snapshot["temporary_after"] is Dictionary<string, object?> temporary
+            && temporary["state"] as string == "present")
+        {
+            message += $" Новое содержимое, вероятно, осталось во временном файле "
+                + $"'{path}{SavedFileWrite.TemporarySuffix}' ({temporary["bytes"]} байт).";
         }
+
+        return message;
     }
 
     public void Dispose()

@@ -174,14 +174,25 @@ public partial class Api5Session
                     + "измерен по всему файлу, вместе с рамкой листа и основной надписью");
             }
 
+            // INVARIANT: the temporary drawing is a claim about the FILE: the converter reads it by path, so
+            // a SaveAs that left the content elsewhere would export nothing. Same rule as a client save.
+            // History: docs/decisions/files.md#save-file-write
+            var drawingBefore = SavedFileWrite.Capture(drawingPath);
             drawing7.SaveAs(drawingPath);
-            if (!File.Exists(drawingPath))
+            var notWritten = SavedFileWrite.UnconfirmedReason(
+                drawingBefore, SavedFileWrite.Capture(drawingPath));
+            if (notWritten is not null)
             {
                 throw new KompasContractException(
                     ErrorCodes.ExportFailed,
-                    "Временный чертёж не сохранился в файл: конвертер берёт входной файл по пути, выгрузка "
-                    + "невозможна.",
-                    RetryPolicy.SameOperationId);
+                    $"Временный чертёж не сохранён файлом ({notWritten}): конвертер берёт входной файл по пути, "
+                    + "выгрузка невозможна.",
+                    RetryPolicy.SameOperationId,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["drawing_path"] = drawingPath,
+                        ["reason"] = notWritten,
+                    });
             }
 
             ConvertDrawingToDxf(application, drawingPath, command.OutputPath);

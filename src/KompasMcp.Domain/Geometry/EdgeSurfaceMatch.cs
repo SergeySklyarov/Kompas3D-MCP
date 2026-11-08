@@ -179,6 +179,28 @@ public static class EdgeSurfaceMatch
             "Новая грань параллельна ребру и отсекает обе смежные грани на заданные катеты.");
     }
 
+    /// <summary>Whether two readings are the SAME plane: parallel normals and one and the same offset from
+    /// the origin. The sign of a normal is irrelevant here, as everywhere in this rule. Used to tell a face
+    /// that APPEARED from one the body already had.</summary>
+    public static bool SamePlane(
+        IReadOnlyList<double> firstPoint,
+        IReadOnlyList<double> firstNormal,
+        IReadOnlyList<double> secondPoint,
+        IReadOnlyList<double> secondNormal)
+    {
+        if (!Unit(firstNormal, out var first) || !Unit(secondNormal, out var second))
+        {
+            return false;
+        }
+
+        if (Math.Abs(Math.Abs(Dot(first, second)) - 1d) > DirectionTolerance)
+        {
+            return false;
+        }
+
+        return Math.Abs(Math.Abs(Dot(first, Subtract(secondPoint, firstPoint)))) <= PlacementToleranceMm;
+    }
+
     /// <summary>Unit direction of the segment, or false when its ends coincide.</summary>
     public static bool Direction(IReadOnlyList<double> start, IReadOnlyList<double> end, out double[] unit)
     {

@@ -27,6 +27,17 @@ public partial class Api5Session
     /// meaning of <c>RadiusMm</c>; <c>Direction</c> is the axis of a cylinder and the normal of a plane.</summary>
     private sealed record SurfaceShape(bool Cylinder, double[] Point, double[] Direction, double RadiusMm);
 
+    /// <summary>The document as it read BEFORE the feature was created: the revision, the planes of the body
+    /// and the number of its edges, plus the name the created feature carries. None of the numbers can be
+    /// recovered after the mutation, and a refusal must name the state it started from — otherwise the
+    /// cause can only be read from a repeated run. <c>EdgeCount</c> is null when the body did not read:
+    /// that is a gap, not "no edges".</summary>
+    private sealed record FeatureCallSnapshot(
+        long Revision,
+        IReadOnlyList<SurfaceShape> Planes,
+        int? EdgeCount,
+        string? FeatureName);
+
     /// <summary>What the placement check concluded for one operation.</summary>
     private sealed record EdgePlacementOutcome(
         bool Refused,
@@ -44,29 +55,102 @@ public partial class Api5Session
         for (var i = 0; i < entities.Count; i++)
         {
             var reference = i < references.Count ? references[i] : "<без ссылки>";
+            (double[] Start, double[] End, bool Straight)? line = null;
             try
             {
-                if (entities[i].GetDefinition() is not ksEdgeDefinition edge
-                    || edge.GetVertex(true) is not ksVertexDefinition first
-                    || edge.GetVertex(false) is not ksVertexDefinition second
-                    || !first.GetPoint(out var ax, out var ay, out var az)
-                    || !second.GetPoint(out var bx, out var by, out var bz))
-                {
-                    lines.Add(new RequestedEdgeLine(reference, new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 0d }, false));
-                    continue;
-                }
-
-                var straight = SafeBool(edge.IsStraight) == true;
-                lines.Add(new RequestedEdgeLine(reference, new[] { ax, ay, az }, new[] { bx, by, bz }, straight));
+                line = entities[i].GetDefinition() is ksEdgeDefinition edge ? EdgeLineOf(edge) : null;
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                lines.Add(new RequestedEdgeLine(reference, new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 0d }, false));
+                // An edge whose definition did not read stays a degenerate line, so the placement rule
+                // answers "not_read" instead of finding the surface somewhere else.
             }
+
+            lines.Add(line is { } read
+                ? new RequestedEdgeLine(reference, read.Start, read.End, read.Straight)
+                : new RequestedEdgeLine(reference, new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 0d }, false));
         }
 
         return lines;
     }
+
+    /// <summary>Both vertices of one edge, read from the model, and whether the edge is straight; null when
+    /// it did not read. INVARIANT: an unread vertex is never carried as a zero point — a zero point is a
+    /// placement claim the read did not make.</summary>
+    private static (double[] Start, double[] End, bool Straight)? EdgeLineOf(ksEdgeDefinition edge)
+    {
+        try
+        {
+            if (edge.GetVertex(true) is not ksVertexDefinition first
+                || edge.GetVertex(false) is not ksVertexDefinition second
+                || !first.GetPoint(out var ax, out var ay, out var az)
+                || !second.GetPoint(out var bx, out var by, out var bz))
+            {
+                return null;
+            }
+
+            return (new[] { ax, ay, az }, new[] { bx, by, bz }, SafeBool(edge.IsStraight) == true);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Every edge of the main body once, for a refusal that has to count them. Deduplication is by
+    /// COM identity, because one edge is reachable from BOTH of its faces — the route and the deduplication
+    /// <c>kompas_read_topology</c> uses. An unreadable body gives an empty list: an edge that did not read is
+    /// absent, and the count the caller publishes is the count it got.</summary>
+    private static List<ksEdgeDefinition> BodyEdges(DocumentEntry document)
+    {
+        var edges = new List<ksEdgeDefinition>();
+        if (document.Kind != DocumentKind.Part || document.PartNow().GetMainBody() is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            return edges;
+        }
+
+        var seen = new HashSet<IntPtr>();
+        for (var f = 0; f < faces.GetCount(); f++)
+        {
+            try
+            {
+                if (AsInterface<ksFaceDefinition>(faces.GetByIndex(f)) is not ksFaceDefinition face
+                    || face.EdgeCollection() is not ksEdgeCollection collection)
+                {
+                    continue;
+                }
+
+                for (var e = 0; e < collection.GetCount(); e++)
+                {
+                    if (AsInterface<ksEdgeDefinition>(collection.GetByIndex(e)) is not ksEdgeDefinition edge)
+                    {
+                        continue;
+                    }
+
+                    var pointer = Marshal.GetIUnknownForObject(edge);
+                    var alreadySeen = !seen.Add(pointer);
+                    Marshal.Release(pointer);
+                    if (!alreadySeen)
+                    {
+                        edges.Add(edge);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                // A face whose edge collection did not read contributes nothing; the count stays a count.
+            }
+        }
+
+        return edges;
+    }
+
+    /// <summary>Edge count of the main body BEFORE a mutation; null when the body itself does not read.
+    /// The guard is the settle's own (<see cref="HasSolidBody"/>), so a "before" count and a "before"
+    /// volume never disagree about whether there was a body to read.</summary>
+    private static int? BodyEdgeCount(DocumentEntry document) =>
+        HasSolidBody(document) ? BodyEdges(document).Count : null;
 
     /// <summary>Every face of the body reduced to a cylinder or a plane, through the route P2.5 measured.</summary>
     private static List<SurfaceShape> ReadSurfaceShapes(DocumentEntry document)
@@ -135,7 +219,7 @@ public partial class Api5Session
                 continue;
             }
 
-            var adjacent = PlanesThrough(planes, edge);
+            var adjacent = PlanesThrough(planes, edge.Start, edge.End);
             if (adjacent.Count != 2)
             {
                 unverified.Add(
@@ -207,12 +291,17 @@ public partial class Api5Session
     }
 
     /// <summary>Whether a chamfer with the two given legs really adjoins every straight requested edge.</summary>
+    /// <param name="snapshot">The body as it read BEFORE the feature was created. A refusal answers with it
+    /// beside what it found afterwards: the revision and the edge count it started from, the planar faces
+    /// the body did not have before, and the feature's own name — so the cause is read from one answer
+    /// instead of a repeated run.</param>
     private EdgePlacementOutcome CheckChamferPlacement(
         DocumentEntry document,
         IReadOnlyList<RequestedEdgeLine> requested,
         double distance1Mm,
         double distance2Mm,
-        string featureReference)
+        string featureReference,
+        FeatureCallSnapshot snapshot)
     {
         var shapes = ReadSurfaceShapes(document);
         var planes = shapes.Where(s => !s.Cylinder).ToList();
@@ -229,7 +318,7 @@ public partial class Api5Session
                 continue;
             }
 
-            var adjacent = PlanesThrough(planes, edge);
+            var adjacent = PlanesThrough(planes, edge.Start, edge.End);
             if (adjacent.Count != 2)
             {
                 unverified.Add(
@@ -255,6 +344,10 @@ public partial class Api5Session
                     ["expected_legs_mm"] = new[] { distance1Mm, distance2Mm },
                 });
 
+                // The chamfer consumed the edge it landed on, so that edge cannot be reported as an edge:
+                // what names the place is the face that APPEARED and the vertices of the lines where it
+                // cuts its neighbours. The corner itself is read from the plane, the legs being known.
+                // History: docs/decisions/adapter-features.md#chamfer-on-other-edge-snapshot
                 return new EdgePlacementOutcome(
                     true,
                     "chamfer_on_other_edge",
@@ -263,14 +356,23 @@ public partial class Api5Session
                     + distance1Mm.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " и "
                     + distance2Mm.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
                     + " мм): фаска построена НЕ по запрошенному ребру. Признак создан и остался в дереве. "
-                    + "Удалите признак вызовом kompas_delete_feature по feature_ref и повторите.",
+                    + "Удалите признак вызовом kompas_delete_feature по feature_ref и повторите. Где "
+                    + "поверхность оказалась — грани, появившиеся на теле, в details.new_faces.",
                     new Dictionary<string, object?>
                     {
                         ["code"] = "chamfer_on_other_edge",
                         ["feature_ref"] = featureReference,
+                        ["feature_name"] = snapshot.FeatureName,
                         ["distance1_mm"] = distance1Mm,
                         ["distance2_mm"] = distance2Mm,
                         ["requested_edges"] = measured,
+                        ["requested_vertices_source"] =
+                            "прочитаны с модели до Entity.Create(), не из запроса клиента",
+                        ["new_faces"] = NewPlanarFaces(document, snapshot.Planes),
+                        ["revision_before"] = snapshot.Revision,
+                        ["revision_after"] = document.Revision,
+                        ["edge_count_before"] = snapshot.EdgeCount,
+                        ["edge_count_after"] = BodyEdgeCount(document),
                         ["planar_faces"] = planes.Count,
                     },
                     unverified);
@@ -562,10 +664,11 @@ public partial class Api5Session
         unverified.Add("hole_placement_not_checked — " + results[0].Result.Detail);
     }
 
-    /// <summary>The planar faces whose plane contains the requested edge line. Both endpoints must lie in
+    /// <summary>The planar faces whose plane contains the given edge line. Both endpoints must lie in
     /// the plane, which is what "meets the edge there" means for a plane — the sign of the normal is not
     /// consulted, because the rule takes distances in absolute value.</summary>
-    private static List<SurfaceShape> PlanesThrough(IReadOnlyList<SurfaceShape> planes, RequestedEdgeLine edge)
+    private static List<SurfaceShape> PlanesThrough(
+        IReadOnlyList<SurfaceShape> planes, double[] start, double[] end)
     {
         var found = new List<SurfaceShape>();
         foreach (var plane in planes)
@@ -575,12 +678,111 @@ public partial class Api5Session
                 continue;
             }
 
-            var atStart = Math.Abs(Dot(normal, Subtract(edge.Start, plane.Point)));
-            var atEnd = Math.Abs(Dot(normal, Subtract(edge.End, plane.Point)));
+            var atStart = Math.Abs(Dot(normal, Subtract(start, plane.Point)));
+            var atEnd = Math.Abs(Dot(normal, Subtract(end, plane.Point)));
             if (atStart <= PlaneThroughEdgeToleranceMm && atEnd <= PlaneThroughEdgeToleranceMm)
             {
                 found.Add(plane);
             }
+        }
+
+        return found;
+    }
+
+    /// <summary>The planar faces of the body, each with the plane it reads as. A face that did not read is
+    /// absent: the caller names the absence where it matters.</summary>
+    private static List<(ksFaceDefinition Face, SurfaceShape Shape)> PlanarFaces(DocumentEntry document)
+    {
+        var found = new List<(ksFaceDefinition, SurfaceShape)>();
+        if (document.Kind != DocumentKind.Part || document.PartNow().GetMainBody() is not ksBody body
+            || body.FaceCollection() is not ksFaceCollection faces)
+        {
+            return found;
+        }
+
+        for (var i = 0; i < faces.GetCount(); i++)
+        {
+            try
+            {
+                if (AsInterface<ksFaceDefinition>(faces.GetByIndex(i)) is not ksFaceDefinition face
+                    || face.GetSurface() is not ksSurface surface
+                    || surface.GetSurfaceParam() is not ksPlaneParam plane
+                    || plane.GetPlacement() is not ksPlacement placement
+                    || !placement.GetOrigin(out var x, out var y, out var z)
+                    || !placement.GetVector(2, out var nx, out var ny, out var nz))
+                {
+                    continue;
+                }
+
+                found.Add((face, new SurfaceShape(false, new[] { x, y, z }, new[] { nx, ny, nz }, 0d)));
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                // A face whose plane did not read is absent, and the count stays the count it got.
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>The planar faces the body did NOT have before the feature was created, with the vertices of
+    /// their edges: this is where a chamfer that missed the requested edge actually sits. The plane names
+    /// the corner (the legs are known) and the edge vertices name the lines it cuts. A face that did not
+    /// read is absent, so an empty list means "no face appeared", not "not checked".</summary>
+    private static List<object?> NewPlanarFaces(
+        DocumentEntry document, IReadOnlyList<SurfaceShape> before)
+    {
+        var found = new List<object?>();
+        foreach (var (face, shape) in PlanarFaces(document))
+        {
+            var known = before.Any(b => !b.Cylinder
+                && EdgeSurfaceMatch.SamePlane(b.Point, b.Direction, shape.Point, shape.Direction));
+            if (known)
+            {
+                continue;
+            }
+
+            found.Add(new Dictionary<string, object?>
+            {
+                ["plane_point_mm"] = shape.Point,
+                ["plane_normal"] = shape.Direction,
+                ["area_mm2"] = SafeDouble(() => face.GetArea((uint)KompasUnits.LengthMm)),
+                ["edge_vertices_mm"] = FaceEdgeVertices(face),
+            });
+        }
+
+        return found;
+    }
+
+    /// <summary>The vertices of every edge of ONE face, as [start, end] pairs. An edge that did not read is
+    /// left out; the edges read up to a COM break are kept, because a partial picture names more than none.
+    /// No deduplication is needed: the edges of one face meet it once.</summary>
+    private static List<object?> FaceEdgeVertices(ksFaceDefinition face)
+    {
+        var found = new List<object?>();
+        try
+        {
+            if (face.EdgeCollection() is not ksEdgeCollection edges)
+            {
+                return found;
+            }
+
+            for (var e = 0; e < edges.GetCount(); e++)
+            {
+                if (AsInterface<ksEdgeDefinition>(edges.GetByIndex(e)) is not ksEdgeDefinition edge)
+                {
+                    continue;
+                }
+
+                if (EdgeLineOf(edge) is { } line)
+                {
+                    found.Add(new[] { line.Start, line.End });
+                }
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            // The edges read up to the break stay: what was read is still evidence.
         }
 
         return found;

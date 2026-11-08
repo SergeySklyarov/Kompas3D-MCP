@@ -37851,6 +37851,33 @@ def chamfer_checks(client, rep, app_id, workdir):
                 f"исход={outcomeL} err={codeL} details_code={detailsL.get('code')} level={levelL} "
                 f"V={vL1} ожидание_при_построении={wantL} (Г-пластина {l_plate_ch}, "
                 f"снято/добавлено {sign * chamfer_sweep}) msg={describe(chL_env)[1]}")
+
+        # INVARIANT: a refusal that SAYS the feature stayed in the tree must also be USABLE - the name it
+        # gave has to bring the body back to the plate. The row above judges the placement and stays as it
+        # is; this one exists only when the refusal happened, because the refusal cannot be staged
+        # without KOMPAS. DOC: two refusal routes leave a feature behind, and this is the one that names it.
+        # History: docs/decisions/adapter-features.md#chamfer-on-other-edge-snapshot
+        if detailsL.get("code") == "chamfer_on_other_edge":
+            frefL = detailsL.get("feature_ref")
+            # The raw message, not `describe`: that one clips to 200 characters and the sentence this
+            # check is about lives after the numbers it quotes.
+            raw_msgL = str(((chL_env or {}).get("error") or {}).get("message") or "")
+            namedL = bool(frefL) and "остался в дереве" in raw_msgL
+            v_del, del_code = None, "не вызывалось: отказ не назвал признак"
+            if namedL:
+                _e, delL_env, _r = client.tool("kompas_delete_feature", {
+                    "feature_ref": frefL,
+                    "expected_revision": (chL_env or {}).get("revision_after") or revL,
+                    "operation_id": str(uuid.uuid4())}, timeout=240)
+                del_code = error_code(delL_env)
+                v_del = volume((bodies(docL) or [{}])[0].get("body_ref") or bodyL)
+            okDelL = (namedL and del_code is None and v_del is not None
+                      and abs(v_del - l_plate_ch) <= 0.01)
+            rep.add("CH30d", "отказ chamfer_on_other_edge называет оставшийся признак, и удаление по нему "
+                             "возвращает объём пластины",
+                    "PASS" if okDelL else "FAIL",
+                    f"feature_ref={frefL} назван={namedL} ошибка_отказа={codeL} удаление={del_code} "
+                    f"V={v_del} ожидание={l_plate_ch}")
         close(docL)
 
     # ── CH31: КУБ, фаска на ВСЕХ 12 рёбрах — то же правило числа граней у второй ветви ─────────

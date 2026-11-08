@@ -1,4 +1,4 @@
-﻿using KompasMcp.Domain.Geometry;
+using KompasMcp.Domain.Geometry;
 using Xunit;
 
 namespace KompasMcp.Unit;
@@ -223,5 +223,22 @@ public class EdgeSurfaceMatchTests
         var direction = new[] { 0d, 0d, 1d };
         Assert.Equal(5d, EdgeSurfaceMatch.DistanceToLine(
             new[] { 3d, 4d, 100d }, new[] { 0d, 0d, 0d }, direction), 9);
+    }
+
+    /// <summary>Which face APPEARED on the body is decided by this comparison, so the two readings that
+    /// must answer the same and the one that must not are both checked.</summary>
+    [Fact]
+    public void SamePlane_IgnoresTheNormalSign_ButNotAnOffset()
+    {
+        // One plane read twice: normal (1,−1,0) through (48,−40) and the opposite normal through another
+        // point of the SAME plane.
+        Assert.True(EdgeSurfaceMatch.SamePlane(
+            new[] { 48d, -40d, 5d }, new[] { 1d, -1d, 0d },
+            new[] { 50d, -38d, -7d }, new[] { -1d, 1d, 0d }));
+
+        // A parallel plane 2·√2/2 mm away is a DIFFERENT face — the neighbour of the chamfer face.
+        Assert.False(EdgeSurfaceMatch.SamePlane(
+            new[] { 48d, -40d, 5d }, new[] { 1d, -1d, 0d },
+            new[] { 46d, -40d, 5d }, new[] { 1d, -1d, 0d }));
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
@@ -3462,6 +3462,12 @@ public sealed partial class Api5Session
         var facesBefore = CountFaces(document);
         var bodiesBefore = CountBodies(document);
 
+        // The state the mutation starts from, read BEFORE the feature exists: a refusal must name the
+        // revision and the edge count it began with, and neither is recoverable after the mutation.
+        var revisionBefore = document.Revision;
+        var planesBefore = ReadSurfaceShapes(document);
+        var edgesBefore = BodyEdgeCount(document);
+
         var entities = new List<ksEntity>();
         var unwrapRoutes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var reference in edgeRefs)
@@ -3665,7 +3671,9 @@ public sealed partial class Api5Session
         // operation that HAPPENED.
         // History: docs/decisions/adapter-features.md#fillet-on-other-edge
         var placement = CheckChamferPlacement(
-            document, requestedLines, command.Distance1Mm, distance2, reference2.Id);
+            document, requestedLines, command.Distance1Mm, distance2, reference2.Id,
+            new FeatureCallSnapshot(revisionBefore, planesBefore, edgesBefore,
+                SafeString(() => feature.name)));
         if (placement.Refused)
         {
             throw new KompasContractException(

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
@@ -70,6 +70,13 @@ public partial class Api5Session
         int bodiesBefore,
         HashSet<string> unwrapRoutes)
     {
+        // The state the mutation starts from AND the requested edge lines, both read BEFORE the feature
+        // exists: after it the requested edge may be gone, and the revision and edge count are past.
+        var revisionBefore = document.Revision;
+        var planesBefore = ReadSurfaceShapes(document);
+        var edgesBefore = BodyEdgeCount(document);
+        var requestedLines = EdgeLines(entities, command.EdgeRefs);
+
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
@@ -159,13 +166,15 @@ public partial class Api5Session
         // The second leg of this mode is DERIVED from the angle (MEASURED by probe F.10: the legs are
         // d and d·tg α), and it is that derived leg the placement is checked against.
         // History: docs/decisions/adapter-features.md#fillet-on-other-edge
-        var requestedLines = EdgeLines(entities, command.EdgeRefs);
         var placementFeatureRef = api5Feature is null
             ? null
             : References.Register("feature", document.Id, document.Revision, api5Feature).Id;
         var secondLeg = command.Distance1Mm * Math.Tan(angle * Math.PI / 180d);
         var placement = CheckChamferPlacement(
-            document, requestedLines, command.Distance1Mm, secondLeg, placementFeatureRef ?? "(признак не найден в дереве)");
+            document, requestedLines, command.Distance1Mm, secondLeg,
+            placementFeatureRef ?? "(признак не найден в дереве)",
+            new FeatureCallSnapshot(revisionBefore, planesBefore, edgesBefore,
+                api5Feature is null ? null : SafeString(() => api5Feature.name)));
         if (placement.Refused)
         {
             throw new KompasContractException(

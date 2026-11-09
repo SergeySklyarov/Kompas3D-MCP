@@ -3877,24 +3877,31 @@ public sealed partial class Api5Session
     private const int RebuildAttemptLimit = 3;
 
     /// <summary>Rebuild until the state is settled; returns the start state, the last state and attempts.</summary>
-    /// <remarks>INVARIANT: a settle stops on EITHER of two facts, and both are needed. (1) The reading
-    /// returned to the value the settle started from - the rebuild changed nothing. (2) Two CONSECUTIVE
-    /// readings agree - the state is a fixed point of the rebuild. MEASURED: comparing only against the
-    /// starting value never settles when that value is itself the unstable one; looking only for a fixed
-    /// point can stop on the unstable one, because a rebuild from it sometimes leaves it unstable again.
-    /// <c>Ok</c> is the answer of the LAST documented call, so a caller keeps its own refusal behaviour.
-    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
-    private (int Attempts, double? Baseline, double? Observed, bool Stable, bool Ok) SettleRebuild(
-        DocumentEntry document)
+    /// <remarks>INVARIANT: a settle stops on EITHER of two facts: the reading returned to the value the
+    /// settle started from, or two CONSECUTIVE readings agree. Both are needed - MEASURED: comparing only
+    /// against the starting value never settles when that value is itself unstable, and a fixed point
+    /// alone can be the state a control rebuild took the operation's effect away on.
+    /// <paramref name="build"/> repeats the route's own build call, and <c>Ok</c> is the answer of the
+    /// LAST documented call. DOC: ipart7_rebuildmodel.html, ksdocument3d_rebuilddocument.html
+    /// History: docs/decisions/adapter-core.md#rebuild-verify, docs/decisions/adapter-features.md#hole-settle</remarks>
+    private (RebuildSettlementOutcome Outcome, bool Ok) SettleRebuild(
+        DocumentEntry document,
+        Action? build = null,
+        SettleDirection direction = SettleDirection.Any)
     {
         var baseline = ReadVolume(document);
         var previous = baseline;
+        var lowest = baseline;
         var attempts = 0;
         double? observed = baseline;
         var stable = false;
         var ok = false;
+        var readings = new List<double?>();
         while (attempts < RebuildAttemptLimit)
         {
+            // The route's own build call FIRST: a pending API7 feature is applied by RebuildModel, and a
+            // document rebuild alone left the model on a state its own next build moved.
+            build?.Invoke();
             ok = document.Document3D.RebuildDocument();
             if (!ok)
             {
@@ -3904,13 +3911,16 @@ public sealed partial class Api5Session
             document.Document3D.UpdateDocumentParam();
             attempts++;
             observed = ReadVolume(document);
+            readings.Add(observed);
+            lowest = RebuildSettlement.Lowest(lowest, observed);
             // An unreadable side stops the loop: repeating cannot compare what was never read.
             if (previous is null || observed is null)
             {
                 break;
             }
 
-            if (RebuildSettlement.Reached(baseline, previous, observed))
+            if (RebuildSettlement.Reached(baseline, previous, observed)
+                && RebuildSettlement.Acceptable(direction, lowest, observed))
             {
                 stable = true;
                 break;
@@ -3919,7 +3929,7 @@ public sealed partial class Api5Session
             previous = observed;
         }
 
-        return (attempts, baseline, observed, stable, ok);
+        return (new RebuildSettlementOutcome(attempts, baseline, observed, stable, readings), ok);
     }
 
     /// <summary>Rebuild the model from its feature tree.</summary>
@@ -3933,7 +3943,8 @@ public sealed partial class Api5Session
     {
         var document = RequireDocument(command.DocumentId);
         var unverified = new List<string>();
-        var (attempts, baseline, observed, stable, ok) = SettleRebuild(document);
+        var (settle, ok) = SettleRebuild(document);
+        var attempts = settle.Attempts;
         if (!ok)
         {
             throw new KompasContractException(
@@ -3944,7 +3955,7 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["rebuild_attempts"] = attempts + 1 });
         }
 
-        var note = RebuildSettlement.Describe(attempts, baseline, observed, stable);
+        var note = settle.Note;
         if (note is not null)
         {
             unverified.Add(note);

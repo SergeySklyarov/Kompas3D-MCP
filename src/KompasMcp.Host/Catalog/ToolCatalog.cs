@@ -1661,8 +1661,12 @@ public static class ToolCatalog
                 "отказывает CAPABILITY_UNAVAILABLE и ничего не создаёт. Успех - не Update(): параметры " +
                 "перечитываются с созданного признака, граней обязано стать больше, объём - уменьшиться, а при " +
                 "заданном ожидании он сверяется числом. Признак, оставшийся в дереве с ошибкой ядра (object_error), " +
-                "отвергается GEOMETRY_FAILED, неизменившееся тело - NO_GEOMETRY_CHANGE; в обоих случаях ответ несёт " +
-                "feature_ref для kompas_delete_feature.",
+                "отвергается GEOMETRY_FAILED, неизменившееся тело - NO_GEOMETRY_CHANGE, а неизменившееся тело на " +
+                "состоянии, где модель ещё не остановилась, - VERIFICATION_FAILED (hole_effect_unsettled): " +
+                "«ничего не изменилось» утверждается только после того, как контрольные перестроения перестали " +
+                "двигать модель. В details всех трёх отказов приходят объём и грани до и после, объём сразу после " +
+                "собственного перестроения операции и объёмы после каждого контрольного (rebuild_readings_mm3), " +
+                "object_error и признак в дереве; feature_ref - для kompas_delete_feature.",
                 Sch.Props(
                     ("face_ref", Sch.Ref("#/$defs/reference")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

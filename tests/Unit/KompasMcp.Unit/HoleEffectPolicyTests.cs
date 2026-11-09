@@ -121,4 +121,35 @@ public class HoleEffectPolicyTests
         Assert.Equal(HoleEffectVerdict.NoGeometryChange, effect.Verdict);
         Assert.True(effect.IsRefusal);
     }
+
+    /// <summary>The same two numbers on a state the model had NOT stopped changing are not a no-op: a
+    /// control rebuild can take the hole's material away and then keep still, and the next rebuild applies
+    /// the feature. The refusal names the failed result check instead of claiming the body did not move.</summary>
+    [Fact]
+    public void UnchangedOnAnUnsettledState_IsAnUnsettledRefusal()
+    {
+        var effect = HoleEffectPolicy.Evaluate(
+            objectError: 0, Plate, Plate, facesBefore: 6d, facesAfter: 6d, declaredMismatch: false,
+            stateStable: false);
+
+        Assert.Equal(HoleEffectVerdict.EffectUnsettled, effect.Verdict);
+        Assert.True(effect.IsRefusal);
+        // NOT NO_GEOMETRY_CHANGE: that code asserts a model that did not move, and this one did not stop.
+        Assert.Equal(ErrorCodes.VerificationFailed, effect.RefusalErrorCode);
+        Assert.Equal(HoleEffectPolicy.UnsettledDetailCode, effect.RefusalDetailCode);
+        Assert.NotEqual(HoleEffectPolicy.NoEffectDetailCode, effect.RefusalDetailCode);
+    }
+
+    /// <summary>An unsettled state does NOT turn a measured removal into a refusal: the material is gone at
+    /// this reading, and the unsettled state is named by the settle's own marks and the level.</summary>
+    [Fact]
+    public void RemovalOnAnUnsettledState_IsStillNotARefusal()
+    {
+        var effect = HoleEffectPolicy.Evaluate(
+            objectError: 0, Plate, PlateAfter, facesBefore: 6d, facesAfter: 7d, declaredMismatch: false,
+            stateStable: false);
+
+        Assert.Equal(HoleEffectVerdict.Confirmed, effect.Verdict);
+        Assert.False(effect.IsRefusal);
+    }
 }

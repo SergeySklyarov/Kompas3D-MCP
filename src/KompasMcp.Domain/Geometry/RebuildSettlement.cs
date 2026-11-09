@@ -48,6 +48,28 @@ public static class RebuildSettlement
         baselineMm3 is double baseline && observedMm3 is double observed
         && Math.Abs(observed - baseline) <= DeclaredExpectation.Tolerance(baseline);
 
+    /// <summary>The lowest volume the settle has seen, the reading it started from included. For a mutation
+    /// that only removes material this is the reading the settle is entitled to stop on: the built state
+    /// holds every removal the model has ever shown. An unreadable side leaves the other one, null when
+    /// neither was read.</summary>
+    public static double? Lowest(double? seenMm3, double? observedMm3) =>
+        seenMm3 is double seen && observedMm3 is double observed
+            ? Math.Min(seen, observed)
+            : seenMm3 ?? observedMm3;
+
+    /// <summary>Whether a reading may stand as a state of the BUILT model in the settle's direction.
+    /// INVARIANT: a control rebuild may APPLY a pending feature, which for a material-removing mutation
+    /// lowers the volume; it may not undo one that is in the tree. A reading above the lowest the settle
+    /// has seen therefore lost the mutation's effect, however still it is. MEASURED: two consecutive
+    /// readings agreed on exactly that lost state, the fixed point alone accepted it, and the NEXT
+    /// command's rebuild removed the material the first call had reported as not applied.
+    /// History: docs/decisions/adapter-features.md#hole-settle</summary>
+    public static bool Acceptable(SettleDirection direction, double? lowestMm3, double? observedMm3) =>
+        direction == SettleDirection.Any
+        || lowestMm3 is not double lowest
+        || observedMm3 is not double observed
+        || observed <= lowest + DeclaredExpectation.Tolerance(lowest);
+
     /// <summary>Whether the settle may STOP: the reading returned to the value the settle started from,
     /// or it agrees with the reading before it (the state is a fixed point of the rebuild). Both facts are
     /// needed — see the class remarks for what each one alone gets wrong.</summary>
@@ -99,17 +121,33 @@ public static class RebuildSettlement
     }
 }
 
+/// <summary>Which way a mutation moves the document volume, as far as the settle is concerned.</summary>
+/// <remarks>Only the settle needs it: a fixed point says the rebuild stopped moving the model, not WHICH
+/// state it stopped on. History: docs/decisions/adapter-features.md#hole-settle</remarks>
+public enum SettleDirection
+{
+    /// <summary>The direction is not known: any state the rebuild stops moving is accepted.</summary>
+    Any = 0,
+
+    /// <summary>The mutation only removes material (a hole, a cut): the built state is the one holding
+    /// every removal the settle has seen.</summary>
+    RemovesMaterial = 1,
+}
+
 /// <summary>What one settle measured: the state before the control rebuilds, the last state, how many
 /// control rebuilds it took, and whether stability was established.</summary>
 /// <remarks>INVARIANT: an unreadable side is NOT a stable one, and two readings that never agreed are not
 /// a move of the model either — they are the ABSENCE of a stable state, and that is what the mark says.
 /// The record carries no COM type, so the decision it feeds is exercised by substituted numbers.
+/// <paramref name="ReadingsMm3"/> is the trajectory (one entry per control rebuild) so an answer can name
+/// what each rebuild did instead of only the endpoints.
 /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
 public readonly record struct RebuildSettlementOutcome(
     int Attempts,
     double? BaselineMm3,
     double? ObservedMm3,
-    bool Stable)
+    bool Stable,
+    IReadOnlyList<double?>? ReadingsMm3 = null)
 {
     /// <summary>Two consecutive readings agreed: the state is a state of the built model.</summary>
     public bool Settled => Stable;

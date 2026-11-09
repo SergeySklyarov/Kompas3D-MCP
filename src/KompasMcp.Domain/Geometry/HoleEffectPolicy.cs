@@ -16,6 +16,11 @@ public enum HoleEffectVerdict
     /// <summary>Both observables were read and neither moved: the call is a refusal.</summary>
     NoGeometryChange,
 
+    /// <summary>Both observables were read and neither moved, but the model had NOT stopped changing, so
+    /// "nothing changed" is not a fact about this call: the reading may be the state the control rebuild
+    /// returned, and a later rebuild may apply the feature. A refusal that says so, not a no-op verdict.</summary>
+    EffectUnsettled,
+
     /// <summary>A side was not read, or material was not removed although the topology moved: "nothing
     /// moved" cannot be asserted, so this is a named gap rather than a refusal.</summary>
     Unverifiable,
@@ -36,13 +41,19 @@ public readonly record struct HoleEffectOutcome(
     bool FacesGrew)
 {
     /// <summary>Whether the call must be refused instead of answered.</summary>
-    public bool IsRefusal => Verdict is HoleEffectVerdict.FeatureError or HoleEffectVerdict.NoGeometryChange;
+    public bool IsRefusal =>
+        Verdict is HoleEffectVerdict.FeatureError
+            or HoleEffectVerdict.NoGeometryChange
+            or HoleEffectVerdict.EffectUnsettled;
 
     /// <summary>The MCP error code of the refusal, or null when the call may succeed.</summary>
     public string? RefusalErrorCode => Verdict switch
     {
         HoleEffectVerdict.FeatureError => ErrorCodes.GeometryFailed,
         HoleEffectVerdict.NoGeometryChange => ErrorCodes.NoGeometryChange,
+        // NOT NO_GEOMETRY_CHANGE: that code claims the model did not move, and here the model did not
+        // STOP moving. What failed is the result check, so the refusal says exactly that.
+        HoleEffectVerdict.EffectUnsettled => ErrorCodes.VerificationFailed,
         _ => null,
     };
 
@@ -52,6 +63,7 @@ public readonly record struct HoleEffectOutcome(
     {
         HoleEffectVerdict.FeatureError => HoleEffectPolicy.FeatureErrorDetailCode,
         HoleEffectVerdict.NoGeometryChange => HoleEffectPolicy.NoEffectDetailCode,
+        HoleEffectVerdict.EffectUnsettled => HoleEffectPolicy.UnsettledDetailCode,
         _ => null,
     };
 }
@@ -72,16 +84,26 @@ public static class HoleEffectPolicy
     /// <summary>The reason inside <c>details.code</c> for a hole that changed nothing.</summary>
     public const string NoEffectDetailCode = "hole_not_applied";
 
-    /// <summary>Decide the verdict from the feature's error, the volume pair, the face-count pair and the
-    /// declared-expectation comparison. <paramref name="declaredMismatch"/> is true only when the client
-    /// declared a volume delta and the measurement contradicted it.</summary>
+    /// <summary>The reason inside <c>details.code</c> for a reading taken on a state the model had not
+    /// stopped changing: neither "applied" nor "not applied" is established.</summary>
+    public const string UnsettledDetailCode = "hole_effect_unsettled";
+
+    /// <summary>Decide the verdict from the feature's error, the volume pair, the face-count pair, the
+    /// declared-expectation comparison and whether the model had stopped changing. <paramref
+    /// name="declaredMismatch"/> is true only when the client declared a volume delta and the measurement
+    /// contradicted it; <paramref name="stateStable"/> is the settle's verdict on the state the pair was
+    /// read on.</summary>
+    /// <remarks>INVARIANT: an unsettled state never becomes "the body did not change" — the same two
+    /// numbers mean "the feature is not applied" on a built model and "the control rebuild took the feature
+    /// away" on one that is still moving. History: docs/decisions/adapter-features.md#hole-settle</remarks>
     public static HoleEffectOutcome Evaluate(
         int? objectError,
         double? volumeBefore,
         double? volumeAfter,
         double? facesBefore,
         double? facesAfter,
-        bool declaredMismatch)
+        bool declaredMismatch,
+        bool stateStable = true)
     {
         var removed = volumeBefore is double before && volumeAfter is double after
             ? before - after
@@ -99,10 +121,13 @@ public static class HoleEffectPolicy
                 HoleEffectVerdict.FeatureError, objectError, removed, materialRemoved, facesGrew);
         }
 
+        // The no-op verdict comes BEFORE the declared comparison for the same reason it always did; what
+        // changed is that it may only be issued on a state the rebuild stopped moving.
         if (volumeRead && facesRead && !materialRemoved && !facesGrew)
         {
             return new HoleEffectOutcome(
-                HoleEffectVerdict.NoGeometryChange, objectError, removed, materialRemoved, facesGrew);
+                stateStable ? HoleEffectVerdict.NoGeometryChange : HoleEffectVerdict.EffectUnsettled,
+                objectError, removed, materialRemoved, facesGrew);
         }
 
         if (!volumeRead || !materialRemoved)

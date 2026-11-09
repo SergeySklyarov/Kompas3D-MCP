@@ -148,6 +148,77 @@ public class RebuildSettlementTests
             RebuildSettlement.CapLevel(VerificationLevel.GeometryChecked, stabilityUnestablished: false));
     }
 
+    /// <summary>The volume with the hole applied, and the volume a control rebuild returned when it took
+    /// that removal away again (one Ø14 ear wall, MEASURED).</summary>
+    private const double Applied = 108504.5815;
+
+    private const double Returned = 109274.2717;
+
+    /// <summary>A material-removing mutation's build took material away; a control rebuild that gives it
+    /// back has dropped the operation's effect, so the reading may not stand as a built state - whatever
+    /// the next reading agrees with it.</summary>
+    [Fact]
+    public void Acceptable_RefusesAReadingAboveTheLowestTheSettleSaw()
+    {
+        var lowest = RebuildSettlement.Lowest(Applied, Returned);
+
+        Assert.Equal(Applied, lowest);
+        // The disagreement is taken at the shared tolerance: the reading is 769.6902 mm3 higher, far
+        // beyond it, so it is a lost effect and not noise.
+        Assert.False(RebuildSettlement.Acceptable(SettleDirection.RemovesMaterial, lowest, Returned));
+        // The state the operation's own build left IS the lowest, so it may stand.
+        Assert.True(RebuildSettlement.Acceptable(SettleDirection.RemovesMaterial, lowest, Applied));
+        // An unknown direction keeps the old rule: a fixed point is accepted wherever it landed.
+        Assert.True(RebuildSettlement.Acceptable(SettleDirection.Any, lowest, Returned));
+    }
+
+    /// <summary>The whole rule on the measured trajectory: a control rebuild that returns the material,
+    /// twice, is never a fixed point the settle may stop on.</summary>
+    [Fact]
+    public void HoleSettle_TwoAgreeingReadingsOnTheReturnedState_AreNotAccepted()
+    {
+        Assert.False(SettleStops(Applied, [Returned, Returned]));
+    }
+
+    /// <summary>The case REBUILD_SETTLE fixed stays fixed: the operation read an unstable state that was
+    /// one hole wall TOO HIGH, the control rebuild brought it down to the built model, and the settle
+    /// stops there on the second attempt.</summary>
+    [Fact]
+    public void HoleSettle_RebuildThatAppliesThePendingRemoval_IsAccepted()
+    {
+        Assert.True(SettleStops(110813.6521, [110043.9619, 110043.9619]));
+    }
+
+    [Fact]
+    public void Lowest_KeepsTheSmallestReading_AndToleratesAnUnreadOne()
+    {
+        Assert.Equal(Applied, RebuildSettlement.Lowest(null, Applied));
+        Assert.Equal(Applied, RebuildSettlement.Lowest(Applied, null));
+        Assert.Null(RebuildSettlement.Lowest(null, null));
+        Assert.Equal(Applied, RebuildSettlement.Lowest(Returned, Applied));
+        Assert.Equal(Applied, RebuildSettlement.Lowest(Applied, Returned));
+    }
+
+    /// <summary>The settle loop's decision, mirrored: does it stop on any of these readings?</summary>
+    private static bool SettleStops(double baseline, double[] readings)
+    {
+        var lowest = (double?)baseline;
+        double? previous = baseline;
+        foreach (var observed in readings)
+        {
+            lowest = RebuildSettlement.Lowest(lowest, observed);
+            if (RebuildSettlement.Reached(baseline, previous, observed)
+                && RebuildSettlement.Acceptable(SettleDirection.RemovesMaterial, lowest, observed))
+            {
+                return true;
+            }
+
+            previous = observed;
+        }
+
+        return false;
+    }
+
     [Fact]
     public void TheFourMarksAreDistinct_SoAClientCanTellThemApart()
     {

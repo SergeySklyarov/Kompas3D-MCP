@@ -26,12 +26,17 @@ public partial class Api5Session
     /// consecutive readings never agreed within the attempt limit.</summary>
     private bool _rebuildStabilityUnestablished;
 
+    /// <summary>What the LAST settle of the current command measured, numbers included: a refusal or a
+    /// warning that must name the trajectory reads it here instead of repeating a volume read.</summary>
+    private RebuildSettlementOutcome? _lastRebuildSettlement;
+
     /// <summary>Drop the marks of the previous command. Called before the mutation, not after: a command
     /// that refuses must not carry the marks of the command that ran before it.</summary>
     public void ResetRebuildSettlement()
     {
         _rebuildSettlementNotes.Clear();
         _rebuildStabilityUnestablished = false;
+        _lastRebuildSettlement = null;
     }
 
     /// <summary>What the settlement of this command did NOT confirm, in the words of
@@ -42,6 +47,11 @@ public partial class Api5Session
     /// command may then claim geometry.</summary>
     public bool RebuildStabilityUnestablished => _rebuildStabilityUnestablished;
 
+    /// <summary>The measurement of the current command's settle, or null when no settle ran.</summary>
+    /// <remarks>INVARIANT: a caller that reports "nothing moved" must be able to say whether the model had
+    /// stopped moving when it read that. History: docs/decisions/adapter-features.md#hole-settle</remarks>
+    public RebuildSettlementOutcome? LastRebuildSettlement => _lastRebuildSettlement;
+
     /// <summary>Bring the model to a state of the BUILT model after the mutation's own rebuild, and
     /// collect what that cost. The control rebuild is <c>ksDocument3D.RebuildDocument()</c> for every
     /// route, including the API7 ones: that is the call MEASURED to restore a feature the previous
@@ -50,25 +60,33 @@ public partial class Api5Session
     /// marked: "no body yet" and "the volume could not be read" are different states, and only the
     /// second one is a gap worth naming.
     /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
-    private void SettleAfterMutation(DocumentEntry document)
+    private void SettleAfterMutation(
+        DocumentEntry document,
+        Action? build = null,
+        SettleDirection direction = SettleDirection.Any)
     {
         if (!HasSolidBody(document))
         {
             return;
         }
 
-        var (attempts, baseline, observed, stable, _) = SettleRebuild(document);
-        Record(new RebuildSettlementOutcome(attempts, baseline, observed, stable));
+        var (outcome, _) = SettleRebuild(document, build, direction);
+        Record(outcome);
     }
 
     /// <summary>The API7 route's rebuild followed by the control rebuild. The API7 write is carried into
-    /// the model by <c>IPart7.RebuildModel(true)</c> plus <c>ksDocument3D.RebuildDocument()</c>; the
-    /// settlement then repeats only the second call, which is the one measured to restore an unapplied
-    /// feature.</summary>
-    private void RebuildApi7AndSettle(IModelContainer container, DocumentEntry document)
+    /// the model by <c>IPart7.RebuildModel(true)</c> plus <c>ksDocument3D.RebuildDocument()</c>.</summary>
+    /// <remarks>The settlement repeats BOTH calls, because a control document rebuild alone left the
+    /// model on a state its own next build moved: "the rebuild stopped moving it" is not the same answer
+    /// as "the model is built". DOC: ipart7_rebuildmodel.html, ksdocument3d_rebuilddocument.html
+    /// History: docs/decisions/adapter-features.md#hole-settle</remarks>
+    private void RebuildApi7AndSettle(
+        IModelContainer container,
+        DocumentEntry document,
+        SettleDirection direction = SettleDirection.Any)
     {
         Api7Bridge.Rebuild(container, document.Document3D);
-        SettleAfterMutation(document);
+        SettleAfterMutation(document, () => Api7Bridge.RebuildModel(container), direction);
     }
 
     /// <summary>Settle a model that was just BUILT by opening or importing, before any client reads it:
@@ -91,6 +109,7 @@ public partial class Api5Session
 
     private void Record(RebuildSettlementOutcome outcome)
     {
+        _lastRebuildSettlement = outcome;
         if (outcome.Note is { } note)
         {
             _rebuildSettlementNotes.Add(note);

@@ -204,9 +204,12 @@ public sealed class HoleExtendedModesTests
         Assert.Equal(HoleEffectVerdict.NoGeometryChange, noEffect.Verdict);
         Assert.Equal(ErrorCodes.NoGeometryChange, noEffect.RefusalErrorCode);
 
-        // And it stands on the CREATION path for every mode, before any mode-specific branch.
+        // And it stands on the CREATION path for every mode, before any mode-specific branch. The code and
+        // the detail code come from the SHARED outcome, not from a literal at the call site: a second
+        // finding (a state the model had not stopped changing) must not be reported under the first one.
         var hole = AdapterSource("Api5Session.Hole.cs");
         Assert.Contains("HoleEffectPolicy.Evaluate(", hole, StringComparison.Ordinal);
-        Assert.Contains("HoleEffectPolicy.NoEffectDetailCode", hole, StringComparison.Ordinal);
+        Assert.Contains("effect.RefusalDetailCode", hole, StringComparison.Ordinal);
+        Assert.Contains("effect.RefusalErrorCode!", hole, StringComparison.Ordinal);
     }
 }

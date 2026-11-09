@@ -148,16 +148,22 @@ internal sealed class Api7Bridge
         return transferred;
     }
 
-    /// <summary>Rebuild after writing to an API7 feature. MEASURED: <c>RebuildModel</c> belongs to
-    /// <see cref="IPart7"/>, not <c>IKompasDocument3D</c>; the API5 rebuild stays mandatory — without it
-    /// the volume read by API5 lags.</summary>
-    public static void Rebuild(IModelContainer container, ksDocument3D document5)
+    /// <summary>The API7 build call alone, for a caller that performs the document rebuild itself — the
+    /// settle repeats it with every control rebuild. DOC: ipart7_rebuildmodel.html</summary>
+    public static void RebuildModel(IModelContainer container)
     {
         if (container is IPart7 part7)
         {
             part7.RebuildModel(true);
         }
+    }
 
+    /// <summary>Rebuild after writing to an API7 feature. MEASURED: <c>RebuildModel</c> belongs to
+    /// <see cref="IPart7"/>, not <c>IKompasDocument3D</c>; the API5 rebuild stays mandatory — without it
+    /// the volume read by API5 lags.</summary>
+    public static void Rebuild(IModelContainer container, ksDocument3D document5)
+    {
+        RebuildModel(container);
         document5.RebuildDocument();
     }
 

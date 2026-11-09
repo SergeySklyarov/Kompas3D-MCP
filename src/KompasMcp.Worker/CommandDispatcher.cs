@@ -675,6 +675,10 @@ public sealed class CommandDispatcher
 
     /// <summary>Carry the settlement marks of a REFUSED command into its <c>details</c>. The original code
     /// and retry policy are preserved: a refusal does not change because a rebuild was not settled.</summary>
+    /// <remarks>INVARIANT: a refusal that reports an effect measured on the model carries the TRAJECTORY of
+    /// the settle - the reading it started from and every reading a control rebuild answered - because
+    /// "the volume did not move" reads the same whether the model had stopped changing or whether a rebuild
+    /// had just taken the operation's effect away. History: docs/decisions/adapter-features.md#hole-settle</remarks>
     private Exception WithRebuildSettlement(Exception ex)
     {
         var notes = _session.RebuildSettlementNotes;
@@ -694,6 +698,13 @@ public sealed class CommandDispatcher
 
         details["rebuild_settlement"] = notes.ToArray();
         details["rebuild_stability_unestablished"] = _session.RebuildStabilityUnestablished;
+        if (_session.LastRebuildSettlement is { } settle)
+        {
+            details["rebuild_baseline_volume_mm3"] = settle.BaselineMm3;
+            details["rebuild_readings_mm3"] = settle.ReadingsMm3;
+            details["rebuild_stable"] = settle.Settled;
+        }
+
         return new KompasContractException(
             contract.Code, contract.Message, contract.RetryPolicy, contract.PartialEffects,
             contract.Hresult, details);

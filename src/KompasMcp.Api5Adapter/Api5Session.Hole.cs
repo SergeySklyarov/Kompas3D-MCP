@@ -113,8 +113,11 @@ public partial class Api5Session
 
         // Without RebuildModel the API7 write stays a representation: MEASURED by probe E on
         // IExtrusion.Sketch and repeated on the chamfer F.10 and the fillet. The call order is part of
-        // the contract, not style.
-        RebuildApi7AndSettle(container, document);
+        // the contract, not style. The settle is told the mutation's direction: a hole only removes
+        // material, so a control rebuild that brings the volume BACK UP dropped the hole instead of
+        // building it, and the verdict below must not be taken on that state.
+        // History: docs/decisions/adapter-features.md#hole-settle
+        RebuildApi7AndSettle(container, document, SettleDirection.RemovesMaterial);
         BumpRevision(document, "hole." + command.Mode.ToString().ToLowerInvariant());
 
         var volumeAfter = ReadVolume(document);
@@ -229,14 +232,34 @@ public partial class Api5Session
 
         // A feature error and a measured no-op are REFUSALS, and both stand BEFORE the declared-expectation
         // comparison: that comparison is the geometry check of an operation that HAPPENED. A hole always
-        // removes material, so an unmoved volume means the feature never reached the body.
-        // History: docs/decisions/adapter-features.md#hole-false-success
+        // removes material, so an unmoved volume means the feature never reached the body - but only on a
+        // state the model had stopped changing. The settle's own verdict decides which of the two it is.
+        // History: docs/decisions/adapter-features.md#hole-false-success, #hole-settle
+        var settle = LastRebuildSettlement;
+        var stateStable = settle is { Settled: true };
         var effect = HoleEffectPolicy.Evaluate(
-            objectError, volumeBefore, volumeAfter, facesBefore, facesAfter, declared.IsNotConfirmed);
+            objectError, volumeBefore, volumeAfter, facesBefore, facesAfter, declared.IsNotConfirmed,
+            stateStable);
         var featureNote = referenceDto is null
             ? " Признак в дереве API5 не найден: удалять нечего."
             : " Признак ОСТАЛСЯ в дереве: удалите его вызовом kompas_delete_feature по feature_ref и "
                 + "повторите вызов.";
+        // WHAT THE SETTLE MEASURED, in the answer: the readings a later investigation cannot take again.
+        // History: docs/decisions/adapter-features.md#hole-settle
+        var snapshot = new Dictionary<string, object?>
+        {
+            ["api7_update_returned"] = true,
+            ["feature_in_tree"] = reference is not null,
+            ["volume_before_mm3"] = volumeBefore,
+            ["volume_after_mm3"] = volumeAfter,
+            ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+            ["face_count_before"] = facesBefore,
+            ["face_count_after"] = facesAfter,
+            ["rebuild_attempts"] = settle?.Attempts,
+            ["rebuild_baseline_volume_mm3"] = settle?.BaselineMm3,
+            ["rebuild_readings_mm3"] = settle?.ReadingsMm3,
+            ["rebuild_stable"] = settle is { Settled: true },
+        };
         if (effect.Verdict == HoleEffectVerdict.FeatureError)
         {
             throw new KompasContractException(
@@ -256,31 +279,40 @@ public partial class Api5Session
                 });
         }
 
-        if (effect.Verdict == HoleEffectVerdict.NoGeometryChange)
+        if (effect.Verdict is HoleEffectVerdict.NoGeometryChange or HoleEffectVerdict.EffectUnsettled)
         {
+            var unsettled = effect.Verdict == HoleEffectVerdict.EffectUnsettled;
+            var details = new Dictionary<string, object?>(snapshot)
+            {
+                ["code"] = effect.RefusalDetailCode,
+                ["object_error"] = effect.ObjectError,
+                ["feature_ref"] = referenceDto?.Id,
+                ["revision_after"] = document.Revision,
+            };
             throw new KompasContractException(
-                ErrorCodes.NoGeometryChange,
-                "Отверстие создано (IHole3D.Update() вернул true, object_error=0), но тело не "
-                + "изменилось: объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + ", граней "
-                + Num(facesBefore) + " → " + Num(facesAfter) + " при пороге шума "
-                + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
-                    System.Globalization.CultureInfo.InvariantCulture)
-                + " мм³. Отверстие всегда снимает материал, поэтому неизменный объём означает, что "
-                + "признак не применён к телу." + featureNote,
+                effect.RefusalErrorCode!,
+                unsettled
+                    // NOT "the body did not change": the model had not stopped changing, so the pair below
+                    // is a reading of a state that is not established as built. Named as such, with what
+                    // the settle saw and with what stayed in the model.
+                    ? "Отверстие создано (IHole3D.Update() вернул true, object_error=0), но модель не "
+                        + "пришла к устойчивому состоянию, поэтому «тело не изменилось» не утверждается: "
+                        + "после собственного перестроения операции объём был " + Num(settle?.BaselineMm3)
+                        + ", контрольные перестроения дали "
+                        + Numbers(settle?.ReadingsMm3) + ", объём " + Num(volumeBefore) + " → "
+                        + Num(volumeAfter) + ", граней " + Num(facesBefore) + " → " + Num(facesAfter)
+                        + ". Признак мог примениться позже: перечитайте объём вызовом kompas_get_context "
+                        + "или повторите перестроение, прежде чем вывод." + featureNote
+                    : "Отверстие создано (IHole3D.Update() вернул true, object_error=0), но тело не "
+                        + "изменилось: объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + ", граней "
+                        + Num(facesBefore) + " → " + Num(facesAfter) + " при пороге шума "
+                        + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
+                            System.Globalization.CultureInfo.InvariantCulture)
+                        + " мм³. Отверстие всегда снимает материал, поэтому неизменный объём означает, что "
+                        + "признак не применён к телу, и модель на этом состоянии остановилась." + featureNote,
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
-                {
-                    ["code"] = HoleEffectPolicy.NoEffectDetailCode,
-                    ["object_error"] = effect.ObjectError,
-                    ["feature_ref"] = referenceDto?.Id,
-                    ["revision_after"] = document.Revision,
-                    ["volume_before_mm3"] = volumeBefore,
-                    ["volume_after_mm3"] = volumeAfter,
-                    ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
-                    ["face_count_before"] = facesBefore,
-                    ["face_count_after"] = facesAfter,
-                });
+                details: details);
         }
 
         // The base face is a REFERENCE too, so the hole may land on a different face. The axis is read
@@ -828,6 +860,13 @@ public partial class Api5Session
             _ => false,
         };
     }
+
+    /// <summary>The settle's readings as one text: a refusal that says the model never settled must show
+    /// what each control rebuild answered, not only the endpoints.</summary>
+    private static string Numbers(IReadOnlyList<double?>? readings) =>
+        readings is { Count: > 0 }
+            ? string.Join(" → ", readings.Select(Num))
+            : "перестроений не было";
 
     private static string DescribeHole(HoleReadDto? read) =>
         read is null

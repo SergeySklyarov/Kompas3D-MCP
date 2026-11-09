@@ -357,4 +357,97 @@ public sealed class ScenarioRunnerTests
             }
         }
     }
+
+    /// <summary>A refused checkpoint that left the client's document open FROM THE COPY names that effect in
+    /// <c>partial_effects</c>, and the refusal carries it too.</summary>
+    /// <remarks>INVARIANT: the client's document is no longer in its own file, which is as much a change of
+    /// state as a completed step — a client that reads only the step list would save into a copy it does not
+    /// know about. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    [Fact]
+    public async Task RefusedCheckpointThatMovedTheDocumentNamesTheEffect()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "kompas-scenario-" + Guid.NewGuid().ToString("N"));
+        var part = Path.Combine(root, "part.m3d");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(part, "part");
+        var runner = new ScenarioRunner(Path.Combine(root, "control"),
+            (tool, arguments, _, _) => Task.FromResult(tool switch
+            {
+                "kompas_get_context" => Succeeded(arguments, new JsonObject
+                {
+                    ["revision"] = 7,
+                    ["kind"] = "assembly",
+                    ["path"] = part,
+                }),
+                "kompas_list_components" => arguments["recursive"]?.GetValue<bool>() == true
+                    ? Succeeded(arguments, new JsonObject
+                    {
+                        ["components"] = new JsonArray(new JsonObject
+                        {
+                            ["component_ref"] = "ref-1",
+                            ["source_path"] = part,
+                            ["name"] = "part",
+                            ["is_detail"] = true,
+                            ["depth"] = 0,
+                        }),
+                    })
+                    // The copy's own rows are refused AFTER the SaveAs moved the document into the copy.
+                    : new ResultEnvelope<JsonNode?>
+                    {
+                        Status = OperationStatus.Failed,
+                        Error = new ErrorDto("CAPABILITY_UNAVAILABLE", "чтение отказало", RetryPolicy.Never, null, false, null),
+                    },
+                "kompas_save_document" => SaveAsCopy(arguments),
+                _ => Succeeded(arguments, new JsonObject { ["id"] = "sk-1" }),
+            }));
+
+        try
+        {
+            var plan = Plan(Step("s1", "kompas_create_sketch"));
+            plan["on_error"] = "restore_checkpoint";
+            plan["checkpoint_policy"] = "document_copy";
+
+            var answer = await runner.RunAsync(plan, CancellationToken.None);
+
+            Assert.Equal(OperationStatus.Failed, answer.Status);
+            var effects = answer.Result?["partial_effects"]!.AsArray()
+                .Select(node => node!.GetValue<string>()).ToArray();
+            Assert.Equal(new[] { ScenarioRunner.CheckpointEffect }, effects);
+            Assert.True(answer.Error?.PartialEffects);
+            Assert.True(answer.Result?["checkpoint"]?["document_moved"]?.GetValue<bool>());
+            // The document that is open now is the copy, not the one the plan started with.
+            Assert.Equal("copy-9", answer.Result?["document_id_after"]?.GetValue<string>());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The assembly SaveAs: the copy appears on disk and the live document gets the copy's id.</summary>
+    private static ResultEnvelope<JsonNode?> SaveAsCopy(JsonObject arguments)
+    {
+        var copy = JsonScalars.ReadString(arguments["target_path"]);
+        if (copy is null)
+        {
+            return Succeeded(arguments, new JsonObject { ["id"] = "sk-1" });
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+        File.WriteAllText(copy, "copy");
+        return new ResultEnvelope<JsonNode?>
+        {
+            Status = OperationStatus.Succeeded,
+            RevisionBefore = 1,
+            RevisionAfter = 2,
+            Result = new JsonObject
+            {
+                ["path"] = copy,
+                ["context"] = new JsonObject { ["id"] = "copy-9", ["path"] = copy, ["revision"] = 2 },
+            },
+        };
+    }
 }

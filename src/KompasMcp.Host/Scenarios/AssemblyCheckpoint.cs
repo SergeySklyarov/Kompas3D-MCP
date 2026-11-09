@@ -28,6 +28,22 @@ internal sealed class AssemblyCheckpoint
 
     internal static readonly string[] ExternalPartsModes = { ExternalPartsCopy, ExternalPartsReadOnly };
 
+    /// <summary>The state key that says the client's live document is now the copy.</summary>
+    /// <remarks>INVARIANT: a refused checkpoint that moved the document must name that effect where the
+    /// client reads effects, so the answer carries this flag and the scenario copies it into
+    /// <c>partial_effects</c>. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    internal const string DocumentMoved = "document_moved";
+
+    /// <summary>Upper bound on documented saves of one copy file until its temporary sibling is gone.</summary>
+    /// <remarks>LIMIT: 3 saves; a copy whose file is still not replaced after them is refused with the
+    /// per-attempt evidence. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    internal const int SaveAttempts = 3;
+
+    /// <summary>Upper bound on reads of the copy file before the verdict — a reading is not a state.</summary>
+    /// <remarks>LIMIT: 2 reads; a copy whose links disagree on every read is refused and both readings are
+    /// named. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    internal const int VerifyReads = 2;
+
     private readonly string _controlCopyDirectory;
     private readonly Func<string, JsonObject, CancellationToken, Task<ResultEnvelope<JsonNode?>>> _invoke;
 
@@ -195,19 +211,33 @@ internal sealed class AssemblyCheckpoint
 
         // The top file goes through the SAME route as a detail: SaveAs, so unsaved edits of the top assembly
         // are inside the copy. The live document becomes the copy; the client's own file is not written.
-        var saved = await _invokeCopy("kompas_save_document", new JsonObject
-        {
-            ["document_id"] = documentId,
-            ["expected_revision"] = revision.Value,
-            ["target_path"] = topCopy,
-            ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "checkpoint-save"),
-        }, topCopy, cancellationToken).ConfigureAwait(false);
+        var topSave = await SaveCopyAsync(
+            parentOperationId, "checkpoint-save", documentId, revision.Value, topCopy, topCopy,
+            cancellationToken).ConfigureAwait(false);
+        var saved = topSave.Envelope;
 
         if (saved.Status != OperationStatus.Succeeded)
         {
             DeleteFolderIfCreated(folder, created);
             return Refuse(report, "copy_not_written", "Копия верхней сборки не снята: документ не сохранён "
-                + "документированным SaveAs.", Array.Empty<string>(), stepError: ErrorOf(saved));
+                + "документированным SaveAs.", Array.Empty<string>(), stepError: ErrorOf(saved),
+                evidence: topSave.Evidence());
+        }
+
+        if (!topSave.Settled)
+        {
+            // The live document already IS the copy, so its folder is NOT deleted under it.
+            return Refuse(report, "copy_not_saved",
+                $"Копия верхней сборки не дописана: содержимое модели осталось во временном файле "
+                + $"'{topCopy}{SavedFileWrite.TemporarySuffix}', файл копии не заменён. Файл клиента не изменён.",
+                Array.Empty<string>(),
+                new JsonObject
+                {
+                    ["path"] = topCopy,
+                    [DocumentMoved] = true,
+                    ["notes"] = "Документ открыт из копии, файл копии не дописан, файл клиента не изменён.",
+                },
+                evidence: topSave.Evidence());
         }
 
         // ---- From here the live document IS the copy: a refusal must not delete the folder under it. ----
@@ -222,11 +252,12 @@ internal sealed class AssemblyCheckpoint
             .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
             ?? JsonScalars.ReadString(saved.Result?["context"]?["id"])
             ?? documentId;
-        var revisionNow = saved.RevisionAfter ?? revision.Value;
+        var revisionNow = topSave.Revision ?? revision.Value;
         var moved = new JsonObject
         {
             ["document_id_after"] = copyDocumentId,
             ["path"] = topCopy,
+            [DocumentMoved] = true,
             ["notes"] = "Документ теперь открыт из копии в каталоге контрольной точки: правки идут в копию, "
                 + "файл клиента не изменён.",
         };
@@ -238,22 +269,30 @@ internal sealed class AssemblyCheckpoint
         {
             return Refuse(report, "top_refs_not_reassigned",
                 $"Ссылки верхней сборки не переназначены: {topReassigned.Message}", Array.Empty<string>(),
-                moved, stepError: topReassigned.Error);
+                moved, stepError: topReassigned.Error, evidence: ReassignEvidence(topReassigned));
         }
 
         if (topReassigned.Revision is { } afterReassign && afterReassign != revisionNow)
         {
-            var resaved = await _invoke("kompas_save_document", new JsonObject
-            {
-                ["document_id"] = copyDocumentId,
-                ["expected_revision"] = afterReassign,
-                ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "checkpoint-resave"),
-            }, cancellationToken).ConfigureAwait(false);
-            if (resaved.Status != OperationStatus.Succeeded)
+            var resaved = await SaveCopyAsync(
+                parentOperationId, "checkpoint-resave", copyDocumentId, afterReassign, topCopy, null,
+                cancellationToken).ConfigureAwait(false);
+            if (resaved.Envelope.Status != OperationStatus.Succeeded)
             {
                 return Refuse(report, "copy_not_saved",
                     "Копия с переназначенными ссылками не сохранена.", Array.Empty<string>(), moved,
-                    stepError: ErrorOf(resaved));
+                    stepError: ErrorOf(resaved.Envelope), evidence: resaved.Evidence());
+            }
+
+            if (!resaved.Settled)
+            {
+                // The reassigned links live only in the model: closing the copy now would read the file as it
+                // was BEFORE the reassignment, and the verdict would describe that older state.
+                return Refuse(report, "copy_not_saved",
+                    $"Копия с переназначенными ссылками не дописана: содержимое модели осталось во временном "
+                    + $"файле '{topCopy}{SavedFileWrite.TemporarySuffix}', файл копии не заменён. Файл клиента "
+                    + "не изменён.",
+                    Array.Empty<string>(), moved, evidence: resaved.Evidence());
             }
         }
 
@@ -330,9 +369,12 @@ internal sealed class AssemblyCheckpoint
 
         if (verification.Mismatches.Count > 0)
         {
+            var evidence = ReassignEvidence(topReassigned);
+            evidence["verification_reads"] = new JsonArray(verification.ReadCounts
+                .Select(count => (JsonNode)JsonValue.Create(count)!).ToArray());
             return Refuse(report, "copy_not_verified",
                 "Ссылки в копии не совпали с графом: " + string.Join("; ", verification.Mismatches),
-                verification.Mismatches, moved, stepError: verification.Error);
+                verification.Mismatches, moved, stepError: verification.Error, evidence: evidence);
         }
 
         if (!manifestWritten)
@@ -345,6 +387,7 @@ internal sealed class AssemblyCheckpoint
         report["path"] = topCopy;
         report["document_path"] = topCopy;
         report["document_id_after"] = reopened.DocumentId;
+        report[DocumentMoved] = true;
         report["revision"] = revision.Value;
         report["application_id"] = applicationId;
         report["manifest_path"] = manifestPath;
@@ -495,7 +538,8 @@ internal sealed class AssemblyCheckpoint
     // ---- Reassignment inside the copies ----
 
     private sealed record ReassignResult(
-        bool Ok, string Message, long? Revision, int? Components = null, JsonObject? Error = null);
+        bool Ok, string Message, long? Revision, int? Components = null, JsonObject? Error = null,
+        JsonArray? Record = null);
 
     /// <summary>Open a copied subassembly, point its components at the copies, save and close it.</summary>
     /// <remarks>INVARIANT: the copy is closed after saving, so a client's own open document is the only one
@@ -541,12 +585,9 @@ internal sealed class AssemblyCheckpoint
             .ConfigureAwait(false);
 
         var saved = reassigned.Ok && reassigned.Revision is { } revision
-            ? await _invoke("kompas_save_document", new JsonObject
-            {
-                ["document_id"] = copyDocumentId,
-                ["expected_revision"] = revision,
-                ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId, "copy-save-" + StableKey(copyPath)),
-            }, cancellationToken).ConfigureAwait(false)
+            ? await SaveCopyAsync(
+                parentOperationId, "copy-save-" + StableKey(copyPath), copyDocumentId, revision, copyPath, null,
+                cancellationToken).ConfigureAwait(false)
             : null;
 
         // INVARIANT: the copy still holds the components it was planned with AFTER the save. A save that
@@ -568,10 +609,20 @@ internal sealed class AssemblyCheckpoint
             return reassigned;
         }
 
-        if (saved is not null && saved.Status != OperationStatus.Succeeded)
+        if (saved is not null && saved.Envelope.Status != OperationStatus.Succeeded)
         {
             return new ReassignResult(false, "копия вложенной сборки не сохранена после переназначения",
-                null, Error: ErrorOf(saved));
+                null, Error: ErrorOf(saved.Envelope));
+        }
+
+        // INVARIANT: the copy is CLOSED right after this, so a save whose content is still in the temporary
+        // file would lose the reassignment with the closed document — the verification would then read the
+        // file as it was BEFORE the replacement and report a copy that was never written.
+        if (saved is { Settled: false })
+        {
+            return new ReassignResult(false,
+                $"копия «{Path.GetFileName(copyPath)}» не дописана: содержимое модели осталось во временном "
+                + $"файле '{copyPath}{SavedFileWrite.TemporarySuffix}'", null);
         }
 
         if (afterSave is { } left && reassigned.Components is { } planned && left != planned)
@@ -592,7 +643,7 @@ internal sealed class AssemblyCheckpoint
                 Error: ErrorOf(closed));
         }
 
-        return new ReassignResult(true, string.Empty, saved?.RevisionAfter ?? reassigned.Revision);
+        return new ReassignResult(true, string.Empty, saved?.Envelope.RevisionAfter ?? reassigned.Revision);
     }
 
     /// <summary>The copy's component rows, or the refused call's error when the read failed.</summary>
@@ -615,6 +666,92 @@ internal sealed class AssemblyCheckpoint
     /// <summary>How many components the document reports, or <c>null</c> when the read failed.</summary>
     private async Task<int?> CountComponentsAsync(string documentId, CancellationToken cancellationToken) =>
         (await ListRowsAsync(documentId, cancellationToken).ConfigureAwait(false)).Rows?.Length;
+
+    /// <summary>What one save of a copy file settled to: the last answer, the revision, and the evidence.</summary>
+    /// <remarks>INVARIANT: <c>Settled</c> is decided by the FILE, not by the save's boolean — the caller closes
+    /// the document right after, and a save whose content is still in the temporary file would be lost with it.
+    /// History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    private sealed record SettledSave(
+        ResultEnvelope<JsonNode?> Envelope, long? Revision, JsonArray Attempts, bool Settled)
+    {
+        /// <summary>The per-attempt facts, under the key the refusal carries them with.</summary>
+        public JsonObject Evidence() => new() { ["save_attempts"] = Attempts.DeepClone() };
+    }
+
+    /// <summary>Save a copy by the documented route and repeat it while KOMPAS leaves the model's content in
+    /// <c>&lt;file&gt;.$$$</c> beside an unreplaced file.</summary>
+    /// <remarks>MEASURED: a save can answer success while the model's new content ends up in
+    /// <c>&lt;file&gt;.$$$</c> and the file keeps its PREVIOUS bytes; the same documented save then replaces the
+    /// file. INVARIANT: each attempt carries its own operation id, else a repeat would return the recorded
+    /// answer without touching КОМПАС. DOC: ksdocument3d_saveas.html («TRUE - в случае успешного завершения»),
+    /// ikompasdocument_save.html, ikompasdocument_saveas.html.
+    /// History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    private async Task<SettledSave> SaveCopyAsync(
+        string parentOperationId, string operationKey, string documentId, long? revision, string path,
+        string? targetPath, CancellationToken cancellationToken)
+    {
+        var attempts = new JsonArray();
+        var current = revision;
+        var settled = false;
+        ResultEnvelope<JsonNode?>? last = null;
+        for (var attempt = 1; attempt <= SaveAttempts; attempt++)
+        {
+            var arguments = new JsonObject
+            {
+                ["document_id"] = documentId,
+                ["operation_id"] = ScenarioRunner.ChildOperationId(parentOperationId,
+                    attempt == 1 ? operationKey : $"{operationKey}-repeat{attempt}"),
+            };
+            if (current is { } expected)
+            {
+                arguments["expected_revision"] = expected;
+            }
+
+            var saveAs = attempt == 1 && targetPath is not null;
+            if (saveAs)
+            {
+                arguments["target_path"] = targetPath;
+            }
+
+            last = saveAs
+                ? await _invokeCopy("kompas_save_document", arguments, targetPath!, cancellationToken)
+                    .ConfigureAwait(false)
+                : await _invoke("kompas_save_document", arguments, cancellationToken).ConfigureAwait(false);
+
+            if (last.RevisionAfter is { } after)
+            {
+                current = after;
+            }
+
+            var temporary = SavedFileWrite.Capture(path + SavedFileWrite.TemporarySuffix);
+            attempts.Add(new JsonObject
+            {
+                ["attempt"] = attempt,
+                ["mode"] = saveAs ? "SaveAs" : "Save",
+                ["status"] = last.Status.ToString(),
+                ["revision_after"] = last.RevisionAfter,
+                ["target"] = Stamp(SavedFileWrite.Capture(path)),
+                ["temporary"] = Stamp(temporary),
+            });
+
+            if (last.Status != OperationStatus.Succeeded)
+            {
+                return new SettledSave(last, current, attempts, Settled: false);
+            }
+
+            if (temporary is not { Exists: true })
+            {
+                settled = true;
+                break;
+            }
+        }
+
+        return new SettledSave(last!, current, attempts, settled);
+    }
+
+    /// <summary>One file stamp as JSON: the SAME keys on every state, so a reader compares like with like.</summary>
+    private static JsonObject Stamp(SavedFileStamp? stamp) => new(SavedFileWrite.Describe(stamp)
+        .Select(pair => KeyValuePair.Create(pair.Key, (JsonNode?)JsonValue.Create(pair.Value))));
 
     /// <summary>Point every component of one document at its copy, by the documented source replacement.</summary>
     /// <remarks>DOC: kspart_setfilename.html — «Метод используется для компонентов, вставленных в сборку»;
@@ -649,6 +786,7 @@ internal sealed class AssemblyCheckpoint
         var planned = first
             .Select(row => JsonScalars.ReadString(row["source_path"]))
             .ToArray();
+        var record = new JsonArray();
         for (var index = 0; index < planned.Length; index++)
         {
             var source = planned[index];
@@ -721,6 +859,18 @@ internal sealed class AssemblyCheckpoint
 
             current = replacedEnvelope.RevisionAfter ?? current;
 
+            // The row as the replace answered it: this is the difference between "the replacement never
+            // reached the model" and "it did, and the save lost it" when the copy is read back later.
+            record.Add(new JsonObject
+            {
+                ["row"] = index + 1,
+                ["name"] = JsonScalars.ReadString(rows[index]["name"]),
+                ["source_before"] = JsonScalars.ReadString(replacedEnvelope.Result?["source_path_before"])
+                    ?? sourceNow,
+                ["source_after"] = JsonScalars.ReadString(replacedEnvelope.Result?["source_path_after"]),
+                ["revision_after"] = replacedEnvelope.RevisionAfter,
+            });
+
             // INVARIANT: a replace that changed the number of components has dropped or duplicated
             // instances, and the copy no longer matches the graph it was planned from. The route reports
             // this itself; it is refused here rather than left for the verification to notice.
@@ -733,7 +883,21 @@ internal sealed class AssemblyCheckpoint
             }
         }
 
-        return new ReassignResult(true, string.Empty, current, planned.Length);
+        return new ReassignResult(true, string.Empty, current, planned.Length, Record: record);
+    }
+
+    /// <summary>The reassignment's own rows as refusal evidence, capped so one answer stays readable.</summary>
+    private static JsonObject ReassignEvidence(ReassignResult reassigned)
+    {
+        var evidence = new JsonObject();
+        if (reassigned.Record is { Count: > 0 } record)
+        {
+            evidence["reassignments"] = new JsonArray(record.Take(20)
+                .Select(node => node?.DeepClone()).ToArray());
+            evidence["reassignments_total"] = record.Count;
+        }
+
+        return evidence;
     }
 
     // ---- Verification ----
@@ -742,14 +906,47 @@ internal sealed class AssemblyCheckpoint
     /// <remarks>INVARIANT: a verification that could not read the copy is a refusal caused by a refused call,
     /// so it carries that call's code; a graph that was read and disagrees carries none.
     /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
-    private sealed record VerifyResult(IReadOnlyList<string> Mismatches, JsonObject? Error = null);
+    private sealed record VerifyResult(
+        IReadOnlyList<string> Mismatches, JsonObject? Error = null, IReadOnlyList<int>? Readings = null)
+    {
+        /// <summary>Mismatches counted on EVERY read, in order: the trajectory the verdict rests on.</summary>
+        public IReadOnlyList<int> ReadCounts => Readings ?? Array.Empty<int>();
+    }
 
-    /// <summary>Reopen the copy and re-read the links from the FILE, not from memory.</summary>
+    /// <summary>Read the copy's links from the FILE until the reading stops disagreeing or reads run out.</summary>
+    /// <remarks>INVARIANT: the verdict names a STATE, not one reading — a copy whose links are still being
+    /// written shows them only on a later read, and a copy that disagrees on every read is refused with the
+    /// trajectory instead of a single count.
+    /// DOC: kompas_open_document.html (opening a document by path).
+    /// History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    private async Task<VerifyResult> VerifyAsync(
+        string parentOperationId, string topCopy, IReadOnlyList<AssemblyCopyEntry> entries,
+        int expectedComponents, string? applicationId, string copyFolder, string stage,
+        CancellationToken cancellationToken)
+    {
+        var readings = new List<int>(VerifyReads);
+        VerifyResult? last = null;
+        for (var attempt = 1; attempt <= VerifyReads; attempt++)
+        {
+            last = await ReadCopyAsync(
+                parentOperationId, topCopy, entries, expectedComponents, applicationId, copyFolder,
+                stage + "-" + attempt, cancellationToken).ConfigureAwait(false);
+            readings.Add(last.Mismatches.Count);
+            if (last.Mismatches.Count == 0)
+            {
+                return new VerifyResult(Array.Empty<string>(), null, readings);
+            }
+        }
+
+        return new VerifyResult(last!.Mismatches, last.Error, readings);
+    }
+
+    /// <summary>One read of the copy's links from the file, with the document closed after it.</summary>
     /// <remarks>INVARIANT: the caller closes every open document of the copy first — an open-by-path while the
     /// same file is open returns that document from memory and proves nothing about the file. INVARIANT: the
     /// verification document is closed without saving, so checking cannot change what was checked.
     /// DOC: kompas_open_document.html (opening a document by path).</remarks>
-    private async Task<VerifyResult> VerifyAsync(
+    private async Task<VerifyResult> ReadCopyAsync(
         string parentOperationId, string topCopy, IReadOnlyList<AssemblyCopyEntry> entries,
         int expectedComponents, string? applicationId, string copyFolder, string stage,
         CancellationToken cancellationToken)
@@ -863,7 +1060,7 @@ internal sealed class AssemblyCheckpoint
     /// History: docs/decisions/scenario.md#assembly-checkpoint</remarks>
     private static AssemblyCheckpointOutcome Refuse(
         JsonObject report, string cause, string message, IReadOnlyList<string> files, JsonObject? state = null,
-        JsonObject? stepError = null)
+        JsonObject? stepError = null, JsonObject? evidence = null)
     {
         if (state is not null)
         {
@@ -879,6 +1076,16 @@ internal sealed class AssemblyCheckpoint
             ["cause"] = cause,
             ["files"] = new JsonArray(files.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
         };
+        // INVARIANT: what the steps answered before the refusal travels with it, so the cause is read from
+        // the answer instead of being guessed from a repeat run.
+        // History: docs/decisions/scenario.md#checkpoint-settle
+        if (evidence is not null)
+        {
+            foreach (var pair in evidence)
+            {
+                details[pair.Key] = pair.Value?.DeepClone();
+            }
+        }
         var error = new JsonObject
         {
             ["code"] = "CHECKPOINT_FAILED",

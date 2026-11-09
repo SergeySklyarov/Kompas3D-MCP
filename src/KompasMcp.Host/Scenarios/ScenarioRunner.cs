@@ -27,6 +27,11 @@ internal sealed class ScenarioRunner
     /// general-purpose scripting host. History: docs/decisions/scenario.md#limits</remarks>
     internal const int MaxSteps = 100;
 
+    /// <summary>The effect a refused checkpoint leaves when the client's document now lives in the copy.</summary>
+    /// <remarks>INVARIANT: it is listed in <c>partial_effects</c> next to the step ids, with a prefix, because
+    /// no step produced it. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    internal const string CheckpointEffect = "checkpoint:document_copy";
+
     /// <summary>Tools a step may not call, by registry name.</summary>
     /// <remarks>INVARIANT: a step may not write files, open or close documents, take or drop the
     /// session, or nest a scenario. File destinations are the client's business and a closed document
@@ -251,6 +256,15 @@ internal sealed class ScenarioRunner
                     ["passed"] = true,
                 });
             }
+        }
+
+        // INVARIANT: a refused checkpoint that left the client's document OPEN FROM THE COPY changed the
+        // client's state as surely as a step did, so the effect is named where the client reads effects —
+        // not only inside `checkpoint`. History: docs/decisions/scenario.md#checkpoint-settle
+        if (JsonScalars.ReadBool(checkpoint[AssemblyCheckpoint.DocumentMoved]) == true
+            && JsonScalars.ReadBool(checkpoint["taken"]) != true)
+        {
+            mutated.Add(CheckpointEffect);
         }
 
         var result = new JsonObject
@@ -683,6 +697,9 @@ internal sealed class ScenarioRunner
         report["taken"] = true;
         report["path"] = path;
         report["document_path"] = path;
+        // A detail's SaveAs moves the live document into the copy exactly as the assembly route does, so the
+        // state key means the same thing here. History: docs/decisions/scenario.md#checkpoint-settle
+        report[AssemblyCheckpoint.DocumentMoved] = true;
         report["revision"] = revision.Value;
         report["application_id"] = await ResolveApplicationIdAsync(documentId, context, cancellationToken)
             .ConfigureAwait(false);

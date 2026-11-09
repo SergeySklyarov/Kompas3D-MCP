@@ -92,9 +92,39 @@ public class AssemblyCheckpointTests : IDisposable
         /// call the client failed on, so a test must be able to refuse it alone.</remarks>
         public bool RefuseSaveWithoutTarget { get; init; }
 
+        /// <summary>What each save does to the file system: <c>true</c> leaves the model in
+        /// <c>&lt;file&gt;.$$$</c> instead of replacing the file (MEASURED КОМПАС behaviour).</summary>
+        public Queue<bool> LeaveTemporary { get; } = new();
+
+        /// <summary>Every save leaves the temporary file: the file is never replaced.</summary>
+        public bool LeaveTemporaryAlways { get; init; }
+
+        /// <summary>The save number (1-based) from which every save leaves the temporary file.</summary>
+        public int LeaveTemporaryFrom { get; init; } = -1;
+
+        /// <summary>Read-only opens: the verification reads the file once per read.</summary>
+        public int VerifyOpens { get; private set; }
+
         private int _graphsAnswered;
 
         private int _rowsAnswered;
+
+        private int _saves;
+
+        private bool LeavesTemporary()
+        {
+            if (LeaveTemporaryAlways)
+            {
+                return true;
+            }
+
+            if (LeaveTemporaryFrom >= 0 && _saves >= LeaveTemporaryFrom)
+            {
+                return true;
+            }
+
+            return LeaveTemporary.Count > 0 && LeaveTemporary.Dequeue();
+        }
 
         public Task<ResultEnvelope<JsonNode?>> Invoke(
             string tool, JsonObject arguments, string? servicePath, CancellationToken cancellationToken)
@@ -153,6 +183,8 @@ public class AssemblyCheckpointTests : IDisposable
                         return Refused(tool, "SAVE_FAILED");
                     }
 
+                    _saves++;
+                    SimulateTemporary(arguments);
                     return new ResultEnvelope<JsonNode?>
                     {
                         Status = OperationStatus.Succeeded,
@@ -162,6 +194,11 @@ public class AssemblyCheckpointTests : IDisposable
                     return new ResultEnvelope<JsonNode?> { Status = OperationStatus.Succeeded };
                 case "kompas_open_document":
                     var readOnly = (arguments["access"]?.GetValue<string>() ?? "edit") == "read_only";
+                    if (readOnly)
+                    {
+                        VerifyOpens++;
+                    }
+
                     return Ok(new JsonObject
                     {
                         ["document_id"] = readOnly ? "verify-1" : ReopenedDocumentId,
@@ -172,6 +209,11 @@ public class AssemblyCheckpointTests : IDisposable
                     {
                         Status = OperationStatus.Succeeded,
                         RevisionAfter = 3,
+                        Result = new JsonObject
+                        {
+                            ["source_path_before"] = SourcePath,
+                            ["source_path_after"] = arguments["source_path"]?.GetValue<string>(),
+                        },
                     };
                 default:
                     return new ResultEnvelope<JsonNode?>
@@ -184,6 +226,32 @@ public class AssemblyCheckpointTests : IDisposable
 
         private static ResultEnvelope<JsonNode?> Ok(JsonNode? result) =>
             new() { Status = OperationStatus.Succeeded, Result = result };
+
+        /// <summary>Do to the files what КОМПАС does: either replace the file, or leave the model beside it.</summary>
+        /// <remarks>MEASURED: a save can answer success and leave the model's content in
+        /// <c>&lt;file&gt;.$$$</c> while the file keeps its previous bytes; the next save then replaces it.
+        /// History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+        private void SimulateTemporary(JsonObject arguments)
+        {
+            var target = arguments["target_path"]?.GetValue<string>() ?? CopyPath;
+            if (string.IsNullOrEmpty(target))
+            {
+                return;
+            }
+
+            var temporary = target + ".$$$";
+            if (LeavesTemporary())
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllText(temporary, "model");
+                return;
+            }
+
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 
     private async Task<AssemblyCheckpointOutcome> TakeAsync(Session session)
@@ -433,5 +501,95 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.Equal(_topCopy, outcome.Report["path"]!.GetValue<string>());
         Assert.Contains("файл клиента не изменён", outcome.Report["notes"]!.GetValue<string>());
         Assert.False(outcome.Report["taken"]!.GetValue<bool>());
+    }
+
+    /// <summary>A resave that leaves the model in <c>&lt;file&gt;.$$$</c> is repeated until the file is
+    /// replaced, so the verdict reads the reassigned file and not the one before the reassignment.</summary>
+    /// <remarks>MEASURED: the save after the reassignment can answer success while the copy file keeps its
+    /// previous bytes and the model's new content stays in the temporary file. INVARIANT: the copy is closed
+    /// right after that save, so accepting the first answer would verify the OLD file and report a copy that
+    /// was never written. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    [Fact]
+    public async Task SaveThatLeavesATemporaryFile_IsRepeatedUntilTheFileIsReplaced()
+    {
+        var part = Part("part.m3d");
+        var session = new Session { CopyPath = _topCopy, SourcePath = _source };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Graphs.Enqueue(new JsonArray(Row(CopyOf(part))));
+        session.LeaveTemporary.Enqueue(false); // the SaveAs: the file is created
+        session.LeaveTemporary.Enqueue(true); // the resave: the model stays beside an untouched file
+
+        var outcome = await TakeAsync(session);
+
+        Assert.True(outcome.Ok);
+        Assert.True(outcome.Report["taken"]!.GetValue<bool>());
+        // SaveAs, the resave, and the repeat of the resave that replaced the file.
+        Assert.Equal(3, session.Tools.Count(tool => tool == "kompas_save_document"));
+        Assert.False(File.Exists(_topCopy + ".$$$"));
+    }
+
+    /// <summary>A copy whose file is never replaced is refused with EVERY attempt's evidence.</summary>
+    /// <remarks>INVARIANT: the refusal says where the model's content stayed, and the copy's folder is not
+    /// deleted under the document that is open from it. History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    [Fact]
+    public async Task SaveThatNeverReplacesItsFile_IsRefusedWithEveryAttempt()
+    {
+        var part = Part("part.m3d");
+        var session = new Session
+        {
+            CopyPath = _topCopy,
+            SourcePath = _source,
+            LeaveTemporaryFrom = 2,
+        };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        var details = outcome.Error!["details"]!.AsObject();
+        Assert.Equal("copy_not_saved", details["cause"]!.GetValue<string>());
+        var attempts = details["save_attempts"]!.AsArray();
+        Assert.Equal(AssemblyCheckpoint.SaveAttempts, attempts.Count);
+        Assert.All(attempts, attempt => Assert.Equal("present",
+            attempt!["temporary"]!["state"]!.GetValue<string>()));
+        Assert.False(outcome.Report["taken"]!.GetValue<bool>());
+        Assert.True(outcome.Report[AssemblyCheckpoint.DocumentMoved]!.GetValue<bool>());
+        // The folder stays: the live document lives in it.
+        Assert.True(File.Exists(_topCopy + ".$$$"));
+    }
+
+    /// <summary>The mismatch names what every replace answered and every reading of the file.</summary>
+    /// <remarks>INVARIANT: the answer separates "the replacement never reached the model" from "it did, and
+    /// the save lost it"; the verdict rests on two readings, not on the first one.
+    /// History: docs/decisions/scenario.md#checkpoint-settle</remarks>
+    [Fact]
+    public async Task VerificationMismatch_NamesTheReplacedRowsAndBothReadings()
+    {
+        var part = Part("part.m3d");
+        var session = new Session { CopyPath = _topCopy, SourcePath = _source };
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        session.Rows.Enqueue(new JsonArray(Row(part)));
+        // The file kept the client's link: the reading disagrees twice, because the copy is closed and
+        // reopened between them.
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+        session.Graphs.Enqueue(new JsonArray(Row(part)));
+
+        var outcome = await TakeAsync(session);
+
+        Assert.False(outcome.Ok);
+        var details = outcome.Error!["details"]!.AsObject();
+        Assert.Equal("copy_not_verified", details["cause"]!.GetValue<string>());
+        var rows = details["reassignments"]!.AsArray();
+        Assert.Single(rows);
+        Assert.Equal(CopyOf(part), rows[0]!["source_after"]!.GetValue<string>());
+        var reads = details["verification_reads"]!.AsArray();
+        Assert.Equal(AssemblyCheckpoint.VerifyReads, reads.Count);
+        Assert.All(reads, count => Assert.True(count!.GetValue<int>() > 0));
+        Assert.Equal(AssemblyCheckpoint.VerifyReads, session.VerifyOpens);
     }
 }

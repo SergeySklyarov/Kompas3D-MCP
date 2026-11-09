@@ -12,6 +12,14 @@ pages (`<iface>_methods.html`, `<iface>_props.html`, `<iface>_propers.html`) rat
 the member page is matched by its `<title>` - never by the first `<h1>`, which on every page of this
 site is the header «Справочная система SDK КОМПАС-3D».
 
+BOTH RENDERINGS OF THE SAME INTERFACE LIST ITS MEMBERS, AND THE LISTS DIFFER. The listing exists as
+`<iface>_<suffix>.html` and as `ksapi_<iface>_<suffix>.html`, and the ksAPI one may name a member the
+Automation one does not. MEASURED: `idismantlestep_methods.html` answers `404` while
+`ksapi_idismantlestep_methods.html` names «Update - Обновить шаг» and links its page, so
+`IDismantleStep.Update` read as undocumented only because one rendering was read. A member missing
+from the first listing is looked up in the second; the second is fetched ONLY then, because reading
+both for every interface would double the requests for a difference few interfaces have.
+
 THE SAME MEMBER MAY BE DOCUMENTED ON AN ANCESTOR. The help prints the inheritance chain in the
 «Иерархия» line of the interface's own page (`ichamfer.html` -> «IDispatch IKompasAPIObject
 IModelObject IChamfer»), and an inherited member is documented THERE (`imodelobject_update.html`),
@@ -439,8 +447,11 @@ def near_miss_token(title, member):
     return None
 
 
-def member_list(interface):
-    """(listing, statuses, group_names) from the interface's OWN member-list pages.
+def member_list(interface, prefix=""):
+    """(listing, statuses, group_names) from ONE rendering of the interface's OWN member-list pages.
+
+    `prefix` selects the rendering: `""` is the Automation help, `"ksapi_"` the ksAPI one. Both are
+    the SAME interface's own listings, so both are evidence; neither is a duplicate of the other.
 
     `listing` maps a member name to the page that documents it. The name comes from the page's slug
     (`kspart_newentity.html` -> `newentity`) AND from the link TEXT, because the help does not always
@@ -448,14 +459,14 @@ def member_list(interface):
     `constraintsstate.html`. The text before the description separator is a comma-separated GROUP
     («jx, jy, jz - ...»), so every name of it is registered; `group_names` records those names.
     """
-    base = interface.lower()
+    base = prefix + interface.lower()
     listing = {}
     statuses = {}
     group_names = set()
     for suffix in ("_methods", "_props", "_propers"):
         url = f"{HELP_ROOT}{base}{suffix}.html"
         status, body = fetch(url)
-        statuses[suffix] = status
+        statuses[prefix + suffix.lstrip("_")] = status
         if status not in (200, "mirror"):
             continue
         for href, text in LINK.findall(body):
@@ -478,32 +489,48 @@ def member_list(interface):
     return listing, statuses, group_names
 
 
+def listing_of(interface, prefix, cache):
+    """`member_list` of one rendering of the interface, fetched once per run."""
+    key = (interface, prefix)
+    if key not in cache:
+        cache[key] = member_list(interface, prefix)
+    return cache[key]
+
+
 def confirm_member_on(interface, member, listing_cache):
     """How `member` is documented ON `interface`, or None.
 
-    Two independent ways: the interface's own listing names the member, or the page's ADDRESS is
-    `<interface>_<member>.html`. A page whose title misspells the member is confirmed with the
-    misspelling NAMED - its address still carries the member.
+    Three independent ways: the interface's own listing names the member, the page's ADDRESS is
+    `<interface>_<member>.html`, or the OTHER rendering of the same interface names it. A page whose
+    title misspells the member is confirmed with the misspelling NAMED - its address still carries the
+    member.
     """
-    if interface not in listing_cache:
-        listing_cache[interface] = member_list(interface)
-    listing, _statuses, group_names = listing_cache[interface]
+    listing, _statuses, group_names = listing_of(interface, "", listing_cache)
     # THE LISTING IS SEARCHED UNDER EVERY SPELLING the interop may use (`get_PartsEx` -> `PartsEx`),
     # not only under the name the route carries: the accessor form is how the interop exposes a
     # property, and the help names the page after the property.
     listed = next((listing[name] for name in candidate_names(member) if name in listing), None)
-    candidates = [(listed, "перечень интерфейса")] if listed else []
+    if listed:
+        candidates = [(listed, "перечень интерфейса", group_names)]
+    else:
+        # The second listing of the SAME interface. Fetched only after the first one missed: reading
+        # both for every interface would pay six requests where three answer, for a difference few
+        # interfaces have (`IDismantleStep.Update` is named on the ksAPI page only).
+        ks_listing, _ks_statuses, ks_groups = listing_of(interface, "ksapi_", listing_cache)
+        ks_listed = next((ks_listing[name] for name in candidate_names(member)
+                          if name in ks_listing), None)
+        candidates = [(ks_listed, "перечень интерфейса", ks_groups)] if ks_listed else []
     address = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
-    if all(page != address for page, _how in candidates):
-        candidates.append((address, "имя файла страницы"))
-    for page, how in candidates:
+    if all(page != address for page, _how, _names in candidates):
+        candidates.append((address, "имя файла страницы", set()))
+    for page, how, groups in candidates:
         status, body = fetch(page)
         if status not in (200, "mirror"):
             continue
         title = page_title(body)
         basis = "wire" if status == 200 else "mirror"
         if names_member(title, member):
-            if how == "перечень интерфейса" and any(name in group_names
+            if how == "перечень интерфейса" and any(name in groups
                                                    for name in candidate_names(member)):
                 how = "групповая страница"
             return {"page": page, "basis": basis, "how": how, "title": title, "doc_typo": None}
@@ -575,8 +602,7 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
                 "ancestors_checked": ancestors, "ancestors_read_from": ancestor_pages,
                 "source": [named["page"]]}
 
-    listing, statuses, _groups = listing_cache.get(interface) or member_list(interface)
-    listing_cache[interface] = (listing, statuses, _groups)
+    listing, statuses, _groups = listing_of(interface, "", listing_cache)
     if not listing and all(status != 200 for status in statuses.values()):
         # Ни одна из страниц перечня интерфейса не открылась: спрашивать его членов нечем, и
         # повторять запрос на каждого члена значило бы умножить один отказ сервера на число членов.
@@ -827,9 +853,22 @@ def self_test():
     short, _basis, _pages = interface_ancestors("IDismantleStep", {})
     check("интерфейс без предка в ОБЕИХ страницах остаётся с короткой цепочкой",
           short == ["IKompasAPIObject"], str(short))
-    check("и его член предка этим НЕ подтверждается",
-          check_route({"route": "IDismantleStep.Update", "declared_on": "IDismantleStep",
-                       "member": "Update"}, {}, {}, {}).get("status") != "Подтверждено")
+    check("члена, которого не называет ни одна страница, цепочка предков не подтверждает",
+          check_route({"route": "IDismantleStep.ZzzAuditAbsent", "declared_on": "IDismantleStep",
+                       "member": "ZzzAuditAbsent"}, {}, {}, {}).get("status") != "Подтверждено")
+
+    # §1.1c: the member LISTING comes from both renderings of the same interface. Both halves in one
+    # setting: `Update` is named on the ksAPI page only (the Automation `_methods` page answers 404),
+    # and a member named on NEITHER page is still unconfirmed.
+    auto_listing, _auto_statuses, _auto_groups = member_list("IDismantleStep")
+    ksapi = confirm_member_on("IDismantleStep", "Update", {})
+    check("член подтверждается перечнем ksAPI-страницы того же интерфейса",
+          bool(ksapi) and ksapi["page"].endswith("ksapi_idismantlestep_update.html")
+          and ksapi["how"] == "перечень интерфейса", str(ksapi and ksapi["page"]))
+    check("перечень Automation этого члена не называет - подтверждение не из него",
+          "update" not in auto_listing, str(sorted(auto_listing)))
+    check("перечень одного интерфейса не подтверждает члена СОСЕДНЕГО интерфейса",
+          confirm_member_on("IDismantleParameters", "Update", {}) is None)
 
     # §1.2: one page documenting a group of members.
     _listing, _statuses, group_names = member_list("ksMassInertiaParam")

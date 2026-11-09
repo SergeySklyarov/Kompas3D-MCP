@@ -247,6 +247,8 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
+        // DOC: ksapi_idismantlestep_update.html — «Update - Обновить шаг», «int32_t Update()»: the step
+        // enters the model only on this call.
         // INVARIANT: the check names the ANSWER of Update(), so a FALSE must not pass it. MEASURED on
         // sections: Update() can answer FALSE while the row is in the model, so a FALSE is named in the
         // unverified aspects instead of refusing the call.

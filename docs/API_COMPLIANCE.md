@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-09T13:43:48+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-09T20:26:52+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 169, маршрутов 782.
-- Измеряемая сборка: `release_build`, коммит `28ffd93`, дерево чистое; `KompasMcp.Host.dll` sha256 `c3e8d35595f420d283e8aee5e21e12b389070b6633d98ce97606a3f6f53a2396`.
+- Измеряемая сборка: `release_build`, коммит `3c76498`, дерево чистое; `KompasMcp.Host.dll` sha256 `55f8018cb09fbf639c4839241bf41c0893af14b19c5200dd47e6ad323d2f8bd0`.
 
 ## 2. Сверка полноты
 
@@ -22,10 +22,10 @@
 | matrix_rows | 226 |
 | catalog_modes_and_variants | 236 |
 | com_routes | 793 |
-| com_routes_confirmed_by_documentation | 781 |
-| com_routes_confirmed_over_wire | 781 |
+| com_routes_confirmed_by_documentation | 782 |
+| com_routes_confirmed_over_wire | 782 |
 | com_routes_confirmed_from_mirror | 0 |
-| com_routes_unconfirmed | 1 |
+| com_routes_unconfirmed | 0 |
 | com_routes_confirmed_by_name | 5 |
 | documentation_column_complete | True |
 | documentation_routes_unmeasured | 0 |
@@ -75,10 +75,10 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 |---|---|---|---|---|---|
 | `SM-02.base_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) + SetSideParam(etBlind=0) | Подтверждено |
 | `SM-02.cut_extrusion.through` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Подтверждено |
-| `SM-09.fillet.constant_radius_body_edges` | SM-09 | mcp_verified | kompas_fillet | API5 o3d_fillet(34) + ksFilletDefinition{radius,tangent,arra | Не подтверждено |
+| `SM-09.fillet.constant_radius_body_edges` | SM-09 | mcp_verified | kompas_fillet | API5 o3d_fillet(34) + ksFilletDefinition{radius,tangent,arra | Подтверждено |
 | `SM-07.native_hole.through_cylindrical` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Подтверждено |
 | `SM-01.primitive_box` | SM-01 | metadata_found | - | API7 IModelContainer.ElementaryBodies (подтвердить типом уст | Не подтверждено |
-| `AUX-SKETCH.plane_and_profile_lifecycle` | AUX-SKETCH | mcp_verified | kompas_create_sketch, kompas_edit_sketch, kompas_finish_sketch, kompas_read_topology, kompas_set_sketch_plane | API5: GetDefaultEntity(1/2/3), NewEntity(o3d_planeOffset=14) | Не подтверждено |
+| `AUX-SKETCH.plane_and_profile_lifecycle` | AUX-SKETCH | mcp_verified | kompas_create_sketch, kompas_edit_sketch, kompas_finish_sketch, kompas_read_topology, kompas_set_sketch_plane | API5: GetDefaultEntity(1/2/3), NewEntity(o3d_planeOffset=14) | Подтверждено |
 | `SM-02.base_extrusion.additional_body` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) вторым независимым контуром; choo | Подтверждено |
 | `SM-02.base_extrusion.direction_negative` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) + directionType=1 (dtReverse) + S | Подтверждено |
 | `SM-02.boss_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_bossExtrusion(25) + chooseType=3 + ChooseBodies().B | Подтверждено |
@@ -86,14 +86,14 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `SM-02.cut_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Подтверждено |
 | `SM-02.cut_extrusion.explicit_target_body` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Подтверждено |
 | `SM-02.cut_extrusion.direction_symmetric` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + directionType=2 (dtBoth) + два S | Подтверждено |
-| `SM-03.base_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
+| `SM-03.base_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Подтверждено |
 | `SM-03.base_rotated.partial_angle` | SM-03 | mcp_verified | kompas_rotated | тот же маршрут, что у полного оборота; угол пишется в Angle[ | Подтверждено |
-| `SM-03.base_rotated.axis_explicit` | SM-03 | mcp_verified | kompas_rotated | ось подаётся ДВУМЯ точками контракта (axis_point1_mm, axis_p | Не подтверждено |
-| `SM-03.boss_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
-| `SM-03.cut_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
+| `SM-03.base_rotated.axis_explicit` | SM-03 | mcp_verified | kompas_rotated | ось подаётся ДВУМЯ точками контракта (axis_point1_mm, axis_p | Подтверждено |
+| `SM-03.boss_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Подтверждено |
+| `SM-03.cut_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Подтверждено |
 | `SM-04.base.mode_orthogonal` | SM-04 | mcp_verified | kompas_sweep | тот же маршрут, что у SM-04.base.single_profile_flat_path; р | Не подтверждено |
 | `SM-04.boss` | SM-04 | metadata_found | - | - | Не подтверждено |
-| `SM-05.base.mode_couplings` | SM-05 | mcp_verified | kompas_loft | тот же маршрут API7; цепочки — ILoft.AddCoupling() → ICoupli | Не подтверждено |
+| `SM-05.base.mode_couplings` | SM-05 | mcp_verified | kompas_loft | тот же маршрут API7; цепочки — ILoft.AddCoupling() → ICoupli | Подтверждено |
 | `SM-07.native_hole.blind_flat_bottom` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Подтверждено |
 | `SM-07.native_hole.blind_sphere` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Подтверждено |
 | `SM-07.native_hole.through_counterbore` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + ksHTCounterbore + DepthType=ksDTReachT | Подтверждено |
@@ -101,23 +101,23 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `SM-07.native_hole.through_conic` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Подтверждено |
 | `SM-07.native_hole.through_counterdrill` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Подтверждено |
 | `SM-07.native_hole.axis_by_face_normal` | SM-07 | mcp_verified | kompas_hole | IHoleDisposal.BaseSurface(перенесённая опорная грань) + IHol | Подтверждено |
-| `SM-07.native_hole.position_off_origin` | SM-07 | mcp_verified | kompas_hole | IHoleDisposal.Point3DParamSurface → IPoint3DParamSurface, Of | Не подтверждено |
+| `SM-07.native_hole.position_off_origin` | SM-07 | mcp_verified | kompas_hole | IHoleDisposal.Point3DParamSurface → IPoint3DParamSurface, Of | Подтверждено |
 | `SM-09.fillet.read_radius_back` | SM-09 | mcp_verified | kompas_get_feature | API7 IFillet.Radius1/Radius2/Tangent/BuildingType/BaseObject | Подтверждено |
-| `SM-09.fillet.change_radius_in_place` | SM-09 | mcp_verified | kompas_update_feature | API7 IFillet.Radius1 на живой модели: признак API5 сопоставл | Не подтверждено |
-| `SM-09.fillet.change_edge_set` | SM-09 | mcp_verified | kompas_update_feature | API7: IModelContainer.Fillets[i] -> IFillet.BaseObjects (чте | Не подтверждено |
+| `SM-09.fillet.change_radius_in_place` | SM-09 | mcp_verified | kompas_update_feature | API7 IFillet.Radius1 на живой модели: признак API5 сопоставл | Подтверждено |
+| `SM-09.fillet.change_edge_set` | SM-09 | mcp_verified | kompas_update_feature | API7: IModelContainer.Fillets[i] -> IFillet.BaseObjects (чте | Подтверждено |
 | `SM-11.chamfer.mode_two_distances` | SM-11 | mcp_verified | kompas_chamfer | API5 NewEntity(o3d_chamfer=33) + ksChamferDefinition.SetCham | Подтверждено |
-| `SM-11.chamfer.mode_distance_angle` | SM-11 | mcp_verified | kompas_chamfer | API7 IModelContainer.Chamfers.Add() + BaseObjects=object[] п | Не подтверждено |
+| `SM-11.chamfer.mode_distance_angle` | SM-11 | mcp_verified | kompas_chamfer | API7 IModelContainer.Chamfers.Add() + BaseObjects=object[] п | Подтверждено |
 | `SM-11.chamfer.mode_direction` | SM-11 | mcp_verified | kompas_chamfer | API5 SetChamferParam(transfer=direction,…) и API7 IChamfer.D | Подтверждено |
-| `SM-13.shell.mode_remove_faces` | SM-13 | mcp_verified | kompas_read_topology, kompas_shell | API5: NewEntity(43 = o3d_shellOperation) → ksShellDefinition | Не подтверждено |
+| `SM-13.shell.mode_remove_faces` | SM-13 | mcp_verified | kompas_read_topology, kompas_shell | API5: NewEntity(43 = o3d_shellOperation) → ksShellDefinition | Подтверждено |
 | `SM-13.shell.mode_direction` | SM-13 | mcp_verified | kompas_shell | тот же маршрут API5; направление стенки — ksShellDefinition. | Подтверждено |
-| `SM-15.subtract` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
-| `SM-15.intersect` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
-| `SM-15.union.mode_save_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
-| `SM-15.union.mode_multi_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
-| `SM-16.split.mode_keep_parts` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Не подтверждено |
-| `SM-16.cut_by_plane.mode_side_removed` | SM-16 | mcp_verified | kompas_cut_by_plane | API7: container.Cuts.Add() → QI(ICut) → BuildingType = ksCut | Не подтверждено |
-| `SM-17.reposition.translate_by_vector` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Не подтверждено |
-| `SM-17.reposition.rotate_about_axis` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Не подтверждено |
+| `SM-15.subtract` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Подтверждено |
+| `SM-15.intersect` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Подтверждено |
+| `SM-15.union.mode_save_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Подтверждено |
+| `SM-15.union.mode_multi_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Подтверждено |
+| `SM-16.split.mode_keep_parts` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Подтверждено |
+| `SM-16.cut_by_plane.mode_side_removed` | SM-16 | mcp_verified | kompas_cut_by_plane | API7: container.Cuts.Add() → QI(ICut) → BuildingType = ksCut | Подтверждено |
+| `SM-17.reposition.translate_by_vector` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Подтверждено |
+| `SM-17.reposition.rotate_about_axis` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Подтверждено |
 | `SM-18.grid.single_row` | SM-18 | mcp_verified | kompas_pattern_grid | API7 IModelContainer.FeaturePatterns.Add(o3d_meshCopy=35) →  | Подтверждено |
 | `SM-18.grid.rectangular_grid` | SM-18 | mcp_verified | kompas_pattern_grid | то же, плюс второе направление: Axis2/Angle2, Count2/Step2.  | Подтверждено |
 | `SM-18.grid.operations` | SM-18 | mcp_verified | kompas_pattern_grid | то же, copy_kind=operations: копии наследуют область примене | Не подтверждено |
@@ -143,21 +143,21 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `dep.api7.in_same_adapter` | dep | None | - | Api7Bridge — единственная точка входа в API7 в src/: Applica | Подтверждено |
 | `dep.foundation` | dep | None | kompas_get_context | - | Подтверждено |
 | `dep.preserve_unknown` | SM-30 | None | - | - | Не подтверждено |
-| `SM-04.base.single_profile_flat_path` | SM-04 | mcp_verified | kompas_sweep | API5: NewEntity(45 = o3d_baseEvolution) → ksBaseEvolutionDef | Не подтверждено |
-| `SM-05.base.parallel_sections_order` | SM-05 | mcp_verified | kompas_loft | API7: IModelContainer.Lofts.Add(o3d_bossLoft = 31) → ILoft.S | Не подтверждено |
+| `SM-04.base.single_profile_flat_path` | SM-04 | mcp_verified | kompas_sweep | API5: NewEntity(45 = o3d_baseEvolution) → ksBaseEvolutionDef | Подтверждено |
+| `SM-05.base.parallel_sections_order` | SM-05 | mcp_verified | kompas_loft | API7: IModelContainer.Lofts.Add(o3d_bossLoft = 31) → ILoft.S | Подтверждено |
 | `SM-13.shell.uniform_thickness` | SM-13 | mcp_verified | kompas_shell | тот же маршрут API5; толщина — ksShellDefinition.thickness,  | Подтверждено |
-| `SM-14.rib.mode_side_positions` | SM-14 | mcp_verified | kompas_rib | API5: ksPart.NewEntity(44 = o3d_ribOperation) -> ksEntity::G | Не подтверждено |
+| `SM-14.rib.mode_side_positions` | SM-14 | mcp_verified | kompas_rib | API5: ksPart.NewEntity(44 = o3d_ribOperation) -> ksEntity::G | Подтверждено |
 | `SM-14.rib.mode_face_draft` | SM-14 | mcp_implemented | kompas_rib | тот же маршрут API5; угол - ksRibDefinition.angle в ГРАДУСАХ | Подтверждено |
 | `SM-14.rib.mode_symmetric_thickness` | SM-14 | mcp_implemented | kompas_rib, kompas_rib.symmetric | тот же маршрут API5; режим - SetThinParam(2, t, t) (dtBoth,  | Подтверждено |
-| `SM-15.union.explicit_target_and_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
-| `SM-16.split.plane_tool` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Не подтверждено |
+| `SM-15.union.explicit_target_and_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Подтверждено |
+| `SM-16.split.plane_tool` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Подтверждено |
 | `SM-23.mirror_array.selected_operations` | SM-23 | mcp_verified | kompas_pattern_mirror | FeaturePatterns.Add(o3d_mirrorOperation=48) → QI(IMirrorPatt | Подтверждено |
 | `AUX-IMAGE.raster_export` | AUX-IMAGE | mcp_verified | kompas_export_image | API5: ksDocument3D.RasterFormatParam() -> ksRasterFormatPara | Подтверждено |
 | `ASM-01.document.create_open` | ASM | mcp_verified | kompas_close_document, kompas_create_document, kompas_get_context, kompas_list_documents, kompas_open_document, kompas_save_document | kompas_create_document(kind=assembly) / kompas_open_document | Подтверждено |
 | `ASM-02.component.insert` | ASM | mcp_verified | kompas_insert_component, kompas_list_components, kompas_measure | kompas_insert_component: API7 IPart7.Parts → IParts7.AddFrom | Подтверждено |
 | `ASM-03.structure.read` | ASM | mcp_verified | kompas_check_component_links, kompas_list_components, kompas_open_document, kompas_save_document | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Подтверждено |
 | `ASM-04.placement.set_read` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_component_placement | kompas_set_component_placement: API5 ksDocument3D.DefaultPla | Подтверждено |
-| `ASM-05.component.replace` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_replace_component, kompas_save_document | kompas_replace_component: ksPart.fileName (kspart_setfilenam | Не подтверждено |
+| `ASM-05.component.replace` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_replace_component, kompas_save_document | kompas_replace_component: ksPart.fileName (kspart_setfilenam | Подтверждено |
 | `ASM-06.links.check` | ASM | mcp_verified | kompas_check_component_links, kompas_open_document, kompas_save_document | kompas_check_component_links: API7 IPart7.FileName + IPart7. | Подтверждено |
 | `ASM-07.save_reopen` | ASM | mcp_verified | kompas_close_document, kompas_get_context, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document | kompas_save_document / kompas_open_document / kompas_close_d | Подтверждено |
 | `dep.assembly.document_lifecycle` | ASM | mcp_verified | kompas_create_document, kompas_get_context, kompas_list_components, kompas_list_documents | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Подтверждено |
@@ -165,13 +165,13 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `dep.assembly.component_address` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Подтверждено |
 | `dep.assembly.revisions` | ASM | mcp_verified | kompas_get_context, kompas_list_components, kompas_list_documents, kompas_open_document, kompas_save_document, kompas_set_component_placement | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Подтверждено |
 | `dep.assembly.idempotency` | ASM | mcp_verified | kompas_insert_component, kompas_list_components, kompas_list_documents | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Подтверждено |
-| `MATE-01.mate.create` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_measure | kompas_create_mate: IPart7.MateConstraints → IMateConstraint | Не подтверждено |
+| `MATE-01.mate.create` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_measure | kompas_create_mate: IPart7.MateConstraints → IMateConstraint | Подтверждено |
 | `MATE-02.mate.read` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates | kompas_list_mates: ksDocument3D.MateConstraintCollection → G | Подтверждено |
-| `MATE-03.mate.param_edit` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_measure, kompas_set_mate_parameter | kompas_set_mate_parameter: IMateConstraint3D.ParamValue = …  | Не подтверждено |
+| `MATE-03.mate.param_edit` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_measure, kompas_set_mate_parameter | kompas_set_mate_parameter: IMateConstraint3D.ParamValue = …  | Подтверждено |
 | `MATE-04.mate.fixed` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_set_mate_fixed | kompas_set_mate_fixed: IMateConstraint3D.Fixed = ksMateFixed | Подтверждено |
 | `MATE-05.mate.delete` | MATE | mcp_verified | kompas_delete_mate, kompas_list_documents, kompas_list_mates | kompas_delete_mate: обычное сопряжение - ksDocument3D.Remove | Подтверждено |
-| `MATE-06.mate.placement_effect` | MATE | mcp_verified | kompas_list_components, kompas_list_documents, kompas_list_mates, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: ksPlacement.GetMatrix3D по компонент | Не подтверждено |
-| `MATE-07.mate.create_transmission` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_open_document, kompas_save_document, kompas_set_mate_parameter | kompas_create_mate, constraint_type=transmission: IPart7.Mat | Не подтверждено |
+| `MATE-06.mate.placement_effect` | MATE | mcp_verified | kompas_list_components, kompas_list_documents, kompas_list_mates, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: ksPlacement.GetMatrix3D по компонент | Подтверждено |
+| `MATE-07.mate.create_transmission` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_open_document, kompas_save_document, kompas_set_mate_parameter | kompas_create_mate, constraint_type=transmission: IPart7.Mat | Подтверждено |
 | `dep.mate.object_address` | dep | mcp_verified | kompas_list_documents, kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.component_insert` | dep | mcp_verified | kompas_insert_component, kompas_list_mates, kompas_measure | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.revisions` | dep | mcp_verified | kompas_list_mates, kompas_set_mate_parameter | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
@@ -179,8 +179,8 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `dep.mate.save_reopen` | dep | mcp_verified | kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `DRW-01.views.create_standard` | DRW | mcp_verified | kompas_create_drawing_views, kompas_edit_view, kompas_list_drawing_views, kompas_rebuild_drawing_views | kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndL | Подтверждено |
 | `DRW-02.views.list` | DRW | mcp_verified | kompas_list_drawing_views | kompas_list_drawing_views: API7 IViews.View / ViewByNumber / | Подтверждено |
-| `DRW-03.dimension.add` | DRW | mcp_verified | kompas_add_dimension, kompas_list_dimensions | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
-| `DRW-04.title_block.set` | DRW | mcp_verified | kompas_get_title_block, kompas_open_document, kompas_save_document, kompas_set_title_block | kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get | Не подтверждено |
+| `DRW-03.dimension.add` | DRW | mcp_verified | kompas_add_dimension, kompas_list_dimensions | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
+| `DRW-04.title_block.set` | DRW | mcp_verified | kompas_get_title_block, kompas_open_document, kompas_save_document, kompas_set_title_block | kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get | Подтверждено |
 | `DRW-05.export` | DRW | mcp_verified | kompas_export_drawing | kompas_export_drawing: API7 IApplication.get_Converter(Type. | Подтверждено |
 | `dep.drawing.document_lifecycle` | DRW | None | - | - | Не подтверждено |
 | `dep.drawing.source_file` | DRW | None | kompas_create_drawing_views, kompas_list_drawing_views | - | Подтверждено |
@@ -188,15 +188,15 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `dep.drawing.revisions` | DRW | None | kompas_get_context | - | Подтверждено |
 | `dep.drawing.idempotency` | DRW | None | kompas_list_drawing_views | - | Подтверждено |
 | `dep.drawing.export_file` | DRW | None | kompas_export_drawing | - | Подтверждено |
-| `DRW-06.technical_demand` | DRW | mcp_verified | kompas_get_technical_demand, kompas_open_document, kompas_save_document, kompas_set_technical_demand | kompas_set_technical_demand: API7 IDrawingDocument.Technical | Не подтверждено |
-| `DRW-03.dimension.add.linear` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
-| `DRW-03.dimension.add.radial` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
-| `DRW-03.dimension.add.diametral` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
+| `DRW-06.technical_demand` | DRW | mcp_verified | kompas_get_technical_demand, kompas_open_document, kompas_save_document, kompas_set_technical_demand | kompas_set_technical_demand: API7 IDrawingDocument.Technical | Подтверждено |
+| `DRW-03.dimension.add.linear` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
+| `DRW-03.dimension.add.radial` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
+| `DRW-03.dimension.add.diametral` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
 | `VM-01.variables.read` | VM | mcp_implemented | kompas_list_variables | kompas_list_variables: ksPart.VariableCollection → ksVariabl | Подтверждено |
 | `VM-02.variable.set_value` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_variable | kompas_set_variable (mode=value): проверка документа, ревизи | Подтверждено |
 | `VM-03.variable.set_expression` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_variable | kompas_set_variable (mode=expression): запись ksVariable.Exp | Подтверждено |
 | `VM-04.material.read` | VM | mcp_verified | kompas_get_material | kompas_get_material: ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТ | Подтверждено |
-| `VM-05.material.write` | VM | mcp_verified | kompas_get_material, kompas_open_document, kompas_save_document, kompas_set_material | kompas_set_material: ksPart.SetMaterial(name, плотность в до | Не подтверждено |
+| `VM-05.material.write` | VM | mcp_verified | kompas_get_material, kompas_open_document, kompas_save_document, kompas_set_material | kompas_set_material: ksPart.SetMaterial(name, плотность в до | Подтверждено |
 | `VM-06.mass.computed_via_measure` | VM | mcp_verified | kompas_get_material, kompas_measure | kompas_measure получает плотность ОТ ВЫЗЫВАЮЩЕГО (параметр d | Не подтверждено |
 | `dep.vm.part_addressing` | dep | None | - | - | Не подтверждено |
 | `dep.vm.revisions` | dep | None | kompas_set_material | - | Подтверждено |
@@ -239,7 +239,7 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `dep.ei.read_only_measure` | G7 | None | kompas_measure | kompas_measure зарегистрирован как ReadOnly (requiresOperati | Не подтверждено |
 | `dep.ei.idempotency` | G5 | None | kompas_export_step, kompas_export_stl | Мутирующий инструмент: журнал и дедупликация — на уровне Hos | Подтверждено |
 | `SKC-01.geometric_types` | G6 | mcp_verified | kompas_create_sketch_constraint | IDrawingObject1.NewConstraint() → задать ConstraintType/Inde | Подтверждено |
-| `SKC-02.dimension_types` | G6 | mcp_verified | kompas_create_sketch_dimension | У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer | Не подтверждено |
+| `SKC-02.dimension_types` | G6 | mcp_verified | kompas_create_sketch_dimension | У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer | Подтверждено |
 | `SKC-03.read` | G6 | mcp_verified | kompas_list_sketch_constraints | ISketch.BeginEditEx(true) → контейнер эскиза → QI(IDrawingOb | Подтверждено |
 | `SKC-04.delete` | G6 | mcp_verified | kompas_delete_sketch_constraint, kompas_list_sketch_constraints, kompas_measure, kompas_open_document, kompas_save_document | Внутри сеанса записи: перечитать список → Delete() по позици | Подтверждено |
 | `SKC-05.state_read` | G6 | mcp_verified | kompas_get_sketch_status, kompas_list_sketch_entities | Агрегатное состояние — ISketch.ConstraintsState; состояние о | Подтверждено |
@@ -265,38 +265,38 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `SM-12.incline.mode_faces_group` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft: API7 IModelContainer.Inclines -> IInclines.Add | Подтверждено |
 | `SM-12.incline.mode_base_face_or_plane` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft: правка основания по ссылке отвергается (draft_ | Подтверждено |
 | `SM-12.incline.mode_direction` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft, direction: outward|inward -> BOOL признака; ст | Подтверждено |
-| `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft_from_edges, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft_from_edges: API7 IModelContainer.DraftsFromEdge | Не подтверждено |
+| `SM-12.draft_from_edges.mode_dir_by_object` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft_from_edges, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft_from_edges: API7 IModelContainer.DraftsFromEdge | Подтверждено |
 | `SM-12.draft_from_edges.mode_side` | SM-12 | mcp_verified | kompas_delete_feature, kompas_draft_from_edges, kompas_get_feature, kompas_list_features, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_draft_from_edges, сторона: SideFace - грань, прилегаю | Подтверждено |
 | `SM-08.thread.mode_outer_by_edge` | SM-08 | mcp_verified | kompas_create_thread, kompas_delete_feature, kompas_get_feature, kompas_list_features, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_create_thread: API7 IModelContainer -> IBody7.Threads | Подтверждено |
 | `SM-08.thread.mode_inner_by_face` | SM-08 | mcp_verified | kompas_create_thread, kompas_delete_feature, kompas_get_feature, kompas_list_features, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_create_thread: API7 IModelContainer -> IBody7.Threads | Подтверждено |
 | `SM-08.thread.mode_auto` | SM-08 | mcp_verified | kompas_create_thread, kompas_delete_feature, kompas_get_feature, kompas_list_features, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_create_thread: API7 IModelContainer -> IBody7.Threads | Подтверждено |
 | `SM-08.thread.mode_hand` | SM-08 | mcp_verified | kompas_create_thread, kompas_delete_feature, kompas_get_feature, kompas_list_features, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_feature_suppressed, kompas_update_feature | kompas_create_thread: API7 IModelContainer -> IBody7.Threads | Подтверждено |
-| `G8.copy_geometry.mode_body_from_file` | G8 | mcp_verified | kompas_copy_geometry, kompas_list_bodies, kompas_list_copies_geometry, kompas_measure, kompas_open_document, kompas_save_document | kompas_copy_geometry: API7 IModelContainer.CopiesGeometry -> | Не подтверждено |
+| `G8.copy_geometry.mode_body_from_file` | G8 | mcp_verified | kompas_copy_geometry, kompas_list_bodies, kompas_list_copies_geometry, kompas_measure, kompas_open_document, kompas_save_document | kompas_copy_geometry: API7 IModelContainer.CopiesGeometry -> | Подтверждено |
 | `G8.copy_geometry.mode_associativity` | G8 | mcp_verified | kompas_copy_geometry, kompas_list_copies_geometry, kompas_measure, kompas_open_document, kompas_save_document, kompas_synchronise_copy | kompas_synchronise_copy: ICopiesGeometry.CopyGeometry[Index] | Подтверждено |
-| `G9.dismantle.mode_steps` | G9 | mcp_verified | kompas_list_dismantle_steps, kompas_open_document, kompas_save_document, kompas_set_dismantle | kompas_set_dismantle: API7 QI(IAssemblyDocument -> IDismantl | Не подтверждено |
+| `G9.dismantle.mode_steps` | G9 | mcp_verified | kompas_list_dismantle_steps, kompas_open_document, kompas_save_document, kompas_set_dismantle | kompas_set_dismantle: API7 QI(IAssemblyDocument -> IDismantl | Подтверждено |
 | `G9.dismantle.mode_exploded` | G9 | mcp_verified | kompas_list_components, kompas_list_dismantle_steps, kompas_set_dismantle | компонент шага читается по IPart7.GetSummMatrix (тот же марш | Подтверждено |
-| `G11.sections.create_read` | G11 | mcp_verified | kompas_create_section, kompas_list_sections, kompas_open_document, kompas_save_document | kompas_create_section: API7 QI(IKompasDocument3D -> IDynamic | Не подтверждено |
+| `G11.sections.create_read` | G11 | mcp_verified | kompas_create_section, kompas_list_sections, kompas_open_document, kompas_save_document | kompas_create_section: API7 QI(IKompasDocument3D -> IDynamic | Подтверждено |
 | `G11.sections.mode_snapshot` | G11 | mcp_verified | kompas_export_image, kompas_list_sections, kompas_set_section_mode | kompas_set_section_mode: IDynamicCrossSectionsManager.Dynami | Подтверждено |
 | `dep.api7.sections_interface` | G11 | None | - | IDynamicCrossSectionsManager получается ТОЛЬКО документирова | Не подтверждено |
 | `dep.api7.dismantle_interface` | G9 | None | - | IDismantleParameters получается ТОЛЬКО документированным Que | Не подтверждено |
-| `SMB-01.body.create` | SMB | mcp_verified | kompas_create_sheet_metal_body | kompas_create_sheet_metal_body: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
+| `SMB-01.body.create` | SMB | mcp_verified | kompas_create_sheet_metal_body | kompas_create_sheet_metal_body: QI(IPart7 -> ISheetMetalCont | Подтверждено |
 | `SMB-02.body.read` | SMB | mcp_verified | kompas_get_sheet_metal | kompas_get_sheet_metal: Count коллекций ISheetMetalContainer | Подтверждено |
-| `SMB-03.body.edit` | SMB | mcp_verified | kompas_edit_sheet_metal_body | kompas_edit_sheet_metal_body: запись свойств существующего I | Не подтверждено |
-| `SMB-04.bend.create` | SMB | mcp_verified | kompas_create_sheet_metal_bend | kompas_create_sheet_metal_bend: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
-| `SMB-05.hole.create` | SMB | mcp_verified | kompas_create_sheet_metal_hole | kompas_create_sheet_metal_hole: QI(IPart7 -> ISheetMetalCont | Не подтверждено |
-| `SMB-06.cut.create` | SMB | mcp_verified | kompas_create_sheet_metal_cut | kompas_create_sheet_metal_cut: QI(IPart7 -> ISheetMetalConta | Не подтверждено |
+| `SMB-03.body.edit` | SMB | mcp_verified | kompas_edit_sheet_metal_body | kompas_edit_sheet_metal_body: запись свойств существующего I | Подтверждено |
+| `SMB-04.bend.create` | SMB | mcp_verified | kompas_create_sheet_metal_bend | kompas_create_sheet_metal_bend: QI(IPart7 -> ISheetMetalCont | Подтверждено |
+| `SMB-05.hole.create` | SMB | mcp_verified | kompas_create_sheet_metal_hole | kompas_create_sheet_metal_hole: QI(IPart7 -> ISheetMetalCont | Подтверждено |
+| `SMB-06.cut.create` | SMB | mcp_verified | kompas_create_sheet_metal_cut | kompas_create_sheet_metal_cut: QI(IPart7 -> ISheetMetalConta | Подтверждено |
 | `SMB-07.unfold.set` | SMB | mcp_verified | kompas_set_sheet_metal_unfold | kompas_set_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
 | `SMB-08.unfold.read` | SMB | mcp_verified | kompas_get_sheet_metal_unfold | kompas_get_sheet_metal_unfold: QI(IPart7 -> ISheetMetalConta | Подтверждено |
-| `SMB-09.flat_dxf.export` | SMB | mcp_verified | kompas_export_sheet_metal_flat_dxf | kompas_export_sheet_metal_flat_dxf: временный чертёж -> IVie | Не подтверждено |
+| `SMB-09.flat_dxf.export` | SMB | mcp_verified | kompas_export_sheet_metal_flat_dxf | kompas_export_sheet_metal_flat_dxf: временный чертёж -> IVie | Подтверждено |
 | `BOM-01.bom.summary` | BOM | mcp_verified | kompas_get_bom | kompas_get_bom: ksDocument3D.PartCollection(true) -> ksPartC | Подтверждено |
 | `BOM-02.bom.export` | BOM | mcp_verified | kompas_export_bom, kompas_get_bom | kompas_export_bom: те же строки, что kompas_get_bom (один по | Не подтверждено |
 | `BOM-03.component.properties` | BOM | mcp_verified | kompas_delete_component, kompas_get_component_properties, kompas_list_components | kompas_get_component_properties: component_ref из kompas_lis | Подтверждено |
 | `BOM-04.specification.read` | BOM | mcp_verified | kompas_get_specification | kompas_get_specification: IKompasDocument.SpecificationDescr | Подтверждено |
-| `SM-24.move_faces` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Не подтверждено |
-| `SM-24.move_faces.tangent_group` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Не подтверждено |
-| `SM-24.delete_faces.open_shell` | SM-24 | metadata_found | kompas_delete_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceRemove | Не подтверждено |
-| `SM-24.delete_faces.keep_body` | SM-24 | metadata_found | kompas_delete_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceRemove | Не подтверждено |
-| `SM-24.restore_faces.by_face` | SM-24 | metadata_found | kompas_restore_faces | API7: ISurfaceContainer (приведением от IPart7) → RestoredSu | Не подтверждено |
+| `SM-24.move_faces` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Подтверждено |
+| `SM-24.move_faces.tangent_group` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Подтверждено |
+| `SM-24.delete_faces.open_shell` | SM-24 | metadata_found | kompas_delete_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceRemove | Подтверждено |
+| `SM-24.delete_faces.keep_body` | SM-24 | metadata_found | kompas_delete_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceRemove | Подтверждено |
+| `SM-24.restore_faces.by_face` | SM-24 | metadata_found | kompas_restore_faces | API7: ISurfaceContainer (приведением от IPart7) → RestoredSu | Подтверждено |
 | `dep.api7.surface_container` | SM-24 | metadata_found | - | ISurfaceContainer получается приведением (ISurfaceContainer) | Не подтверждено |
 | `dep.refs.faces_body` | SM-24 | metadata_found | kompas_read_topology | Новых читателей не заводится: грани адресуются ссылками komp | Подтверждено |
 
@@ -1299,7 +1299,7 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 | `IDismantleStep.Parts` | api7 | property | `prop Object Parts` | 2 | Подтверждено | перечень интерфейса |
 | `IDismantleStep.Distance` | api7 | property | `prop Double Distance` | 1 | Подтверждено | перечень интерфейса |
 | `IDismantleStep.DirectionObject` | api7 | property | `prop IModelObject DirectionObject` | 1 | Подтверждено | перечень интерфейса |
-| `IDismantleStep.Update` | api7 | method | `Int32 Update()` | 1 | не подтверждено | - |
+| `IDismantleStep.Update` | api7 | method | `Int32 Update()` | 1 | Подтверждено | перечень интерфейса |
 | `IDismantleParameters.DismantleStep` | api7 | property | `prop DismantleStep DismantleStep` | 1 | Подтверждено | перечень интерфейса |
 | `IModelContainer.Inclines` | api7 | property | `prop Inclines Inclines` | 2 | Подтверждено | перечень интерфейса |
 | `IIncline.Faces` | api7 | property | `prop Object Faces` | 3 | Подтверждено | перечень интерфейса |
@@ -2019,23 +2019,7 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 
 ## 7. Находки
 
-### F-01 - несоответствие документации (член вызывается, страницы нет)
-
-Серьёзность: высокая.
-
-1 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: IDismantleStep.Update (HTTP 404)
-
-Исправление: перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение
-
-### F-02 - подкласс F-01: страницы нет по ожидаемому адресу (HTTP 404)
-
-Серьёзность: высокая.
-
-1 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: IDismantleStep.Update
-
-Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
-
-### F-06 - заявка не подтверждена вызовами (отказ сторожа)
+### F-04 - заявка не подтверждена вызовами (отказ сторожа)
 
 Серьёзность: средняя.
 
@@ -2043,7 +2027,7 @@ COM-маршрутов по сборкам: {'api7': 500, 'api5': 282, 'adapter-
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
-### F-07 - пробел трассируемости (действие не названо строкой)
+### F-05 - пробел трассируемости (действие не названо строкой)
 
 Серьёзность: низкая.
 

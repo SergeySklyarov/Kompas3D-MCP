@@ -1171,6 +1171,11 @@ public partial class Api5Session
             new("feature_identity_preserved",
                 string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal),
                 Observed: stateAfter.Name, Expected: stateBefore.Name),
+            // INVARIANT: an EDIT rewrites the addressed feature's own parameters and adds nothing to the tree.
+            // A raised count means the write created a feature instead of changing one, which a client reading
+            // only the edited parameters would not notice.
+            new("feature_count_unchanged", featuresAfter == featuresBefore,
+                Observed: Fmt(featuresAfter), Expected: Fmt(featuresBefore)),
             new("hole_mode_preserved",
                 string.Equals(readBefore?.HoleType, readBack?.HoleType, StringComparison.Ordinal),
                 Observed: readBack?.HoleType ?? "не читается",

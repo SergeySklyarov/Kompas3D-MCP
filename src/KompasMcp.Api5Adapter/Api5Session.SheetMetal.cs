@@ -338,11 +338,11 @@ public partial class Api5Session
 
         var before = ReadBody(document, body, ordinal: null);
         var refusal = SheetMetalBodyPolicy.CheckEdit(
-            before?.UnfoldType, command.ThicknessMm, command.BendRadiusMm, command.UnfoldType,
+            before.UnfoldType, command.ThicknessMm, command.BendRadiusMm, command.UnfoldType,
             command.BendCoefficient, command.BendValue, command.BendReduction);
         if (refusal != SheetMetalBodyPolicy.Refusal.None)
         {
-            throw SheetMetalRefusal(refusal, command.UnfoldType ?? before?.UnfoldType);
+            throw SheetMetalRefusal(refusal, command.UnfoldType ?? before.UnfoldType);
         }
 
         var (container, sheet) = RequireSheetMetal(document, "Правка невозможна");
@@ -367,7 +367,7 @@ public partial class Api5Session
                 body.UnfoldType = (ksUnfoldTypeEnum)SheetMetalBodyPolicy.UnfoldTypeValue(unfoldType)!.Value;
             }
 
-            WriteUnfoldValue(body, command.UnfoldType ?? before?.UnfoldType,
+            WriteUnfoldValue(body, command.UnfoldType ?? before.UnfoldType,
                 command.BendCoefficient, command.BendValue, command.BendReduction);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
@@ -1428,11 +1428,13 @@ public partial class Api5Session
         + $"direction={command.Direction} unfold={command.UnfoldType} "
         + $"value={Num(SheetMetalBodyPolicy.SelectedField(command.UnfoldType, command.BendCoefficient, command.BendValue, command.BendReduction))}";
 
-    private static string DescribeEdit(EditSheetMetalBodyCommand command, SheetMetalBodyDto? before) =>
-        $"thickness={Num(command.ThicknessMm ?? before?.ThicknessMm)} "
-        + $"radius={Num(command.BendRadiusMm ?? before?.BendRadiusMm)} "
-        + $"unfold={command.UnfoldType ?? before?.UnfoldType ?? "не прочитано"} "
-        + $"value={Num(SheetMetalBodyPolicy.SelectedField(command.UnfoldType ?? before?.UnfoldType, command.BendCoefficient, command.BendValue, command.BendReduction) ?? before?.UnfoldValue)}";
+    // INVARIANT: the reading before the edit is never null - ReadBody answers with a record whose unread
+    // fields are null, so "not read" is said by the field, not by the presence of the reading.
+    private static string DescribeEdit(EditSheetMetalBodyCommand command, SheetMetalBodyDto before) =>
+        $"thickness={Num(command.ThicknessMm ?? before.ThicknessMm)} "
+        + $"radius={Num(command.BendRadiusMm ?? before.BendRadiusMm)} "
+        + $"unfold={command.UnfoldType ?? before.UnfoldType ?? "не прочитано"} "
+        + $"value={Num(SheetMetalBodyPolicy.SelectedField(command.UnfoldType ?? before.UnfoldType, command.BendCoefficient, command.BendValue, command.BendReduction) ?? before.UnfoldValue)}";
 
     /// <summary>Whether two readings of the same body hold the same numbers — the fact a repeat must show
     /// and an edit must contradict.</summary>

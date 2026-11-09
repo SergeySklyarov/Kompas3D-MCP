@@ -2101,7 +2101,7 @@ public sealed partial class Api5Session : IDisposable
         document.SaveState = DocumentSaveTracking.AfterConfirmedSave();
         document.SavedFileSha256 = after!.Sha256;
         document.SavedFileByteLength = after.ByteLength;
-        document.SavedAtUtc = after.WrittenUtcUtc;
+        document.SavedAtUtc = after.WrittenUtc;
 
         return new SaveDocumentResult(
             path,

@@ -41,7 +41,6 @@ public partial class Api5Session
         var bridge = BridgeFor(document);
         var container = RequirePatternContainer(bridge, document);
 
-        var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
         var holesBefore = ReadHoleAxes(part, command.ExpectedHoleRadiusMm, command.ExpectedHoleHeightMm);
 
@@ -106,7 +105,6 @@ public partial class Api5Session
             pattern,
             failure,
             "linear",
-            volumeBefore,
             bodiesBefore,
             holesBefore,
             command.ExpectedVolumeMm3,
@@ -128,7 +126,6 @@ public partial class Api5Session
         var bridge = BridgeFor(document);
         var container = RequirePatternContainer(bridge, document);
 
-        var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
         var holesBefore = ReadHoleAxes(part, command.ExpectedHoleRadiusMm, command.ExpectedHoleHeightMm);
 
@@ -170,7 +167,6 @@ public partial class Api5Session
             pattern,
             failure,
             "circular",
-            volumeBefore,
             bodiesBefore,
             holesBefore,
             command.ExpectedVolumeMm3,
@@ -194,7 +190,6 @@ public partial class Api5Session
         var bridge = BridgeFor(document);
         var container = RequirePatternContainer(bridge, document);
 
-        var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
         var bodiesBeforeSnapshot = ReadBodySnapshots(part);
         var holesBefore = ReadHoleAxes(part, command.ExpectedHoleRadiusMm, command.ExpectedHoleHeightMm);
@@ -239,7 +234,6 @@ public partial class Api5Session
             pattern,
             failure,
             "mirror",
-            volumeBefore,
             bodiesBefore,
             holesBefore,
             command.ExpectedVolumeMm3,
@@ -351,7 +345,6 @@ public partial class Api5Session
         IFeaturePattern? pattern,
         string? failure,
         string family,
-        double? volumeBefore,
         int bodiesBefore,
         IReadOnlyList<HoleAxis> holesBefore,
         double? expectedVolume,

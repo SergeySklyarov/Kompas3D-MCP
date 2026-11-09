@@ -1060,10 +1060,12 @@ public partial class Api5Session
         var ambiguous = removal.Ambiguous;
         var addressedOccurrences = addressedKey is null ? 0 : before.Count(e => e.Key == addressedKey);
 
-        // SURVIVORS' PLACEMENTS: with NO dependent mates a moved survivor is a hard failure (nothing in the
-        // model justified it). With dependent mates the kernel removes the mate too, and a mate solve can
-        // legitimately move a component — that is NAMED, not refused.
-        var survivorsPreserved = countFell && removedIsAddressed;
+        // SURVIVORS' PLACEMENTS: the entries still listed after the deletion must be the earlier ones
+        // unchanged, so no entry at a NEW placement may appear. INVARIANT: identity carries the placement, so
+        // the addressed claim already rests on this fact; stated on its own it says what its name says
+        // instead of repeating the conjunction of the two checks beside it.
+        var survivorsMoved = removal.Appeared.Count > 0;
+        var survivorsPreserved = countFell && !survivorsMoved;
 
         var sourceStillThere = sourcePath is { Length: > 0 } && SafeFileExists(sourcePath);
 
@@ -1081,7 +1083,8 @@ public partial class Api5Session
                 Observed: $"ушло [{string.Join("; ", left)}]",
                 Expected: "ровно адресованный (файл + размещение)"),
             new("survivors_placements_preserved", survivorsPreserved,
-                Observed: string.Join("; ", after.Select(e => e.Summary()))),
+                Observed: string.Join("; ", after.Select(e => e.Summary())),
+                Expected: "уцелевшие — те же записи (файл + размещение), что были до удаления"),
             new("dependent_mates_removed_with_component", mateFateMatches,
                 Observed: $"сопряжений {mateCountBefore} → {mateCountAfter}",
                 Expected: $"{expectedMatesAfter}"),
@@ -1116,12 +1119,19 @@ public partial class Api5Session
                 + ": ожидалось " + expectedMatesAfter + ". Судьба зависимых сопряжений не подтверждена.");
         }
 
-        if (!survivorsPreserved && dependents.Count > 0)
+        if (survivorsMoved && dependents.Count > 0)
         {
             unverified.Add("survivor_placement_changed_with_mates — размещение уцелевшего компонента "
                 + "изменилось, а в сборке были зависимые сопряжения: ядро сняло сопряжение вместе с "
                 + "компонентом, и пересчёт мог двинуть остальные. Это НАЗВАНО, а не выдано за "
                 + "«размещения не изменились»");
+        }
+        else if (survivorsMoved)
+        {
+            unverified.Add("survivor_placement_changed — после удаления в перечне появились записи "
+                + "(файл + размещение), которых до него не было: уцелевшие компоненты остались не на "
+                + "своих местах, хотя зависимых сопряжений в сборке не было. Это НАЗВАНО, а не выдано "
+                + "за «размещения не изменились»");
         }
 
         // A FAILED MANDATORY CHECK IS NOT SUCCESS: the revision is already bumped, so a client reading only

@@ -7,6 +7,7 @@ namespace KompasMcp.Unit;
 /// <remarks>TEST: exactly the pure function is checked. INVARIANT: the removed entry is the MULTISET
 /// difference before minus after, so a change of an ordinal cannot be mistaken for a change of a component;
 /// the addressed identity occurring twice is NAMED as ambiguous rather than silently resolved.
+/// INVARIANT: the difference the other way round is what tells a moved survivor from the deleted one.
 /// History: docs/decisions/assembly.md#delete-component</remarks>
 public class ComponentRemovalTests
 {
@@ -71,6 +72,28 @@ public class ComponentRemovalTests
 
         Assert.True(verdict.CountFell);
         Assert.False(verdict.AddressedRemoved);
+    }
+
+    [Fact]
+    public void SurvivorMoved_IsNamedInAppeared()
+    {
+        // THE CASE THE PLACEMENT CHECK EXISTS FOR: the addressed component left and a SURVIVOR moved. "Before
+        // minus after" cannot say which is which, because the moved entry leaves its old key behind; the
+        // difference the other way round names the new placement. That ALSO breaks "the addressed one left":
+        // the identity key carries the placement, so the two claims are one and the same fact.
+        var verdict = ComponentRemoval.Decide([A0, A1, B2], [A0, "b.m3d|x=500"], A1);
+
+        Assert.True(verdict.CountFell);
+        Assert.False(verdict.AddressedRemoved);
+        Assert.Equal(["b.m3d|x=500"], verdict.Appeared);
+    }
+
+    [Fact]
+    public void PlainDeletion_AppearsNothing()
+    {
+        var verdict = ComponentRemoval.Decide([A0, A1, B2], [A0, B2], A1);
+
+        Assert.Empty(verdict.Appeared);
     }
 
     [Fact]

@@ -6,11 +6,14 @@ namespace KompasMcp.Domain.References;
 /// <param name="Ambiguous">The addressed identity occurred more than once before the deletion, so "the
 /// addressed one left" cannot be told apart from "its twin left".</param>
 /// <param name="Left">The entries that were present before and are gone after, in enumeration order.</param>
+/// <param name="Appeared">The entries that are present after and were not there before, in enumeration order:
+/// a survivor whose placement changed produces one, because the placement is part of its key.</param>
 public sealed record ComponentRemovalVerdict(
     bool CountFell,
     bool AddressedRemoved,
     bool Ambiguous,
-    IReadOnlyList<string> Left);
+    IReadOnlyList<string> Left,
+    IReadOnlyList<string> Appeared);
 
 /// <summary>The component-deletion identity rule — a PURE function over opaque keys, no KOMPAS.</summary>
 /// <remarks>INVARIANT: the component that left is decided by IDENTITY (source file and placement), NOT by the
@@ -38,10 +41,18 @@ public static class ComponentRemoval
             left.Remove(key);
         }
 
+        // INVARIANT: "the remaining components kept their placements" is answered by the multiset difference
+        // the other way round - a survivor that moved leaves a key that was not in the earlier enumeration.
+        var appeared = new List<string>(after);
+        foreach (var key in before)
+        {
+            appeared.Remove(key);
+        }
+
         var addressedOccurrences = addressedKey is null ? 0 : before.Count(key => key == addressedKey);
         var countFell = after.Count == before.Count - 1;
         var addressedRemoved = left.Count == 1 && addressedKey is not null && left[0] == addressedKey;
 
-        return new ComponentRemovalVerdict(countFell, addressedRemoved, addressedOccurrences > 1, left);
+        return new ComponentRemovalVerdict(countFell, addressedRemoved, addressedOccurrences > 1, left, appeared);
     }
 }

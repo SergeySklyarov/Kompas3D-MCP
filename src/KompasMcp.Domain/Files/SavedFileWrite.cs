@@ -4,7 +4,7 @@ namespace KompasMcp.Domain.Files;
 /// <remarks>INVARIANT: a stamp is taken BEFORE and AFTER a save, never only after it — "the file exists and
 /// is not empty" is true of the PREVIOUS content as well, so it proves nothing about this call.
 /// History: docs/decisions/files.md#save-file-write</remarks>
-public sealed record SavedFileStamp(bool Exists, long ByteLength, string? Sha256, DateTime WrittenUtcUtc)
+public sealed record SavedFileStamp(bool Exists, long ByteLength, string? Sha256, DateTime WrittenUtc)
 {
     /// <summary>The file is not there. A separate value from "unreadable": one is a fact, the other is not.</summary>
     public static readonly SavedFileStamp Absent = new(false, 0, null, default);
@@ -98,7 +98,7 @@ public static class SavedFileWrite
             return ContentLeftInTemporary;
         }
 
-        return after.WrittenUtcUtc > before.WrittenUtcUtc ? null : "target_unchanged";
+        return after.WrittenUtc > before.WrittenUtc ? null : "target_unchanged";
     }
 
     /// <summary>Whether one repeat of the SAME documented call is allowed for this refusal. Only the case
@@ -127,7 +127,7 @@ public static class SavedFileWrite
         }
 
         return before.ByteLength != after.ByteLength
-            || before.WrittenUtcUtc != after.WrittenUtcUtc
+            || before.WrittenUtc != after.WrittenUtc
             || !string.Equals(before.Sha256, after.Sha256, StringComparison.Ordinal);
     }
 
@@ -147,7 +147,7 @@ public static class SavedFileWrite
             ["bytes"] = stamp.Exists ? stamp.ByteLength : null,
             ["sha256"] = stamp.Exists ? stamp.Sha256 : null,
             ["written_utc"] = stamp.Exists
-                ? stamp.WrittenUtcUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture)
+                ? stamp.WrittenUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture)
                 : null,
         };
 }

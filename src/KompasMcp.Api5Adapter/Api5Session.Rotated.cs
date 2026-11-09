@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -658,6 +658,11 @@ public partial class Api5Session
             new("feature_identity_preserved",
                 string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal),
                 Observed: stateAfter.Name, Expected: stateBefore.Name),
+            // INVARIANT: an EDIT rewrites the addressed feature's own parameters and adds nothing to the tree.
+            // A raised count means the write created a feature instead of changing one, which a client reading
+            // only the rotation angle would not notice.
+            new("feature_count_unchanged", featuresAfter == featuresBefore,
+                Observed: Num(featuresAfter), Expected: Num(featuresBefore)),
         };
 
         if (command.RotationAngleDeg is double wanted)

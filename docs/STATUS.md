@@ -605,11 +605,16 @@ UNKNOWN 3 / FAIL 0.
 - **Проверки.** `build` / `test -c Release` - 0 предупреждений / 0 ошибок, **1880/1880**; `--self-test`
   - **109 проверок, 0 FAIL**; `--hole-only` на Release-хосте - **97 PASS / 0 FAIL**; `--mania-only` -
   **50 PASS / 0 FAIL** (`MANIA.06.create` PASS, все четыре кода пусты); стражи
-  `lint-dashes.py` / `check-evidence-links.py` / `long-comment-blocks.py` - 0/0/0. Зачётный `--all` -
-  запись после прогона.
+  `lint-dashes.py` / `check-evidence-links.py` / `long-comment-blocks.py` - 0/0/0.
+- **Зачётный `--all`.** `41d75bc`, дерево чистое (`source_tree_dirty: false`), Release того же коммита:
+  **2171 PASS / 10 NAMED / 3 UNKNOWN / 1 FAIL** - `ASC.09.same_name` (группа `asm_checkpoint`), ВНЕ
+  области наряда. Класс отказа оставлен решению техлида: на том же коммите группа прогнана ещё трижды
+  (отказ переехал на `ASC.08`, затем дважды 39/39), снимок и обе стороны - отчёт §9. Область наряда
+  зелёная.
 - **Долг.** Строка 90 **ЗАКРЫТА**, новых строк нет: открыто **1** (строка 38), бюджет 0.14 (не больше
   11) держится с запасом 10. Отчёт - `HOLE_SETTLE_0_14_REPORT_20261109.md`, решение -
-  `docs/decisions/adapter-features.md#hole-settle`.
+  `docs/decisions/adapter-features.md#hole-settle`. Кандидат на строку, если отказ `ASC` не признан
+  классом, назван в отчёте §9.4 - не заведён, чтобы не менять бюджет 0.14 в обход решения.
 - **Очередь:** `SONAR_ANALYZER_TRIAL` -> новые возможности.
 
 ## Архив журнала

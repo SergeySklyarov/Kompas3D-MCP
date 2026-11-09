@@ -19,6 +19,15 @@ not on the interface's own page. The chain is read from that line and NEVER gues
 without the line is judged by its own pages alone. `documented_on` names the interface whose page
 carries the confirmation.
 
+THE SAME INTERFACE HAS TWO PAGES, AND THE ksAPI ONE MAY NAME MORE ANCESTORS. The help describes an
+interface twice - the Automation page `<interface>.html` and the ksAPI page `ksapi_<interface>.html`
+- and both print an «Иерархия» line. MEASURED: `imateconstraint3d.html` prints «IDispatch
+IKompasAPIObject IMateConstraint3D» while `ksapi_imateconstraint3d.html` prints «IAPIObject
+IKompasAPIObject IModelObject IMateConstraint3D», and `imateconstraints3d.html` prints an EMPTY line
+while `ksapi_imateconstraints3d.html` names `IKompasCollection` and `IModelObjects`. The chain is the
+UNION of the two lines of the SAME help, read from both pages; `ancestors_read_from` names the pages
+it came from. `IAPIObject` is dropped with `IDispatch` - ksAPI plumbing with no page of its own.
+
 ONE PAGE MAY DOCUMENT A GROUP OF MEMBERS. The help groups related members and names them together in
 the listing (`ksmassinertiaparam_props.html`: «jx, jy, jz - Осевые моменты инерции»); every name of
 such a group is documented by that one page.
@@ -35,10 +44,11 @@ no page".
 
 A FEW MEMBERS THE HELP SPELLS DIFFERENTLY ARE CONFIRMED BY NAME, ONE BY ONE. Where the help
 describes the SAME member under another spelling (`ksBody.CalcMassInertiaProperties` on a page
-titled `MassInertiaParam`; `ksPart.density` on `kspart_getdensity.html`, which prints `GetDensity`),
-no rule can tell "another spelling of one member" from "a different member" - and a rule that tried
-would confirm routes nobody checked. These are listed in `NAMED_NAME_MISMATCH`, each with its page
-and a verbatim quote proving the member is the same; the way is named `named_name_mismatch`.
+titled `MassInertiaParam`; `ksPart.density` on `kspart_getdensity.html`, which prints `GetDensity`;
+`ksPlacement.GetMatrix3D` on `ksplacement_getmatrix.html`, which prints `GetMatrix`), no rule can
+tell "another spelling of one member" from "a different member" - and a rule that tried would
+confirm routes nobody checked. These are listed in `NAMED_NAME_MISMATCH`, each with its page and a
+verbatim quote proving the member is the same; the way is named `named_name_mismatch`.
 
 Three outcomes, never two: `confirmed` (200, same interface, same member), `broken` (404 - an
 instrument defect if it is cited as evidence), `not_checked` (network failure - NOT counted as good).
@@ -92,14 +102,25 @@ EXCEPTIONS = {
                    "раздел о маршрутах); основание - измерение, а не страница справки",
 }
 
-# A CLOSED, BY-NAME LIST, NOT A RULE. Six routes call a member the help documents under another
+# A CLOSED, BY-NAME LIST, NOT A RULE. Seven routes call a member the help documents under another
 # spelling or on an ancestor's page that the interface's own «Иерархия» line does not name. A general
 # rule ("another spelling", "Get<Member>", "the name from Синтаксис") would also confirm members
-# nobody checked, so the six are listed by hand - `(interface, member) -> page, quote`. Each quote is
+# nobody checked, so the seven are listed by hand - `(interface, member) -> page, quote`. Each quote is
 # verbatim from the page and is what makes the member the SAME one; the page is fetched and the
 # documented name must be found in it, so the table alone never confirms a route.
 # INVARIANT: an entry confirms exactly its own route; any other route is left to the rules above.
 NAMED_NAME_MISMATCH = {
+    ("ksplacement", "getmatrix3d"): {
+        "page": "ksplacement_getmatrix.html",
+        "documented_on": "ksPlacement",
+        "doc_name": "GetMatrix",
+        "kind": "справка называет аксессор `GetMatrix`, интероп - `GetMatrix3D`; соседний член той же "
+                "страницы носит суффикс в обоих (`InitByMatrix3D`)",
+        "quote": "«Automation : VARIANT GetMatrix();» и «Синтаксис COM : HRESULT GetMatrix( VARIANT * "
+                 "Result );», «Возвращаемое значение : - массив SafeAttray типа (VT_ARRAY | VT_R8)»: "
+                 "«1. Элементы матрицы возвращаются в виде одномерного массива из 16 элементов. "
+                 "2. Матрица имеет размер 4х4» - та же матрица размещения, которую читает адаптер",
+    },
     ("ksbaseloftdefinition", "sketchs"): {
         "page": "ksbaseloftdefinition_sketches.html",
         "documented_on": "ksBaseLoftDefinition",
@@ -313,26 +334,44 @@ def hierarchy_entries(body):
     return match.group(1).split() if match else []
 
 
+def interface_pages(interface):
+    """The two pages the help gives the SAME interface: the Automation one, then the ksAPI one."""
+    base = interface.lower()
+    return [f"{HELP_ROOT}{base}.html", f"{HELP_ROOT}ksapi_{base}.html"]
+
+
 def interface_ancestors(interface, cache):
-    """(ancestors, basis, url) from the «Иерархия» line of the interface's OWN page.
+    """(ancestors, basis, urls) from the «Иерархия» lines of BOTH pages of the interface.
 
     Ancestors are the names listed BEFORE the interface itself; the names AFTER it belong to other
     interfaces that share the topic page (`iapplication.html` names `IApplication` and then
-    `IAttrTypeMng`, `IPropertyMng`). `IDispatch` is dropped - COM plumbing with no page of its own.
-    When the interface is not named in the line, or its page cannot be read, the list is empty.
+    `IAttrTypeMng`, `IPropertyMng`). `IDispatch` and `IAPIObject` are dropped - COM and ksAPI
+    plumbing with no page of their own. When neither page names the interface, the list is empty.
     """
     if interface in cache:
         return cache[interface]
-    url = f"{HELP_ROOT}{interface.lower()}.html"
-    status, body = fetch(url)
-    result = ([], None, url)
-    if status in (200, "mirror"):
+    urls = interface_pages(interface)
+    ancestors = []
+    seen = set()
+    basis = None
+    read = []
+    for url in urls:
+        status, body = fetch(url)
+        if status not in (200, "mirror"):
+            continue
+        read.append(url)
         names = hierarchy_entries(body)
         target = interface.lower()
         index = next((i for i, name in enumerate(names) if name.lower() == target), None)
-        ancestors = ([name for name in names[:index] if name.lower() != "idispatch"]
-                     if index is not None else [])
-        result = (ancestors, "wire" if status == 200 else "mirror", url)
+        if index is None:
+            continue
+        basis = basis or ("wire" if status == 200 else "mirror")
+        for name in names[:index]:
+            if name.lower() in ("idispatch", "iapiobject") or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            ancestors.append(name)
+    result = (ancestors, basis, read or urls[:1])
     cache[interface] = result
     return result
 
@@ -506,7 +545,7 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
     """One route: confirmed on its interface or on an ancestor, else named unconfirmed."""
     interface = route["declared_on"]
     member = route["member"]
-    ancestors, _basis, _url = interface_ancestors(interface, hierarchy_cache)
+    ancestors, _basis, ancestor_pages = interface_ancestors(interface, hierarchy_cache)
     chain = [interface] + ancestors
     for position, owner in enumerate(chain):
         hit = confirm_member_on(owner, member, listing_cache)
@@ -516,7 +555,8 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
                     "documented_on": owner,
                     "relation": "сам интерфейс" if position == 0 else "предок",
                     "how": hit["how"], "doc_typo": hit["doc_typo"],
-                    "ancestors_checked": ancestors, "source": [hit["page"]]}
+                    "ancestors_checked": ancestors, "ancestors_read_from": ancestor_pages,
+                    "source": [hit["page"]]}
 
     # The closed by-name list, AFTER the rules: a member the help spells differently is confirmed
     # only by its own named entry, and the page is fetched before the confirmation stands.
@@ -532,7 +572,8 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
                                    "doc_name": named["doc_name"],
                                    "contradiction": named["contradiction"],
                                    "hierarchy_from": named["hierarchy_from"]},
-                "ancestors_checked": ancestors, "source": [named["page"]]}
+                "ancestors_checked": ancestors, "ancestors_read_from": ancestor_pages,
+                "source": [named["page"]]}
 
     listing, statuses, _groups = listing_cache.get(interface) or member_list(interface)
     listing_cache[interface] = (listing, statuses, _groups)
@@ -543,7 +584,7 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
         return {"route": route["route"], "member": member,
                 "page": f"{HELP_ROOT}{interface.lower()}_methods.html", "status": "не проверено",
                 "reason": f"перечень интерфейса не прочитан: {reason}",
-                "ancestors_checked": ancestors,
+                "ancestors_checked": ancestors, "ancestors_read_from": ancestor_pages,
                 "source": [f"{HELP_ROOT}{interface.lower()}_methods.html"]}
     page = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
     status, body = fetch(page)
@@ -551,12 +592,15 @@ def check_route(route, listing_cache, hierarchy_cache, named_cache):
     if status in (200, "mirror"):
         return {"route": route["route"], "member": member, "page": page, "status": "Противоречие",
                 "reason": f"заголовок страницы не называет тот же член: {title}",
-                "title": title, "ancestors_checked": ancestors, "source": [page]}
+                "title": title, "ancestors_checked": ancestors,
+                "ancestors_read_from": ancestor_pages, "source": [page]}
     if isinstance(status, int):
         return {"route": route["route"], "member": member, "page": page, "status": "не подтверждено",
-                "reason": f"HTTP {status}", "ancestors_checked": ancestors, "source": [page]}
+                "reason": f"HTTP {status}", "ancestors_checked": ancestors,
+                "ancestors_read_from": ancestor_pages, "source": [page]}
     return {"route": route["route"], "member": member, "page": page, "status": "не проверено",
-            "reason": status, "ancestors_checked": ancestors, "source": [page]}
+            "reason": status, "ancestors_checked": ancestors,
+            "ancestors_read_from": ancestor_pages, "source": [page]}
 
 
 TABLE_CELL = re.compile(r'<span class="f_Table_Cell">([^<]+)</span>')
@@ -674,8 +718,8 @@ def collect(routes_path):
                          "page": item["page"]} for item in groups],
         "title_typos": [{"route": item["route"], "documented_on": item["documented_on"],
                          "typo": item["doc_typo"], "title": item["title"]} for item in typos],
-        # The six confirmed BY NAME: each with its kind of mismatch and the verbatim quote that makes
-        # the member the same one. Named separately so a reader can re-check the six by hand.
+        # The routes confirmed BY NAME: each with its kind of mismatch and the verbatim quote that
+        # makes the member the same one. Named separately so a reader can re-check them by hand.
         "named_name_mismatches": [{"route": item["route"], "documented_on": item["documented_on"],
                                    "page": item["page"], "kind": item["named_mismatch"]["kind"],
                                    "quote": item["named_mismatch"]["quote"],
@@ -765,6 +809,28 @@ def self_test():
           "IFeaturePattern" not in ancestors
           and confirm_member_on("IChamfer", "GeometryPattern", {}) is None)
 
+    # §1.1b: BOTH pages of the same interface carry the chain, and the ksAPI one may be fuller. Both
+    # halves in one setting: the omitted ancestor is found, and an interface whose two pages name no
+    # extra ancestor keeps the short chain - the union must not invent one.
+    shared, _basis, pages = interface_ancestors("IMateConstraint3D", {})
+    check("предок берётся из обеих страниц одного интерфейса (ksAPI называет `IModelObject`)",
+          shared == ["IKompasAPIObject", "IModelObject"] and len(pages) == 2,
+          f"{shared}, страниц={len(pages)}")
+    collection, _basis, _pages = interface_ancestors("IMateConstraints3D", {})
+    check("пустая строка «Иерархия» дополняется страницей ksAPI",
+          collection == ["IKompasAPIObject", "IKompasCollection", "IModelObjects"], str(collection))
+    count = check_route({"route": "IMateConstraints3D.Count", "declared_on": "IMateConstraints3D",
+                         "member": "Count"}, {}, {}, {})
+    check("член документации коллекции подтверждается предком с ksAPI-страницы",
+          count.get("status") == "Подтверждено" and count.get("documented_on") == "IKompasCollection"
+          and count.get("relation") == "предок", f"{count.get('status')}/{count.get('documented_on')}")
+    short, _basis, _pages = interface_ancestors("IDismantleStep", {})
+    check("интерфейс без предка в ОБЕИХ страницах остаётся с короткой цепочкой",
+          short == ["IKompasAPIObject"], str(short))
+    check("и его член предка этим НЕ подтверждается",
+          check_route({"route": "IDismantleStep.Update", "declared_on": "IDismantleStep",
+                       "member": "Update"}, {}, {}, {}).get("status") != "Подтверждено")
+
     # §1.2: one page documenting a group of members.
     _listing, _statuses, group_names = member_list("ksMassInertiaParam")
     check("групповая страница называет каждого члена группы",
@@ -788,6 +854,12 @@ def self_test():
     check("запись поимённого перечня подтверждает РОВНО свой маршрут",
           bool(direct) and direct["documented_on"] == "ksPart"
           and direct["page"].endswith("kspart_getdensity.html"), str(direct and direct["page"]))
+    matrix = named_name_mismatch("ksPlacement", "GetMatrix3D", {})
+    check("матрица размещения подтверждается страницей `GetMatrix` той же справки",
+          bool(matrix) and matrix["page"].endswith("ksplacement_getmatrix.html")
+          and matrix["doc_name"] == "GetMatrix", str(matrix and matrix["page"]))
+    check("обратного направления у этой записи нет: `GetMatrix` как имя маршрута не подтверждается",
+          named_name_mismatch("ksPlacement", "GetMatrix", {}) is None)
     check("маршрут, которого нет в перечне, тем же способом НЕ подтверждается",
           named_name_mismatch("ksPart", "newentity", {}) is None
           and named_name_mismatch("ksPart", "material", {}) is None)

@@ -11,12 +11,13 @@ using KompasMcp.Domain.References;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Mates domain — block C2, profile <c>mates-minimal-v1</c>, modes <c>MATE-01…MATE-06</c>.</summary>
-/// <remarks>ROUTE — the documented API7 path: <c>IPart7.MateConstraints</c> →
-/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1/2</c> → <c>Update()</c>;
-/// confirmation is <c>Valid</c>, not <c>Update()=true</c>.
+/// <remarks>ROUTE — documented API7: <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add</c> →
+/// <c>BaseObject1/2</c> → <c>Update()</c>; confirmation is <c>Valid</c>, not <c>Update()=true</c>.
+/// DOC: <c>imodelobject_update.html</c>, <c>imodelobject_valid.html</c> - <c>Update</c>, <c>Valid</c>
+/// from <c>IModelObject</c>; <c>ikompascollection_count.html</c> - <c>Count</c> from <c>IKompasCollection</c>.
 /// LIMIT: <c>ksDocument3D.AddMateConstraint</c> is NOT used — it returned <c>False</c> under every
 /// documented combination; cause not established, closed by decision.
-/// History: docs/decisions/mates.md#api5-addmateconstraint</remarks>
+/// History: docs/decisions/mates.md#inherited-doc-pages, #api5-addmateconstraint</remarks>
 public sealed partial class Api5Session
 {
     private const string MateRefKind = "mate";

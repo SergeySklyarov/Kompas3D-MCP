@@ -372,3 +372,42 @@ TRUE, компонентов 3 → 3 и размещения не изменил
 **Как это проверяется.** Строки `MM.08.delete` и `MM.08.delete_reopen` группы `--mech-mates-only`:
 счёт уменьшился на единицу, типы прочих сопряжений те же, после сохранения и переоткрытия передача не
 возвращается. Строка долга 53 закрыта.
+
+## <a id="inherited-doc-pages"></a>`Update`, `Valid` и `Count` документированы у предков, названных ksAPI-страницей того же интерфейса (наряд `DEBT_DOC_ROUTES_0_14`, 09.11.2026)
+
+**Что было (долг 38).** Инвентарь аудита увидел три вызова, страницы которых отвечают 404:
+`IMateConstraint3D.Update` (`Api5Session.Mate.cs`, четыре места), `IMateConstraint3D.Valid` (два) и
+`IMateConstraints3D.Count` (одно). Прибор искал страницу у САМОГО интерфейса и по строке «Иерархия»
+его Automation-страницы, и обе дороги молчали: у `imateconstraint3d.html` цепочка - «IDispatch
+IKompasAPIObject IMateConstraint3D», у `imateconstraints3d.html` строка «Иерархия :» ПУСТАЯ, а
+перечни членов (`_propers`, `_methods`) ни `Update`, ни `Valid`, ни `Count` не называют.
+
+**Что нашла справка.** Тот же интерфейс описан в справке дважды: страницей Automation
+(`imateconstraint3d.html`) и страницей ksAPI (`ksapi_imateconstraint3d.html`), и вторая печатает
+ПОЛНУЮ цепочку: «IAPIObject IKompasAPIObject IModelObject IMateConstraint3D». У коллекции -
+`ksapi_imateconstraints3d.html`: «IAPIObject IKompasAPIObject IKompasCollection IModelObjects
+IMateConstraints3D». Отсюда члены документированы у предков: `Update` - `imodelobject_update.html`
+(«Automation : BOOL Update( );»), `Valid` - `imodelobject_valid.html` («Valid - Признак
+невырожденности объекта», «Свойство доступно только для чтения»; на страницу ведёт перечень
+`imodelobject_props.html`), `Count` - `ikompascollection_count.html` («Count - Количество элементов в
+коллекции», «Тип данных: long», «Свойство доступно только для чтения»). Библиотека типов говорит то
+же (`IMateConstraint3D : IModelObject`, `IMateConstraints3D : IModelObjects, IKompasCollection`), но
+это причина, по которой цепочка проверялась, а не доказательство документации.
+
+**Решение.** Прибор читает строку «Иерархия» с ОБЕИХ страниц одного интерфейса и берёт объединение,
+называя страницы-источники в `ancestors_read_from`; `IAPIObject` отбрасывается вместе с `IDispatch`
+как служебный предок ksAPI без своей страницы. Цепочка по-прежнему ЧИТАЕТСЯ, а не угадывается: у
+интерфейса, чьи обе страницы предка не называют, она остаётся короткой. Продукт не менялся: три
+члена получили строку `DOC:` с именами страниц, вызовы и их порядок прежние.
+
+**Чего решение НЕ делает.** Оно не подтверждает `IDismantleStep.Update` - единственный прочий
+маршрут с тем же видом находки: обе его страницы (`idismantlestep.html` и
+`ksapi_idismantlestep.html`) называют только `IKompasAPIObject`, и отрицательный контроль
+самопроверки требует, чтобы он остался «не подтверждено».
+
+**Чем подтверждается.** Самопроверка прибора: предок берётся с обеих страниц, пустая строка
+дополняется ksAPI-страницей, член коллекции подтверждается предком `IKompasCollection`, интерфейс без
+предка в обеих страницах остаётся с короткой цепочкой и его член НЕ подтверждается. Аудит по отчёту
+зачётного `--all` этого наряда: `IMateConstraint3D.Update`, `IMateConstraint3D.Valid` и
+`IMateConstraints3D.Count` - «Подтверждено», `documented_on` - `IModelObject` (два) и
+`IKompasCollection` (один), `relation = предок`. Строка долга 38 закрыта.

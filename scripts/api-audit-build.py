@@ -365,10 +365,12 @@ def build(evidence_dir):
                 "pages_read": docs.get("interfaces_checked"),
                 "routes_checked": docs.get("routes_checked"),
                 "note": "страницы читались по проводу; подтверждающей считается только страница "
-                        "СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или "
+                        "СВОЕГО интерфейса и СВОЕГО члена, страница предка (цепочка читается с "
+                        "Automation- и ksAPI-страницы одного интерфейса), групповая страница или "
                         "страница с опечаткой в заголовке; у каждого маршрута назван способ "
-                        "подтверждения (`how`), и шесть подтверждены поимённым перечнем "
-                        "(`named_name_mismatch`), а не правилом",
+                        "подтверждения (`how`), и "
+                        + str((docs.get("confirmation_ways") or {}).get("named_name_mismatch", 0))
+                        + " подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
                 "basis": {"wire": (docs.get("bases") or {}).get("wire", 0),
                           "mirror": (docs.get("bases") or {}).get("mirror", 0),
                           "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - "

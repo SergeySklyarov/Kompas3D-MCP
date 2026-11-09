@@ -363,7 +363,9 @@ public partial class Api5Session
     /// <summary>Component placement matrix by its ORDINAL in the structure enumeration.</summary>
     /// <remarks>The ordinal is the address (<c>IPart7.Reference</c> is not a component number; matching by
     /// source file is ambiguous). The <c>ksPartCollection</c> ↔ <c>IPart7.PartsEx</c> order is an
-    /// ASSUMPTION, checked by a discriminating control (moving one instance does not move another).</remarks>
+    /// ASSUMPTION, checked by a discriminating control (moving one instance does not move another).
+    /// DOC: the SAME read as <c>ReadPlacementMatrix</c> - <c>ksplacement_getmatrix.html</c>.
+    /// History: docs/decisions/adapter-core.md#getmatrix3d-name</remarks>
     private double[]? PlacementMatrixByOrdinal(DocumentEntry document, int ordinal)
     {
         try
@@ -1642,6 +1644,12 @@ public partial class Api5Session
             : ComponentIdentitySignal.Differs;
     }
 
+    /// <summary>Placement matrix of a part, in document coordinates; <c>null</c> - not read.</summary>
+    /// <remarks>DOC: <c>ksplacement_getmatrix.html</c> - «GetMatrix - Получить суммарную матрицу
+    /// преобразования координат»: «Элементы матрицы возвращаются в виде одномерного массива из 16
+    /// элементов. Матрица имеет размер 4х4». The type library spells the SAME member
+    /// <c>GetMatrix3D</c> while its neighbour keeps the suffix in both (<c>InitByMatrix3D</c>), so the
+    /// page is cited under its own name. History: docs/decisions/adapter-core.md#getmatrix3d-name</remarks>
     private double[]? ReadPlacementMatrix(ksPart part)
     {
         try

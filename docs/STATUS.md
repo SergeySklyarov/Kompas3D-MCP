@@ -805,10 +805,11 @@ UNKNOWN 3 / FAIL 0.
   - следствие nullable параметра, параметр сужен; (6) `WrittenUtcUtc` -> `WrittenUtc` (ключ JSON
   `written_utc` не менялся).
 - **Проверки.** Release-сборка 0/0, тесты Release **1891/1891**, Debug 0/0 и **1891/1891**;
-  `--self-test` 109 проверок / 0 FAIL; группы на Release-хосте коммита: `--hole-only` 97/0,
-  `--rotation-only` 115/0, `--b4-only` 136/0, `--assembly-only` 91/0, `--sheet-metal-only` 75/0;
-  стражи `lint-dashes.py` 0, `check-evidence-links.py` 0, `long-comment-blocks.py` 0/0/0. Зачётный
-  `--all` - отдельной записью после прогона.
+  `--self-test` 109 проверок / 0 FAIL; группы на Release-хосте (сборка до коммита, прибор записал
+  `source_tree_dirty: true`): `--hole-only` 97/0, `--rotation-only` 115/0, `--b4-only` 136/0,
+  `--assembly-only` 91/0, `--sheet-metal-only` 75/0; стражи `lint-dashes.py` 0,
+  `check-evidence-links.py` 0, `long-comment-blocks.py` 0/0/0. Зачётный `--all` - отдельной записью
+  после прогона.
 - **Долг.** Новых строк нет: подтверждённых дефектов не найдено, бюджет 0.14 (11) не тронут.
 - **Размер файла.** Запись пересекла порог переноса: `docs/STATUS.md` 98 005 -> 102 629 байт.
   Перенос записей прошлого цикла - шаг наряда выпуска, здесь он не делается.

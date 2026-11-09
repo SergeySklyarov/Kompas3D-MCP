@@ -736,6 +736,14 @@ internal sealed class AssemblyCheckpoint
 
             if (last.Status != OperationStatus.Succeeded)
             {
+                // INVARIANT: a save the tool refused because the model's content stayed in the temporary file
+                // is repeated here as well - the copy is closed right after, so the work would be lost with
+                // it. The tool itself repeats once; this keeps the checkpoint's own limit of saves, named above.
+                if (attempt < SaveAttempts && LeftContentInTemporary(last))
+                {
+                    continue;
+                }
+
                 return new SettledSave(last, current, attempts, Settled: false);
             }
 
@@ -752,6 +760,11 @@ internal sealed class AssemblyCheckpoint
     /// <summary>One file stamp as JSON: the SAME keys on every state, so a reader compares like with like.</summary>
     private static JsonObject Stamp(SavedFileStamp? stamp) => new(SavedFileWrite.Describe(stamp)
         .Select(pair => KeyValuePair.Create(pair.Key, (JsonNode?)JsonValue.Create(pair.Value))));
+
+    /// <summary>Whether the save tool refused because the model's content stayed in the temporary file.</summary>
+    private static bool LeftContentInTemporary(ResultEnvelope<JsonNode?> save) =>
+        save.Error?.Details?[SavedFileWrite.DetailKey]?["reason"]?.GetValue<string>()
+            == SavedFileWrite.ContentLeftInTemporary;
 
     /// <summary>Point every component of one document at its copy, by the documented source replacement.</summary>
     /// <remarks>DOC: kspart_setfilename.html — «Метод используется для компонентов, вставленных в сборку»;

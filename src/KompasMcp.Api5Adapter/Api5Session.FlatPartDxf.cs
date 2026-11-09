@@ -218,12 +218,16 @@ public partial class Api5Session
             }
 
             // INVARIANT: the temporary drawing is a claim about the FILE: the converter reads it by path, so
-            // a SaveAs that left the content elsewhere would export nothing. Same rule as a client save.
+            // a SaveAs that left the content elsewhere would export nothing. Same rule as a client save,
+            // including the temporary file beside the drawing.
             // History: docs/decisions/files.md#save-file-write
             var drawingBefore = SavedFileWrite.Capture(drawingPath);
+            var temporaryPath = drawingPath + SavedFileWrite.TemporarySuffix;
+            var temporaryBefore = SavedFileWrite.Capture(temporaryPath);
             drawing7.SaveAs(drawingPath);
             var notWritten = SavedFileWrite.UnconfirmedReason(
-                drawingBefore, SavedFileWrite.Capture(drawingPath));
+                drawingBefore, SavedFileWrite.Capture(drawingPath),
+                temporaryBefore, SavedFileWrite.Capture(temporaryPath));
             if (notWritten is not null)
             {
                 throw new KompasContractException(
@@ -234,6 +238,7 @@ public partial class Api5Session
                     details: new Dictionary<string, object?>
                     {
                         ["drawing_path"] = drawingPath,
+                        ["temporary_path"] = temporaryPath,
                         ["reason"] = notWritten,
                     });
             }

@@ -551,9 +551,12 @@ public sealed partial class Api5Session : IDisposable
     private (bool Ok, string? Reason) RescueCopyTo(DocumentEntry document, string targetPath)
     {
         // INVARIANT: the copy is a claim about the FILE, not about SaveAs' answer — the target is a fresh
-        // service path, so "it exists and is not empty" is the proof, read the same way as a client save.
+        // service path, so "it exists and is not empty" is the proof, read the same way as a client save,
+        // temporary file included.
         // History: docs/decisions/files.md#save-file-write
         var before = SavedFileWrite.Capture(targetPath);
+        var temporaryPath = targetPath + SavedFileWrite.TemporarySuffix;
+        var temporaryBefore = SavedFileWrite.Capture(temporaryPath);
         try
         {
             if (document.Document is not null)
@@ -580,7 +583,9 @@ public sealed partial class Api5Session : IDisposable
                 return (false, "у документа нет ни 3D-, ни 2D-дескриптора: сохранять нечем");
             }
 
-            var notWritten = SavedFileWrite.UnconfirmedReason(before, SavedFileWrite.Capture(targetPath));
+            var notWritten = SavedFileWrite.UnconfirmedReason(
+                before, SavedFileWrite.Capture(targetPath),
+                temporaryBefore, SavedFileWrite.Capture(temporaryPath));
             if (notWritten is not null)
             {
                 return (false, $"спасательная копия '{targetPath}' не подтверждена файлом: {notWritten}");
@@ -1948,39 +1953,47 @@ public sealed partial class Api5Session : IDisposable
         // BEFORE the call and compared with the one after it.
         // History: docs/decisions/files.md#save-file-write
         var before = SavedFileWrite.Capture(path);
-        bool ok;
-        if (document.Document is not null)
+        var temporaryPath = path + SavedFileWrite.TemporarySuffix;
+        var temporaryBefore = SavedFileWrite.Capture(temporaryPath);
+        var mode = targetPath is null ? "Save" : "SaveAs";
+
+        // One documented call of the handle this document carries. A local function, because the save may be
+        // repeated ONCE by the SAME call (see the loop).
+        bool SaveThroughDocumentedRoute()
         {
-            ok = targetPath is null
-                ? document.Document.Save()
-                : document.Document.SaveAs(path);
-        }
-        else if (document.Drawing is not null)
-        {
-            // A drawing saves through its documented 2D route: ksDocument2D.ksSaveDocument(fileName)
-            // (ksdocument2d.html). It has no "save to previous name" form, so a document that has a path
-            // but no target_path still passes that path explicitly.
-            ok = document.Drawing.ksSaveDocument(path);
-        }
-        else if (document.Drawing7 is IKompasDocument kompasDocument)
-        {
-            // An API7-created drawing has no API5 2D handle and saves through IKompasDocument.
-            // DOC: ikompasdocument_save.html — Save() writes to the document's own file;
-            // ikompasdocument_saveas.html — SaveAs(path) writes to a named file. MEASURED: both return
-            // Void, so the write is confirmed ONLY by the file stamped below (SavedFileWrite), never by a
-            // return value — the same discipline as the API5 3D route's boolean, taken further.
-            if (targetPath is null)
+            if (document.Document is not null)
             {
-                kompasDocument.Save();
+                return targetPath is null
+                    ? document.Document.Save()
+                    : document.Document.SaveAs(path);
             }
-            else
+
+            if (document.Drawing is not null)
             {
-                kompasDocument.SaveAs(path);
+                // A drawing saves through its documented 2D route: ksDocument2D.ksSaveDocument(fileName)
+                // (ksdocument2d.html). It has no "save to previous name" form, so a document that has a path
+                // but no target_path still passes that path explicitly.
+                return document.Drawing.ksSaveDocument(path);
             }
-            ok = true;
-        }
-        else
-        {
+
+            if (document.Drawing7 is IKompasDocument kompasDocument)
+            {
+                // An API7-created drawing has no API5 2D handle and saves through IKompasDocument.
+                // DOC: ikompasdocument_save.html — Save() writes to the document's own file;
+                // ikompasdocument_saveas.html — SaveAs(path) writes to a named file. MEASURED: both return
+                // Void, so the write is confirmed ONLY by the file, never by a return value.
+                if (targetPath is null)
+                {
+                    kompasDocument.Save();
+                }
+                else
+                {
+                    kompasDocument.SaveAs(path);
+                }
+
+                return true;
+            }
+
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
                 $"Документ «{document.Id}» не имеет ни 3D-, ни 2D-дескриптора: сохранять нечем.",
@@ -1988,62 +2001,88 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
-        // INVARIANT: success is proved by the FILE, never by the call's answer. DOC: ikompasdocument_save.html
-        // — Save() writes to the document's own file; ikompasdocument_saveas.html — SaveAs(path) writes to a
-        // named file. MEASURED: both return Void, so the write is confirmed ONLY by the file read back below,
-        // never by a return value — the same discipline as the API5 3D route's boolean, taken further.
-        var mode = targetPath is null ? "Save" : "SaveAs";
-        var after = SavedFileWrite.Capture(path);
-
-        if (!ok)
+        // INVARIANT: the stamps of the FIRST call stay the baseline for its one repeat, so a repeat that only
+        // moved the target's write time cannot confirm the content the first call left in the temporary file.
+        SavedFileStamp? after = null;
+        string[]? warnings = null;
+        var earlierAttempts = new List<Dictionary<string, object?>>();
+        for (var attempt = 1; ; attempt++)
         {
-            // A failed save does not clear the state: the document stays modified.
-            // INVARIANT: the refusal carries the КОМПАС error code, read through the documented route, so
-            // a client sees WHY the save failed and not only that the boolean was false. DOC:
-            // iapplication_kompaserror.html → IKompasError.Code/Description; ksapi_ikompasdocument_save.html —
-            // «false - неуспешное (например, нет прав на перезапись файла)».
-            // MEASURED: a save onto a target another process holds answers false and can leave the target
-            // TRUNCATED (0 bytes), so the file state travels with the refusal as well.
-            // History: docs/decisions/adapter-core.md#kompas-error-route
-            var details = CodeDetails(new Dictionary<string, object?>
+            var ok = SaveThroughDocumentedRoute();
+            after = SavedFileWrite.Capture(path);
+            var temporaryAfter = SavedFileWrite.Capture(temporaryPath);
+
+            if (!ok)
             {
-                ["document_id"] = document.Id,
-                ["path"] = path,
-                ["mode"] = mode,
-            }, document);
-            details[SavedFileWrite.DetailKey] = SaveFailureSnapshot(
-                path, mode, callResult: false, reason: "call_returned_false", before, after);
+                // A failed save does not clear the state: the document stays modified.
+                // INVARIANT: the refusal carries the КОМПАС error code, read through the documented route, so
+                // a client sees WHY the save failed and not only that the boolean was false. DOC:
+                // iapplication_kompaserror.html → IKompasError.Code/Description; ksapi_ikompasdocument_save.html —
+                // «false - неуспешное (например, нет прав на перезапись файла)».
+                // MEASURED: a save onto a target another process holds answers false and can leave the target
+                // TRUNCATED (0 bytes), so the file state travels with the refusal as well.
+                // History: docs/decisions/adapter-core.md#kompas-error-route
+                var failed = CodeDetails(new Dictionary<string, object?>
+                {
+                    ["document_id"] = document.Id,
+                    ["path"] = path,
+                    ["mode"] = mode,
+                }, document);
+                failed[SavedFileWrite.DetailKey] = SaveFailureSnapshot(
+                    path, mode, callResult: false, reason: "call_returned_false", attempt,
+                    before, after, temporaryBefore, temporaryAfter, earlierAttempts);
 
-            throw new KompasContractException(
-                ErrorCodes.SaveFailed,
-                $"Сохранение не подтверждено возвращаемым значением ({mode}). Файл-цель после вызова: "
-                + $"{DescribeFileState(after)}.",
-                RetryPolicy.SameOperationId,
-                partialEffects: true,
-                details: details);
-        }
+                throw new KompasContractException(
+                    ErrorCodes.SaveFailed,
+                    $"Сохранение не подтверждено возвращаемым значением ({mode}). Файл-цель после вызова: "
+                    + $"{DescribeFileState(after)}.",
+                    RetryPolicy.SameOperationId,
+                    partialEffects: true,
+                    details: failed);
+            }
 
-        var unconfirmed = SavedFileWrite.UnconfirmedReason(before, after);
-        if (unconfirmed is not null)
-        {
-            // INVARIANT: the answer says the FILE was NOT saved and names where the model's content may be.
-            // The document stays open and unsaved in KOMPAS; a client that is told "succeeded" here would
-            // close the session over a file that never received the work.
-            var details = CodeDetails(new Dictionary<string, object?>
+            var unconfirmed = SavedFileWrite.UnconfirmedReason(before, after, temporaryBefore, temporaryAfter);
+            if (unconfirmed is null)
             {
-                ["document_id"] = document.Id,
-                ["path"] = path,
-                ["mode"] = mode,
-            }, document);
-            var snapshot = SaveFailureSnapshot(path, mode, callResult: true, unconfirmed, before, after);
-            details[SavedFileWrite.DetailKey] = snapshot;
+                if (attempt > 1)
+                {
+                    warnings = new[]
+                    {
+                        $"Сохранение подтверждено ПОВТОРОМ того же вызова: первая попытка оставила содержимое "
+                        + $"модели во временном файле '{temporaryPath}' и не заменила файл-цель.",
+                    };
+                }
 
-            throw new KompasContractException(
-                ErrorCodes.SaveFailed,
-                SaveNotWrittenMessage(path, unconfirmed, after, snapshot),
-                RetryPolicy.SameOperationId,
-                partialEffects: true,
-                details: details);
+                break;
+            }
+
+            earlierAttempts.Add(SaveFailureSnapshot(
+                path, mode, callResult: true, unconfirmed, attempt,
+                before, after, temporaryBefore, temporaryAfter));
+
+            if (!SavedFileWrite.MayRepeat(unconfirmed, attempt))
+            {
+                // INVARIANT: the answer says the FILE was NOT saved and names where the model's content may
+                // be. The document stays open and unsaved in KOMPAS; a client that is told "succeeded" here
+                // would close the session over a file that never received the work.
+                var details = CodeDetails(new Dictionary<string, object?>
+                {
+                    ["document_id"] = document.Id,
+                    ["path"] = path,
+                    ["mode"] = mode,
+                }, document);
+                var snapshot = SaveFailureSnapshot(
+                    path, mode, callResult: true, unconfirmed, attempt,
+                    before, after, temporaryBefore, temporaryAfter, earlierAttempts);
+                details[SavedFileWrite.DetailKey] = snapshot;
+
+                throw new KompasContractException(
+                    ErrorCodes.SaveFailed,
+                    SaveNotWrittenMessage(path, unconfirmed, after, snapshot, attempt),
+                    RetryPolicy.SameOperationId,
+                    partialEffects: true,
+                    details: details);
+            }
         }
 
         document.Path = path;
@@ -2066,10 +2105,11 @@ public sealed partial class Api5Session : IDisposable
 
         return new SaveDocumentResult(
             path,
-            after.ByteLength,
+            after!.ByteLength,
             after.Sha256!,
             Context(document, includeTopology: false),
-            document.Revision);
+            document.Revision,
+            warnings);
     }
 
     /// <summary>What the file on disk holds, in words a client can act on: a size, or the reason it is not
@@ -2082,45 +2122,63 @@ public sealed partial class Api5Session : IDisposable
         { } present => $"{present.ByteLength} байт",
     };
 
-    /// <summary>The file evidence of a save that did not land: the target before and after, the temporary
-    /// file beside it, the call's answer and the reason. Built AT the refusal, so a save that failed once
-    /// carries its own facts instead of a guess made afterwards.</summary>
-    /// <remarks>INVARIANT: the temporary file is described by its own stamp — its presence next to an
-    /// untouched target is where the model's content goes when KOMPAS does not replace the target.
+    /// <summary>The file evidence of a save attempt: the target and the temporary file beside it before and
+    /// after the call, the call's answer, the reason and the attempt's number. Built AT the refusal, so a save
+    /// that failed once carries its own facts instead of a guess made afterwards.</summary>
+    /// <remarks>INVARIANT: the temporary file is described by its own BEFORE and AFTER stamps — its appearance
+    /// or change during the call is where the model's content goes when KOMPAS does not replace the target.
     /// History: docs/decisions/files.md#save-file-write</remarks>
     private static Dictionary<string, object?> SaveFailureSnapshot(
-        string path, string mode, bool callResult, string reason,
-        SavedFileStamp? before, SavedFileStamp? after)
+        string path, string mode, bool callResult, string reason, int attempt,
+        SavedFileStamp? before, SavedFileStamp? after,
+        SavedFileStamp? temporaryBefore, SavedFileStamp? temporaryAfter,
+        IReadOnlyList<Dictionary<string, object?>>? earlierAttempts = null)
     {
-        var temporaryPath = path + SavedFileWrite.TemporarySuffix;
-        return new Dictionary<string, object?>
+        var snapshot = new Dictionary<string, object?>
         {
             ["target_path"] = path,
             ["mode"] = mode,
+            ["attempt"] = attempt,
             ["call_result"] = callResult,
             ["reason"] = reason,
             ["target_before"] = SavedFileWrite.Describe(before),
             ["target_after"] = SavedFileWrite.Describe(after),
-            ["temporary_path"] = temporaryPath,
-            ["temporary_after"] = SavedFileWrite.Describe(SavedFileWrite.Capture(temporaryPath)),
+            ["temporary_path"] = path + SavedFileWrite.TemporarySuffix,
+            ["temporary_before"] = SavedFileWrite.Describe(temporaryBefore),
+            ["temporary_after"] = SavedFileWrite.Describe(temporaryAfter),
         };
+        if (earlierAttempts is { Count: > 0 })
+        {
+            snapshot["earlier_attempts"] = earlierAttempts;
+        }
+
+        return snapshot;
     }
 
     /// <summary>The refusal text of a save the call reported as done and the file did not: it says the file
     /// was NOT saved, names the reason, and says where the content most likely went.</summary>
     private static string SaveNotWrittenMessage(
-        string path, string reason, SavedFileStamp? after, Dictionary<string, object?> snapshot)
+        string path, string reason, SavedFileStamp? after, Dictionary<string, object?> snapshot, int attempts)
     {
         var what = reason switch
         {
             "target_missing" => "файла-цели на диске нет после вызова",
             "target_empty" => "файл-цель после вызова пуст",
             "target_unchanged" => "цель не изменилась: её содержимое и время записи те же, что до вызова",
+            SavedFileWrite.ContentLeftInTemporary =>
+                "цель не заменена, а временный файл рядом появился или изменился за этот вызов",
             _ => "файл-цель не прочитан с диска",
         };
         var message = $"Файл НЕ сохранён: {what} (путь '{path}', причина: {reason}). "
             + "Документ в КОМПАС остаётся открытым и несохранённым.";
-        if (snapshot["temporary_after"] is Dictionary<string, object?> temporary
+        if (attempts > 1)
+        {
+            message += " Сохранение повторено один раз документированным вызовом; снимок первой попытки - "
+                + "в details.failure_snapshot.earlier_attempts.";
+        }
+
+        if (reason != SavedFileWrite.ContentLeftInTemporary
+            && snapshot["temporary_after"] is Dictionary<string, object?> temporary
             && temporary["state"] as string == "present")
         {
             message += $" Новое содержимое, вероятно, осталось во временном файле "
@@ -2404,7 +2462,17 @@ public sealed class DocumentEntry
     public bool KindVerified { get; init; }
 }
 
-public sealed record SaveDocumentResult(string? Path, long ByteLength, string Sha256, DocumentContextDto Context, long Revision);
+/// <summary>What a confirmed save answers: the file's size and hash re-read from disk, the document context
+/// and the revision. <see cref="Warnings"/> names the non-fatal fact that the save was confirmed only on its
+/// one repeat, so a client reading the answer alone is not told the first call wrote the file.
+/// History: docs/decisions/files.md#save-file-write</summary>
+public sealed record SaveDocumentResult(
+    string? Path,
+    long ByteLength,
+    string Sha256,
+    DocumentContextDto Context,
+    long Revision,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Struct-type selectors for <c>KompasObject.GetParamStruct(Int16)</c>, from
 /// <c>StructType2DEnum</c> (<c>Interop.Kompas6Constants.dll</c>). The member names are the vendor's;

@@ -26,6 +26,10 @@ public static class SavedFileWrite
     /// <summary>The temporary file KOMPAS keeps next to the target while saving (MEASURED name).</summary>
     public const string TemporarySuffix = ".$$$";
 
+    /// <summary>Why a save is not confirmed while its target still holds the PREVIOUS bytes: the content
+    /// this call wrote is in the temporary file beside it.</summary>
+    public const string ContentLeftInTemporary = "content_left_in_temporary";
+
     /// <summary>The file as it is now, or <c>null</c> when it cannot be read at all — a failed read is NOT
     /// "absent", because the two demand different answers from the caller.</summary>
     public static SavedFileStamp? Capture(string path)
@@ -50,10 +54,13 @@ public static class SavedFileWrite
     /// <remarks>INVARIANT: a file that existed before must show a changed hash OR a later write time - the
     /// time alone would accept a target rewritten by the PREVIOUS save (MEASURED: two saves 1.26 s apart),
     /// the hash alone would refuse a re-save with unchanged bytes; the OR holds in both directions.
-    /// LIMIT: a re-save whose bytes AND write time both stay identical is refused (MEASURED: KOMPAS rewrites
-    /// the bytes on every save, so this was not observed).
+    /// INVARIANT: an unchanged target beside a temporary file THIS call touched is also not confirmed:
+    /// MEASURED, KOMPAS can leave the model's content in '&lt;имя&gt;.$$$' and move only the write time.
+    /// LIMIT: a re-save whose bytes AND write time both stay identical is refused (MEASURED: not observed).
     /// History: docs/decisions/files.md#save-file-write</remarks>
-    public static string? UnconfirmedReason(SavedFileStamp? before, SavedFileStamp? after)
+    public static string? UnconfirmedReason(
+        SavedFileStamp? before, SavedFileStamp? after,
+        SavedFileStamp? temporaryBefore, SavedFileStamp? temporaryAfter)
     {
         if (after is null)
         {
@@ -85,7 +92,43 @@ public static class SavedFileWrite
             return null;
         }
 
+        // The target kept its bytes: a temporary file this call created or wrote is where the content went.
+        if (TemporaryTouched(temporaryBefore, temporaryAfter))
+        {
+            return ContentLeftInTemporary;
+        }
+
         return after.WrittenUtcUtc > before.WrittenUtcUtc ? null : "target_unchanged";
+    }
+
+    /// <summary>Whether one repeat of the SAME documented call is allowed for this refusal. Only the case
+    /// with a chance of settling is repeated: an unchanged target whose content stayed in the temporary
+    /// file is replaced by the next save (MEASURED), while the other reasons describe a state a repeat does
+    /// not change.</summary>
+    /// <remarks>INVARIANT: at most ONE repeat (attempt is the 1-based number of the call just made), so the
+    /// caller cannot loop on a kernel that keeps writing to the temporary file.
+    /// History: docs/decisions/files.md#save-file-write</remarks>
+    public static bool MayRepeat(string reason, int attempt) =>
+        reason == ContentLeftInTemporary && attempt == 1;
+
+    /// <summary>True when THIS call created the temporary file or wrote to it. A file that was already
+    /// there and kept its size, hash and write time proves nothing about this call.</summary>
+    private static bool TemporaryTouched(SavedFileStamp? before, SavedFileStamp? after)
+    {
+        if (after is not { Exists: true })
+        {
+            return false;
+        }
+
+        if (before is not { Exists: true })
+        {
+            // Absent, or unreadable before: either way there is no earlier state to compare with.
+            return true;
+        }
+
+        return before.ByteLength != after.ByteLength
+            || before.WrittenUtcUtc != after.WrittenUtcUtc
+            || !string.Equals(before.Sha256, after.Sha256, StringComparison.Ordinal);
     }
 
     /// <summary>One stamp as it travels inside a refusal. The SAME keys on every state, and <c>state</c>

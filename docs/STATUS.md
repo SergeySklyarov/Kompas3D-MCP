@@ -24,14 +24,13 @@
   ровно один релиз.
 - **Инструментов:** 14, операций **129** (из них через `run` 118), схем **129**, профилей **21**
   (**134/134** режимов, **82/82** зависимостей, `problems []`).
-- **Последний полный прогон:** **PASS 2165 / NAMED 10 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
-  `660638b` (`--all`, 2178 строк, 35 групп, Release этого же коммита: `ProductVersion 0.13.0+660638b`),
-  каталог `scratch/mcp-smoke/runs/20261107-235735-all-660638b`, 46 минут. NAMED 10: восемь прежних
-  строк, `ALL.client_bugs_20261107` (группа намеренно завершает экземпляр, §4 наряда) и `E5.KEEP.hole` -
-  дефект прибора, исправлен коммитом `262897a` (постановка `e5` подавала вырезу отрицательное
-  ожидание); после этой правки только прибора, без изменения продукта, на чистом дереве перепрогнаны
-  `e5` (71 PASS / 0 FAIL) и CB13 (39 PASS / 0 FAIL). UNKNOWN 3 - прежние строки. Зачётный прогон
-  поставки `v0.13.0` - **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
+- **Последний полный прогон:** **PASS 2172 / NAMED 10 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
+  `c894bc7` (`--all`, 2185 строк, 35 групп, Release этого же коммита: `ProductVersion 0.13.0+c894bc7`),
+  каталог `scratch/mcp-smoke/runs/20261109-141419-all-c894bc7`, 45 минут (журнал 15:14-15:59).
+  NAMED 10 - прежние строки приёмки (`SB-12.fragment_insert`, `SKC.07`, `SKC.21`, `DRW-07` и его
+  отрицательная проверка, `EI.04b`, `SR.recovery`, `OPS.14`, `EV.external`, `ALL.client_bugs_20261107`);
+  UNKNOWN 3 - прежние `CG-07` (две) и `DSM-08`. Зачётный прогон поставки `v0.13.0` - **PASS 2154 /
+  NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
   `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`; доказательства -
   `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` - 36 PASS,
   «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
@@ -688,8 +687,10 @@ UNKNOWN 3 / FAIL 0.
 - **Проверки.** `build`/`test -c Release` - 0 предупреждений / 0 ошибок, **1884/1884** (+4 новых
   модульных); `--self-test` - 109 проверок / 0 FAIL; `--asm-checkpoint-only` на Release `abd5d2f` -
   **20 прогонов подряд, 39 PASS каждый (780/0)**, журнал `scratch/soak-asc-summary.txt`;
-  `--assembly-only` - **91 PASS / 0 FAIL**; зачётный `--all` - `<впишу после прогона>`; стражи
-  `lint-dashes` / `long-comment-blocks` / `check-evidence-links` - 0/0/0.
+  `--assembly-only` - **91 PASS / 0 FAIL**; зачётный `--all` на Release `c894bc7` (дерево чистое) -
+  **PASS 2172 / NAMED 10 / UNKNOWN 3 / FAIL 0**, `asm_checkpoint` 11 PASS, каталог
+  `scratch/mcp-smoke/runs/20261109-141419-all-c894bc7`; стражи `lint-dashes` / `long-comment-blocks` /
+  `check-evidence-links` - 0/0/0.
 - **Долг.** Строка 92 **ЗАКРЫТА**; строк **94**, закрыто **92**, открыто **2**: 93 (`IDismantleStep.Update`) и новая
   94 - `kompas_save_document` может назвать успехом запись, ушедшую в `<файл>.$$$` (класс - дефект
   продукта, ложный успех; срок - этап долга следующего цикла). Бюджет 0.14 держится: 2 при 11.

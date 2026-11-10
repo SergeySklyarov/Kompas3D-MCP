@@ -37,13 +37,13 @@ public partial class Api5Session
     /// <summary>Depth limit of the structure walk. Exceeding it is NAMED, not silenced.</summary>
     private const int MaxStructureDepth = 64;
 
-    /// <summary>Component reference payload: the API7 view, the PARENT node (the matrix is read fresh
-    /// from it), <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL.</summary>
-    /// <remarks>The ordinal is the address; <c>IPart7.Reference</c> is not a component number. The
-    /// parent is stored so the matrix is read FRESH at comparison time.
-    /// INVARIANT: the placement matrix is NOT stored in the reference — a snapshot went stale from the
-    /// server's OWN mutation and rejected a second mutation with <c>STALE_REFERENCE</c>.
-    /// History: docs/decisions/assembly.md#identity</remarks>
+    /// <summary>Component reference payload: the API7 view, the PARENT node (the matrix is read fresh from
+    /// it), <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL.</summary>
+    /// <remarks>INVARIANT: the ordinal is the address of a TOP-LEVEL component only; a NESTED one is
+    /// addressed by the PATH IN THE REFERENCE ID (<see cref="ComponentPath"/>), so one place carries it.
+    /// INVARIANT: the placement matrix is NOT stored here — a snapshot went stale from the server's OWN
+    /// mutation and rejected a second mutation with <c>STALE_REFERENCE</c>.
+    /// History: docs/decisions/assembly.md#identity, docs/decisions/assembly-ext.md#nested-implemented</remarks>
     private sealed record ComponentPayload(IPart7 Part7, IPart7? Parent7, int? Reference, int Ordinal);
 
     // ── ASM-03 ──
@@ -65,20 +65,23 @@ public partial class Api5Session
         var enumerated = 0;
         var ranks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         Walk(top, parentRef: null, depth: 0, command.Recursive, document, rows, uniqueParts,
-            ref enumerated, ranks, notes);
+            ref enumerated, ranks, notes, path: null);
 
         if (rows.Any(r => r.Depth > 0))
         {
-            notes.Add("nested_components_not_addressable — вложенные компоненты перечислены для " +
-                      "ЧТЕНИЯ структуры, но адреса API5 у них нет: ksDocument3D.PartCollection(true) " +
-                      "перечисляет компоненты сборки ПЛОСКО, поэтому размещение, замена и геометрия " +
-                      "вложенного компонента этим выпуском НЕ поддерживаются и отвергаются, а не " +
-                      "выполняются по предположительному номеру");
+            notes.Add("nested_component_addressed_by_path — вложенный компонент адресуется путём " +
+                      "индексов IPart7.Parts от верхней сборки, и такой ссылкой работают " +
+                      "kompas_set_component_placement и kompas_replace_component (маршрут API7: " +
+                      "IPart7.Placement и IPart7.FileName). Остальные операции над компонентом " +
+                      "(удаление, BOM, пересечения, разнесение, массивы компонентов) требуют " +
+                      "компонент ВЕРХНЕГО уровня и отвергают вложенный с CAPABILITY_UNAVAILABLE, " +
+                      "потому что адрес API5 перечисляет компоненты плоско");
         }
 
         return new ListComponentsResult(rows, uniqueParts.Count, enumerated,
-            "api7:IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); адрес — сопоставление записи с "
-            + "ksDocument3D.PartCollection(true) по полному пути и размещению; размещение — GetSummMatrix",
+            "api7:IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); адрес верхнего компонента — "
+            + "сопоставление записи с ksDocument3D.PartCollection(true) по полному пути и размещению, "
+            + "адрес вложенного — путь индексов; размещение — GetSummMatrix в координатах родителя",
             notes);
     }
 
@@ -92,7 +95,8 @@ public partial class Api5Session
         HashSet<string> uniqueParts,
         ref int enumerated,
         Dictionary<string, int> ranks,
-        List<string> notes)
+        List<string> notes,
+        IReadOnlyList<int>? path)
     {
         if (depth > MaxStructureDepth)
         {
@@ -102,18 +106,25 @@ public partial class Api5Session
             return;
         }
 
-        foreach (var child in ChildrenOf(node, notes))
+        var children = ChildrenOf(node, notes);
+        for (var index = 0; index < children.Count; index++)
         {
+            var child = children[index];
             enumerated++;
+
+            // THE PATH IS THE ADDRESS OF A NESTED COMPONENT: level by level, the index of the child in
+            // the SAME enumeration the row was read from. MEASURED: this index equals the one
+            // IPart7.Parts→IParts7.Part(index) answers, so a later command resolves the SAME component.
+            var childPath = path is null ? [index] : path.Append(index).ToArray();
 
             // THE ADDRESS IS MATCHED, NOT COUNTED: `IPart7.PartsEx` omits an excluded instance, so a
             // counter would shift every later address onto a FOREIGN component. A record that cannot be
             // matched gets NO address (see AddressOf), never a neighbour's.
-            var row = ReadComponent(document, node, child, parentRef, depth, ranks, notes);
+            var row = ReadComponent(document, node, child, parentRef, depth, ranks, notes, childPath);
             rows.Add(row);
-            if (row.SourcePath is { Length: > 0 } path)
+            if (row.SourcePath is { Length: > 0 } source)
             {
-                uniqueParts.Add(path);
+                uniqueParts.Add(source);
             }
 
             if (row.IsDetail is null)
@@ -127,7 +138,7 @@ public partial class Api5Session
             else if (recursive && row.IsDetail == false)
             {
                 Walk(child, row.ComponentRef, depth + 1, recursive: true, document, rows,
-                    uniqueParts, ref enumerated, ranks, notes);
+                    uniqueParts, ref enumerated, ranks, notes, childPath);
             }
         }
     }
@@ -174,7 +185,7 @@ public partial class Api5Session
 
     private ComponentRowDto ReadComponent(
         DocumentEntry document, IPart7 parent, IPart7 part, string? parentRef, int depth,
-        Dictionary<string, int>? ranks, List<string> notes)
+        Dictionary<string, int>? ranks, List<string> notes, IReadOnlyList<int> path)
     {
         // Reference is a diagnostic number, NOT an address (see ComponentPayload). An unread value
         // stays null, not 0: "not read" and "0" are different claims.
@@ -182,21 +193,24 @@ public partial class Api5Session
 
         // THE API7 MATRIX FOR THE RESPONSE, via the documented IPart7.GetSummMatrix
         // (ipart7_getsummmatrix.html): «суммарная матрица преобразования координат», 16 elements, 4x4.
-        // It is the placement AT READ TIME; it is NOT stored in the REFERENCE (see ComponentPayload),
-        // and is read only for a top-level component — a nested one has no address.
-        var matrix7 = depth == 0 ? SummMatrix7(parent, part) : null;
+        // It is the placement AT READ TIME in the coordinates of the PARENT node — MEASURED: for a
+        // nested component it equals IPart7.Placement's local matrix and does NOT include the parent's
+        // own origin. It is NOT stored in the REFERENCE (see ComponentPayload).
+        var matrix7 = SummMatrix7(parent, part);
         var ordinal = depth == 0 ? AddressOf(document, part, matrix7, ranks, notes) : NestedComponentOrdinal;
         var addressable = ordinal != NestedComponentOrdinal && ordinal != UnaddressedComponentOrdinal;
 
         var stored = References.Register(
             ComponentRefKind, document.Id, document.Revision,
-            new ComponentPayload(part, parent, reference, ordinal));
+            new ComponentPayload(part, parent, reference, ordinal),
+            idSuffix: depth == 0 ? null : ComponentPath.Separator + ComponentPath.Format(path));
 
         if (depth != 0)
         {
-            notes.Add($"nested_component_no_address — компонент «{Text(() => part.Name) ?? "?"}» " +
-                      $"вложен (глубина {depth}): тело, грани и размещение НЕ читаются, потому что " +
-                      "адрес API5 перечисляет компоненты плоско и у вложенного компонента его нет");
+            notes.Add($"nested_component_geometry_not_read — у компонента «{Text(() => part.Name) ?? "?"}» " +
+                      $"(глубина {depth}) число тел и граней НЕ читается: ksPart.BodyCollection() " +
+                      "доступен только по плоскому PartCollection, а размещение и источник этого " +
+                      "компонента читаются и пишутся маршрутом API7");
         }
 
         return new ComponentRowDto
@@ -662,11 +676,12 @@ public partial class Api5Session
         // The component row is built FROM THE INSERTED INSTANCE (inserted7), not by a file-name search:
         // with two instances of one part, a name search would return the wrong instance. Its address is
         // found by matching (see AddressOf), so the row and the mutation route cannot disagree.
-        // ranks: null names the insert case — the new instance is the LAST record of its file.
+        // ranks: null names the insert case — the new instance is the LAST record of its file. The path is
+        // empty because a top-level component's address is the ordinal, never a path.
         var inserted = top7 is null
             ? null
             : ReadComponent(document, top7, (IPart7)inserted7, parentRef: null, depth: 0, ranks: null,
-                notes);
+                notes, path: []);
 
         if (inserted is null)
         {
@@ -729,23 +744,29 @@ public partial class Api5Session
     }
 
     // ── ASM-04 ──
-    /// <summary>
-    /// Set a component's placement by a rigid transform and re-read it. Write via API5
-    /// <c>ksPlacement.InitByMatrix3D</c> + <c>ksPart.SetPlacement</c> + <c>ksPart.UpdatePlacement</c>
-    /// (the only documented absolute placement write).
-    /// </summary>
+    /// <summary>Set a component's placement by a rigid transform and re-read it: API5
+    /// <c>ksPlacement.InitByMatrix3D</c> + <c>ksPart.SetPlacement</c> + <c>ksPart.UpdatePlacement</c>.</summary>
+    /// <remarks>INVARIANT: a NESTED component goes by API7 (<c>IPart7.Placement</c> →
+    /// <c>IPlacement3D.InitByMatrix3D</c> → <c>IPart7.UpdatePlacement</c>) — it has no API5 ordinal — and
+    /// there <c>transform</c> means the component's LOCAL frame, not document coordinates.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
     public SetComponentPlacementResult SetComponentPlacement(SetComponentPlacementCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
         RequireRevision(document, command.ExpectedRevision);
 
-        var stored = References.Require(command.ComponentRef, document.Id, document.Revision);
+        var stored = RequireComponentReference(document, command.ComponentRef);
         if (stored.Payload is not ComponentPayload payload)
         {
             throw new KompasContractException(
                 ErrorCodes.StaleReference,
                 $"Ссылка «{command.ComponentRef}» не адресует компонент: это {stored.Kind}.",
                 RetryPolicy.ReacquireContext);
+        }
+
+        if (ComponentPath.TryParse(command.ComponentRef, out var nestedPath))
+        {
+            return SetNestedPlacement(document, command, stored, nestedPath);
         }
 
         var part5 = ComponentPart5(document, payload, out var lookupNote);
@@ -831,6 +852,105 @@ public partial class Api5Session
             new VerificationDto(VerificationLevel.StructureChecked, checks, unverified));
     }
 
+    /// <summary>A NESTED component's placement through the documented API7 route:
+    /// <c>IPart7.Placement</c> → <c>IPlacement3D.InitByMatrix3D</c> → <c>IPart7.UpdatePlacement(Redraw)</c>,
+    /// then the rebuild of every parent up to the assembly (<c>ipart7_placement.html</c>,
+    /// <c>iplacement3d_initbymatrix3d.html</c>, <c>ipart7_updateplacement.html</c>).</summary>
+    /// <remarks>MEASURED: <c>IPart7.Placement.GetMatrix3D</c> returns the LOCAL matrix the write took (the
+    /// parent's origin is NOT added), and <c>UpdatePlacement</c> answers FALSE on an applied write — so
+    /// success is named by the RE-READ only. History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private SetComponentPlacementResult SetNestedPlacement(
+        DocumentEntry document, SetComponentPlacementCommand command, StoredReference stored,
+        IReadOnlyList<int> path)
+    {
+        var matrix = MatrixOf(command.Transform);
+        var node = ResolveNested(document, stored, path, out var chain, out var addressNote,
+            out var unconfirmedAddress);
+        var beforeMatrix = NestedPlacementMatrix(node);
+
+        try
+        {
+            if (node.Placement is not { } placement || !placement.InitByMatrix3D(ToVariant(matrix)))
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "IPart7.Placement не вернул IPlacement3D или InitByMatrix3D ответил false: " +
+                    "размещение вложенного компонента этим маршрутом не задаётся.",
+                    RetryPolicy.Never);
+            }
+
+            node.UpdatePlacement(false);
+        }
+        catch (COMException ex)
+        {
+            // NOTHING IS BUMPED: the same rule as the API5 route — a write that broke off may have applied,
+            // and the refusal says so; the references of this revision still address the same components.
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Запись размещения вложенного компонента прервалась: {ex.Message}. Размещение могло " +
+                "измениться частично.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_path"] = DescribePath(path),
+                    ["placement_before"] = beforeMatrix,
+                    ["placement_requested"] = matrix,
+                });
+        }
+
+        RebuildAncestors(document, chain);
+        BumpRevision(document, "assembly.set_placement.nested");
+
+        var afterMatrix = NestedPlacementMatrix(node);
+        var matched = MatrixMatchesRequest(afterMatrix, matrix);
+        var checks = new List<NamedCheck>
+        {
+            new("placement_read_back_matches_request", matched,
+                Observed: Describe(afterMatrix), Expected: Describe(matrix)),
+        };
+
+        if (!matched)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Размещение вложенного компонента записано, но ПЕРЕЧИТАННАЯ локальная матрица не " +
+                $"совпала с запрошенной: запрос «{Describe(matrix)}», перечитано «{Describe(afterMatrix)}». " +
+                "Успехом это не считается: модель изменена, размещение не подтверждено.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_path"] = DescribePath(path),
+                    ["placement_before"] = beforeMatrix,
+                    ["placement_after"] = afterMatrix,
+                    ["placement_requested"] = matrix,
+                    ["failure_snapshot"] = new Dictionary<string, object?>
+                    {
+                        ["route"] = "api7:IPart7.Placement→InitByMatrix3D→UpdatePlacement",
+                        ["component_path"] = DescribePath(path),
+                        ["placement_before"] = beforeMatrix,
+                        ["placement_after"] = afterMatrix,
+                        ["update_placement_called"] = true,
+                        ["revision_bumped"] = true,
+                    },
+                });
+        }
+
+        return new SetComponentPlacementResult(
+            ToDto(stored, "component"),
+            beforeMatrix,
+            afterMatrix,
+            new VerificationDto(VerificationLevel.StructureChecked, checks,
+            [
+                "nested_placement_is_local — " + NestedPlacementMeaning,
+                "component_address_by_path — " + addressNote,
+                .. unconfirmedAddress is null ? Array.Empty<string>() : new[] { unconfirmedAddress },
+            ]));
+    }
+
     // ── ASM-05 ──
     /// <summary>Replace a component's source while preserving placement.</summary>
     public ReplaceComponentResult ReplaceComponent(ReplaceComponentCommand command)
@@ -839,13 +959,18 @@ public partial class Api5Session
         RequireRevision(document, command.ExpectedRevision);
         RequireSourceFile(command.SourcePath);
 
-        var stored = References.Require(command.ComponentRef, document.Id, document.Revision);
+        var stored = RequireComponentReference(document, command.ComponentRef);
         if (stored.Payload is not ComponentPayload payload)
         {
             throw new KompasContractException(
                 ErrorCodes.StaleReference,
                 $"Ссылка «{command.ComponentRef}» не адресует компонент: это {stored.Kind}.",
                 RetryPolicy.ReacquireContext);
+        }
+
+        if (ComponentPath.TryParse(command.ComponentRef, out var nestedPath))
+        {
+            return ReplaceNestedSource(document, command, stored, nestedPath);
         }
 
         var part5 = ComponentPart5(document, payload, out var lookupNote);
@@ -955,6 +1080,128 @@ public partial class Api5Session
             new VerificationDto(
                 structural && placementPreserved ? VerificationLevel.StructureChecked
                     : VerificationLevel.CallReturned,
+                checks, unverified));
+    }
+
+    /// <summary>Replace the SOURCE of a NESTED component through the documented <c>IPart7.FileName</c>
+    /// (put) + <c>IModelObject.Update</c> — the property takes effect only after that call
+    /// (<c>ipart7_filename.html</c>: «Свойство вступает в силу после вызова метода IModelObject::Update»;
+    /// «Имя файла можно установить только у компонента, вставленного в сборку»).</summary>
+    /// <remarks>INVARIANT: the answer is named by the RE-READ of the source and of the local placement, not
+    /// by <c>Update()</c>'s BOOL. INVARIANT: the reference keeps working across this operation — MEASURED:
+    /// <c>IPart7.Reference</c> stays the same number after the replacement, so a second command with the
+    /// SAME reference resolves the same instance.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private ReplaceComponentResult ReplaceNestedSource(
+        DocumentEntry document, ReplaceComponentCommand command, StoredReference stored,
+        IReadOnlyList<int> path)
+    {
+        var node = ResolveNested(document, stored, path, out var chain, out var addressNote,
+            out var unconfirmedAddress);
+        var sourceBefore = Text(() => node.FileName);
+        var matrixBefore = NestedPlacementMatrix(node);
+
+        try
+        {
+            node.FileName = command.SourcePath;
+        }
+        catch (COMException ex)
+        {
+            BumpRevision(document, "assembly.replace_component.nested.partial", invalidateAll: true);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Запись IPart7.FileName вложенного компонента прервалась: {ex.Message}. Ссылка могла " +
+                "измениться частично.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_path"] = DescribePath(path),
+                });
+        }
+
+        node.Update();
+        RebuildAncestors(document, chain);
+
+        var sourceAfter = Text(() => node.FileName);
+        var matrixAfter = NestedPlacementMatrix(node);
+        // THE FULL PATH IS COMPARED, not a file name: two files of one name are exactly the pair a name
+        // comparison calls "replaced". The read-back value is the model's own answer, not the request.
+        var sourceChanged = sourceAfter is { Length: > 0 } readBack
+                            && ComponentAddress.SameSource(readBack, command.SourcePath);
+
+        if (!sourceChanged)
+        {
+            // NOT A "CLEAN FAILURE": FileName and Update have already run, so a replay with the SAME
+            // operation_id would apply the replacement a SECOND time.
+            // History: docs/decisions/assembly.md#replace-partial
+            BumpRevision(document, "assembly.replace_component.nested.unread", invalidateAll: true);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Источник вложенного компонента НЕ заменён: после записи IPart7.FileName и Update() " +
+                $"перечитывается «{sourceAfter ?? "null"}» вместо «{command.SourcePath}». Запись и Update() " +
+                "уже вызваны, поэтому исход считается ЧАСТИЧНЫМ ЭФФЕКТОМ, а не чистым отказом.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_path"] = DescribePath(path),
+                    ["source_path"] = command.SourcePath,
+                    ["read_back"] = sourceAfter,
+                    ["placement_before"] = matrixBefore,
+                    ["placement_after"] = matrixAfter,
+                    ["update_called"] = true,
+                    ["revision_bumped"] = true,
+                    ["failure_snapshot"] = new Dictionary<string, object?>
+                    {
+                        ["route"] = "api7:IPart7.FileName→IModelObject.Update",
+                        ["component_path"] = DescribePath(path),
+                        ["source_before"] = sourceBefore,
+                        ["source_after"] = sourceAfter,
+                        ["source_requested"] = command.SourcePath,
+                    },
+                });
+        }
+
+        BumpRevision(document, "assembly.replace_component.nested");
+
+        var placementPreserved = matrixBefore is not null && matrixAfter is not null
+                                 && MatricesEqual(matrixBefore, matrixAfter);
+        var checks = new List<NamedCheck>
+        {
+            new("source_changed", sourceChanged,
+                Observed: sourceAfter ?? "не читается", Expected: command.SourcePath),
+            new("placement_preserved", placementPreserved,
+                Observed: Describe(matrixAfter), Expected: Describe(matrixBefore)),
+        };
+
+        var unverified = new List<string>
+        {
+            "nested_placement_is_local — " + NestedPlacementMeaning,
+            "component_address_by_path — " + addressNote,
+        };
+        if (unconfirmedAddress is not null)
+        {
+            unverified.Add(unconfirmedAddress);
+        }
+
+        if (!placementPreserved)
+        {
+            unverified.Insert(0, "placement_not_preserved — локальное размещение до и после не совпало " +
+                                 "(или не читается): сохранение размещения не подтверждено");
+        }
+
+        return new ReplaceComponentResult(
+            ToDto(stored, "component"),
+            sourceBefore,
+            sourceAfter,
+            matrixBefore,
+            matrixAfter,
+            CountComponents(document),
+            new VerificationDto(
+                placementPreserved ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
                 checks, unverified));
     }
 
@@ -1473,8 +1720,277 @@ public partial class Api5Session
         }
     }
 
-    private IPart7? TopPart7(DocumentEntry document, List<string> notes)
+    /// <summary>The reference a component command is allowed to resolve: a component of THIS document.</summary>
+    /// <remarks>INVARIANT: a reference minted in ANOTHER document is refused as CAPABILITY_UNAVAILABLE, not
+    /// as a stale handle — nothing about it is out of date, and re-reading this document will never make it
+    /// usable. A reference of this document with an older revision stays STALE_REFERENCE (the general rule
+    /// of the registry, <see cref="ReferenceRegistry.Require"/>).
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private StoredReference RequireComponentReference(DocumentEntry document, string componentRef)
     {
+        if (References.TryGet(componentRef, out var known) && known is not null
+            && !string.Equals(known.DocumentId, document.Id, StringComparison.Ordinal))
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Ссылка «{componentRef}» выпущена для ДРУГОГО документа: компонент принадлежит документу "
+                + $"«{known.DocumentId}», а команда назвала «{document.Id}». Документ сам не заменяется: "
+                + "перечитайте структуру kompas_list_components того документа, в котором компонент "
+                + "должен правиться.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["reference_id"] = componentRef,
+                    ["reference_document_id"] = known.DocumentId,
+                    ["document_id"] = document.Id,
+                    ["supported"] = "компонент того же документа",
+                });
+        }
+
+        return References.Require(componentRef, document.Id, document.Revision);
+    }
+
+    /// <summary>What a nested placement matrix means — the wording every answer carries.</summary>
+    /// <remarks>MEASURED (probe `nested-address`): <c>IPart7.Placement.GetMatrix3D</c> gives the LOCAL frame
+    /// of the component inside its parent, and <c>GetSummMatrix(parent, child)</c> answers the same numbers,
+    /// so the parent's own origin is NOT added.</remarks>
+    private const string NestedPlacementMeaning =
+        "матрица вложенного компонента — ЛОКАЛЬНАЯ система координат в его родителе (IPart7.Placement → "
+        + "IPlacement3D.GetMatrix3D), а не координаты документа: начало родителя в неё не входит";
+
+    /// <summary>The live object a NESTED reference names, resolved by its PATH of indices from the top
+    /// assembly through the documented recursion <c>IPart7.Parts</c> → <c>IParts7.Part(index)</c>.</summary>
+    /// <param name="chain">Top assembly down to the component itself — every ancestor is rebuilt after a
+    /// write, so the path is resolved ONCE and the same objects carry the change.</param>
+    /// <remarks>INVARIANT: the path is resolved, never guessed: a level that answers nothing, or a resolved
+    /// instance whose <c>IPart7.Reference</c> differs from the one the reference was minted with, is
+    /// STALE_REFERENCE — the same code an API5 component with an unconfirmed ordinal gets, and for the same
+    /// reason: a mutation by a guessed address would hit a FOREIGN component.
+    /// INVARIANT: a component whose READ load state is not «загружен полностью» is refused
+    /// CAPABILITY_UNAVAILABLE (`ksloadstateenum.html`: «Компонент не загружен — не отображается в окне
+    /// документа. Редактировать нельзя»).
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private IPart7 ResolveNested(
+        DocumentEntry document, StoredReference stored, IReadOnlyList<int> path,
+        out List<IPart7> chain, out string note, out string? unconfirmed)
+    {
+        var payload = stored.Payload as ComponentPayload;
+        var notes = new List<string>();
+        var top = TopPart7(document, notes);
+        chain = new List<IPart7>();
+        if (top is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "API7-представление сборки не получено: вложенный компонент адресуется путём по "
+                + "IPart7.Parts, а без него адреса нет. " + string.Join("; ", notes),
+                RetryPolicy.ReacquireContext);
+        }
+
+        chain.Add(top);
+        var node = top;
+        for (var level = 0; level < path.Count; level++)
+        {
+            var child = ChildAt(node, path[level]);
+            if (child is null)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.StaleReference,
+                    $"Адрес вложенного компонента не найден: путь {DescribePath(path)} на уровне {level} "
+                    + $"индекс {path[level]} не дал компонента (IParts7.Part ответил null). Компонент мог "
+                    + "быть удалён или структура изменилась — перечитайте kompas_list_components и "
+                    + "возьмите свежую ссылку.",
+                    RetryPolicy.ReacquireContext,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["component_path"] = DescribePath(path),
+                        ["level"] = level,
+                        ["index"] = path[level],
+                    });
+            }
+
+            node = child;
+            chain.Add(child);
+        }
+
+        // THE INSTANCE IS CONFIRMED, NOT ASSUMED: an index addresses a POSITION, and a position survives a
+        // structure change that the reference does not. The decision is the PURE rule in Domain.
+        var resolvedReference = Int(() => node.Reference);
+        var verdict = NestedComponentAddress.Decide(
+            payload?.Reference, resolvedReference, ReadEnumName(() => node.LoadState));
+        if (verdict.Kind != NestedAddressVerdictKind.Addressable)
+        {
+            throw new KompasContractException(
+                verdict.Kind == NestedAddressVerdictKind.StaleReference
+                    ? ErrorCodes.StaleReference
+                    : ErrorCodes.CapabilityUnavailable,
+                verdict.Detail,
+                verdict.Kind == NestedAddressVerdictKind.StaleReference
+                    ? RetryPolicy.ReacquireContext
+                    : RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_path"] = DescribePath(path),
+                    ["reference_minted"] = payload?.Reference,
+                    ["reference_resolved"] = resolvedReference,
+                });
+        }
+
+        note = $"путь {DescribePath(path)}: {verdict.Detail}";
+        unconfirmed = verdict.Unconfirmed;
+        return node;
+    }
+
+    /// <summary>The child of a node at an index of the documented recursive collection
+    /// <c>IPart7.Parts</c> (<c>iparts7_part.html</c>: «VT_I4 - индекс компонента»).</summary>
+    private static IPart7? ChildAt(IPart7 node, int index)
+    {
+        try
+        {
+            return node.Parts?.get_Part(index) as IPart7;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A component's LOCAL placement: <c>IPart7.Placement</c> →
+    /// <c>IPlacement3D.GetMatrix3D</c>, 16 numbers. <c>null</c> — not read, never zeros.</summary>
+    /// <remarks>DOC: <c>ipart7_placement.html</c> («Получить локальную систему координат компонента»),
+    /// <c>iplacement3d_getmatrix3d.html</c> («массив координат SAFEARRAY double (VT_ARRAY | VT_R8)»).
+    /// MEASURED: the returned matrix is exactly what <c>InitByMatrix3D</c> wrote.</remarks>
+    private static double[]? NestedPlacementMatrix(IPart7 part)
+    {
+        try
+        {
+            return part.Placement is { } placement ? Matrix16(placement.GetMatrix3D()) : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Rebuild the path's ANCESTORS from the nearest one up, then the document — the order the
+    /// route was measured with. The BOOL of <c>RebuildModel</c> is not a success claim: the write is
+    /// confirmed by the re-read matrix, and a rebuild that answers false still gets its build from
+    /// <c>ksDocument3D.RebuildDocument()</c>.</summary>
+    /// <remarks>DOC: <c>ipart7_rebuildmodel.html</c>, <c>ksdocument3d_rebuilddocument.html</c>.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private static void RebuildAncestors(DocumentEntry document, List<IPart7> chain)
+    {
+        for (var index = chain.Count - 2; index >= 0; index--)
+        {
+            try
+            {
+                chain[index].RebuildModel(false);
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                // The document rebuild below is the build the comparison relies on.
+            }
+        }
+
+        document.Document3D.RebuildDocument();
+    }
+
+    /// <summary>A path of indices, as an answer names it.</summary>
+    private static string DescribePath(IReadOnlyList<int> path) => string.Join("/", path);
+
+    /// <summary>The source files of the SUBASSEMBLIES this assembly holds, at any depth — the files a save
+    /// of this assembly can write on its own.</summary>
+    /// <remarks>MEASURED (probe `nested-address`): saving ONLY the parent assembly rewrites the file of the
+    /// subassembly whose component was changed (size and write time move), so a save that does not name
+    /// those files hides a change on disk from its caller.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private List<string> NestedSourceFiles(DocumentEntry document, List<string> notes)
+    {
+        var files = new List<string>();
+        var top = TopPart7(document, notes);
+        if (top is not null)
+        {
+            CollectSubassemblyFiles(top, depth: 0, files, notes);
+        }
+
+        return files;
+    }
+
+    private void CollectSubassemblyFiles(IPart7 node, int depth, List<string> files, List<string> notes)
+    {
+        if (depth > MaxStructureDepth)
+        {
+            notes.Add($"subassembly_files_depth_limit — обход подсборок остановлен на глубине "
+                      + $"{MaxStructureDepth}");
+            return;
+        }
+
+        foreach (var child in ChildrenOf(node, notes))
+        {
+            // A DETAIL carries no file of its own to write: only a subassembly is saved together with its
+            // parent. An unread flag leaves the file out AND is named, not silently treated as "a part".
+            var detail = Bool(() => child.Detail);
+            if (detail is null)
+            {
+                notes.Add($"subassembly_flag_unread — у компонента «{Text(() => child.Name) ?? "?"}» признак "
+                          + "«деталь/сборка» не прочитан: его файл не сверяется с записанными");
+                continue;
+            }
+
+            if (detail != false)
+            {
+                continue;
+            }
+
+            var path = Text(() => child.FileName);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                notes.Add($"subassembly_file_unread — у подсборки «{Text(() => child.Name) ?? "?"}» файл не "
+                          + "прочитан: запись его файла сохранением верхней сборки не сверяется");
+                continue;
+            }
+
+            if (!files.Contains(path, StringComparer.OrdinalIgnoreCase))
+            {
+                files.Add(path);
+            }
+
+            CollectSubassemblyFiles(child, depth + 1, files, notes);
+        }
+    }
+
+    /// <summary>How many control rebuilds a save of an assembly that HOLDS a subassembly waits through.</summary>
+    private const int NestedRebuildAttempts = 3;
+
+    /// <summary>The pause between those rebuilds.</summary>
+    private const int NestedRebuildPauseMs = 300;
+
+    /// <summary>Wait for the kernel's rebuild by BUDGET before a save of an assembly that holds nested
+    /// components.</summary>
+    /// <remarks>DOC: <c>ipart7_needrebuild.html</c> promises a flag, but MEASURED: it is ABSENT from
+    /// <c>Interop.KompasAPI7.dll</c> (compile error CS1061), so there is nothing to poll and the wait is a
+    /// named budget. MEASURED: a save raced against a rebuild answers with the OLD placement, so the wait
+    /// stands before the call. Only a save whose document HAS a subassembly pays it.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
+    private void WaitForNestedRebuild(DocumentEntry document, List<string> notes)
+    {
+        try
+        {
+            for (var attempt = 0; attempt < NestedRebuildAttempts; attempt++)
+            {
+                document.Document3D.RebuildDocument();
+                System.Threading.Thread.Sleep(NestedRebuildPauseMs);
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            // A wait that failed is NAMED: the save still runs, and its file stamps stay the proof.
+            notes.Add($"rebuild_before_nested_save_failed — перестроение перед сохранением бросило "
+                      + $"{ex.GetType().Name}: файлы подсборок могут не содержать правку");
+        }
+    }
+
+    private IPart7? TopPart7(DocumentEntry document, List<string> notes)    {
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is IPart7 part7)
@@ -1498,22 +2014,26 @@ public partial class Api5Session
     {
         if (payload.Ordinal == NestedComponentOrdinal)
         {
-            // NESTED COMPONENT: no address. A mutation "by a guessed ordinal" is forbidden — it would hit
-            // a FOREIGN component, because PartCollection enumerates components flatly (a LIMIT, named).
+            // NESTED COMPONENT: no API5 address. A mutation "by a guessed ordinal" is forbidden — it would
+            // hit a FOREIGN component, because PartCollection enumerates components flatly. Placement and
+            // source replacement do NOT come here: they go by the API7 route (see SetNestedPlacement).
             note = "вложенный компонент: адрес API5 неприменим (PartCollection перечисляет компоненты плоско)";
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "Компонент вложен в подсборку, и адресовать его API5-маршрутом нельзя: " +
-                "ksDocument3D.PartCollection(true) перечисляет компоненты сборки ПЛОСКО, поэтому " +
-                "порядковый номер вложенного компонента адресом не является. Поэтому " + operation +
-                " вложенного компонента этим выпуском не выполняется; работайте с компонентом " +
-                "верхнего уровня.",
+                "Компонент вложен в подсборку, и этот маршрут идёт через API5, где адреса у вложенного " +
+                "компонента нет: ksDocument3D.PartCollection(true) перечисляет компоненты сборки ПЛОСКО, " +
+                "поэтому порядковый номер вложенного компонента адресом не является. Поэтому " + operation +
+                " вложенного компонента не выполняется. Размещение и замена источника вложенного " +
+                "компонента работают маршрутом API7 (kompas_set_component_placement, " +
+                "kompas_replace_component); для остальных операций работайте с компонентом верхнего " +
+                "уровня.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
                     ["api7_reference"] = payload.Reference,
                     ["ordinal"] = payload.Ordinal,
-                    ["supported"] = "компоненты верхнего уровня (Depth=0)",
+                    ["supported"] = "компоненты верхнего уровня (Depth=0); API7-маршрут: размещение и "
+                                    + "замена источника",
                 });
         }
 

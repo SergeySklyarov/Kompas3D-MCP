@@ -55,6 +55,11 @@ internal sealed partial class AssemblyExtProbe : IDisposable
             {
                 NestedScenario();
             }
+
+            if (only is null or "nested-address")
+            {
+                NestedAddressScenario();
+            }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException
                                        or NotSupportedException)

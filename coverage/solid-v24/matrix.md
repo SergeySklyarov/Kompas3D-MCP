@@ -266,18 +266,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 390
-- **строк_полностью_закрыто:** 203
-- **строк_с_каким_либо_прогрессом:** 226
+- **строк_каталога:** 392
+- **строк_полностью_закрыто:** 205
+- **строк_с_каким_либо_прогрессом:** 228
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 157
+- **операций:** 159
 - **режимов_и_вариантов:** 236
-- **применимых_действий:** 3142
-- **действий_verified:** 1389
-- **покрытие_действий:** 44.2%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1389, 'not_applicable': 758, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 81, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **применимых_действий:** 3156
+- **действий_verified:** 1403
+- **покрытие_действий:** 44.5%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1403, 'not_applicable': 764, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 83, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -959,6 +959,8 @@
 | `ASM-08.component.delete` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.08.discover, ASM.08.read, ASM.08.edit, ASM.08.rebuild, ASM.08.save_reopen, ASM.08.delete_dependencies, ASM.08.negative_tests, ASM.08.geometry_validation |
 | `ASM-09.component_pattern.grid` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.09.discover, ASM.09.create, ASM.09.create_2x2, ASM.09.read, ASM.09.edit, ASM.09.rebuild, ASM.09.save_reopen, ASM.09.delete_dependencies, ASM.09.negative_tests, ASM.09.geometry_validation |
 | `ASM-10.component_pattern.circular` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.10.discover, ASM.10.create, ASM.10.read, ASM.10.edit, ASM.10.rebuild, ASM.10.save_reopen, ASM.10.delete_dependencies, ASM.10.negative_tests, ASM.10.geometry_validation |
+| `ASM-11.nested.placement_set` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.11.discover, ASM.11.edit, ASM.11.geometry_validation, ASM.11.save_reopen, ASM.11.negative_tests, ASM.11.stale_address, ASM.11.foreign_document, ASM.11.api5_only_refusal |
+| `ASM-12.nested.source_replace` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.12.discover, ASM.12.edit, ASM.12.read, ASM.12.save_reopen, ASM.12.negative_tests |
 | `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation, MATE.01.create_after_mate_moved |
 | `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
 | `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests, MATE.03.geometry_validation |
@@ -1564,6 +1566,15 @@
   - Ожидаемый набор начал выводится только для ОДНОГО радиального слоя (count1=1) при building_type=save_all, reverse_direction=false и step_by_axis_mm=0: направление радиального смещения ядром не измерено. Иначе сверка не выполняется и это названо в unverified_aspects.
   - Удаление отдельного экземпляра (instance_deleted_indexes) не измерено и отвергается CAPABILITY_UNAVAILABLE до мутации.
   - Источник — компонент ВЕРХНЕГО уровня; вложенный компонент входит в наряд ASM_NESTED_COMPONENTS.
+- `ASM-11.nested.placement_set` — закрыт целиком
+  - transform вложенного компонента — ЛОКАЛЬНАЯ система координат в его родителе (IPart7.Placement), а не координаты документа: измерено, что GetSummMatrix(родитель, компонент) отвечает те же числа и начала родителя не прибавляет.
+  - Число тел и граней вложенного компонента НЕ читается: ksPart.BodyCollection() доступен только по плоскому PartCollection(true), поэтому body_count/face_count у вложенной строки пусты, и это названо в notes, а не выдано за ноль.
+  - Удаление, BOM, пересечения, разнесение и массивы компонентов адресуют только ВЕРХНИЙ уровень: вложенный компонент отвергается CAPABILITY_UNAVAILABLE с причиной (строка ASM.11.api5_only_refusal).
+  - Признака IPart7.NeedRebuild в интероп-сборке нет (ошибка компиляции), поэтому перед сохранением сборки с подсборками перестроение ждётся по бюджету: 3 × RebuildDocument с паузой 300 мс.
+- `ASM-12.nested.source_replace` — закрыт целиком
+  - Замена адресует файл-источник вложенного компонента: правка переживает сохранение только ВЕРХНЕЙ сборки (измерено), при этом записывается и файл подсборки — его называет поле saved_subassembly_files ответа kompas_save_document, а отметка файла (размер и время записи) сдвигается.
+  - Документированная альтернатива для замены в МАССИВЕ компонентов (ksPartCollection.SetByIndex) не используется: вложенные экземпляры массива этим нарядом не адресуются.
+  - Кратность вложенного компонента в ответе не заявляется: она читается из IPart7.InstanceCount родителя и в проверки замены не входит.
 - `MATE-01.mate.create` — закрыт целиком
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.

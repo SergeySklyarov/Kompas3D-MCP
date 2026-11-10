@@ -41,9 +41,12 @@ public sealed class ReferenceRegistry
     /// <param name="identity">Identity of the object, when the caller can state one. Stored so that
     /// <see cref="FindLiveByIdentity"/> can hand this reference back instead of minting a second live
     /// address for the same object.</param>
+    /// <param name="idSuffix">An ADDRESS the subject publishes, appended to the id verbatim — the path of a
+    /// nested component (<see cref="ComponentPath"/>). Additive: a reference minted without it keeps the
+    /// old form, so ids issued before the suffix existed stay valid.</param>
     public StoredReference Register(
         string kind, string documentId, long revision, object? payload, string? persistentFeatureId = null,
-        string? identity = null)
+        string? identity = null, string? idSuffix = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
@@ -53,7 +56,8 @@ public sealed class ReferenceRegistry
         }
 
         var stored = new StoredReference(
-            $"{kind}:{Guid.NewGuid():N}", kind, documentId, revision, persistentFeatureId, payload, identity);
+            $"{kind}:{Guid.NewGuid():N}{idSuffix}", kind, documentId, revision, persistentFeatureId, payload,
+            identity);
         if (!_byId.TryAdd(stored.Id, stored))
         {
             throw new InvalidOperationException("Ссылка с таким идентификатором уже существует.");

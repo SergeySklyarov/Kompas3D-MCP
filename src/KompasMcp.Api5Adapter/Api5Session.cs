@@ -1951,6 +1951,21 @@ public sealed partial class Api5Session : IDisposable
         // untouched target while the call answers TRUE, which neither page covers — so the stamp is taken
         // BEFORE the call and compared with the one after it.
         // History: docs/decisions/files.md#save-file-write
+        // SUBASSEMBLY FILES: a save of a parent assembly WRITES the files of the subassemblies whose
+        // components were changed (MEASURED), so their stamps are taken HERE, before the call, for the same
+        // reason the target's are: a stamp taken afterwards cannot tell this save from the previous one.
+        // History: docs/decisions/assembly-ext.md#nested-implemented
+        var nestedNotes = new List<string>();
+        var nestedFiles = document.Kind == DocumentKind.Assembly
+            ? NestedSourceFiles(document, nestedNotes)
+            : [];
+        var nestedBefore = nestedFiles.ToDictionary(
+            file => file, SavedFileWrite.Capture, StringComparer.OrdinalIgnoreCase);
+        if (nestedFiles.Count > 0)
+        {
+            WaitForNestedRebuild(document, nestedNotes);
+        }
+
         var before = SavedFileWrite.Capture(path);
         var temporaryPath = path + SavedFileWrite.TemporarySuffix;
         var temporaryBefore = SavedFileWrite.Capture(temporaryPath);
@@ -2102,13 +2117,51 @@ public sealed partial class Api5Session : IDisposable
         document.SavedFileByteLength = after.ByteLength;
         document.SavedAtUtc = after.WrittenUtc;
 
+        // WHICH SUBASSEMBLY FILES THIS SAVE WROTE — read from the files, never assumed: a file whose stamp
+        // did not move was not written by this call, and a stamp that could not be compared is NAMED instead
+        // of being counted as written or as untouched.
+        var nestedWritten = new List<string>();
+        foreach (var file in nestedFiles)
+        {
+            var stampAfter = SavedFileWrite.Capture(file);
+            var stampBefore = nestedBefore[file];
+            if (stampAfter is not { Exists: true })
+            {
+                nestedNotes.Add($"subassembly_file_not_written — «{file}»: "
+                                + (stampAfter is null ? "отметка после сохранения не прочитана"
+                                    : "файла после сохранения нет")
+                                + ", поэтому запись его этим сохранением не подтверждена");
+                continue;
+            }
+
+            if (stampBefore is not { Exists: true })
+            {
+                nestedNotes.Add($"subassembly_file_not_compared — «{file}»: отметка до сохранения не "
+                                + "прочитана, сверять не с чем; считать ли файл записанным — неизвестно");
+                continue;
+            }
+
+            if (stampBefore.ByteLength != stampAfter.ByteLength
+                || stampBefore.WrittenUtc != stampAfter.WrittenUtc
+                || !string.Equals(stampBefore.Sha256, stampAfter.Sha256, StringComparison.Ordinal))
+            {
+                nestedWritten.Add(file);
+            }
+        }
+
+        if (nestedNotes.Count > 0)
+        {
+            warnings = (warnings ?? []).Concat(nestedNotes).ToArray();
+        }
+
         return new SaveDocumentResult(
             path,
             after.ByteLength,
             after.Sha256!,
             Context(document, includeTopology: false),
             document.Revision,
-            warnings);
+            warnings,
+            nestedWritten);
     }
 
     /// <summary>What the file on disk holds, in words a client can act on: a size, or the reason it is not
@@ -2464,14 +2517,18 @@ public sealed class DocumentEntry
 /// <summary>What a confirmed save answers: the file's size and hash re-read from disk, the document context
 /// and the revision. <see cref="Warnings"/> names the non-fatal fact that the save was confirmed only on its
 /// one repeat, so a client reading the answer alone is not told the first call wrote the file.
-/// History: docs/decisions/files.md#save-file-write</summary>
+/// <see cref="SavedSubassemblyFiles"/> names the SUBASSEMBLY files this save wrote: MEASURED, a save of a
+/// parent assembly writes the file of a subassembly whose component was changed, and an answer that omits it
+/// leaves a change on disk unnamed.
+/// History: docs/decisions/files.md#save-file-write, docs/decisions/assembly-ext.md#nested-implemented</summary>
 public sealed record SaveDocumentResult(
     string? Path,
     long ByteLength,
     string Sha256,
     DocumentContextDto Context,
     long Revision,
-    IReadOnlyList<string>? Warnings = null);
+    IReadOnlyList<string>? Warnings = null,
+    IReadOnlyList<string>? SavedSubassemblyFiles = null);
 
 /// <summary>Struct-type selectors for <c>KompasObject.GetParamStruct(Int16)</c>, from
 /// <c>StructType2DEnum</c> (<c>Interop.Kompas6Constants.dll</c>). The member names are the vendor's;

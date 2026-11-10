@@ -973,6 +973,10 @@ RUN_GROUPS = (
      "Приёмка ASM-09/ASM-10: массивы КОМПОНЕНТОВ сборки - сетка 3x1 и 2x2, круговой, чтение "
      "семейства components с исходными ссылками, переоткрытие, правка, удаление и каждый отказ "
      "(наряд ASM_PATTERN_COMPONENTS, профиль assembly-ext-v1)"),
+    ("asm_nested", "asm-nested", "asm-nested-acceptance.json",
+     "Приёмка ASM-11/ASM-12: размещение и замена источника компонента ВНУТРИ подсборки - путь в ссылке, "
+     "маршрут API7, сохранение верхней сборки с названным файлом подсборки, переоткрытие и каждый отказ "
+     "(наряд ASM_NESTED_COMPONENTS, профиль assembly-ext-v1)"),
     ("catalog", "catalog", "catalog-acceptance.json",
      "Приёмка CT: механизм каталога — список постоянен по размеру, find/describe/run, отказы по "
      "имени поля (наряды CATALOG_MECHANISM_RESEARCH и CATALOG_FULL_REMOVAL)"),
@@ -1056,6 +1060,7 @@ VERTICAL_GROUPS = (
 ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
     ("pattern_components", ["--pattern-components-only"]),
+    ("asm_nested", ["--assembly-nested-only"]),
     ("mate", ["--mate-only"]),
     ("mate_ext", ["--mate-ext-only"]),
     ("mech_mates", ["--mech-mates-only"]),
@@ -2332,6 +2337,8 @@ FLAGS = (
     ("--assembly-only", False, "группа ASM: минимальные сборки"),
     ("--pattern-components-only", False,
      "группа ASM-09/ASM-10: массивы КОМПОНЕНТОВ по сетке и концентрической сетке"),
+    ("--assembly-nested-only", False,
+     "группа ASM-11/12: размещение и замена источника вложенного компонента"),
     ("--mate-only", False, "группа MATE: сопряжения сборки"),
     ("--mate-ext-only", False,
      "группа MATE-08/09: симметрия и зависимое положение (профиль assembly-ext-v1)"),
@@ -20581,6 +20588,9 @@ def main():
     # Группа ASM-09/ASM-10 (массивы КОМПОНЕНТОВ): своя ветка по той же причине - клетка матрицы
     # находится по ИМЕНИ строки (`ASM.09.<действие>` / `ASM.10.<действие>`).
     pattern_components_only = "--pattern-components-only" in sys.argv
+    # Группа ASM-11/ASM-12 (компонент ВНУТРИ подсборки): своя ветка по той же причине - клетка матрицы
+    # находится по ИМЕНИ строки (`ASM.11.<действие>` / `ASM.12.<действие>`).
+    assembly_nested_only = "--assembly-nested-only" in sys.argv
     # То же для домена СОПРЯЖЕНИЙ (блок C2): одна группа MATE на своём сеансе. Отдельная ветка нужна
     # по той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
@@ -20794,6 +20804,7 @@ def main():
         "nested": nested_only,
         "assembly": assembly_only,
         "pattern_components": pattern_components_only,
+        "asm_nested": assembly_nested_only,
         "mate": mate_only,
         "mate_ext": mate_ext_only,
         "mech_mates": mech_mates_only,
@@ -21491,6 +21502,14 @@ def main():
 
         if pattern_components_only:
             pattern_components_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if assembly_nested_only:
+            assembly_nested_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -63905,9 +63924,394 @@ def mate_ext_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
 
+def assembly_nested_checks(client, rep, app_id, workdir):
+    """Приёмка ASM-11/ASM-12: размещение и замена источника компонента ВНУТРИ подсборки.
+
+    Наряд `ASM_NESTED_COMPONENTS` (профиль `assembly-ext-v1`). Маршрут измерен пробой
+    `AssemblyExtProbe.NestedAddress` (`scripts/probes/assembly-ext/`): адрес вложенного компонента - путь
+    индексов `IPart7.Parts` → `IParts7.Part(index)`, размещение - `IPart7.Placement` →
+    `IPlacement3D.InitByMatrix3D` → `IPart7.UpdatePlacement`, источник - `IPart7.FileName` +
+    `IModelObject.Update`.
+
+    ЧТО СЧИТАЕТСЯ ДОКАЗАТЕЛЬСТВОМ. `UpdatePlacement` и `Update()` отвечают BOOL, и ИЗМЕРЕНО, что
+    `UpdatePlacement` отвечает FALSE на применённой записи, поэтому успех называется ПЕРЕЧИТЫВАНИЕМ
+    матрицы и источника. Постановка РАЗЛИЧАЮЩАЯ: подсборка стоит в (100, 0, 0), свободная деталь - в
+    (200, 0, 0), поэтому запись в (0, 0, 20) вложенного компонента обязана оставить оба начала на месте, а
+    перечитанная ЛОКАЛЬНАЯ матрица равна записанной. Матрица вложенного в `kompas_list_components` -
+    локальная (в координатах родителя), поэтому (0, 0, 20), а не (100, 0, 20).
+
+    ПОЧЕМУ СОХРАНЯЕТСЯ ТОЛЬКО ВЕРХНЯЯ СБОРКА. Измерено: правка вложенного компонента переживает
+    сохранение ТОЛЬКО верхней сборки, и при этом записывается файл подсборки. Поэтому строка сохранения
+    требует, чтобы ответ назвал файл подсборки (`saved_subassembly_files`), а переоткрытие - чтобы правка
+    была на месте.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Удаление вложенного компонента, `DestroySubassembly`, `SaveAs` подсборки отдельно и
+    сопряжения на вложенных компонентах в наряд не входят.
+    """
+
+    def call(tool, payload, timeout=300):
+        payload = dict(payload)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return (env if isinstance(env, dict) else {}), error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def listing(doc, recursive=False):
+        payload = {"document_id": doc}
+        if recursive:
+            payload["recursive"] = True
+        env, code = call("kompas_list_components", payload)
+        rows = result(env).get("components") or []
+        return rows, code, result(env).get("notes") or []
+
+    def origin(row):
+        matrix = row.get("matrix") or []
+        return [matrix[12], matrix[13], matrix[14]] if len(matrix) >= 15 else None
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
+
+    def checks_of(env):
+        r = result(env)
+        found = list(r.get("checks") or [])
+        found += list((r.get("verification") or {}).get("checks") or [])
+        found += list(((env or {}).get("verification") or {}).get("checks") or [])
+        return found
+
+    def check_passed(env, name):
+        for row in checks_of(env):
+            if row.get("name") == name:
+                return bool(row.get("passed"))
+        return None
+
+    def unverified(env):
+        return result(env).get("unverified_aspects") or []
+
+    def build_part(path, name, height):
+        """Деталь-источник: брусок 20 × 10 заданной высоты, сохранённый на диск."""
+        _env, _code = call("kompas_create_document",
+                           {"application_id": app_id, "kind": "part", "name": name})
+        doc = doc_id(_env)
+        if not doc:
+            return None, f"документ детали: {_code} {emsg(_env)}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-sketch"})
+        sketch = result(env).get("id")
+        if not sketch:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, f"эскиз: {code} {emsg(env)}"
+        call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 20, "height_mm": 10}]})
+        call("kompas_finish_sketch", {"sketch_ref": sketch, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "operation": "base",
+            "depth_mm": height, "direction": "positive"})
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, f"выдавливание: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": current_rev(doc), "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if saved else None), (None if saved else f"сохранение: {code} {emsg(env)}")
+
+    def new_assembly(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "assembly", "name": name})
+        doc = doc_id(env)
+        return doc, rev_of(env), (None if doc else f"сборка: {code} {emsg(env)}")
+
+    def insert(doc, source_path, origin_mm):
+        env, code = call("kompas_insert_component", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "source_path": source_path, "fixed": False,
+            "transform": {"origin_mm": list(origin_mm), "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}},
+            timeout=300)
+        ref = result(env).get("component_ref") or {}
+        return ref.get("id") if isinstance(ref, dict) else ref, code, emsg(env)
+
+    def place(doc, component_ref, origin_mm, x_axis=(1.0, 0.0, 0.0), y_axis=(0.0, 1.0, 0.0)):
+        return call("kompas_set_component_placement", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "component_ref": component_ref,
+            "transform": {"origin_mm": list(origin_mm), "x_axis": list(x_axis),
+                          "y_axis": list(y_axis)}})
+
+    def replace(doc, component_ref, source_path):
+        return call("kompas_replace_component", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "component_ref": component_ref, "source_path": source_path})
+
+    def nested_row(doc):
+        """Строка ВЛОЖЕННОГО компонента и полное перечисление: глубина > 0 - признак вложенности."""
+        rows, code, notes = listing(doc, recursive=True)
+        nested = [r for r in rows if (r.get("depth") or 0) > 0]
+        return (nested[0] if nested else {}), rows, code, notes
+
+    def top_origins(rows):
+        return {r.get("name"): origin(r) for r in rows if (r.get("depth") or 0) == 0}
+
+    def ref_of(row):
+        ref = row.get("component_ref")
+        return ref.get("id") if isinstance(ref, dict) else ref
+
+    src_dir = os.path.join(workdir, "assembly-nested")
+    os.makedirs(src_dir, exist_ok=True)
+    path_a = os.path.join(src_dir, "nested-a.m3d")
+    path_b = os.path.join(src_dir, "nested-b.m3d")
+    path_c = os.path.join(src_dir, "nested-c.m3d")
+    part_a, err_a = build_part(path_a, "NST-A", 5)
+    part_b, err_b = build_part(path_b, "NST-B", 8)
+    part_c, err_c = build_part(path_c, "NST-C", 3)
+    rep.add("ASM.11.source", "три детали-источника (A, B, C) сохранены на диск",
+            "PASS" if (part_a and part_b and part_c) else "FAIL",
+            f"a={part_a} b={part_b} c={part_c} ошибки={err_a} {err_b} {err_c}")
+    if not (part_a and part_b and part_c):
+        return
+
+    # ── постановка: подсборка с A, верхняя сборка [подсборка в (100,0,0), B в (200,0,0)] ──
+    sub_doc, _rev, sub_err = new_assembly("NST-sub")
+    if not sub_doc:
+        rep.add("ASM.11.fixture", "подсборка создана", "FAIL", str(sub_err))
+        return
+    _ref_a, code_a, msg_a = insert(sub_doc, path_a, (0, 0, 0))
+    sub_path = os.path.join(src_dir, "nested-sub.m3d")
+    env, code_save = call("kompas_save_document", {
+        "document_id": sub_doc, "expected_revision": current_rev(sub_doc), "target_path": sub_path})
+    sub_saved = (not code_save) and os.path.isfile(sub_path)
+    call("kompas_close_document", {"document_id": sub_doc, "dirty_policy": "discard"})
+    rep.add("ASM.11.fixture", "подсборка с деталью A сохранена на диск",
+            "PASS" if sub_saved else "FAIL",
+            f"вставка={code_a} {msg_a} сохранение={code_save} {emsg(env)} путь={sub_path}")
+    if not sub_saved:
+        return
+
+    top_doc, _rev, top_err = new_assembly("NST-top")
+    if not top_doc:
+        rep.add("ASM.11.fixture_top", "верхняя сборка создана", "FAIL", str(top_err))
+        return
+    _ref_sub, code_sub, msg_sub = insert(top_doc, sub_path, (100, 0, 0))
+    _ref_b, code_b, msg_b = insert(top_doc, path_b, (200, 0, 0))
+
+    # ── ASM.11.discover ──
+    nested, rows, code, notes = nested_row(top_doc)
+    nested_ref = ref_of(nested)
+    nested_origin = origin(nested)
+    top_map = top_origins(rows)
+    carries_path = isinstance(nested_ref, str) and "/" in nested_ref
+    rep.add("ASM.11.discover",
+            "перечисление с recursion показывает вложенный компонент, его ссылка несёт ПУТЬ, "
+            "а его матрица — ЛОКАЛЬНАЯ (0, 0, 0) при подсборке в (100, 0, 0)",
+            "PASS" if (not code and nested_ref and carries_path and near(nested_origin, [0, 0, 0])) else "FAIL",
+            f"строк={len(rows)} вложенных={sum(1 for r in rows if (r.get('depth') or 0) > 0)} "
+            f"ссылка={nested_ref} путь_в_ссылке={carries_path} начало={nested_origin} "
+            f"верхние={top_map} ошибка={code} notes={notes}")
+    if not (nested_ref and carries_path):
+        return
+
+    # ── ASM.11.edit: размещение вложенного компонента ──
+    env, code = place(top_doc, nested_ref, (0, 0, 20))
+    before = result(env).get("placement_before_matrix")
+    after = result(env).get("placement_after_matrix")
+    before_origin = [before[12], before[13], before[14]] if before and len(before) >= 15 else None
+    after_origin = [after[12], after[13], after[14]] if after and len(after) >= 15 else None
+    rep.add("ASM.11.edit",
+            "размещение ВЛОЖЕННОГО компонента задано и ПЕРЕЧИТАНО: было (0, 0, 0), стало (0, 0, 20)",
+            "PASS" if (not code and near(before_origin, [0, 0, 0]) and near(after_origin, [0, 0, 20])
+                       and check_passed(env, "placement_read_back_matches_request") is True) else "FAIL",
+            f"было={before_origin} стало={after_origin} "
+            f"проверка={check_passed(env, 'placement_read_back_matches_request')} "
+            f"revision={rev_of(env)} unverified={unverified(env)} ошибка={code} {emsg(env)}")
+
+    # ── ASM.11.geometry_validation: независимое чтение структуры ──
+    nested2, rows2, code2, notes2 = nested_row(top_doc)
+    nested2_origin = origin(nested2)
+    top_map2 = top_origins(rows2)
+    top_origins2 = [o for o in top_map2.values() if o is not None]
+    rep.add("ASM.11.geometry_validation",
+            "правка легла ТОЛЬКО во вложенный компонент: он в (0, 0, 20), а подсборка и свободная "
+            "деталь остались в (100, 0, 0) и (200, 0, 0)",
+            "PASS" if (not code2 and near(nested2_origin, [0, 0, 20])
+                       and any(near(o, [100, 0, 0]) for o in top_origins2)
+                       and any(near(o, [200, 0, 0]) for o in top_origins2)) else "FAIL",
+            f"вложенный={nested2_origin} верхние={top_map2} errors={code2} notes={notes2}")
+
+    # ── ASM.11.save_reopen: сохранение ТОЛЬКО верхней сборки и переоткрытие ──
+    top_path = os.path.join(src_dir, "nested-top.m3d")
+    env, code = call("kompas_save_document", {
+        "document_id": top_doc, "expected_revision": current_rev(top_doc), "target_path": top_path})
+    saved_files = result(env).get("saved_subassembly_files") or []
+    saved_ok = (not code) and os.path.isfile(top_path)
+    named_sub = any(str(f).lower().endswith("nested-sub.m3d") for f in saved_files)
+    call("kompas_close_document", {"document_id": top_doc, "dirty_policy": "discard"})
+    env, code_open = call("kompas_open_document",
+                          {"application_id": app_id, "path": top_path, "access": "edit"})
+    reopened = doc_id(env)
+    nested3, rows3, code3, notes3 = nested_row(reopened) if reopened else ({}, [], None, [])
+    nested3_origin = origin(nested3)
+    rep.add("ASM.11.save_reopen",
+            "сохранение ТОЛЬКО верхней сборки назвало файл подсборки, а после переоткрытия размещение "
+            "вложенного компонента на месте (0, 0, 20)",
+            "PASS" if (saved_ok and named_sub and reopened and not code_open
+                       and near(nested3_origin, [0, 0, 20])) else "FAIL",
+            f"сохранено={saved_ok} файлы_подсборок={saved_files} названа_подсборка={named_sub} "
+            f"документ={reopened} вложенный={nested3_origin} ошибки={code},{code_open},{code3} "
+            f"notes={notes3}")
+    if not reopened:
+        return
+    top_doc = reopened
+
+    # ── ASM.11.negative_tests: вырожденный кадр отвергается ДО мутации ──
+    nested4, _rows4, _c4, _n4 = nested_row(top_doc)
+    ref4 = ref_of(nested4)
+    before_place = origin(nested4)
+    env, code = place(top_doc, ref4, (0, 0, 30), x_axis=(0.0, 0.0, 0.0))
+    nested5, _rows5, _c5, _n5 = nested_row(top_doc)
+    rep.add("ASM.11.negative_tests",
+            "вырожденная ось отвергается INVALID_ARGUMENT, размещение не меняется",
+            "PASS" if (code == "INVALID_ARGUMENT" and near(origin(nested5), before_place)) else "FAIL",
+            f"код={code} сообщение={emsg(env)} было={before_place} стало={origin(nested5)}")
+
+    # ── ASM.11.stale_address: путь, которого нет, отвергается ──
+    broken_ref = f"{ref4}/0" if isinstance(ref4, str) else ref4
+    env, code = place(top_doc, broken_ref, (0, 0, 40))
+    nested6, _rows6, _c6, _n6 = nested_row(top_doc)
+    rep.add("ASM.11.stale_address",
+            "ссылка с несуществующим путём отвергается STALE_REFERENCE, модель не меняется",
+            "PASS" if (code == "STALE_REFERENCE" and near(origin(nested6), before_place)) else "FAIL",
+            f"ссылка={broken_ref} код={code} сообщение={emsg(env)} начало={origin(nested6)}")
+
+    # ── ASM.11.foreign_document: ссылка из ЧУЖОГО документа ──
+    # ССЫЛКА БЕРЁТСЯ, ПОКА ДОКУМЕНТ ОТКРЫТ: закрытие отзывает ссылки своего документа, и после него
+    # отказ был бы STALE_REFERENCE вместо проверяемого CAPABILITY_UNAVAILABLE.
+    foreign_env, code_foreign = call("kompas_open_document",
+                                     {"application_id": app_id, "path": sub_path, "access": "read_only"})
+    sub_as_document = doc_id(foreign_env)
+    foreign_ref = None
+    if sub_as_document:
+        sub_rows, _c, _n = listing(sub_as_document)
+        top_rows = [r for r in sub_rows if (r.get("depth") or 0) == 0]
+        foreign_ref = ref_of(top_rows[0]) if top_rows else None
+    env, code = place(top_doc, foreign_ref, (0, 0, 50)) if foreign_ref else ({}, None)
+    if sub_as_document:
+        call("kompas_close_document", {"document_id": sub_as_document, "dirty_policy": "discard"})
+    rep.add("ASM.11.foreign_document",
+            "ссылка на компонент, выпущенная в ДРУГОМ документе (сама подсборка), отвергается "
+            "CAPABILITY_UNAVAILABLE, а не выполняется",
+            "PASS" if (foreign_ref and code == "CAPABILITY_UNAVAILABLE") else "FAIL",
+            f"чужая_ссылка={foreign_ref} код={code} сообщение={emsg(env)} открытие={code_foreign}")
+
+    # ── ASM.11.api5_only_refusal: маршрут API5 вложенный компонент не адресует ──
+    env, code = call("kompas_delete_component", {
+        "document_id": top_doc, "expected_revision": current_rev(top_doc),
+        "component_ref": ref4, "confirm_dependents": False})
+    rep.add("ASM.11.api5_only_refusal",
+            "операция, которая идёт только маршрутом API5 (удаление компонента), отвергает вложенный "
+            "компонент CAPABILITY_UNAVAILABLE и называет причину",
+            "PASS" if code == "CAPABILITY_UNAVAILABLE" else "FAIL",
+            f"код={code} сообщение={emsg(env)}")
+
+    # ── ASM.12.discover: источник вложенного ДО замены ──
+    nested7, _rows7, _c7, _n7 = nested_row(top_doc)
+    ref7 = ref_of(nested7)
+    source_before = nested7.get("source_path")
+    rep.add("ASM.12.discover",
+            "источник вложенного компонента читается до замены (nested-a.m3d)",
+            "PASS" if (source_before and str(source_before).lower().endswith("nested-a.m3d")) else "FAIL",
+            f"источник={source_before} ссылка={ref7} начало={origin(nested7)}")
+    if not ref7:
+        return
+
+    # ── ASM.12.edit: замена источника вложенного компонента ──
+    placement_before_replace = origin(nested7)
+    env, code = replace(top_doc, ref7, path_c)
+    source_after = result(env).get("source_path_after")
+    after_matrix = result(env).get("placement_after_matrix")
+    after_origin = [after_matrix[12], after_matrix[13], after_matrix[14]] \
+        if after_matrix and len(after_matrix) >= 15 else None
+    rep.add("ASM.12.edit",
+            "источник ВЛОЖЕННОГО компонента заменён на nested-c.m3d, размещение сохранено",
+            "PASS" if (not code and source_after and str(source_after).lower().endswith("nested-c.m3d")
+                       and near(after_origin, placement_before_replace)
+                       and check_passed(env, "source_changed") is True
+                       and check_passed(env, "placement_preserved") is True) else "FAIL",
+            f"источник={source_after} было={placement_before_replace} стало={after_origin} "
+            f"source_changed={check_passed(env, 'source_changed')} "
+            f"placement_preserved={check_passed(env, 'placement_preserved')} "
+            f"unverified={unverified(env)} ошибка={code} {emsg(env)}")
+
+    # ── ASM.12.read ──
+    nested8, rows8, code8, notes8 = nested_row(top_doc)
+    rep.add("ASM.12.read",
+            "перечитывание структуры: у вложенного компонента новый источник и прежнее размещение",
+            "PASS" if (not code8 and str(nested8.get("source_path") or "").lower().endswith("nested-c.m3d")
+                       and near(origin(nested8), placement_before_replace)) else "FAIL",
+            f"источник={nested8.get('source_path')} начало={origin(nested8)} "
+            f"верхние={top_origins(rows8)} ошибка={code8} notes={notes8}")
+
+    # ── ASM.12.save_reopen: сохранение верхней сборки называет файл подсборки ──
+    top2_path = os.path.join(src_dir, "nested-top-replaced.m3d")
+    env, code = call("kompas_save_document", {
+        "document_id": top_doc, "expected_revision": current_rev(top_doc), "target_path": top2_path})
+    saved2 = result(env).get("saved_subassembly_files") or []
+    named2 = any(str(f).lower().endswith("nested-sub.m3d") for f in saved2)
+    save_ok = (not code) and os.path.isfile(top2_path)
+    warnings2 = result(env).get("warnings") or []
+    call("kompas_close_document", {"document_id": top_doc, "dirty_policy": "discard"})
+    env, code_open = call("kompas_open_document",
+                          {"application_id": app_id, "path": top2_path, "access": "edit"})
+    reopened2 = doc_id(env)
+    nested9, _rows9, code9, notes9 = nested_row(reopened2) if reopened2 else ({}, [], None, [])
+    rep.add("ASM.12.save_reopen",
+            "после сохранения ТОЛЬКО верхней сборки ответ назвал файл подсборки, а переоткрытие "
+            "показывает новый источник и прежнее размещение",
+            "PASS" if (save_ok and named2 and reopened2 and not code_open
+                       and str(nested9.get("source_path") or "").lower().endswith("nested-c.m3d")
+                       and near(origin(nested9), placement_before_replace)) else "FAIL",
+            f"сохранено={save_ok} файлы_подсборок={saved2} named={named2} предупреждения={warnings2} "
+            f"документ={reopened2} источник={nested9.get('source_path')} начало={origin(nested9)} "
+            f"ошибки={code},{code_open},{code9} notes={notes9}")
+    if not reopened2:
+        return
+
+    # ── ASM.12.negative_tests: отсутствующий источник отвергается ДО мутации ──
+    nested10, _rows10, _c10, _n10 = nested_row(reopened2)
+    ref10 = ref_of(nested10)
+    env, code = replace(reopened2, ref10, os.path.join(src_dir, "nested-absent.m3d"))
+    nested11, _rows11, _c11, _n11 = nested_row(reopened2)
+    rep.add("ASM.12.negative_tests",
+            "отсутствующий файл-источник отвергается до мутации, источник вложенного не меняется",
+            "PASS" if (code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED")
+                       and nested11.get("source_path") == nested10.get("source_path")) else "FAIL",
+            f"код={code} сообщение={emsg(env)} было={nested10.get('source_path')} "
+            f"стало={nested11.get('source_path')}")
+    call("kompas_close_document", {"document_id": reopened2, "dirty_policy": "discard"})
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "pattern_components": lambda c, r, a, w, v, p: pattern_components_checks(c, r, a, w),
+    "asm_nested": lambda c, r, a, w, v, p: assembly_nested_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "mate_ext": lambda c, r, a, w, v, p: mate_ext_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),

@@ -63,7 +63,7 @@
   },
   "counters": {
    "families": 49,
-   "operations": 157,
+   "operations": 159,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 236,
    "operations_without_level": 0,
@@ -6326,8 +6326,8 @@
     "runtime": "живой прогон 04.10.2026, группа ASM (scripts/mcp-smoke.py --assembly-only): 52 строки, 0 отказов"
    },
    "route": "API5 ksDocument3D.CreatePartInAssembly / ksComponentPositioner / ksPart.GetPlacement; API7 IAssemblyDocument.TopPart → IPart7.PartsEx / IComponentPositioner7 (мост ksGetApplication7 в том же сеансе). Основной маршрут вставки — OQ-C1-1.",
-   "mcp_support": "kompas_create_document(kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document (жизненный цикл) + kompas_list_components / kompas_insert_component / kompas_set_component_placement / kompas_replace_component / kompas_check_component_links",
-   "next_step": "Живой прогон пройден (52 строки, 0 отказов). Следующее: приёмка на БИНАРЯХ ПОСТАВКИ и переиздание аудита.",
+   "mcp_support": "kompas_create_document(kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document (жизненный цикл) + kompas_list_components / kompas_insert_component / kompas_set_component_placement / kompas_replace_component / kompas_check_component_links; размещение и замена источника принимают и ВЛОЖЕННЫЙ компонент (маршрут API7, строки ASM-11/ASM-12)",
+   "next_step": "Живой прогон пройден (52 строки, 0 отказов), строки ASM-11/ASM-12 пройдены группой ASM-11/ASM-12 на профиле assembly-ext-v1. Следующее: приёмка на БИНАРЯХ ПОСТАВКИ и переиздание аудита.",
    "operations": [
     {
      "id": "ASM-01.document.create_open",
@@ -6597,6 +6597,56 @@
      "modes": [],
      "mcp_support": "kompas_pattern_circular (copy_kind=components); чтение - kompas_get_pattern, правка - kompas_update_feature, удаление - kompas_delete_feature",
      "next_step": "Живой прогон группы ASM-09/ASM-10 прибора scripts/mcp-smoke.py пройден: кольцо из четырёх компонентов с шагом 90°, чтение, переоткрытие, правка, удаление и отказы."
+    },
+    {
+     "id": "ASM-11.nested.placement_set",
+     "name": "Задать размещение компонента ВНУТРИ подсборки",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ipart7_parts",
+      "iparts7_part",
+      "ipart7_placement",
+      "iplacement3d_initbymatrix3d",
+      "iplacement3d_getmatrix3d",
+      "ipart7_updateplacement",
+      "ipart7_rebuildmodel",
+      "ksloadstateenum"
+     ],
+     "interfaces": {
+      "api7": [
+       "IPart7.Parts -> IParts7.Part(index) -> IPart7 (путь адреса)",
+       "IPart7.Placement -> IPlacement3D",
+       "IPlacement3D.InitByMatrix3D(VARIANT VT_ARRAY|VT_R8) -> BOOL",
+       "IPart7.UpdatePlacement(BOOL Redraw) -> BOOL",
+       "IPlacement3D.GetMatrix3D() -> SAFEARRAY double 16",
+       "IPart7.RebuildModel(BOOL)"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "kompas_set_component_placement по ссылке вложенного компонента из kompas_list_components(recursive=true); чтение — kompas_list_components (матрица в координатах родителя)",
+     "next_step": "Живой прогон группы ASM-11/ASM-12 прибора scripts/mcp-smoke.py пройден: запись (0, 0, 20) в компонент подсборки, стоящей в (100, 0, 0), соседи не сдвинулись, сохранение верхней сборки и переоткрытие правку сохраняют, каждый отказ назван своим кодом."
+    },
+    {
+     "id": "ASM-12.nested.source_replace",
+     "name": "Заменить файл-источник компонента ВНУТРИ подсборки",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ipart7_parts",
+      "iparts7_part",
+      "ipart7_filename",
+      "ipart7_placement"
+     ],
+     "interfaces": {
+      "api7": [
+       "IPart7.Parts -> IParts7.Part(index) -> IPart7 (путь адреса)",
+       "IPart7.FileName (put_FileName)",
+       "IModelObject.Update() -> BOOL (изменение вступает в силу после вызова)",
+       "IPart7.Placement -> IPlacement3D.GetMatrix3D() -> 16 элементов"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "kompas_replace_component по ссылке вложенного компонента; сохранение верхней сборки называет записанный файл подсборки полем saved_subassembly_files",
+     "next_step": "Живой прогон группы ASM-11/ASM-12 прибора scripts/mcp-smoke.py пройден: замена nested-a.m3d на nested-c.m3d с сохранённым локальным размещением, переоткрытием и названным файлом подсборки в ответе сохранения."
     }
    ]
   },

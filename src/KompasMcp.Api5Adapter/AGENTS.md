@@ -16,9 +16,18 @@ API7. One `Api5Session` partial class, one file per domain.
   notes.
 - INVARIANT: the placement matrix is NOT stored in the reference; it is read FRESH from the live parent.
 - INVARIANT: a failed mandatory check is not success - placement/fixing must be re-read and match.
-- LIMIT: a nested component has no API5 address; its placement/replacement is unsupported.
+- INVARIANT: a NESTED component is addressed by a PATH of `IPart7.Parts` → `IParts7.Part(index)` indices
+  from the top (MEASURED: the index equals the `PartsEx` order, and `IPart7.Reference` survives our own
+  writes); its placement and source go by API7, and a path that does not resolve, or resolves to another
+  `Reference`, is refused STALE_REFERENCE.
+- INVARIANT: success of a nested write is named by the RE-READ LOCAL matrix - `UpdatePlacement` answers
+  FALSE on an applied write (MEASURED), and `IPart7.Placement` is the component's frame INSIDE its parent.
+- LIMIT: a nested component has no API5 address, so every other operation on it (delete, BOM,
+  interference, dismantle, component patterns) refuses `CAPABILITY_UNAVAILABLE` naming the reason.
 - DOC: `iparts7_addfromfile.html`, `ksdocument3d_partcollection.html`, `kspart_setfilename.html`,
-  `ipart7_getsummmatrix.html`.
+  `ipart7_getsummmatrix.html`, `ipart7_parts.html`, `iparts7_part.html`, `ipart7_placement.html`,
+  `iplacement3d_initbymatrix3d.html`, `iplacement3d_getmatrix3d.html`, `ipart7_updateplacement.html`,
+  `ipart7_filename.html`, `ipart7_needrebuild.html`, `ksloadstateenum.html`.
 
 ### mates (`Api5Session.Mate.cs`)
 

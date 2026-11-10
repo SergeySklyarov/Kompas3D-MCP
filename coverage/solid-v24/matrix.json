@@ -17277,6 +17277,251 @@
         }
       ]
     }
+  },
+  {
+    "operation_id": "ASM-11.nested.placement_set",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "ASM",
+    "catalog_refs": [
+      "ASM-11.nested.placement_set"
+    ],
+    "parameters_schema": null,
+    "adapter_route": "kompas_set_component_placement на ВЛОЖЕННОМ компоненте: адрес — путь индексов IPart7.Parts → IParts7.Part от верхней сборки (сама ссылка несёт путь: component:<uuid>/<i>/...); запись — IPart7.Placement → IPlacement3D.InitByMatrix3D → IPart7.UpdatePlacement(false) → RebuildModel каждого родителя → ksDocument3D.RebuildDocument; подтверждение — СРАВНЕНИЕ перечитанной ЛОКАЛЬНОЙ матрицы (IPart7.Placement.GetMatrix3D, 12 значимых элементов, допуск 0.01 мм) с записанной. ИЗМЕРЕНО: UpdatePlacement отвечает false на применённой записи, поэтому успех называет только перечитывание; матрица вложенного — в координатах родителя, а не документа",
+    "actions": {
+      "discover": "verified",
+      "create": "not_applicable",
+      "read": "verified",
+      "edit": "verified",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "not_applicable",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "ASM.11.discover",
+      "ASM.11.edit",
+      "ASM.11.geometry_validation",
+      "ASM.11.save_reopen",
+      "ASM.11.negative_tests",
+      "ASM.11.stale_address",
+      "ASM.11.foreign_document",
+      "ASM.11.api5_only_refusal"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/assembly-nested/asm-nested-acceptance.json",
+      "scripts/probes/assembly-ext/AssemblyExtProbe.NestedAddress.cs",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "transform вложенного компонента — ЛОКАЛЬНАЯ система координат в его родителе (IPart7.Placement), а не координаты документа: измерено, что GetSummMatrix(родитель, компонент) отвечает те же числа и начала родителя не прибавляет.",
+      "Число тел и граней вложенного компонента НЕ читается: ksPart.BodyCollection() доступен только по плоскому PartCollection(true), поэтому body_count/face_count у вложенной строки пусты, и это названо в notes, а не выдано за ноль.",
+      "Удаление, BOM, пересечения, разнесение и массивы компонентов адресуют только ВЕРХНИЙ уровень: вложенный компонент отвергается CAPABILITY_UNAVAILABLE с причиной (строка ASM.11.api5_only_refusal).",
+      "Признака IPart7.NeedRebuild в интероп-сборке нет (ошибка компиляции), поэтому перед сохранением сборки с подсборками перестроение ждётся по бюджету: 3 × RebuildDocument с паузой 300 мс."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.component_address",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "create": "размещение не создаёт компонент: состав сборки не меняется (измерено)",
+      "suppress_restore": "подавление компонентов в профиль assembly-ext-v1 не входит",
+      "delete_dependencies": "удаление вложенного компонента в наряд не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "recursive"
+          ]
+        }
+      ],
+      "note": "вложенная строка несёт ссылку с ПУТЁМ (component:<uuid>/<i>/...), а её матрица — в координатах родителя"
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    },
+    "edit_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_set_component_placement"
+        }
+      ]
+    },
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_set_component_placement"
+        },
+        {
+          "tool": "kompas_delete_component"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    }
+  },
+  {
+    "operation_id": "ASM-12.nested.source_replace",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "ASM",
+    "catalog_refs": [
+      "ASM-12.nested.source_replace"
+    ],
+    "parameters_schema": null,
+    "adapter_route": "kompas_replace_component на ВЛОЖЕННОМ компоненте: адрес — путь индексов IPart7.Parts → IParts7.Part; замена — IPart7.FileName (put) + IModelObject.Update; подтверждение — перечитанный источник (IPart7.FileName) и сохранённое ЛОКАЛЬНОЕ размещение (IPart7.Placement.GetMatrix3D). ИЗМЕРЕНО: IPart7.Reference переживает замену источника, поэтому взятая ссылка остаётся годной",
+    "actions": {
+      "discover": "verified",
+      "create": "not_applicable",
+      "read": "verified",
+      "edit": "verified",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "not_applicable",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "ASM.12.discover",
+      "ASM.12.edit",
+      "ASM.12.read",
+      "ASM.12.save_reopen",
+      "ASM.12.negative_tests"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/assembly-nested/asm-nested-acceptance.json",
+      "scripts/probes/assembly-ext/AssemblyExtProbe.NestedAddress.cs",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "Замена адресует файл-источник вложенного компонента: правка переживает сохранение только ВЕРХНЕЙ сборки (измерено), при этом записывается и файл подсборки — его называет поле saved_subassembly_files ответа kompas_save_document, а отметка файла (размер и время записи) сдвигается.",
+      "Документированная альтернатива для замены в МАССИВЕ компонентов (ksPartCollection.SetByIndex) не используется: вложенные экземпляры массива этим нарядом не адресуются.",
+      "Кратность вложенного компонента в ответе не заявляется: она читается из IPart7.InstanceCount родителя и в проверки замены не входит."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.source_file",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "create": "замена не создаёт компонент: кратность не меняется (измерено)",
+      "suppress_restore": "подавление компонентов в профиль assembly-ext-v1 не входит",
+      "delete_dependencies": "удаление вложенного компонента в наряд не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "recursive"
+          ]
+        }
+      ]
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    },
+    "edit_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_replace_component"
+        }
+      ]
+    },
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_replace_component"
+        },
+        {
+          "tool": "kompas_set_component_placement"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    }
   }
   ],
   "pending_families": [

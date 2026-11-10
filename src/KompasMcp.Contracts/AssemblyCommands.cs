@@ -1,4 +1,4 @@
-﻿namespace KompasMcp.Contracts;
+namespace KompasMcp.Contracts;
 
 /// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes
 /// <c>ASM-01…ASM-07</c>).</summary> <remarks>INVARIANT: a component is a reference to a file, not a body: what leaves
@@ -34,6 +34,11 @@ public sealed record ListComponentsCommand
 }
 
 /// <summary>Set a component's placement with a rigid transform and read it back.</summary>
+/// <remarks>INVARIANT: <see cref="Transform"/> is in the coordinates the write route takes — document
+/// coordinates for a top-level component, the component's LOCAL frame inside its parent for a nested one
+/// (MEASURED: <c>IPart7.Placement</c> is local). A nested component is addressed by a reference from
+/// <c>kompas_list_components(recursive=true)</c> and written through API7.
+/// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
 public sealed record SetComponentPlacementCommand
 {
     public required string DocumentId { get; init; }
@@ -46,6 +51,9 @@ public sealed record SetComponentPlacementCommand
 }
 
 /// <summary>Replace a component's source while keeping its placement.</summary>
+/// <remarks>INVARIANT: a nested component is replaced through <c>IPart7.FileName</c> + <c>IModelObject.Update</c>
+/// (API7) and keeps its LOCAL placement; a top-level one keeps its document placement.
+/// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
 public sealed record ReplaceComponentCommand
 {
     public required string DocumentId { get; init; }
@@ -130,7 +138,11 @@ public sealed record ComponentRowDto
     /// <summary>Source load state (<c>IPart7.LoadState</c>, <c>ksLoadStateEnum</c>).</summary>
     public string? LoadState { get; init; }
 
-    /// <summary>Cumulative placement matrix (16 numbers, 4×4), if read.</summary>
+    /// <summary>Placement matrix (16 numbers, 4×4) in the coordinates of the PARENT node, if read: the
+    /// document for a top-level component, its subassembly for a nested one.</summary>
+    /// <remarks>MEASURED: for a nested component this is the same LOCAL matrix <c>IPart7.Placement</c> gives,
+    /// and the one <c>kompas_set_component_placement</c> writes there — the parent's own origin is NOT added.
+    /// History: docs/decisions/assembly-ext.md#nested-implemented</remarks>
     public IReadOnlyList<double>? Matrix { get; init; }
 }
 

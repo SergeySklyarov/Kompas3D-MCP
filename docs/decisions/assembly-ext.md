@@ -374,8 +374,8 @@ History: `ASM_NESTED_COMPONENTS_REPORT_20261110.md` - прогон приёмк�
 `kompas_pattern_path`: набора кривых у продукта не было, и сеткой/кольцом этот вид массива не
 выражается. Контракт меняется аддитивно (MINOR), `<Version>` не поднимался.
 
-**Что измерено перед кодом** (проба `scripts/probes/assembly-ext --only=path-pattern`, пять постановок
-в одной сборке с деталью 100×10×5):
+**Что измерено перед кодом** (проба `scripts/probes/assembly-ext --only=path-pattern`, восемь
+постановок - каждая своя сборка с одной деталью 100×10×5):
 
 1. **Маршрут есть и работает.** `FeaturePatterns.Add(o3d_curvePartArray=40)` отвечает
    `QI(IPathPattern)` и `ModelObjectType = 40`; `Curves` → `AddInitialObjects(компонент)` →

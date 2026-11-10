@@ -3,17 +3,12 @@ using KompasAPI7;
 
 namespace AssemblyExtProbe;
 
-/// <summary>Scenario D: what a NESTED component's address is made of, and what the documented API7 write
-/// reads back as.</summary>
-/// <remarks>WHY: the product must address a component inside a subassembly without a flat API5 index
-/// (<c>ksDocument3D.PartCollection(true)</c> lists 2 rows for 3 components — measured in scenario C). The
-/// two questions this scenario answers with numbers are (1) whether the index of <c>IPart7.PartsEx</c> and
-/// the index of the documented recursive <c>IPart7.Parts → IParts7.Part</c> name the same component, and
-/// (2) whether <c>IPart7.Placement</c>'s matrix is LOCAL to the parent or summed in document coordinates —
-/// the write takes one and the check reads the other back.
-/// DOC: <c>ipart7_parts.html</c>, <c>iparts7_part.html</c>, <c>ipart7_partsex.html</c>,
-/// <c>ipart7_placement.html</c>, <c>iplacement3d_getmatrix3d.html</c>, <c>ipart7_updateplacement.html</c>,
-/// <c>ipart7_filename.html</c>.
+/// <summary>Scenario D: what a NESTED component's address is made of, and what the API7 write reads back as.</summary>
+/// <remarks>INVARIANT: a component inside a subassembly is addressed without a flat API5 index, which skips
+/// nested rows. Answers (1) whether <c>IPart7.PartsEx</c> and recursive <c>IPart7.Parts</c> indices name the same
+/// component, (2) whether the <c>IPart7.Placement</c> matrix is LOCAL to the parent or in document coordinates.
+/// DOC: <c>ipart7_parts.html</c>, <c>iparts7_part.html</c>, <c>ipart7_partsex.html</c>, <c>ipart7_placement.html</c>,
+/// <c>iplacement3d_getmatrix3d.html</c>, <c>ipart7_updateplacement.html</c>, <c>ipart7_filename.html</c>.
 /// History: docs/decisions/assembly-ext.md#nested-components</remarks>
 internal sealed partial class AssemblyExtProbe
 {

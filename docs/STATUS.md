@@ -1032,6 +1032,47 @@ UNKNOWN 3 / FAIL 0.
   инструмента и в `unverified_aspects`, а не выданы за поддержку.
 - **Очередь:** исследование спецификации, затем выпуск.
 
+**10.11.2026 - исследование блока «спецификация»: создание и правка строк, чтение `.spw` (наряд
+`SPEC_EXT_RESEARCH`, коммит `7d463a0`).** Исследование, код продукта не менялся, `<Version>` не
+поднимался, `--all` не нужен. Доказательства -
+`docs/acceptance/evidence/20261110-spec-ext-7d463a0/`, прибор `scripts/probes/spec`.
+
+- **Документировано по темам.** Создание строки: 2 маршрута (API7 `BaseObjects.Add` + `Update`;
+  API5 `ksSpcObjectCreate…ksSpcObjectEnd`), связь с компонентом - `AddWithParam` + `IPropertyKeeper`,
+  но точки входа в COM нет (KsAPI). Правка: 8 членов (API7 `Text`/`ColumnItems` + `Update`; API5
+  `ksSpcObjectEdit…End`, `ksSetSpcObjectColumnText(_Ex)`, `ksSpcChangeValue`, `ksSpcCount`,
+  `ksSpcPosition`, `ksSpcMassa`); раздела - `SetSection`; удаление - `ISpecificationObject.Delete`
+  (`ksDeleteSpcObject` в оглавлении v24 нет). `.spw`: открытие - `IDocuments.Open`/`OpenDocument`,
+  `ksSpcDocument.ksOpenDocument`; чтение - `IKompasDocument.SpecificationDescriptions` или
+  `ksSpcDocument.GetSpecification`; связь - `SpecificationDocumentName`, `Documents`,
+  `ksGetSpcSheetSB`; синхронизация - `DocumentSynchronize`, `DelegateMode`, режимы 3/4.
+- **Живой замер (PASS 94 / FAIL 0 / INFO 12, пять стадий в отдельных процессах).** Создание через
+  API7 сохраняется; правка через API7 (`Text.Str` и `ColumnItems.Value` + `Update`) отвечает
+  `Update()=false` и НЕ сохраняется; правка через API5 сохраняется; удаление через API7 сохраняется;
+  `SetSection` меняет раздел в сессии, но в файле раздел прежний. `.spw` создаётся
+  `IDocuments.Add(ksDocumentSpecification)`, переоткрывается `IDocuments.Open`, строки читаются через
+  `SpecificationDescriptions` и (при активном документе) через API5.
+- **Продукт сверен отдельно:** `kompas_get_specification` на сохранённой сборке видит правку API5 и не
+  видит удалённой строки; `kompas_open_document` на `.spw` отвечает `DOCUMENT_NOT_FOUND` - прежний
+  предел `#spec-read` подтверждён, маршрут `IDocuments` его снимает по документации, не обходом.
+- **Страницы.** Темы 1-2 уже лежали в `docs-wire-20261026-bom/`; недостающие 32 страницы документной
+  стороны сняты в `reference/kompas-sdk-v24/docs-wire-20261110-spec/` (32/32 ответа 200, отрицательный
+  контроль - 404 на три выдуманных имени), строка в `README.md` зеркала.
+- **Записи:** раздел `docs/decisions/bom.md#spec-ext`, отчёт `SPEC_EXT_RESEARCH_REPORT_20261110.md`.
+  Профиль - предложением `spec-ext-v1` (4 инструмента, аддитивно = MINOR); порядок нарядов
+  `SPEC_READ_SPW` → `SPEC_ADD_ROW` → `SPEC_EDIT_ROW` → `SPEC_DELETE_ROW` (строки `SPEC-01…SPEC-04`,
+  группа `--specification-only`, `--all` в каждом).
+- **Вопросы заказчику:** запись в `.spw` (в блоке было только чтение), связь строки с компонентом
+  (нужна ли при отсутствии COM-входа в `IPropertyKeeper`), правка строк, которые КОМПАС ведёт от
+  компонентов.
+- **Проверки:** сборка прибора - 0 (0 предупреждений), пять запусков прибора - все 0,
+  `long-comment-blocks.py` по прибору - 0/0/0, `lint-dashes.py` - 0, `check-evidence-links.py` - 0.
+- **Долг.** Новых строк нет. Вне наряда: `kompas_get_specification` назвал 3 объекта не-базовыми на
+  этой сборке - кандидат в строку техдолга по решению техлида.
+- **Размер `docs/STATUS.md`** - 137 990 Б (было 134 516 Б): больше 100 КБ, перенос прошлых записей -
+  этап наряда выпуска; эта запись его не делает.
+- **Очередь:** выпуск 0.14.0 - этап долга по решению техлида, затем наряды `SPEC_*`.
+
 ## Архив журнала
 
 - `docs/status/journal-2026-11.md` - записи 11.2026: журнал цикла выпуска 0.13.0 (разбор технического

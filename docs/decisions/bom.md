@@ -196,3 +196,62 @@
 - **Запись — только постановка.** Прибор `scripts/probes/bom/` создаёт объекты
   `ksSpcObjectCreate`/`ksSetSpcObjectColumnText`/`ksSpcCount`/`ksSpcPosition`/`ksSpcObjectEnd` и
   читает их обратно независимым маршрутом. Инструмент ничего не пишет.
+
+## #spec-ext — расширение блока «спецификация» (наряд `SPEC_EXT_RESEARCH`, 10.11.2026)
+
+Исследование блока заказчика: создание и правка строк спецификации, чтение `.spw`. Код продукта не
+менялся; страницы, маршруты и замеры - `SPEC_EXT_RESEARCH_REPORT_20261110.md`. Доказательства -
+`docs/acceptance/evidence/20261110-spec-ext-7d463a0/`, прибор - `scripts/probes/spec/`.
+
+- **Документная сторона снята отдельно.** К наборам `#routes` (API7 «Работа со спецификацией» и API5
+  `ksSpecification`/`ksSpcDocument`) добавлен `docs-wire-20261110-spec/`: `IApplication.Documents` →
+  `IDocuments` (`Add`, `Open`, `OpenDocument`, `Item`), `IOpenDocumentParam`, `IKompasDocument`,
+  `ISpecificationDocument`, `DocumentTypeEnum`, `ksIsSlaveSpcOpened`. Сценарий -
+  `_fetch_docs_wire_20261110_spec.py`.
+- **`.spw` читается по документной ссылке - предел `#spec-read` снят не обходом, а документом.**
+  `IDocuments.Open(PathName, Visible, ReadOnly)` и `IDocuments.Add(ksDocumentSpecification, Visible)`
+  дают `IKompasDocument` (`idocuments_open.html`, `idocuments_add.html`, `ikompasdocument.html`:
+  «может быть получен … от IDocuments::Item и методов IDocuments::Add, IDocuments::Open»), а
+  `SpecificationDescriptions` объявлено свойством БАЗОВОГО `IKompasDocument`
+  (`ikompasdocument_specificationdescriptions.html`), не `IKompasDocument3D`. Пункт «`.spw` вне
+  объёма» из `#spec-read` относится к `KompasObject.SpcDocument`/`DocumentKind`; новый маршрут его
+  не повторяет и прежний `LIMIT:` заменяет на «читается, если документ открыт через `IDocuments`».
+- **API5-дорога к `.spw` остаётся активной-документной.** `SpcActiveDocument` при неактивном
+  документе-спецификации даёт `NULL` (`kompasobject_spcactivedocument.html`); после
+  `IApplication.ActiveDocument = <spw>` измерено чтение через `GetSpecification` +
+  `ksGetSpcObjectColumnText`. Поэтому профиль опирается на API7, а API5-чтение - независимая сверка
+  при активном документе.
+- **Создание строки модели - API7 и API5; сохраняется оба.** API7:
+  `BaseObjects.Add(section, attrNumb)` + колонки + `Update()` (`ispecificationbaseobjects_add.html`:
+  «объект будет добавлен в коллекцию, но в документе не появится»; `Update` создаёт объект).
+  API5: `ksSpcObjectCreate…ksSpcObjectEnd` (прежний прибор `#probe`). Замер: строки переживают
+  сохранение и переоткрытие, `ksGetSpcObjectNumber` совпадает с `UniqueNumber`.
+- **Правка существующей строки модели сохраняется ТОЛЬКО через API5.** `ksSpcObjectEdit` +
+  `ksSetSpcObjectColumnText`/`ksSpcCount` + `ksSpcObjectEnd`. Две документированные записи API7
+  (`ISpecificationColumn.Text.Str`, `ISpecificationColumnItems.Item.Value` с `Update()`) отвечают
+  `Update() = false`, меняют текст в сессии и НЕ попадают в файл. Причина не установлена; правило для
+  инструментов: успех правки подтверждается перечитыванием, а не возвратом `Update`.
+- **Раздел строки не переносится.** `Section` - только чтение, «переместить уже созданные объекты из
+  одного раздела в другой нельзя» (`ispecificationobject_section.html`); `SetSection` возвращает
+  `TRUE` и меняет раздел в сессии, но после переоткрытия раздел прежний. `LIMIT:` - в контракте.
+- **Удаление строки - только API7.** `ISpecificationObject.Delete()` сохраняется; `ksDeleteSpcObject`
+  в оглавлении v24 отсутствует, `ksSpcDocument.ksDeleteObj` удаляет объект документа-спецификации, не
+  строку модели. В «не входит»: удаление строки модели через API5.
+- **Связь с компонентом документирована, но не подтверждена постановкой.**
+  `ISpecificationBaseObjects.AddWithParam(…, IPropertyKeeper, …)` связывает строку и объект общим
+  ключом информационного объекта; точки входа в `IPropertyKeeper` в COM нет (в зеркале - KsAPI,
+  `#not-included`). В профиль не входит, вопрос заказчику - в отчёте.
+- **Связь модели и `.spw`.** `ISpecificationDescription.SpecificationDocumentName` - полное имя
+  подключённого `.spw` у чертежа/сборки; `ISpecificationBaseObject.Documents` - документы, чья
+  геометрия подключена к строке, «только для объектов в документе спецификации»
+  (`ispecificationbaseobject_documents.html`); `ksSpcDocument.ksGetSpcSheetSB` - листы сборочного
+  чертежа. Замер: у строк модели и у строки `.spw` без геометрии `Documents = null`, у модели без
+  подключённого `.spw` имя пустое.
+- **Синхронизация - отдельными свойствами, не побочным эффектом.** `IDocuments.DocumentSynchronize`,
+  `ISpecificationDescription.DelegateMode` и режимы 3/4 `ksOpenDocument` («без синхронизации со
+  сборочным чертежом») документированы; в профиль входят только как прочитанные значения при
+  открытии, без собственного режима.
+- **Профиль - предложением:** `spec-ext-v1`, четыре инструмента (`kompas_get_specification_document`,
+  `kompas_specification_add_row`/`edit_row`/`delete_row`), контракт аддитивный → MINOR. Порядок
+  нарядов - раздел 6 отчёта.
+

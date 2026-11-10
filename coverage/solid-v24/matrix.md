@@ -266,18 +266,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 392
-- **строк_полностью_закрыто:** 205
-- **строк_с_каким_либо_прогрессом:** 228
+- **строк_каталога:** 393
+- **строк_полностью_закрыто:** 206
+- **строк_с_каким_либо_прогрессом:** 229
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 159
+- **операций:** 160
 - **режимов_и_вариантов:** 236
-- **применимых_действий:** 3156
-- **действий_verified:** 1403
-- **покрытие_действий:** 44.5%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1403, 'not_applicable': 764, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 83, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **применимых_действий:** 3164
+- **действий_verified:** 1411
+- **покрытие_действий:** 44.6%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1411, 'not_applicable': 766, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 84, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -961,6 +961,7 @@
 | `ASM-10.component_pattern.circular` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.10.discover, ASM.10.create, ASM.10.read, ASM.10.edit, ASM.10.rebuild, ASM.10.save_reopen, ASM.10.delete_dependencies, ASM.10.negative_tests, ASM.10.geometry_validation |
 | `ASM-11.nested.placement_set` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.11.discover, ASM.11.edit, ASM.11.geometry_validation, ASM.11.save_reopen, ASM.11.negative_tests, ASM.11.stale_address, ASM.11.foreign_document, ASM.11.api5_only_refusal |
 | `ASM-12.nested.source_replace` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.12.discover, ASM.12.edit, ASM.12.read, ASM.12.save_reopen, ASM.12.negative_tests |
+| `ASM-13.component_pattern.path` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | ASM.13.discover, ASM.13.component_frame, ASM.13.create, ASM.13.read, ASM.13.rebuild, ASM.13.save_reopen, ASM.13.full_length, ASM.13.delete_dependencies, ASM.13.negative_tests, ASM.13.geometry_validation |
 | `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation, MATE.01.create_after_mate_moved |
 | `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
 | `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests, MATE.03.geometry_validation |
@@ -1575,6 +1576,12 @@
   - Замена адресует файл-источник вложенного компонента: правка переживает сохранение только ВЕРХНЕЙ сборки (измерено), при этом записывается и файл подсборки — его называет поле saved_subassembly_files ответа kompas_save_document, а отметка файла (размер и время записи) сдвигается.
   - Документированная альтернатива для замены в МАССИВЕ компонентов (ksPartCollection.SetByIndex) не используется: вложенные экземпляры массива этим нарядом не адресуются.
   - Кратность вложенного компонента в ответе не заявляется: она читается из IPart7.InstanceCount родителя и в проверки замены не входит.
+- `ASM-13.component_pattern.path` — закрыт целиком
+  - Траектория — РЕБРО компонента, и только оно: эскиз и элемент EntityCollection(o3d_curveElement=111) ядро принимает молча, но IPathPattern.Curves читается null и массив не строится (измерено пробой).
+  - Ровно одна кривая: сшивание нескольких кривых в одну траекторию не измерено (схема maxItems=1, рабочий слой отвечает CAPABILITY_UNAVAILABLE).
+  - Сверка смещений выводится для save_initial_orientation=true (измеренный режим); при false экземпляры доворачиваются к траектории, и правило их начал не измерено — сверка снимается в unverified_aspects.
+  - Знак направления траектории задаёт ориентация ребра в модели: набор начал сверяется с обоими направлениями, reverse_direction подтверждается чтением свойства.
+  - Правка параметров существующего массива по кривой не входит: PatternEditDto не несёт членов IPathPattern.
 - `MATE-01.mate.create` — закрыт целиком
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.

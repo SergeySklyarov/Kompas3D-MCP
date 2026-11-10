@@ -17046,7 +17046,7 @@
       "ASM.13.geometry_validation"
     ],
     "evidence": [
-      "docs/acceptance/evidence/20261110-assembly-path-<commit>/README.md",
+      "docs/acceptance/evidence/20261110-assembly-path-38f8a2b/README.md",
       "docs/acceptance/pattern-path/pattern-path-acceptance.json",
       "scripts/mcp-smoke.py"
     ],

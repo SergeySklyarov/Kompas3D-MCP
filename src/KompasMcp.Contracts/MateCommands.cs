@@ -14,18 +14,36 @@ public sealed record CreateMateCommand
     public required long ExpectedRevision { get; init; }
 
     /// <summary>Mate type by name: <c>coincidence</c>, <c>parallel</c>, <c>perpendicular</c>, <c>tangency</c>,
-    /// <c>concentric</c>, <c>distance</c>, <c>angle</c>.</summary>
+    /// <c>concentric</c>, <c>distance</c>, <c>angle</c>, <c>transmission</c>, <c>symmetric</c>, <c>dependent</c>.</summary>
     public required string ConstraintType { get; init; }
 
     /// <summary>Reference to the first component (from <c>kompas_list_components</c>).</summary>
     public required string FirstComponentRef { get; init; }
 
-    /// <summary>Face number of the first component in its <c>FaceCollection()</c>.</summary>
-    public required int FirstFaceIndex { get; init; }
+    /// <summary>Face number of the first component in its <c>FaceCollection()</c>. Required for every type
+    /// EXCEPT <c>dependent</c>, whose base objects are the components themselves: a face number there
+    /// would be accepted and never applied.</summary>
+    public int? FirstFaceIndex { get; init; }
 
     public required string SecondComponentRef { get; init; }
 
-    public required int SecondFaceIndex { get; init; }
+    /// <summary>Face number of the second component; the same rule as <see cref="FirstFaceIndex"/>.</summary>
+    public int? SecondFaceIndex { get; init; }
+
+    /// <summary><c>symmetric</c> only: reference to the mirror PLANE (kind <c>plane</c>, from
+    /// <c>kompas_create_aux_geometry</c> / <c>kompas_list_aux_geometry</c>). Required for that type.</summary>
+    public string? SymmetryPlaneRef { get; init; }
+
+    /// <summary><c>dependent</c> only: <c>IMate3DDependentPosition.BySample</c> — «по образцу». <c>null</c>
+    /// means the documented default <c>true</c>, so the samples are required unless it is <c>false</c>.</summary>
+    public bool? BySample { get; init; }
+
+    /// <summary><c>dependent</c> only: the dependent component's sample (<c>SampleObject1</c>), a
+    /// <c>component:</c> reference. Required when <see cref="BySample"/> holds.</summary>
+    public string? SampleObject1Ref { get; init; }
+
+    /// <summary><c>dependent</c> only: the base component's sample (<c>SampleObject2</c>), same rule.</summary>
+    public string? SampleObject2Ref { get; init; }
 
     /// <summary>Direction-alignment variant by name: <c>opposite</c>, <c>cooriented</c>, <c>closest</c>. <c>null</c>
     /// keeps the documented KOMPAS default.</summary>
@@ -163,6 +181,20 @@ public sealed record MateRowDto
     /// <summary>Transmission only: <c>Direction2</c> read back.</summary>
     public bool? Direction2 { get; init; }
 
+    /// <summary><c>symmetric</c> only: reference on the mirror plane read back from
+    /// <c>IMate3DSymmetry.Plane</c>; <c>null</c> — not read, or another mate type.</summary>
+    public string? SymmetryPlaneRef { get; init; }
+
+    /// <summary><c>dependent</c> only: <c>IMate3DDependentPosition.BySample</c> read back; <c>null</c> —
+    /// not read, or another mate type.</summary>
+    public bool? BySample { get; init; }
+
+    /// <summary><c>dependent</c> only: <c>SampleObject1</c> read back as a <c>component:</c> reference.</summary>
+    public string? SampleObject1Ref { get; init; }
+
+    /// <summary><c>dependent</c> only: <c>SampleObject2</c> read back as a <c>component:</c> reference.</summary>
+    public string? SampleObject2Ref { get; init; }
+
     public string? Name { get; init; }
 }
 
@@ -173,12 +205,13 @@ public sealed record ListMatesResult(
     IReadOnlyList<string> Notes);
 
 /// <summary>Result of creating a mate.</summary>
-/// <param name="AlignmentRequested">The alignment asked for, echoed back; <c>null</c> — none was requested.</param>
-/// <param name="AlignmentRead">Read after <c>Update()</c>; a FACT, not a criterion. <c>null</c> — not read.</param>
-/// <param name="FaceNormalsDot">Dot of the two mated faces' normals in assembly coordinates — the MEASURED
-/// orientation. An explicit value is confirmed by it (-1/+1); <c>closest</c> names none, not judged.</param>
-/// <remarks>INVARIANT: an explicit value is confirmed by the dot, never by the number read back; a mismatch is
-/// a refusal with partial effects. History: docs/decisions/mates.md#alignment-geometry-criterion</remarks>
+/// <param name="AlignmentRead">Read after <c>Update()</c>; a FACT, not a criterion.</param>
+/// <param name="FaceNormalsDot">Dot of the two faces' normals in assembly coordinates — MEASURED.</param>
+/// <param name="PlaneRead"><c>symmetric</c>: <c>Plane</c> read back as the SAME object written.</param>
+/// <param name="BySample"><c>dependent</c> only: <c>BySample</c> read back; <c>null</c> — not read.</param>
+/// <param name="Sample1"><c>dependent</c>: the sample read back, by its requested address.</param>
+/// <remarks>INVARIANT: an explicit value is confirmed by the dot, never by the number read back.
+/// History: docs/decisions/mates.md#alignment-geometry-criterion</remarks>
 public sealed record CreateMateResult(
     ReferenceDto MateRef,
     MateRowDto Mate,
@@ -186,7 +219,14 @@ public sealed record CreateMateResult(
     string? AlignmentRequested,
     string? AlignmentRead,
     double? FaceNormalsDot,
-    VerificationDto Verification);
+    VerificationDto Verification,
+    bool? PlaneRead = null,
+    bool? BySample = null,
+    string? Sample1 = null,
+    string? Sample2 = null,
+    IReadOnlyList<double[]>? OriginsBeforeMm = null,
+    IReadOnlyList<double[]>? OriginsAfterMm = null,
+    bool? Valid = null);
 
 public sealed record SetMateParameterResult(
     ReferenceDto MateRef,

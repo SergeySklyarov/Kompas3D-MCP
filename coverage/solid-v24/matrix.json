@@ -17007,6 +17007,276 @@
         }
       ]
     }
+  },
+  {
+    "operation_id": "MATE-08.mate.create_symmetric",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "MATE",
+    "catalog_refs": [
+      "MATE-08.mate.create_symmetric"
+    ],
+    "parameters_schema": "schemas/kompas_create_mate.json",
+    "adapter_route": "kompas_create_mate, constraint_type=symmetric: IPart7.MateConstraints -> IMateConstraints3D.Add(mc_Symmetric=11) -> QI(IMate3DSymmetry).Plane = IModelObject (ссылка plane:) и BaseObject1/2 = грани -> Update() -> RebuildDocument; подтверждение - Valid=true, Plane читается ТЕМ ЖЕ объектом, и зеркало граней: плоскость второй грани лежит в зеркале плоскости первой относительно плоскости симметрии (+-0.01 мм, нормали параллельны), плюс независимая сверка начал компонентов по kompas_list_components. Чтение - kompas_list_mates (поле symmetry_plane_ref), удаление - kompas_delete_mate (RemoveMateConstraint, при FALSE - DeleteObject)",
+    "actions": {
+      "discover": "verified",
+      "create": "verified",
+      "read": "verified",
+      "edit": "not_applicable",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "verified",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "MATE.08.discover",
+      "MATE.08.create",
+      "MATE.08.geometry_validation",
+      "MATE.08.read",
+      "MATE.08.rebuild",
+      "MATE.08.save_reopen",
+      "MATE.08.negative_tests",
+      "MATE.08.delete_dependencies"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/mate-ext/mate-ext-acceptance.json",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "Плоскость симметрии задаётся ссылкой plane: - её выдаёт kompas_create_aux_geometry (kind=plane) либо kompas_list_aux_geometry; стандартная плоскость сборки адреса не имеет.",
+      "Индексы граней 4 (x=20, нормаль +x) и 1 (x=0, нормаль -x) названы для бруска 20x10x5: они ИЗМЕРЕНЫ пробой на этой постановке, а не выводятся продуктом.",
+      "Зеркало проверяется только там, где оно выводится из входа (плоскость прочитана, обе грани плоские, матрицы компонентов прочитаны); иначе это названо в unverified_aspects, а не выдано за проверку.",
+      "Правка полей симметрии не поддержана: маршрут правки сопряжения задаёт ParamValue, отвергается CAPABILITY_UNAVAILABLE."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.component_address",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "edit": "правка полей симметрии и зависимого положения документирована только через Plane и BySample/SampleObject1/2, а маршрут правки сопряжения задаёт ParamValue и коэффициент передачи; поэтому правка отвергается CAPABILITY_UNAVAILABLE (строка MATE.08.negative_tests/MATE.09.negative_tests), а не выдаётся за поддержанную",
+      "suppress_restore": "подавление сопряжений в профиль assembly-ext-v1 не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "document_id"
+          ]
+        }
+      ],
+      "note": "действие называется строкой MATE.08.discover и выполняется чтением структуры сборки"
+    },
+    "create_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_create_mate",
+          "require_args": [
+            "constraint_type"
+          ]
+        }
+      ]
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_mates"
+        }
+      ]
+    },
+
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "all",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "delete_dependencies_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_delete_mate"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_create_mate"
+        },
+        {
+          "tool": "kompas_set_mate_parameter"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    }
+  },
+  {
+    "operation_id": "MATE-09.mate.create_dependent",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "MATE",
+    "catalog_refs": [
+      "MATE-09.mate.create_dependent"
+    ],
+    "parameters_schema": "schemas/kompas_create_mate.json",
+    "adapter_route": "kompas_create_mate, constraint_type=dependent: IPart7.MateConstraints -> IMateConstraints3D.Add(mc_Dependent=14) -> QI(IMate3DDependentPosition): BySample=true, SampleObject1/2 = IPart7 запрошенных компонентов, BaseObject1/2 = сами компоненты -> Update() -> RebuildDocument; подтверждение - Valid=true и перечитанные BySample/SampleObject1/2 равны записанным, а смещение базового компонента сдвигает зависимый на ту же величину. Чтение - kompas_list_mates (by_sample, sample_object1_ref, sample_object2_ref), удаление - kompas_delete_mate",
+    "actions": {
+      "discover": "verified",
+      "create": "verified",
+      "read": "verified",
+      "edit": "not_applicable",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "verified",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "MATE.09.discover",
+      "MATE.09.create",
+      "MATE.09.geometry_validation",
+      "MATE.09.read",
+      "MATE.09.rebuild",
+      "MATE.09.save_reopen",
+      "MATE.09.negative_tests",
+      "MATE.09.delete_dependencies"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/mate-ext/mate-ext-acceptance.json",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "Базовые объекты зависимого положения - САМИ КОМПОНЕНТЫ: номера граней для этого вида отвергаются INVALID_ARGUMENT, потому что были бы приняты и никогда не применены.",
+      "by_sample=false документирован (imate3ddependentposition_props.html) и НЕ измерен: режим отвергается CAPABILITY_UNAVAILABLE, а не выдаётся за поддержанный.",
+      "Следование проверяется смещением БАЗОВОГО компонента (наряд: «смещение базового компонента -> зависимый смещается на ту же величину»); другие виды движения не измерялись.",
+      "Правка полей зависимого положения не поддержана: маршрут правки сопряжения задаёт ParamValue, отвергается CAPABILITY_UNAVAILABLE."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.component_address",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "edit": "правка полей симметрии и зависимого положения документирована только через Plane и BySample/SampleObject1/2, а маршрут правки сопряжения задаёт ParamValue и коэффициент передачи; поэтому правка отвергается CAPABILITY_UNAVAILABLE (строка MATE.08.negative_tests/MATE.09.negative_tests), а не выдаётся за поддержанную",
+      "suppress_restore": "подавление сопряжений в профиль assembly-ext-v1 не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "document_id"
+          ]
+        }
+      ],
+      "note": "действие называется строкой MATE.09.discover и выполняется чтением структуры сборки"
+    },
+    "create_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_create_mate",
+          "require_args": [
+            "constraint_type"
+          ]
+        }
+      ]
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_mates"
+        }
+      ]
+    },
+
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "all",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "delete_dependencies_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_delete_mate"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_create_mate"
+        },
+        {
+          "tool": "kompas_set_mate_parameter"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    }
   }
   ],
   "pending_families": [

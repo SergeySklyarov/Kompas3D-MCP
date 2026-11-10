@@ -1296,7 +1296,11 @@ public partial class Api5Session
                 continue;
             }
 
-            if (Ref(() => model.Part) is { } owner && ReferenceEquals(owner, component7))
+            // TWO ADDRESSING SCHEMES, ONE QUESTION: an ordinary mate names a FACE, so its owner is
+            // `IModelObject.Part`; a dependent position names the COMPONENT itself, so the object IS the
+            // component. Matching only the face owner read the second kind as "no component" (measured).
+            if (ReferenceEquals(model, component7)
+                || (Ref(() => model.Part) is { } owner && ReferenceEquals(owner, component7)))
             {
                 which = index;
                 return true;

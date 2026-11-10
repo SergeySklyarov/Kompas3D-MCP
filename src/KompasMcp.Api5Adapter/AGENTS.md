@@ -28,8 +28,19 @@ API7. One `Api5Session` partial class, one file per domain.
   mutation (`MateIdentityMatches`), and a mismatch or "nothing to compare" both refuse.
 - LIMIT: `ksDocument3D.AddMateConstraint` is NOT used (returned False under every documented
   combination; cause not established, closed by customer decision 05.10.2026).
+- INVARIANT (`symmetric`/`dependent`, profile `assembly-ext-v1`): the kind's own fields are written
+  through `QI` (`IMate3DSymmetry.Plane`, `IMate3DDependentPosition.BySample/SampleObject1/2`), and a
+  field that cannot be applied is refused by NAME before `Add` - a plane on another kind, a face
+  number on `dependent`, or samples with `by_sample=false` (documented, not measured:
+  CAPABILITY_UNAVAILABLE).
+- INVARIANT: a `symmetric` is confirmed by the MEASURED MIRROR of the two faces (plane position and
+  parallel normals), never by the write; a `dependent` by its read-back fields plus the following of
+  the dependent component. Neither kind claims a base-object identity it cannot read.
+- LIMIT: the two kinds are deleted by `DeleteObject` of the mate object itself - `RemoveMateConstraint`
+  throws on a symmetry and `GetBaseObj` answers null on a dependent position (both measured).
 - DOC: `ksdocument3d_addmateconstraint.html`, `ksmateconstraint_fixed.html`,
-  `ksdocument3d_removemateconstraint.html`.
+  `ksdocument3d_removemateconstraint.html`, `mateconstrainttype.html`,
+  `imate3dsymmetry_plane.html`, `imate3ddependentposition_props.html`.
 
 ### solid ops (`Api5Session.SolidOps.cs`, `SolidRead.cs`, `Features.cs`, `FeatureEdit.B5.cs`, `FeatureRead.B5.cs`)
 

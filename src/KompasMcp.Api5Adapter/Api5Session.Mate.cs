@@ -22,6 +22,10 @@ public sealed partial class Api5Session
 {
     private const string MateRefKind = "mate";
 
+    /// <summary>Kind of the reference a symmetry mate's mirror plane is addressed by — the same kind
+    /// <c>kompas_create_aux_geometry</c> mints for a plane the product created.</summary>
+    private const string SymmetryPlaneRefKind = "plane";
+
     /// <summary>How far the measured face-normal dot may drift from the value an explicit alignment
     /// names (-1 or +1) and still count as "landed where the word says".</summary>
     /// <remarks>MEASURED: the mated faces' dot product lands exactly on +/-1, so the tolerance only has
@@ -36,8 +40,12 @@ public sealed partial class Api5Session
     /// frame — a component turned 30 deg about X still reports axis-aligned normals — so the assembly
     /// normal is the component's rotation applied to it. The rotation comes from the SAME documented
     /// <c>IPart7.GetSummMatrix</c> that <c>kompas_list_components</c> publishes.
+    /// <para><see cref="LocalPoint"/> is the face plane's own placement origin in the PART frame, used by
+    /// the symmetry check: a point OF the plane, so any point of it serves.</para>
     /// History: docs/decisions/mates.md#alignment-orientation</remarks>
-    private sealed record FaceHandle(IModelObject Model, IPart7 Component7, IPart7? Parent7, double[]? LocalNormal);
+    private sealed record FaceHandle(
+        IModelObject Model, IPart7 Component7, IPart7? Parent7, double[]? LocalNormal,
+        double[]? LocalPoint = null);
 
     // ── MATE-02 ──
     /// <summary>Enumerate the assembly's mates.</summary>
@@ -57,6 +65,12 @@ public sealed partial class Api5Session
 
     // ── MATE-01 ──
     /// <summary>Create a mate between faces of two components.</summary>
+    /// <remarks>ROUTE — documented API7 <c>IPart7.MateConstraints → IMateConstraints3D.Add(type)</c> →
+    /// <c>BaseObject1/2</c> → <c>Update()</c>, plus the type's own documented interface:
+    /// <c>IMate3DSymmetry.Plane</c> and <c>IMate3DDependentPosition.BySample/SampleObject1/2</c>.
+    /// DOC: <c>mateconstrainttype.html</c>, <c>imateconstraints3d_add.html</c>,
+    /// <c>imate3dsymmetry_plane.html</c>, <c>imate3ddependentposition_*.html</c>.
+    /// History: docs/decisions/assembly-ext.md#mate-types</remarks>
     public CreateMateResult CreateMate(CreateMateCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -75,10 +89,54 @@ public sealed partial class Api5Session
             RequireTransmissionInputs(command);
         }
 
-        var notes = new List<string>();
+        // THE NEW KINDS HAVE NO EDITABLE PARAMETER AND THEIR OWN REQUIRED FIELDS: both are refused here,
+        // before anything reaches the model (a symmetry without a plane, or a dependent without samples,
+        // would be a mate the kernel cannot solve).
+        ValidateMateExt(command);
+        var isSymmetric = type == MateConstraintType.mc_Symmetric;
+        var isDependent = type == MateConstraintType.mc_Dependent;
+        var bySample = command.BySample ?? true;
 
-        var first = FaceObject7(document, command.FirstComponentRef, command.FirstFaceIndex, notes);
-        var second = FaceObject7(document, command.SecondComponentRef, command.SecondFaceIndex, notes);
+        var notes = new List<string>();
+        var top = TopPart7(document, notes);
+
+        // FACES address an ordinary mate and the two objects of a symmetry; a DEPENDENT POSITION's base
+        // objects are the COMPONENTS themselves (the measured route), so no face is taken for it.
+        FaceHandle? first = null;
+        FaceHandle? second = null;
+        IPart7? dependentPart = null;
+        IPart7? basePart = null;
+        IPart7? sample1Part = null;
+        IPart7? sample2Part = null;
+        if (!isDependent)
+        {
+            first = FaceObject7(document, command.FirstComponentRef,
+                RequireFaceIndex(command.FirstFaceIndex, "first_face_index"), notes);
+            second = FaceObject7(document, command.SecondComponentRef,
+                RequireFaceIndex(command.SecondFaceIndex, "second_face_index"), notes);
+        }
+        else
+        {
+            // FOUR ADDRESSES, TWO KINDS: the base objects are the two components of the mate (the measured
+            // route: BaseObject1/2 = the parts), while SampleObject1/2 are written from their OWN refs.
+            // Substituting one for the other would make the answer disagree with the request.
+            dependentPart = RequireComponent(document, command.FirstComponentRef, notes);
+            basePart = RequireComponent(document, command.SecondComponentRef, notes);
+            sample1Part = RequireComponent(document, command.SampleObject1Ref!, notes);
+            sample2Part = RequireComponent(document, command.SampleObject2Ref!, notes);
+        }
+
+        IPlane3D? plane = null;
+        if (isSymmetric)
+        {
+            plane = RequireSymmetryPlane(document, command.SymmetryPlaneRef!, notes);
+        }
+
+        // THE COMPONENT PAIR WHOSE ORIGINS ARE REPORTED AND WHOSE IDENTITY IS COMPARED: faces are the
+        // mates' base objects for ordinary kinds and symmetry, the components themselves for dependent.
+        var firstComponent = isDependent ? dependentPart! : first!.Component7;
+        var secondComponent = isDependent ? basePart! : second!.Component7;
+        var originsBefore = OriginsOf(top, firstComponent, secondComponent);
 
         var mates7 = RequireMateConstraints(document);
 
@@ -89,6 +147,8 @@ public sealed partial class Api5Session
 
         IMateConstraint3D? mate;
         IMate3DTransmission? transmission = null;
+        IMate3DSymmetry? symmetry = null;
+        IMate3DDependentPosition? dependent = null;
         try
         {
             mate = mates7.Add(type);
@@ -112,8 +172,8 @@ public sealed partial class Api5Session
                         RetryPolicy.AfterReconciliation);
             }
 
-            mate.BaseObject1 = first.Model;
-            mate.BaseObject2 = second.Model;
+            mate.BaseObject1 = isDependent ? (IModelObject)dependentPart! : first!.Model;
+            mate.BaseObject2 = isDependent ? (IModelObject)basePart! : second!.Model;
             if (alignment is { } requestedAlignment)
             {
                 mate.Alignment = requestedAlignment;
@@ -124,9 +184,40 @@ public sealed partial class Api5Session
                 mate.ParamValue = value;
             }
 
+            if (isSymmetric)
+            {
+                // DOC: imate3dsymmetry.html / imate3dsymmetry_plane.html — «Плоскость симметрии»,
+                // an IModelObject. A mate that does not cast has no documented properties.
+                symmetry = mate as IMate3DSymmetry
+                    ?? throw new KompasContractException(
+                        ErrorCodes.CapabilityUnavailable,
+                        "Сопряжение создано, но не приводится к IMate3DSymmetry: поле Plane этим маршрутом "
+                        + "недоступно.",
+                        RetryPolicy.AfterReconciliation);
+                symmetry.Plane = plane!;
+            }
+
+            if (isDependent)
+            {
+                // DOC: imate3ddependentposition_props.html — BySample, SampleObject1/2 («образец —
+                // зависимый / базовый компонент»).
+                dependent = mate as IMate3DDependentPosition
+                    ?? throw new KompasContractException(
+                        ErrorCodes.CapabilityUnavailable,
+                        "Сопряжение создано, но не приводится к IMate3DDependentPosition: BySample и "
+                        + "образцы этим маршрутом недоступны.",
+                        RetryPolicy.AfterReconciliation);
+                dependent.BySample = bySample;
+                if (bySample)
+                {
+                    dependent.SampleObject1 = SampleObject(document, sample1Part!, command.SampleObject1Ref!);
+                    dependent.SampleObject2 = SampleObject(document, sample2Part!, command.SampleObject2Ref!);
+                }
+            }
+
             if (transmission is not null)
             {
-                ApplyTransmission(transmission, command, first.Model, second.Model, notes);
+                ApplyTransmission(transmission, command, first!.Model, second!.Model, notes);
             }
         }
         catch (COMException ex)
@@ -179,8 +270,14 @@ public sealed partial class Api5Session
             // An invalid mate ALREADY lies in the assembly: the model changed, and the revision must
             // show it.
             BumpRevision(document, "mate.create.partial", invalidateAll: true);
+            // The TWO KINDS OF THIS ORDER REPORT A KERNEL REFUSAL, not a verification claim: the mate is
+            // named by type, and the snapshot carries what was read back, so the class «Отказ ядра
+            // КОМПАС» (AGENTS.md) can be judged from the answer alone.
+            var refusalCode = isSymmetric || isDependent
+                ? ErrorCodes.GeometryFailed
+                : ErrorCodes.VerificationFailed;
             throw new KompasContractException(
-                ErrorCodes.VerificationFailed,
+                refusalCode,
                 $"Сопряжение НЕ подтверждено: Update()={updated}, Valid={valid}, сопряжений " +
                 $"{before} → {after}. Запись могла быть создана, но недействительна.",
                 RetryPolicy.AfterReconciliation,
@@ -192,6 +289,20 @@ public sealed partial class Api5Session
                     ["valid"] = valid,
                     ["mate_count_before"] = before,
                     ["mate_count_after"] = after,
+                    ["failure_snapshot"] = new Dictionary<string, object?>
+                    {
+                        ["constraint_type"] = command.ConstraintType,
+                        ["update"] = updated,
+                        ["valid"] = valid,
+                        ["mate_count_before"] = before,
+                        ["mate_count_after"] = after,
+                        ["first_component_ref"] = command.FirstComponentRef,
+                        ["second_component_ref"] = command.SecondComponentRef,
+                        ["symmetry_plane_ref"] = command.SymmetryPlaneRef,
+                        ["by_sample"] = isDependent ? bySample : null,
+                        ["sample_object1_ref"] = command.SampleObject1Ref,
+                        ["sample_object2_ref"] = command.SampleObject2Ref,
+                    },
                 });
         }
 
@@ -205,7 +316,10 @@ public sealed partial class Api5Session
         // faces' normals in assembly coordinates, read after the solve. `closest` NAMES NO ORIENTATION
         // — it asks the kernel to choose — so it is not checked at all and the dot is returned as a
         // fact. MEASURED: `opposite` lands on -1 and `cooriented` on +1 on both placements.
-        var dotAfter = command.Alignment is null ? null : FaceNormalsDot(first, second);
+        // A DEPENDENT POSITION IS NOT ALIGNED BY FACES: its base objects are the components, so there is
+        // no pair of face normals to judge and the value is not checked (never silently passed either —
+        // an alignment on this type is named in the notes below).
+        var dotAfter = command.Alignment is null || isDependent ? null : FaceNormalsDot(first!, second!);
 
         // AN EXPLICIT VALUE NAMES AN ORIENTATION, and the geometry must land where the word says. This
         // is the ONLY gate: a value the type cannot express (perpendicular — the faces are at a right
@@ -285,27 +399,47 @@ public sealed partial class Api5Session
         var mate5 = MateAt(document, created.Ordinal ?? 0);
         var firstSide = 0;
         var secondSide = 0;
-        var objectsMatch = mate5 is not null
-            && MateTouchesComponent(document, mate5, first.Component7, out firstSide)
-            && MateTouchesComponent(document, mate5, second.Component7, out secondSide)
+        var objectsMatch = !isDependent
+            && mate5 is not null
+            && MateTouchesComponent(document, mate5, firstComponent, out firstSide)
+            && MateTouchesComponent(document, mate5, secondComponent, out secondSide)
             && firstSide != secondSide;
 
         var stored = References.Register(
             MateRefKind, document.Id, document.Revision,
             new MatePayload(mate5!, created.Ordinal ?? 0, (short)type));
 
+        // NOT READ IS NOT CONFIRMED: the aspects this kind cannot be checked on are NAMED here, and the
+        // list is filled by the block-specific checks below as well.
+        var unverified = new List<string>();
+
         var checks = new List<NamedCheck>
         {
             new("mate_created", after > before, Observed: $"{before} → {after}",
                 Expected: $"{before + 1}"),
             new("mate_valid", valid == true, Observed: $"Valid={valid}"),
-            new("mate_read_back", objectsMatch,
-                Observed: $"тип «{created.ConstraintType}», компоненты запрошенных граней найдены в базовых "
-                          + $"объектах {firstSide} и {secondSide}",
-                Expected: "по одному запрошенному компоненту на каждый базовый объект (1 и 2)"),
         };
 
-        if (!objectsMatch)
+        if (!isDependent)
+        {
+            checks.Add(new("mate_read_back", objectsMatch,
+                Observed: $"тип «{created.ConstraintType}», компоненты запрошенных граней найдены в базовых "
+                          + $"объектах {firstSide} и {secondSide}",
+                Expected: "по одному запрошенному компоненту на каждый базовый объект (1 и 2)"));
+        }
+        else
+        {
+            // MEASURED: on a dependent position `GetBaseObj(1|2)` answers an object whose owner component
+            // is not readable through the face route (both sides read as «0»), so the identity of the two
+            // BASE objects is not claimed — the mate's own sample fields carry it, and the gap is named.
+            unverified.Add("base_object_identity_unverified — базовые объекты зависимого положения не "
+                + "сверены по тождеству: GetBaseObj даёт объект, компонента-владельца которого этим "
+                + "маршрутом не прочитать. Сверены Valid, BySample и оба образца (SampleObject1/2)");
+        }
+
+        // ONLY THE FACE KINDS REFUSE HERE: a dependent position's base objects are not compared, and the
+        // gap is NAMED above instead of being turned into a failed check.
+        if (!objectsMatch && !isDependent)
         {
             // The mate exists in the model, so the refusal carries the partial effect and the revision
             // already bumped above — the same outcome the ratio check below has for a failed read-back.
@@ -367,8 +501,83 @@ public sealed partial class Api5Session
         }
 
         // NOT READ IS NOT CONFIRMED, and it is also not a reason to refuse a call our own instrument
-        // cannot measure: the gap is NAMED here so nobody reads the success as proof of the orientation.
-        var unverified = new List<string>();
+        // cannot measure: the gap is NAMED so nobody reads the success as proof of the orientation.
+        // ── MATE-08: the symmetry is confirmed by the MIRROR, not by the write ──
+        var originsAfter = OriginsOf(top, firstComponent, secondComponent);
+        bool? planeRead = null;
+        bool? bySampleRead = null;
+        string? sample1 = null;
+        string? sample2 = null;
+        if (isSymmetric)
+        {
+            // "Plane reads back as the SAME object" is an object identity, not a name: the mate is asked
+            // for its own Plane and the answer is compared with the object that was written.
+            var planeBack = Ref(() => symmetry!.Plane);
+            planeRead = planeBack is not null && ReferenceEquals(planeBack, plane);
+            checks.Add(new("symmetry_plane_read_back", planeRead == true,
+                Observed: planeBack is null ? "Plane не читается" : "Plane прочитана",
+                Expected: "тот же объект, что записан"));
+
+            // THE GEOMETRY: the second face must lie IN the mirror of the first face's plane about the
+            // symmetry plane. The fixture-driven expectation «the second component's origin is the mirror»
+            // is a special case of this and would not hold in general (see SymmetryMirror).
+            var mirrored = MirroredPlane(first!, plane!);
+            var secondPoint = AssemblyPoint(second!);
+            var secondNormal = AssemblyNormal(second!);
+            var mirrorDistance = mirrored is null || secondPoint is null
+                ? null
+                : SymmetryMirror.DistanceMm(secondPoint, mirrored.Value.Point, mirrored.Value.Normal);
+            var mirrorParallel = mirrored is null || secondNormal is null
+                ? null
+                : SymmetryMirror.ParallelDeviation(mirrored.Value.Normal, secondNormal);
+            var mirroredOk = mirrorDistance is { } distance && distance <= SymmetryMirror.ToleranceMm
+                && mirrorParallel is { } parallel && parallel <= SymmetryMirror.NormalTolerance;
+            if (mirrorDistance is null || mirrorParallel is null)
+            {
+                unverified.Add("symmetry_mirror_unverified — зеркало не выведено из входа: не прочитана "
+                    + "плоскость симметрии, точка или нормаль грани, либо матрица компонента. Совпадение "
+                    + "с зеркалом НЕ подтверждено");
+            }
+            else
+            {
+                checks.Add(new("symmetry_mirror", mirroredOk,
+                    Observed: $"расстояние {mirrorDistance:0.####} мм, |cos|−1 = {mirrorParallel:0.######}",
+                    Expected: $"≤ {SymmetryMirror.ToleranceMm} мм, ≤ {SymmetryMirror.NormalTolerance}"));
+                if (!mirroredOk)
+                {
+                    throw SymmetryRefusal(document, command, planeRead, mirrorDistance.Value,
+                        mirrorParallel.Value, before, after);
+                }
+            }
+        }
+
+        // ── MATE-09: the dependent position is confirmed by its OWN fields, read back ──
+        if (isDependent)
+        {
+            bySampleRead = Bool(() => dependent!.BySample);
+            checks.Add(new("dependent_by_sample_read_back", bySampleRead == bySample,
+                Observed: $"BySample={bySampleRead}", Expected: $"BySample={bySample}"));
+            var sampleBack1 = Ref(() => dependent!.SampleObject1);
+            var sampleBack2 = Ref(() => dependent!.SampleObject2);
+            var same1 = ReferenceEquals(sampleBack1, sample1Part);
+            var same2 = ReferenceEquals(sampleBack2, sample2Part);
+            if (bySample)
+            {
+                checks.Add(new("dependent_sample1_read_back", same1,
+                    Observed: sampleBack1 is null ? "не читается" : "прочитан",
+                    Expected: "тот же компонент, что записан"));
+                checks.Add(new("dependent_sample2_read_back", same2,
+                    Observed: sampleBack2 is null ? "не читается" : "прочитан",
+                    Expected: "тот же компонент, что записан"));
+                if (!same1 || !same2)
+                {
+                    throw DependentRefusal(document, command, bySampleRead, same1, same2, before, after);
+                }
+
+                sample1 = command.SampleObject1Ref;
+                sample2 = command.SampleObject2Ref;
+            }
+        }
         if (isTransmission)
         {
             // MEASURED: the driven component did not move by either documented placement route, and the
@@ -404,8 +613,360 @@ public sealed partial class Api5Session
             alignmentRead,
             dotAfter,
             new VerificationDto(VerificationLevel.StructureChecked, checks,
-                notes.Concat(unverified).ToList()));
+                notes.Concat(unverified).ToList()),
+            planeRead,
+            bySampleRead,
+            sample1,
+            sample2,
+            originsBefore,
+            originsAfter,
+            valid);
     }
+
+    // ── MATE-08 / MATE-09: inputs, geometry and refusals of the two extra kinds ──
+
+    /// <summary>The face number a mate of this kind takes, refused by NAME when it is absent — a mate
+    /// built from "the first face" would be an address substitution.</summary>
+    private static int RequireFaceIndex(int? index, string field) =>
+        index ?? throw new KompasContractException(
+            ErrorCodes.InvalidArgument,
+            $"Поле «{field}» обязательно: базовыми объектами этого вида сопряжения служат грани "
+            + "компонентов.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["field"] = field });
+
+    /// <summary>The inputs of <c>symmetric</c> and <c>dependent</c>, refused BEFORE the mate exists.</summary>
+    /// <remarks>INVARIANT: a field accepted and never applied is the defect this project forbids, so a
+    /// plane on another kind, a face number on <c>dependent</c> and samples of a disabled sample mode are
+    /// all refusals NAMING the field. The type is read from the REQUEST here (the mate does not exist
+    /// yet); the edit and delete routes read it from the MODEL.
+    /// <para>LIMIT: <c>by_sample=false</c> is documented (<c>imate3ddependentposition_props.html</c>) and
+    /// not measured: it is refused CAPABILITY_UNAVAILABLE instead of being offered untested.</para>
+    /// TEST: <c>MateExtValidationTests</c>. History: docs/decisions/assembly-ext.md#mate-types</remarks>
+    public static void ValidateMateExt(CreateMateCommand command)
+    {
+        // THE NAME IS COMPARED AS A NAME: the interop enum must not be touched here, or the rule could
+        // only be tested on a machine with КОМПАС installed.
+        var isSymmetric = string.Equals(command.ConstraintType, "symmetric", StringComparison.Ordinal);
+        var isDependent = string.Equals(command.ConstraintType, "dependent", StringComparison.Ordinal);
+        var sampleField = command.BySample is not null ? "by_sample"
+            : command.SampleObject1Ref is not null ? "sample_object1_ref"
+            : command.SampleObject2Ref is not null ? "sample_object2_ref"
+            : null;
+
+        if (!isSymmetric && !string.IsNullOrWhiteSpace(command.SymmetryPlaneRef))
+        {
+            throw MateExtFieldRefusal("symmetry_plane_ref", "symmetric", command.ConstraintType);
+        }
+
+        if (!isDependent && sampleField is not null)
+        {
+            throw MateExtFieldRefusal(sampleField, "dependent", command.ConstraintType);
+        }
+
+        if (isSymmetric && string.IsNullOrWhiteSpace(command.SymmetryPlaneRef))
+        {
+            throw MateExtMissing("symmetry_plane_ref", "symmetric",
+                "плоскость симметрии — обязательный объект этого сопряжения");
+        }
+
+        if (isDependent)
+        {
+            // THE BASE OBJECTS OF A DEPENDENT POSITION ARE THE COMPONENTS: a face number would be accepted
+            // and never applied, so it is refused by name rather than ignored.
+            if (command.FirstFaceIndex is not null || command.SecondFaceIndex is not null)
+            {
+                throw MateExtFieldRefusal(
+                    command.FirstFaceIndex is not null ? "first_face_index" : "second_face_index",
+                    null, command.ConstraintType);
+            }
+
+            if (command.BySample == false)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "Режим by_sample=false документирован (BySample: BOOL, «по образцу»), но не измерен: "
+                    + "годный набор объектов для него не установлен. Поддерживается by_sample=true "
+                    + "(по умолчанию) с двумя образцами.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?> { ["field"] = "by_sample", ["value"] = false });
+            }
+
+            if (string.IsNullOrWhiteSpace(command.SampleObject1Ref))
+            {
+                throw MateExtMissing("sample_object1_ref", "dependent",
+                    "при by_sample=true образец зависимого компонента обязателен");
+            }
+
+            if (string.IsNullOrWhiteSpace(command.SampleObject2Ref))
+            {
+                throw MateExtMissing("sample_object2_ref", "dependent",
+                    "при by_sample=true образец базового компонента обязателен");
+            }
+
+            return;
+        }
+
+        if (command.FirstFaceIndex is null)
+        {
+            throw MateExtMissing("first_face_index", command.ConstraintType,
+                "базовыми объектами этого вида сопряжения служат грани компонентов");
+        }
+
+        if (command.SecondFaceIndex is null)
+        {
+            throw MateExtMissing("second_face_index", command.ConstraintType,
+                "базовыми объектами этого вида сопряжения служат грани компонентов");
+        }
+    }
+
+    private static KompasContractException MateExtFieldRefusal(
+        string field, string? onlyFor, string requestedType) =>
+        new(
+            ErrorCodes.InvalidArgument,
+            onlyFor is null
+                ? $"Поле «{field}» не относится к constraint_type={requestedType}: базовые объекты этого "
+                  + "вида — сами компоненты, и номер грани был бы принят и никогда не применён."
+                : $"Поле «{field}» относится только к constraint_type={onlyFor}: у «{requestedType}» его "
+                  + "нет, и принятое значение было бы записано и проигнорировано.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?>
+            {
+                ["field"] = field,
+                ["constraint_type"] = requestedType,
+                ["supported_for"] = onlyFor,
+            });
+
+    private static KompasContractException MateExtMissing(string field, string type, string why) =>
+        new(
+            ErrorCodes.InvalidArgument,
+            $"При constraint_type={type} поле «{field}» обязательно: {why}.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["field"] = field, ["constraint_type"] = type });
+
+    /// <summary>A component reference written into the mate, with its identity confirmed against the
+    /// live collection before anything is written.</summary>
+    /// <remarks>INVARIANT: the sample refs are `component:` references; another kind is
+    /// INVALID_ARGUMENT (the caller named the wrong object), while a component whose identity does not
+    /// match its record is STALE_REFERENCE — the same rule as an addressed face.
+    /// History: docs/decisions/assembly-ext.md#mate-types</remarks>
+    private IPart7 RequireComponent(DocumentEntry document, string componentRef, List<string> notes)
+    {
+        var stored = References.Require(componentRef, document.Id, document.Revision);
+        if (stored.Payload is not ComponentPayload payload)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка «{componentRef}» не адресует компонент: это {stored.Kind}. Образец зависимого "
+                + "положения задаётся ссылкой component: из kompas_list_components.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = componentRef,
+                    ["reference_kind"] = stored.Kind,
+                    ["supported_kinds"] = new[] { "component" },
+                });
+        }
+
+        var part5 = ComponentPart5At(document, payload.Ordinal);
+        if (part5 is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Компонент по порядковому номеру {payload.Ordinal} не получен как ksPart: образец "
+                + "адресовать нечем.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var identity = IdentityMatches(part5, payload, out var identityNote);
+        notes.Add("component_identity — " + identityNote);
+        if (identity != true)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                "Компонент адресован по номеру, тождество которого НЕ подтверждено: " + identityNote +
+                ". Зависимое положение по неподтверждённому адресу не создаётся; перечитайте структуру "
+                + "сборки kompas_list_components и возьмите свежую ссылку.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = componentRef,
+                    ["ordinal"] = payload.Ordinal,
+                    ["identity_confirmed"] = identity is null ? "не сверено (источник не прочитан)" : "расхождение источника",
+                });
+        }
+
+        return payload.Part7;
+    }
+
+    /// <summary>The mirror plane a <c>symmetric</c> mate is built about, by its <c>plane:</c> reference.</summary>
+    /// <remarks>A reference of another kind is INVALID_ARGUMENT with the kind named: a mirror plane is a
+    /// plane, and substituting another object for it would be an address substitution.
+    /// DOC: <c>imate3dsymmetry_plane.html</c>. History: docs/decisions/assembly-ext.md#mate-types</remarks>
+    private IPlane3D RequireSymmetryPlane(DocumentEntry document, string planeRef, List<string> notes)
+    {
+        var stored = References.Require(planeRef, document.Id, document.Revision);
+        if (stored.Payload is not IPlane3D plane)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Ссылка «{planeRef}» не адресует плоскость: это {stored.Kind}. Плоскость симметрии "
+                + "задаётся ссылкой plane: (kompas_create_aux_geometry kind=plane либо "
+                + "kompas_list_aux_geometry).",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["symmetry_plane_ref"] = planeRef,
+                    ["reference_kind"] = stored.Kind,
+                    ["supported_kinds"] = new[] { "plane" },
+                });
+        }
+
+        notes.Add("плоскость симметрии взята по ссылке plane: и перенесена в сопряжение как IModelObject");
+        return plane;
+    }
+
+    /// <summary>The sample object of a dependent position: the interop declares <c>SampleObject1/2</c> as
+    /// the concrete <c>Part7</c>, so a component that does not cast is named, not replaced.</summary>
+    private static Part7 SampleObject(DocumentEntry document, IPart7 component, string componentRef) =>
+        component as Part7 ?? throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            $"Компонент «{componentRef}» не приводится к Part7: SampleObject1/2 этим маршрутом не задаются.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?>
+            {
+                ["component_ref"] = componentRef,
+                ["document_id"] = document.Id,
+            });
+
+    /// <summary>The mirror of the FIRST face's plane about the symmetry plane, in assembly coordinates;
+    /// <c>null</c> when any of the four reads (plane point, plane normal, face point, face normal, matrix)
+    /// is absent.</summary>
+    private (double[] Point, double[] Normal)? MirroredPlane(FaceHandle first, IPlane3D plane)
+    {
+        var read = Api7AuxGeometry.ReadPlane(plane, -1);
+        if (read.PointMm is not { Length: 3 } planePoint || read.DirectionMm is not { Length: 3 } planeNormal)
+        {
+            return null;
+        }
+
+        var frame = new PlaneFrame(planePoint, planeNormal);
+        var firstPoint = AssemblyPoint(first);
+        var firstNormal = AssemblyNormal(first);
+        if (firstPoint is null || firstNormal is null)
+        {
+            return null;
+        }
+
+        var mirroredPoint = SymmetryMirror.ReflectPoint(firstPoint, frame);
+        var mirroredNormal = SymmetryMirror.ReflectNormal(firstNormal, frame);
+        return mirroredPoint is null || mirroredNormal is null ? null : (mirroredPoint, mirroredNormal);
+    }
+
+    /// <summary>A face plane's point in ASSEMBLY coordinates: the component's
+    /// <c>IPart7.GetSummMatrix</c> applied to the part-frame point, read fresh.</summary>
+    private static double[]? AssemblyPoint(FaceHandle face)
+    {
+        if (face.LocalPoint is not { Length: 3 } local || face.Parent7 is null
+            || SummMatrix7(face.Parent7, face.Component7) is not { Length: >= 16 } matrix)
+        {
+            return null;
+        }
+
+        return
+        [
+            matrix[0] * local[0] + matrix[4] * local[1] + matrix[8] * local[2] + matrix[12],
+            matrix[1] * local[0] + matrix[5] * local[1] + matrix[9] * local[2] + matrix[13],
+            matrix[2] * local[0] + matrix[6] * local[1] + matrix[10] * local[2] + matrix[14],
+        ];
+    }
+
+    /// <summary>The origins of both components in assembly coordinates — the same read
+    /// <c>kompas_list_components</c> publishes; <c>null</c> when a matrix is not read.</summary>
+    private static double[][]? OriginsOf(IPart7? top, IPart7 first, IPart7 second)
+    {
+        if (top is null || OriginOf(top, first) is not { } origin1 || OriginOf(top, second) is not { } origin2)
+        {
+            return null;
+        }
+
+        return [origin1, origin2];
+    }
+
+    private static double[]? OriginOf(IPart7 top, IPart7 component) =>
+        SummMatrix7(top, component) is { Length: >= 16 } matrix
+            ? [matrix[12], matrix[13], matrix[14]]
+            : null;
+
+    /// <summary>Refusal of a symmetry whose MEASURED mirror did not land, with the snapshot of what was
+    /// read — the mate is already in the model, so the effect is partial.</summary>
+    private static KompasContractException SymmetryRefusal(
+        DocumentEntry document, CreateMateCommand command, bool? planeRead, double distance,
+        double parallel, int before, int after) =>
+        new(
+            ErrorCodes.GeometryFailed,
+            $"Симметрия создана (Valid=true, сопряжений {before} → {after}), но ИЗМЕРЕННОЕ зеркало не "
+            + $"совпало: вторая грань отстоит от зеркала первой на {distance:0.####} мм "
+            + $"(допуск {SymmetryMirror.ToleranceMm}), нормали расходятся на {parallel:0.######} "
+            + $"(допуск {SymmetryMirror.NormalTolerance}). Геометрия встала не туда; успехом это не "
+            + "считается.",
+            RetryPolicy.AfterReconciliation,
+            partialEffects: true,
+            details: new Dictionary<string, object?>
+            {
+                ["constraint_type"] = command.ConstraintType,
+                ["symmetry_plane_ref"] = command.SymmetryPlaneRef,
+                ["symmetry_plane_read_back"] = planeRead,
+                ["mate_count_before"] = before,
+                ["mate_count_after"] = after,
+                ["document_id"] = document.Id,
+                ["failure_snapshot"] = new Dictionary<string, object?>
+                {
+                    ["constraint_type"] = command.ConstraintType,
+                    ["valid"] = true,
+                    ["symmetry_plane_ref"] = command.SymmetryPlaneRef,
+                    ["symmetry_plane_read_back"] = planeRead,
+                    ["mirror_distance_mm"] = distance,
+                    ["mirror_normal_deviation"] = parallel,
+                    ["mirror_tolerance_mm"] = SymmetryMirror.ToleranceMm,
+                    ["mirror_normal_tolerance"] = SymmetryMirror.NormalTolerance,
+                    ["mate_count_before"] = before,
+                    ["mate_count_after"] = after,
+                },
+            });
+
+    /// <summary>Refusal of a dependent position whose OWN fields did not read back as written.</summary>
+    private static KompasContractException DependentRefusal(
+        DocumentEntry document, CreateMateCommand command, bool? bySampleRead, bool sample1, bool sample2,
+        int before, int after) =>
+        new(
+            ErrorCodes.GeometryFailed,
+            $"Зависимое положение создано (Valid=true, сопряжений {before} → {after}), но перечитанные "
+            + $"поля — НЕ записанные: BySample={bySampleRead} (записано true), образец1 "
+            + $"{(sample1 ? "совпал" : "НЕ совпал")}, образец2 {(sample2 ? "совпал" : "НЕ совпал")}. "
+            + "Успехом это не считается.",
+            RetryPolicy.AfterReconciliation,
+            partialEffects: true,
+            details: new Dictionary<string, object?>
+            {
+                ["constraint_type"] = command.ConstraintType,
+                ["by_sample"] = command.BySample,
+                ["sample_object1_ref"] = command.SampleObject1Ref,
+                ["sample_object2_ref"] = command.SampleObject2Ref,
+                ["mate_count_before"] = before,
+                ["mate_count_after"] = after,
+                ["document_id"] = document.Id,
+                ["failure_snapshot"] = new Dictionary<string, object?>
+                {
+                    ["constraint_type"] = command.ConstraintType,
+                    ["valid"] = true,
+                    ["by_sample_read"] = bySampleRead,
+                    ["sample1_reads_back"] = sample1,
+                    ["sample2_reads_back"] = sample2,
+                    ["mate_count_before"] = before,
+                    ["mate_count_after"] = after,
+                },
+            });
 
     // ── MATE-03 ──
     /// <summary>Change a mate parameter (distance or angle) or, for a transmission, its ratio and
@@ -439,6 +1000,28 @@ public sealed partial class Api5Session
         // request schema: a parameter written into a transmission would be accepted and ignored.
         // History: docs/decisions/mates.md#transmission-edit
         var isTransmission = payload.ConstraintType == (short)MateConstraintType.mc_Transmission;
+
+        // THE TWO KINDS OF THIS ORDER HAVE NO EDITABLE PARAMETER: their documented fields are Plane and
+        // BySample/SampleObject1/2, and the documented edit route (ParamValue) does not name them —
+        // writing it there would be accepted and ignored. Named refusal, not silence.
+        if (payload.ConstraintType is (short)MateConstraintType.mc_Symmetric
+            or (short)MateConstraintType.mc_Dependent)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Сопряжение вида «{MateTypeName(payload.ConstraintType)}» не имеет правимого параметра: "
+                + "документированная правка задаёт ParamValue (расстояние или угол) либо коэффициент "
+                + "передачи, а у этого вида таких полей нет. Изменение — удалить сопряжение и создать "
+                + "заново с другими полями.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["mate_ref"] = command.MateRef,
+                    ["constraint_type"] = MateTypeName(payload.ConstraintType),
+                    ["supported_fields"] = new[] { "plane", "by_sample", "sample_object1", "sample_object2" },
+                });
+        }
+
         var refusal = MateTransmissionPolicy.CheckEdit(isTransmission, command.ParamValue,
             command.Scale1, command.Scale2, command.Direction1, command.Direction2);
         if (refusal != MateTransmissionPolicy.EditRefusal.None)
@@ -793,6 +1376,15 @@ public sealed partial class Api5Session
         {
             // THE OBJECT IS THE MATE THE REFERENCE NAMES — the same API5 ksMateConstraint the product
             // already addresses the transmission with; DeleteObject takes an object, not a type pair.
+            removed = DeleteObjectOfMate(document, payload);
+        }
+        else if (payload.ConstraintType is (short)MateConstraintType.mc_Symmetric
+                 or (short)MateConstraintType.mc_Dependent)
+        {
+            // MEASURED: on the two kinds of this order RemoveMateConstraint is not the working route —
+            // on a symmetry it threw RPC_E_SERVERFAULT, and on a dependent position GetBaseObj answers
+            // null (its base objects are the components), so the pair it needs does not exist. Both go
+            // through the documented DeleteObject of the mate object itself, and the count still decides.
             removed = DeleteObjectOfMate(document, payload);
         }
         else
@@ -1196,6 +1788,20 @@ public sealed partial class Api5Session
                 ? mate7 as IMate3DTransmission
                 : null;
 
+            // THE TWO EXTRA KINDS READ THEIR OWN FIELDS by QueryInterface of the same API7 object: a row
+            // that showed them empty while the model holds them would be a read that disagrees with the
+            // write (DESIGN: the same fields the creating call wrote).
+            var symmetry7 = typeValue == (short)MateConstraintType.mc_Symmetric
+                ? mate7 as IMate3DSymmetry
+                : null;
+            var dependent7 = typeValue == (short)MateConstraintType.mc_Dependent
+                ? mate7 as IMate3DDependentPosition
+                : null;
+            var planeRef = symmetry7 is null ? null : PlaneReference(document, symmetry7, index, notes);
+            var (bySampleRead, sampleRef1, sampleRef2) = dependent7 is null
+                ? ((bool?)null, (string?)null, (string?)null)
+                : DependentFields(document, dependent7, notes);
+
             rows.Add(new MateRowDto
             {
                 MateRef = stored.Id,
@@ -1216,12 +1822,70 @@ public sealed partial class Api5Session
                 Scale2 = transmission7 is null ? null : SafeDouble(() => transmission7.Scale2),
                 Direction1 = Bool(() => transmission7?.Direction1),
                 Direction2 = Bool(() => transmission7?.Direction2),
+                SymmetryPlaneRef = planeRef,
+                BySample = bySampleRead,
+                SampleObject1Ref = sampleRef1,
+                SampleObject2Ref = sampleRef2,
                 Name = Ref(() => mate7?.Name),
             });
         }
 
         return rows;
     }
+
+    /// <summary>The mirror plane of a symmetry row as a <c>plane:</c> reference, read through
+    /// <c>IMate3DSymmetry.Plane</c> (an <c>IModelObject</c>).</summary>
+    /// <remarks>A plane that does not cast to <c>IPlane3D</c> has no plane address to mint, and that is
+    /// NAMED rather than left silently empty. History: docs/decisions/assembly-ext.md#mate-types</remarks>
+    private string? PlaneReference(
+        DocumentEntry document, IMate3DSymmetry symmetry, int ordinal, List<string> notes)
+    {
+        var raw = Ref(() => symmetry.Plane);
+        if (raw is IPlane3D plane)
+        {
+            return References.Register(
+                SymmetryPlaneRefKind, document.Id, document.Revision, plane).Id;
+        }
+
+        if (raw is not null)
+        {
+            notes.Add($"mate_{ordinal}_plane_not_iplane3d — Plane прочитана, но не IPlane3D: адресовать её "
+                      + "ссылкой на плоскость нечем");
+        }
+
+        return null;
+    }
+
+    /// <summary><c>BySample</c> and both samples of a dependent row, the samples handed back as
+    /// <c>component:</c> references of the address rule the product already uses.</summary>
+    private (bool? BySample, string? Sample1, string? Sample2) DependentFields(
+        DocumentEntry document, IMate3DDependentPosition dependent, List<string> notes)
+    {
+        var top = TopPart7(document, notes);
+        return (Bool(() => dependent.BySample),
+            SampleReference(document, top, Ref(() => dependent.SampleObject1) as IPart7, notes),
+            SampleReference(document, top, Ref(() => dependent.SampleObject2) as IPart7, notes));
+    }
+
+    /// <summary>A sample object as a <c>component:</c> reference: the ordinal is FOUND by the product's
+    /// own rule (<c>ComponentAddress</c>), never counted, and an unconfirmed address is named by that
+    /// rule instead of being replaced by a neighbour's number.</summary>
+    private string? SampleReference(
+        DocumentEntry document, IPart7? top, IPart7? sample, List<string> notes)
+    {
+        if (sample is null)
+        {
+            return null;
+        }
+
+        var ordinal = top is null
+            ? UnaddressedComponentOrdinal
+            : AddressOf(document, sample, SummMatrix7(top, sample), null, notes);
+        return References.Register(
+            ComponentRefKind, document.Id, document.Revision,
+            new ComponentPayload(sample, top, Int(() => sample.Reference), ordinal)).Id;
+    }
+
 
     /// <summary>
     /// A component face as <c>IModelObject</c>: the documented
@@ -1325,12 +1989,36 @@ public sealed partial class Api5Session
 
         // A CURVED FACE HAS NO SINGLE NORMAL: the read stays null and the orientation of a mate on it
         // is named unverified rather than replaced by a guess.
-        var localNormal = AsInterface<ksFaceDefinition>(face) is { } definition && definition.IsPlanar()
-            ? SurfaceNormalAtMiddle(definition)
-            : null;
+        var definition = AsInterface<ksFaceDefinition>(face);
+        var planar = definition is not null && definition.IsPlanar();
+        var localNormal = planar ? SurfaceNormalAtMiddle(definition!) : null;
+        var localPoint = planar ? ReadPlanarFacePoint(definition!) : null;
 
         notes.Add($"грань компонента {payload.Ordinal}[{faceIndex}] перенесена в API7");
-        return new FaceHandle(model, payload.Part7, payload.Parent7, localNormal);
+        return new FaceHandle(model, payload.Part7, payload.Parent7, localNormal, localPoint);
+    }
+
+    /// <summary>The face plane's placement origin in PART coordinates, read by the documented
+    /// <c>ksSurface.GetSurfaceParam → ksPlaneParam.GetPlacement → GetOrigin</c> route.</summary>
+    /// <remarks>This is a POINT OF THE PLANE, not the face's centre: it is what comparing a face with a
+    /// mirrored plane needs, and it is the same object the reference route publishes for a plane.
+    /// DOC: <c>kssurface_getsurfaceparam.html</c>, <c>ksplaneparam_getplacement.html</c>,
+    /// <c>ksplacement_getorigin.html</c>. History: docs/decisions/assembly-ext.md#mate-types</remarks>
+    private static double[]? ReadPlanarFacePoint(ksFaceDefinition face)
+    {
+        try
+        {
+            return face.GetSurface() is ksSurface surface && surface.IsPlane()
+                && surface.GetSurfaceParam() is ksPlaneParam plane
+                && plane.GetPlacement() is ksPlacement placement
+                && placement.GetOrigin(out var x, out var y, out var z)
+                    ? [x, y, z]
+                    : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The dot product of the two mated faces' normals in ASSEMBLY coordinates.</summary>
@@ -1387,6 +2075,11 @@ public sealed partial class Api5Session
         "distance" => MateConstraintType.mc_Distance,
         "angle" => MateConstraintType.mc_Angle,
         "transmission" => MateConstraintType.mc_Transmission,
+        // DOC: mateconstrainttype.html — mc_Symmetric (11), «Симметрия»; mc_Dependent (14),
+        // «Зависимое положение». Both are measured live and implemented by their own interfaces.
+        // History: docs/decisions/assembly-ext.md#mate-types
+        "symmetric" => MateConstraintType.mc_Symmetric,
+        "dependent" => MateConstraintType.mc_Dependent,
         // NAMED REFUSAL, NOT A SILENT ABSENCE: the cam gear is documented and its mate is added, but
         // the object set that makes it valid is not established, so it is out of this volume.
         // History: docs/decisions/mates.md#mechanical-transmission
@@ -1398,7 +2091,7 @@ public sealed partial class Api5Session
         _ => throw new KompasContractException(
             ErrorCodes.InvalidArgument,
             $"Неизвестный тип сопряжения «{name}». Допустимы: coincidence, parallel, perpendicular, " +
-            "tangency, concentric, distance, angle, transmission.",
+            "tangency, concentric, distance, angle, transmission, symmetric, dependent.",
             RetryPolicy.Never),
     };
 

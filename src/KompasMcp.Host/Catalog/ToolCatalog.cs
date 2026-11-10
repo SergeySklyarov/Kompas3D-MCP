@@ -901,7 +901,8 @@ public static class ToolCatalog
             // History: docs/decisions/host.md#mates-domain
             ReadOnly("kompas_list_mates", "Сопряжения сборки",
                 "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта, "
-                + "подтверждение Valid и — для передачи — MotionType/Scale/Direction. Фиксация "
+                + "подтверждение Valid и — для передачи — MotionType/Scale/Direction, для симметрии — "
+                + "плоскость симметрии, для зависимого положения — BySample и оба образца. Фиксация "
                 + "печатается по сырому числу поля fixed (mateconstraintfixed.html: 0 нет, 1 деталь 1, "
                 + "2 деталь 2); ksMateFixedTypeEnum называет 0 «Неопределено» — расхождение названо.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
@@ -911,19 +912,43 @@ public static class ToolCatalog
 
             Mutation("kompas_create_mate", "Создать сопряжение",
                 "Создаёт сопряжение граней двух компонентов (Add → BaseObject1/2 → Update); "
-                + "подтверждение — Valid, а не Update()=true.",
+                + "подтверждение — Valid, а не Update()=true. Виды symmetric («симметрия») и dependent "
+                + "(«зависимое положение») задаются своими полями: плоскость симметрии и два образца; "
+                + "у dependent базовые объекты — сами компоненты, грани ему не передаются.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("constraint_type", Sch.Enum(
                         "Тип по MateConstraintType; transmission — передача (создаётся и читается, ход "
-                        + "ведомого не проверяется), cam_gear вне контракта.",
+                        + "ведомого не проверяется), symmetric — симметрия (нужна плоскость), dependent — "
+                        + "зависимое положение (нужны два образца), cam_gear вне контракта.",
                         "coincidence", "parallel", "perpendicular", "tangency",
-                        "concentric", "distance", "angle", "transmission")),
+                        "concentric", "distance", "angle", "transmission", "symmetric", "dependent")),
                     ("first_component_ref", Sch.Str("Ссылка на первый компонент из kompas_list_components.")),
-                    ("first_face_index", Sch.Int("Номер грани первого компонента в его FaceCollection.")),
+                    ("first_face_index", Sch.Nullable(Sch.Int(
+                        "Номер грани первого компонента в его FaceCollection; обязателен для всех видов, "
+                        + "кроме dependent, где базовый объект — сам компонент."))),
                     ("second_component_ref", Sch.Str("Ссылка на второй компонент.")),
-                    ("second_face_index", Sch.Int("Номер грани второго компонента.")),
+                    ("second_face_index", Sch.Nullable(Sch.Int(
+                        "Номер грани второго компонента; то же правило, что у first_face_index."))),
+                    // INVARIANT: the mirror plane is a `plane:` reference (kompas_create_aux_geometry /
+                    // kompas_list_aux_geometry) and is required for symmetric: the mate cannot be solved
+                    // without it, and substituting an axis or a face would be an address substitution.
+                    // DOC: imate3dsymmetry_plane.html. History: docs/decisions/assembly-ext.md#mate-types
+                    ("symmetry_plane_ref", Sch.Nullable(Sch.Str(
+                        "symmetric: ссылка на плоскость симметрии (plane: из kompas_create_aux_geometry). "
+                        + "Обязательна для этого вида."))),
+                    // DOC: imate3ddependentposition_props.html. by_sample=false is documented and NOT
+                    // measured: it is refused CAPABILITY_UNAVAILABLE rather than offered untested.
+                    ("by_sample", Sch.Nullable(Sch.Bool(
+                        "dependent: BySample («по образцу»), по умолчанию true. false документирован, но "
+                        + "не измерен — отвергается CAPABILITY_UNAVAILABLE."))),
+                    ("sample_object1_ref", Sch.Nullable(Sch.Str(
+                        "dependent: образец зависимого компонента (component:); обязателен при "
+                        + "by_sample=true."))),
+                    ("sample_object2_ref", Sch.Nullable(Sch.Str(
+                        "dependent: образец базового компонента (component:); обязателен при "
+                        + "by_sample=true."))),
                     // INVARIANT: an explicit value is confirmed by the MEASURED orientation of the two
                     // faces, not by the number the kernel keeps; `closest` names no orientation and is
                     // never checked. MEASURED on two placements: opposite lands on -1, cooriented on +1.

@@ -63,7 +63,7 @@
   },
   "counters": {
    "families": 49,
-   "operations": 155,
+   "operations": 157,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 236,
    "operations_without_level": 0,
@@ -6707,6 +6707,40 @@
        ]
       }
      ]
+    },
+    {
+     "id": "MATE-08.mate.create_symmetric",
+     "name": "Создать сопряжение «симметрия»",
+     "level": "mcp_verified",
+     "doc_source": [
+      "mateconstrainttype",
+      "imateconstraints3d_add",
+      "imate3dsymmetry",
+      "imate3dsymmetry_plane",
+      "kssurface_getsurfaceparam",
+      "ksplaneparam_getplacement",
+      "ksplacement_getorigin",
+      "ipart7_getsummmatrix"
+     ],
+     "route": "IPart7.MateConstraints → IMateConstraints3D.Add(mc_Symmetric=11) → приведение QueryInterface к IMate3DSymmetry → Plane = IModelObject (ссылка plane:) и BaseObject1/2 = грани компонентов → Update() → RebuildDocument. Подтверждение — Valid, а не Update()=true, и СРАВНЕНИЕ с ожидаемым: плоскость второй грани лежит в зеркале плоскости первой относительно плоскости симметрии (±0.01 мм, нормали параллельны), Plane читается тем же объектом, начала компонентов сверяются независимо структурой сборки",
+     "mcp_support": "kompas_create_mate (constraint_type=symmetric, поля symmetry_plane_ref и номера граней); чтение — kompas_list_mates (symmetry_plane_ref), удаление — kompas_delete_mate (DeleteObject объекта сопряжения)",
+     "next_step": "Живой прогон группы MATE-08/09 прибора scripts/mcp-smoke.py пройден: создание, зеркало по геометрии, чтение, перестроение, переоткрытие, удаление и каждый отказ."
+    },
+    {
+     "id": "MATE-09.mate.create_dependent",
+     "name": "Создать сопряжение «зависимое положение»",
+     "level": "mcp_verified",
+     "doc_source": [
+      "mateconstrainttype",
+      "imateconstraints3d_add",
+      "imate3ddependentposition_props",
+      "imate3ddependentposition_bysample",
+      "imate3ddependentposition_sampleobject1",
+      "imate3ddependentposition_sampleobject2"
+     ],
+     "route": "IPart7.MateConstraints → IMateConstraints3D.Add(mc_Dependent=14) → приведение QueryInterface к IMate3DDependentPosition → BySample=true, SampleObject1/2 = IPart7 запрошенных компонентов, BaseObject1/2 = сами компоненты → Update() → RebuildDocument. Подтверждение — Valid и перечитанные BySample/SampleObject1/2, равные записанным, а геометрия — смещение базового компонента сдвигает зависимый на ту же величину",
+     "mcp_support": "kompas_create_mate (constraint_type=dependent, поля by_sample и sample_object1_ref/sample_object2_ref); чтение — kompas_list_mates (by_sample, sample_object1_ref, sample_object2_ref), удаление — kompas_delete_mate (DeleteObject объекта сопряжения)",
+     "next_step": "Живой прогон группы MATE-08/09 прибора scripts/mcp-smoke.py пройден: создание, следование за базовым компонентом, чтение, перестроение, переоткрытие, удаление и каждый отказ; режим by_sample=false не измерен и отвергается CAPABILITY_UNAVAILABLE."
     }
    ]
   },

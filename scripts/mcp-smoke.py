@@ -880,6 +880,10 @@ RUN_GROUPS = (
      "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)"),
     ("mate", "mate", "mate-acceptance.json",
      "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)"),
+    ("mate_ext", "mate-ext", "mate-ext-acceptance.json",
+     "Приёмка MATE-08/MATE-09: симметрия и зависимое положение - создание, зеркало по геометрии, "
+     "следование зависимого за базовым, чтение, переоткрытие, удаление и каждый отказ "
+     "(наряд MATE_SYMMETRIC_DEPENDENT, профиль assembly-ext-v1)"),
     ("mech_mates", "mech-mates", "mech-mates-acceptance.json",
      "Приёмка MM: механическая передача через MCP — создание и чтение параметров, названные отказы "
      "(наряд G4, профиль mechanical-mates-minimal-v1)"),
@@ -1053,6 +1057,7 @@ ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
     ("pattern_components", ["--pattern-components-only"]),
     ("mate", ["--mate-only"]),
+    ("mate_ext", ["--mate-ext-only"]),
     ("mech_mates", ["--mech-mates-only"]),
     ("sheet_metal", ["--sheet-metal-only"]),
     ("drafts", ["--drafts-only"]),
@@ -2328,6 +2333,8 @@ FLAGS = (
     ("--pattern-components-only", False,
      "группа ASM-09/ASM-10: массивы КОМПОНЕНТОВ по сетке и концентрической сетке"),
     ("--mate-only", False, "группа MATE: сопряжения сборки"),
+    ("--mate-ext-only", False,
+     "группа MATE-08/09: симметрия и зависимое положение (профиль assembly-ext-v1)"),
     ("--mech-mates-only", False, "группа MM: механическая передача"),
     ("--sheet-metal-only", False, "группа SMB: листовое тело"),
     ("--drafts-only", False, "группа DR: уклоны граней"),
@@ -20578,6 +20585,9 @@ def main():
     # по той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
     mate_only = "--mate-only" in sys.argv
+    # Группа MATE-08/MATE-09 (симметрия и зависимое положение): своя ветка по той же причине - клетка
+    # матрицы находится по ИМЕНИ строки (`MATE.08.<действие>` / `MATE.09.<действие>`).
+    mate_ext_only = "--mate-ext-only" in sys.argv
     # То же для механической передачи (наряд G4, профиль `mechanical-mates-minimal-v1`): одна группа
     # MM на своём сеансе, потому что клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MM.<NN>.<действие>`), а не по номеру в общем потоке.
@@ -20783,7 +20793,9 @@ def main():
         "image": image_only,
         "nested": nested_only,
         "assembly": assembly_only,
+        "pattern_components": pattern_components_only,
         "mate": mate_only,
+        "mate_ext": mate_ext_only,
         "mech_mates": mech_mates_only,
         "sheet_metal": sheet_metal_only,
         "drafts": drafts_only,
@@ -21487,6 +21499,14 @@ def main():
 
         if mate_only:
             mate_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if mate_ext_only:
+            mate_ext_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -63343,10 +63363,553 @@ def pattern_components_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm3, "dirty_policy": "discard"})
 
 
+def mate_ext_checks(client, rep, app_id, workdir):
+    """MATE.08/MATE.09 — симметрия и зависимое положение (профиль `assembly-ext-v1`).
+
+    Наряд `MATE_SYMMETRIC_DEPENDENT`. Маршрут измерен пробой `scripts/probes/assembly-ext/
+    AssemblyExtProbe.Mate.cs` (`docs/acceptance/evidence/20261110-assembly-ext-75357f8/`):
+    `IMateConstraints3D.Add(mc_Symmetric=11 | mc_Dependent=14)` → `QI(IMate3DSymmetry).Plane` либо
+    `QI(IMate3DDependentPosition).BySample/SampleObject1/2` → `Update()`, подтверждение — `Valid`.
+
+    ЧТО СЧИТАЕТСЯ ДОКАЗАТЕЛЬСТВОМ. `Update()=true` — «принято», а не «применено» (урок строки долга 62).
+    Поэтому:
+    * симметрия проверяется ЗЕРКАЛОМ: вторая грань обязана лечь в зеркало плоскости первой относительно
+      плоскости симметрии (±0.01 мм, нормали параллельны), а независимо — начала компонентов обязаны
+      удовлетворять `o2 = −o1 − 20` для бруска 20×10×5 (грань 4 — x=20, грань 1 — x=0; индексы граней
+      ИЗМЕРЕНЫ пробой и названы здесь);
+    * зависимое положение проверяется СЛЕДОВАНИЕМ: сдвиг базового компонента на 50 мм обязан сдвинуть
+      зависимый на ту же величину — сопряжение, которое ничего не передаёт, это имя, а не зависимость.
+
+    ОТРИЦАТЕЛЬНЫЕ КОНТРОЛИ различимые: сдвиг базы на 0.02 мм ломает «зеркало», неподвижный зависимый
+    ломает «следует». Каждый отказ наряда проверяется СВОИМ кодом до мутации.
+    """
+
+    def call(tool, payload, timeout=300):
+        payload = dict(payload)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return (env if isinstance(env, dict) else {}), error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def components(doc):
+        env, code = call("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        return [r for r in rows if (r.get("depth") or 0) == 0], code
+
+    def origin(row):
+        matrix = row.get("matrix") or []
+        return [matrix[12], matrix[13], matrix[14]] if len(matrix) >= 15 else None
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
+
+    def component_at(doc, x, tol=0.01):
+        """Ссылка и начало компонента, стоящего началом на x — по структуре, а не по порядку вставки."""
+        rows, _code = components(doc)
+        for row in rows:
+            got = origin(row)
+            if got is not None and abs(got[0] - x) <= tol:
+                return row.get("component_ref"), got
+        return None, None
+
+    def checks_of(env):
+        found = list(result(env).get("checks") or [])
+        found += list((result(env).get("verification") or {}).get("checks") or [])
+        found += list(((env or {}).get("verification") or {}).get("checks") or [])
+        return found
+
+    def check_passed(env, name):
+        for row in checks_of(env):
+            if row.get("name") == name:
+                return bool(row.get("passed"))
+        return None
+
+    def mates(doc):
+        env, code = call("kompas_list_mates", {"document_id": doc})
+        return result(env).get("mates") or [], code
+
+    def build_source(path):
+        """Деталь-источник: брусок 20 × 10, высота 5 (та же постановка, что у пробы сопряжений)."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                   "name": "ME-src"})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"документ детали: {code} {emsg(env)}"
+        prev = rev_of(env)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "ME-src-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+            "entities": [{"kind": "polyline", "closed": True,
+                          "points_mm": [[0, 0], [20, 0], [20, 10], [0, 10]]}]})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": 5,
+                                            "direction": "positive"})
+        prev = rev_of(env, prev)
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, f"выдавливание: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {"document_id": doc, "expected_revision": prev,
+                                                  "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if saved else None), (None if saved else f"сохранение: {code} {emsg(env)}")
+
+    def new_assembly(name):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                   "name": name})
+        doc = doc_id(env)
+        return doc, rev_of(env), (None if doc else f"сборка: {code} {emsg(env)}")
+
+    def insert(doc, source_path):
+        env, code = call("kompas_insert_component", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "source_path": source_path, "fixed": False}, timeout=300)
+        ref = result(env).get("component_ref") or {}
+        return ref.get("id"), rev_of(env), code, emsg(env)
+
+    def move(doc, component_ref, x):
+        return call("kompas_set_component_placement", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "component_ref": component_ref,
+            "transform": {"origin_mm": [x, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+
+    def create_plane(doc, name):
+        """Плоскость симметрии: смещённая на 0 от стандартной YZ плоскость САМОЙ сборки."""
+        env, code = call("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": current_rev(doc), "kind": "plane",
+            "mode": "offset", "base_plane": "yz", "offset_mm": 0, "name": name})
+        return result(env).get("reference_id"), code, emsg(env)
+
+    def source_face_pair(path):
+        """Индексы граней ±x детали-источника и их плоскости — из ТОПОЛОГИИ ДЕТАЛИ, открытой файлом.
+
+        ЗАЧЕМ. Номер грани в FaceCollection — это порядок перечисления ядра, он не выводится из формы и
+        меняется от постановки к постановке (измерено: у бруска, нарисованного прямоугольником, грань 4
+        оказалась боковой +y). Ожидание зеркала, построенное на «угаданном» номере, проверяло бы догадку.
+        Здесь грань ВЫБИРАЕТСЯ по нормали (+x / −x), а её плоскость читается центром грани: для бруска
+        центр плоской грани лежит в её плоскости.
+        """
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                 "access": "read_only"})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"открытие источника: {code} {emsg(env)}"
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else (result(env).get("bodies") or [])
+        faces = []
+        if bodies:
+            env, code = call("kompas_read_topology", {
+                "document_id": doc, "body_ref": bodies[0].get("body_ref"), "include": "faces"})
+            faces = (result(env) or {}).get("faces") or []
+        # ПЛОСКОСТИ ГРАНЕЙ — ИЗ ГАБАРИТА ТЕЛА: центр плоской грани топологией не читается (поле
+        # center_mm заполняется только для цилиндров), а габарит даёт min/max по осям, и у бруска
+        # плоскости ±x-граней равны этим границам.
+        ctx_env, ctx_code = call("kompas_get_context", {"document_id": doc, "detail": "full"})
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        box = ((result(ctx_env) or {}).get("gabarit") or {}).get("bodies") or {}
+        box_min, box_max = box.get("min_mm") or [], box.get("max_mm") or []
+        if not faces:
+            return None, f"топология источника не прочитана: {code} {emsg(env)}"
+        if len(box_min) != 3 or len(box_max) != 3:
+            return None, f"габарит тела не прочитан: {box.get('min_mm')}/{box.get('max_mm')}"
+
+        found = {}
+        for index, face in enumerate(faces):
+            normal = face.get("normal_at_center") or []
+            if len(normal) != 3:
+                continue
+            for name, sign in (("plus", 1), ("minus", -1)):
+                if name in found:
+                    continue
+                if (abs(normal[0] - sign) <= 0.01 and abs(normal[1]) <= 0.01
+                        and abs(normal[2]) <= 0.01):
+                    found[name] = index
+        if "plus" not in found or "minus" not in found:
+            return None, f"граней ±x не найдено среди {len(faces)}: {sorted(found)}"
+        return {"plus_index": found["plus"], "plus_plane": box_max[0],
+                "minus_index": found["minus"], "minus_plane": box_min[0]}, None
+
+    src_dir = os.path.join(workdir, "mate-ext")
+    os.makedirs(src_dir, exist_ok=True)
+    source_path = os.path.join(src_dir, "me-source.m3d")
+    source, src_err = build_source(source_path)
+    rep.add("MATE.08.source", "деталь-источник (20×10×5) сохранена на диск",
+            "PASS" if source else "FAIL", f"path={source} error={src_err}")
+    if not source:
+        return
+
+    # ========= MATE-08: симметрия =========
+    asm, _rev, asm_err = new_assembly("MATE-08")
+    if not asm:
+        rep.add("MATE.08.discover", "сборка для симметрии не создана", "FAIL", str(asm_err))
+        return
+    ref_a, _r, code, msg = insert(asm, source)
+    ref_b, _r, code_b, msg_b = insert(asm, source)
+    _e, _c = move(asm, ref_b, -60.0) if ref_b else ({}, None)
+    plane_ref, plane_code, plane_msg = create_plane(asm, "ME-sym-plane")
+    first_ref, first_origin = component_at(asm, 0.0)
+    second_ref, second_origin = component_at(asm, -60.0)
+    rep.add("MATE.08.discover",
+            "сборка с двумя компонентами и плоскостью симметрии читается до сопряжения",
+            "PASS" if (first_ref and second_ref and plane_ref and not plane_code
+                       and near(first_origin, [0, 0, 0]) and near(second_origin, [-60, 0, 0]))
+            else "FAIL",
+            f"компоненты={bool(first_ref)}/{bool(second_ref)} начала={first_origin}/{second_origin} "
+            f"плоскость={plane_ref} ошибки вставки={code},{code_b} плоскости={plane_code} "
+            f"{plane_msg} {msg} {msg_b}")
+
+    # Начала ДО сопряжения — снимок, с которым сравнивается результат: «сборка не изменилась» обязано
+    # быть видно как факт, а не как совпадение с ожиданием.
+    before_positions = sorted((origin(row) or [None])[0] for row in components(asm)[0])
+
+    # ГРАНИ ВЫБИРАЮТСЯ ПО ГЕОМЕТРИИ, а не по номеру: пара ±x читается из топологии ДЕТАЛИ-ИСТОЧНИКА.
+    faces_of_source, faces_err = source_face_pair(source_path)
+    rep.add("MATE.08.faces",
+            "грани ±x детали-источника выбраны по нормали, их плоскости прочитаны топологией",
+            "PASS" if faces_of_source else "FAIL", f"пара={faces_of_source} ошибка={faces_err}")
+    if not faces_of_source:
+        return
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "symmetric",
+        "first_component_ref": first_ref, "first_face_index": faces_of_source["plus_index"],
+        "second_component_ref": second_ref, "second_face_index": faces_of_source["minus_index"],
+        "symmetry_plane_ref": plane_ref})
+    r = result(env)
+    mirror_ok = check_passed(env, "symmetry_mirror")
+    plane_back = check_passed(env, "symmetry_plane_read_back")
+    rep.add("MATE.08.create",
+            "симметрия создаётся: Valid=true, Plane читается тем же объектом, зеркало граней совпало",
+            "PASS" if (not code and r.get("valid") is True and r.get("plane_read") is True
+                       and mirror_ok is True and plane_back is True and r.get("mate_ref"))
+            else "FAIL",
+            f"valid={r.get('valid')} plane_read={r.get('plane_read')} checks: "
+            f"mirror={mirror_ok} plane={plane_back} начала до/после="
+            f"{r.get('origins_before_mm')}/{r.get('origins_after_mm')} ошибка={code} {emsg(env)}")
+
+    # НЕЗАВИСИМАЯ ПРОВЕРКА ГЕОМЕТРИИ: начала читаются структурой сборки, а ожидание выводится из
+    # постановки. Грань 4 первого компонента стоит на x = o1 + 20, её зеркало — x = −(o1 + 20), а на нём
+    # обязана стоять грань 1 второго, то есть o2 = −o1 − 20. Какая сторона сдвинулась, не предполагается:
+    # проверяются оба начала и то, что сдвинулся ровно один.
+    # ОЖИДАНИЕ ВЫВОДИТСЯ ИЗ ГЕОМЕТРИИ, а не из ответа: грань +x первого компонента стоит на
+    # o1 + plus_plane, её зеркало — на −(o1 + plus_plane), и там обязана стоять грань −x второго, то есть
+    # o2 = −(o1 + plus_plane) + minus_plane. Какая сторона сдвинулась, не предполагается: сверяются оба
+    # начала (сумма) и то, что сборка изменилась.
+    expected_sum = faces_of_source["minus_plane"] - faces_of_source["plus_plane"]
+    rows, _cc = components(asm)
+    positions = sorted((origin(row) or [None])[0] for row in rows)
+    sum_after = (sum(positions) if all(p is not None for p in positions) else None)
+    mirror_holds = (len(positions) == 2 and sum_after is not None
+                    and abs(sum_after - expected_sum) <= 0.01)
+    rep.add("MATE.08.geometry_validation",
+            "начала компонентов сверены НЕЗАВИСИМО: o1 + o2 = minus_plane − plus_plane (зеркало ±x-граней)",
+            "PASS" if (mirror_holds and positions != before_positions) else "FAIL",
+            f"начала из kompas_list_components={positions} (до сопряжения {before_positions}) "
+            f"сумма={sum_after} (ждали {expected_sum})")
+
+    env, code = call("kompas_list_mates", {"document_id": asm})
+    rows = result(env).get("mates") or []
+    row = rows[0] if rows else {}
+    rep.add("MATE.08.read",
+            "строка симметрии несёт тип, Valid и ссылку на плоскость симметрии",
+            "PASS" if (not code and row.get("constraint_type") == "symmetric"
+                       and row.get("valid") is True and row.get("symmetry_plane_ref")) else "FAIL",
+            f"тип={row.get('constraint_type')} valid={row.get('valid')} "
+            f"plane={row.get('symmetry_plane_ref')} ошибка={code} {emsg(env)}")
+
+    # ── отказы: каждый своим кодом, до мутации ──
+    before_origins = [origin(r) for r in components(asm)[0]]
+    refusals = []
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "symmetric",
+        "first_component_ref": first_ref, "first_face_index": 4,
+        "second_component_ref": second_ref, "second_face_index": 1})
+    refusals.append(("нет плоскости", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "symmetric",
+        "first_component_ref": first_ref, "first_face_index": 4,
+        "second_component_ref": second_ref, "second_face_index": 1,
+        "symmetry_plane_ref": first_ref})
+    refusals.append(("плоскость — ссылка не того рода", code, "INVALID_ARGUMENT"))
+
+    part_env, part_code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                          "name": "ME-part"})
+    part_doc = doc_id(part_env)
+    if part_doc:
+        env, code = call("kompas_create_mate", {
+            "document_id": part_doc, "expected_revision": rev_of(part_env),
+            "constraint_type": "symmetric",
+            "first_component_ref": first_ref, "first_face_index": 4,
+            "second_component_ref": second_ref, "second_face_index": 1,
+            "symmetry_plane_ref": plane_ref})
+        refusals.append(("документ-деталь", code, "INVALID_ARGUMENT"))
+        call("kompas_close_document", {"document_id": part_doc, "dirty_policy": "discard"})
+    else:
+        refusals.append(("документ-деталь", part_code or "нет документа", "INVALID_ARGUMENT"))
+
+    # Правка симметрии существующим маршрутом правки сопряжения не документирована для её полей.
+    mate_ref = row.get("mate_ref")
+    env, code = call("kompas_set_mate_parameter", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "mate_ref": mate_ref, "param_value": 10.0})
+    refusals.append(("правка симметрии", code, "CAPABILITY_UNAVAILABLE"))
+
+    after_origins = [origin(r) for r in components(asm)[0]]
+    bad = [f"{name}: {got} (ждали {want})" for name, got, want in refusals if got != want]
+    rep.add("MATE.08.negative_tests",
+            "каждый отказ назван своим кодом до мутации: нет плоскости, ссылка не того рода, "
+            "документ-деталь, правка симметрии",
+            "PASS" if (not bad and before_origins == after_origins) else "FAIL",
+            "коды: " + "; ".join(f"{n}={g}" for n, g, _w in refusals)
+            + f"; состав до/после отказов={len(before_origins)}/{len(after_origins)}"
+            + ("; РАСХОЖДЕНИЯ: " + ", ".join(bad) if bad else ""))
+
+    env, code = call("kompas_rebuild", {"document_id": asm})
+    rows_after_rebuild, code_r = mates(asm)
+    rebuilt = rows_after_rebuild[0] if rows_after_rebuild else {}
+    positions_rebuild = sorted((origin(r) or [None])[0] for r in components(asm)[0])
+    rep.add("MATE.08.rebuild",
+            "перестроение сохраняет симметрию (Valid) и положение компонентов",
+            "PASS" if (not code and not code_r and rebuilt.get("constraint_type") == "symmetric"
+                       and rebuilt.get("valid") is True and positions_rebuild == positions) else "FAIL",
+            f"тип={rebuilt.get('constraint_type')} valid={rebuilt.get('valid')} "
+            f"начала={positions_rebuild} (было {positions}) ошибки={code},{code_r}")
+
+    asm_path = os.path.join(src_dir, "me-symmetric.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm,
+                                              "expected_revision": current_rev(asm),
+                                              "target_path": asm_path})
+    saved = (not code) and os.path.isfile(asm_path)
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, open_code = call("kompas_open_document", {"application_id": app_id, "path": asm_path,
+                                                   "access": "edit"})
+    reopened = doc_id(env)
+    reopened_rows, reopened_code = mates(reopened) if reopened else ([], None)
+    reopened_row = reopened_rows[0] if reopened_rows else {}
+    rep.add("MATE.08.save_reopen",
+            "после сохранения и переоткрытия симметрия снова читается: тип, Valid и плоскость",
+            "PASS" if (saved and reopened and not open_code
+                       and reopened_row.get("constraint_type") == "symmetric"
+                       and reopened_row.get("valid") is True
+                       and reopened_row.get("symmetry_plane_ref")) else "FAIL",
+            f"saved={saved} документ={reopened} тип={reopened_row.get('constraint_type')} "
+            f"valid={reopened_row.get('valid')} plane={reopened_row.get('symmetry_plane_ref')} "
+            f"ошибки={code},{open_code},{reopened_code}")
+    if not reopened:
+        return
+    asm = reopened
+
+    fresh_rows, _c = mates(asm)
+    delete_ref = (fresh_rows[0].get("mate_ref") if fresh_rows else None)
+    env, code = call("kompas_delete_mate", {"document_id": asm,
+                                            "expected_revision": current_rev(asm),
+                                            "mate_ref": delete_ref})
+    after_delete, _c = mates(asm)
+    rep.add("MATE.08.delete_dependencies",
+            "симметрия удаляется существующим kompas_delete_mate и исчезает из перечня",
+            "PASS" if (delete_ref and not code
+                       and (result(env).get("mate_count_after") or 0)
+                       < (result(env).get("mate_count_before") or 0)
+                       and not after_delete) else "FAIL",
+            f"счёт {result(env).get('mate_count_before')} → {result(env).get('mate_count_after')} "
+            f"в перечне после={len(after_delete)} ошибка={code} {emsg(env)}")
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "discard"})
+
+    # ========= MATE-09: зависимое положение =========
+    asm2, _rev2, err2 = new_assembly("MATE-09")
+    if not asm2:
+        rep.add("MATE.09.discover", "сборка для зависимого положения не создана", "FAIL", str(err2))
+        return
+    dep_ref, _r, code, msg = insert(asm2, source)
+    base_ref, _r, code_b, msg_b = insert(asm2, source)
+    if base_ref:
+        move(asm2, base_ref, -60.0)
+    dep_component, _o = component_at(asm2, 0.0)
+    base_component, _o2 = component_at(asm2, -60.0)
+    rep.add("MATE.09.discover",
+            "сборка с зависимым и базовым компонентами читается до сопряжения",
+            "PASS" if (dep_component and base_component) else "FAIL",
+            f"зависимый={bool(dep_component)} базовый={bool(base_component)} "
+            f"ошибки вставки={code},{code_b} {msg} {msg_b}")
+    if not dep_component or not base_component:
+        return
+
+    dep_before = component_at(asm2, 0.0)[1]
+    base_before = component_at(asm2, -60.0)[1]
+    env, code = call("kompas_create_mate", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "constraint_type": "dependent",
+        "first_component_ref": dep_component, "second_component_ref": base_component,
+        "sample_object1_ref": dep_component, "sample_object2_ref": base_component})
+    r2 = result(env)
+    sample_ok = (r2.get("sample1") == dep_component and r2.get("sample2") == base_component)
+    rep.add("MATE.09.create",
+            "зависимое положение создаётся: Valid=true, BySample прочитан, оба образца — запрошенные",
+            "PASS" if (not code and r2.get("valid") is True and r2.get("by_sample") is True
+                       and sample_ok and check_passed(env, "dependent_by_sample_read_back") is True
+                       and check_passed(env, "dependent_sample1_read_back") is True
+                       and check_passed(env, "dependent_sample2_read_back") is True)
+            else "FAIL",
+            f"valid={r2.get('valid')} by_sample={r2.get('by_sample')} "
+            f"образцы совпали={sample_ok} начала до/после="
+            f"{r2.get('origins_before_mm')}/{r2.get('origins_after_mm')} ошибка={code} {emsg(env)}")
+
+    # СЛЕДОВАНИЕ: база сдвигается на 50 мм — зависимый обязан сдвинуться на ту же величину.
+    env, code = move(asm2, base_component, -10.0)
+    dep_after = component_at(asm2, 50.0)[1]
+    base_after = component_at(asm2, -10.0)[1]
+    dep_delta = None if (dep_before is None or dep_after is None) else dep_after[0] - dep_before[0]
+    base_delta = None if (base_before is None or base_after is None) else base_after[0] - base_before[0]
+    followed = (dep_delta is not None and base_delta is not None
+                and abs(base_delta - 50.0) <= 0.01 and abs(dep_delta - base_delta) <= 0.01)
+    rep.add("MATE.09.geometry_validation",
+            "зависимый компонент СЛЕДУЕТ за базовым: сдвиг базы на 50 мм сдвигает его на 50 мм",
+            "PASS" if (not code and followed) else "FAIL",
+            f"база {base_before} → {base_after} (Δ={base_delta}); зависимый {dep_before} → {dep_after} "
+            f"(Δ={dep_delta}) ошибка сдвига={code} {emsg(env)}")
+
+    rows2, code2 = mates(asm2)
+    row2 = rows2[0] if rows2 else {}
+    rep.add("MATE.09.read",
+            "строка зависимого положения несёт тип, Valid, BySample и оба образца",
+            "PASS" if (not code2 and row2.get("constraint_type") == "dependent"
+                       and row2.get("valid") is True and row2.get("by_sample") is True
+                       and row2.get("sample_object1_ref") and row2.get("sample_object2_ref")) else "FAIL",
+            f"тип={row2.get('constraint_type')} valid={row2.get('valid')} "
+            f"by_sample={row2.get('by_sample')} образцы="
+            f"{row2.get('sample_object1_ref')}/{row2.get('sample_object2_ref')} ошибка={code2}")
+
+    # ── отказы ──
+    refusals2 = []
+
+    # Плоскость ЭТОЙ сборки: ссылка на плоскость из закрытого документа законно устарела бы, и отказ
+    # пришёл бы STALE_REFERENCE вместо INVALID_ARGUMENT — проверка была бы о другом.
+    plane2_ref, _pc, _pm = create_plane(asm2, "ME-dep-plane")
+
+    env, code = call("kompas_create_mate", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "constraint_type": "dependent",
+        "first_component_ref": dep_component, "second_component_ref": base_component})
+    refusals2.append(("нет образцов", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_create_mate", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "constraint_type": "dependent",
+        "first_component_ref": dep_component, "first_face_index": 0,
+        "second_component_ref": base_component, "second_face_index": 0,
+        "sample_object1_ref": dep_component, "sample_object2_ref": base_component})
+    refusals2.append(("грань у зависимого", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_create_mate", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "constraint_type": "dependent",
+        "first_component_ref": dep_component, "second_component_ref": base_component,
+        "sample_object1_ref": plane2_ref, "sample_object2_ref": base_component})
+    refusals2.append(("образец — ссылка не того рода", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_create_mate", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "constraint_type": "dependent", "by_sample": False,
+        "first_component_ref": dep_component, "second_component_ref": base_component,
+        "sample_object1_ref": dep_component, "sample_object2_ref": base_component})
+    refusals2.append(("by_sample=false", code, "CAPABILITY_UNAVAILABLE"))
+
+    bad2 = [f"{name}: {got} (ждали {want})" for name, got, want in refusals2 if got != want]
+    rep.add("MATE.09.negative_tests",
+            "каждый отказ назван своим кодом до мутации: нет образцов, грань у зависимого, "
+            "образец не того рода, by_sample=false",
+            "PASS" if not bad2 else "FAIL",
+            "коды: " + "; ".join(f"{n}={g}" for n, g, _w in refusals2)
+            + ("; РАСХОЖДЕНИЯ: " + ", ".join(bad2) if bad2 else ""))
+
+    env, code = call("kompas_rebuild", {"document_id": asm2})
+    rows2b, code2b = mates(asm2)
+    row2b = rows2b[0] if rows2b else {}
+    dep_kept = component_at(asm2, 50.0)[1]
+    rep.add("MATE.09.rebuild",
+            "перестроение сохраняет зависимое положение и положение зависимого компонента",
+            "PASS" if (not code and not code2b and row2b.get("constraint_type") == "dependent"
+                       and row2b.get("valid") is True
+                       and dep_after is not None and near(dep_kept, dep_after)) else "FAIL",
+            f"тип={row2b.get('constraint_type')} valid={row2b.get('valid')} "
+            f"зависимый={dep_kept} (было {dep_after}) ошибки={code},{code2b}")
+
+    asm2_path = os.path.join(src_dir, "me-dependent.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm2,
+                                              "expected_revision": current_rev(asm2),
+                                              "target_path": asm2_path})
+    saved2 = (not code) and os.path.isfile(asm2_path)
+    call("kompas_close_document", {"document_id": asm2, "dirty_policy": "save"})
+    env, open_code = call("kompas_open_document", {"application_id": app_id, "path": asm2_path,
+                                                   "access": "edit"})
+    reopened2 = doc_id(env)
+    rows2c, code2c = mates(reopened2) if reopened2 else ([], None)
+    row2c = rows2c[0] if rows2c else {}
+    rep.add("MATE.09.save_reopen",
+            "после сохранения и переоткрытия зависимое положение читается: тип, Valid, BySample, образцы",
+            "PASS" if (saved2 and reopened2 and not open_code
+                       and row2c.get("constraint_type") == "dependent"
+                       and row2c.get("valid") is True and row2c.get("by_sample") is True
+                       and row2c.get("sample_object1_ref") and row2c.get("sample_object2_ref"))
+            else "FAIL",
+            f"saved={saved2} документ={reopened2} тип={row2c.get('constraint_type')} "
+            f"valid={row2c.get('valid')} by_sample={row2c.get('by_sample')} "
+            f"ошибки={code},{open_code},{code2c}")
+    if not reopened2:
+        return
+    asm2 = reopened2
+
+    fresh2, _c = mates(asm2)
+    delete_ref2 = (fresh2[0].get("mate_ref") if fresh2 else None)
+    env, code = call("kompas_delete_mate", {"document_id": asm2,
+                                            "expected_revision": current_rev(asm2),
+                                            "mate_ref": delete_ref2})
+    after_delete2, _c = mates(asm2)
+    rep.add("MATE.09.delete_dependencies",
+            "зависимое положение удаляется существующим kompas_delete_mate и исчезает из перечня",
+            "PASS" if (delete_ref2 and not code
+                       and (result(env).get("mate_count_after") or 0)
+                       < (result(env).get("mate_count_before") or 0)
+                       and not after_delete2) else "FAIL",
+            f"счёт {result(env).get('mate_count_before')} → {result(env).get('mate_count_after')} "
+            f"в перечне после={len(after_delete2)} ошибка={code} {emsg(env)}")
+    call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "pattern_components": lambda c, r, a, w, v, p: pattern_components_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
+    "mate_ext": lambda c, r, a, w, v, p: mate_ext_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
     "sheet_metal": lambda c, r, a, w, v, p: sheet_metal_checks(c, r, a, w),
     "drafts": lambda c, r, a, w, v, p: drafts_checks(c, r, a, w),

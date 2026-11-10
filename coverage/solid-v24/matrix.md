@@ -266,18 +266,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 388
-- **строк_полностью_закрыто:** 201
-- **строк_с_каким_либо_прогрессом:** 224
+- **строк_каталога:** 390
+- **строк_полностью_закрыто:** 203
+- **строк_с_каким_либо_прогрессом:** 226
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 155
+- **операций:** 157
 - **режимов_и_вариантов:** 236
-- **применимых_действий:** 3126
-- **действий_verified:** 1373
-- **покрытие_действий:** 43.9%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1373, 'not_applicable': 754, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 79, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **применимых_действий:** 3142
+- **действий_verified:** 1389
+- **покрытие_действий:** 44.2%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1389, 'not_applicable': 758, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 81, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -966,6 +966,8 @@
 | `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests, MATE.05.delete_dependencies |
 | `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
 | `MATE-07.mate.create_transmission.rotation_rotation` | MATE | later | — | mcp_verified | — | — | — | — | — | — | — | — | — | — | — |
+| `MATE-08.mate.create_symmetric` | MATE | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | MATE.08.discover, MATE.08.create, MATE.08.geometry_validation, MATE.08.read, MATE.08.rebuild, MATE.08.save_reopen, MATE.08.negative_tests, MATE.08.delete_dependencies |
+| `MATE-09.mate.create_dependent` | MATE | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | MATE.09.discover, MATE.09.create, MATE.09.geometry_validation, MATE.09.read, MATE.09.rebuild, MATE.09.save_reopen, MATE.09.negative_tests, MATE.09.delete_dependencies |
 | `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW-01.views.create_standard.create, DRW-01.views.create_standard.edit, DRW-01.views.create_standard.geometry_validation, DRW-01.views.create_standard.negative_tests, DRW-01.views.create_standard.negative_tests.kind, DRW-01.views.create_standard.negative_tests.path, DRW-01.views.create_standard.read, DRW-01.views.create_standard.rebuild, DRW-01.views.create_standard.save_reopen, DRW-02.views.list.read, DRW-02.views.list.read.fields |
 | `DRW-02.views.list` | DRW | practical_required | C3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-02.views.list.discover, DRW-02.views.list.negative_tests, DRW-02.views.list.read, DRW-02.views.list.read.fields, DRW-02.views.list.read.gabarit_named, DRW-02.views.list.read.system_view_named, DRW-02.views.list.save_reopen |
 | `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |
@@ -1586,6 +1588,16 @@
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.
   - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-08.mate.create_symmetric` — закрыт целиком
+  - Плоскость симметрии задаётся ссылкой plane: - её выдаёт kompas_create_aux_geometry (kind=plane) либо kompas_list_aux_geometry; стандартная плоскость сборки адреса не имеет.
+  - Индексы граней 4 (x=20, нормаль +x) и 1 (x=0, нормаль -x) названы для бруска 20x10x5: они ИЗМЕРЕНЫ пробой на этой постановке, а не выводятся продуктом.
+  - Зеркало проверяется только там, где оно выводится из входа (плоскость прочитана, обе грани плоские, матрицы компонентов прочитаны); иначе это названо в unverified_aspects, а не выдано за проверку.
+  - Правка полей симметрии не поддержана: маршрут правки сопряжения задаёт ParamValue, отвергается CAPABILITY_UNAVAILABLE.
+- `MATE-09.mate.create_dependent` — закрыт целиком
+  - Базовые объекты зависимого положения - САМИ КОМПОНЕНТЫ: номера граней для этого вида отвергаются INVALID_ARGUMENT, потому что были бы приняты и никогда не применены.
+  - by_sample=false документирован (imate3ddependentposition_props.html) и НЕ измерен: режим отвергается CAPABILITY_UNAVAILABLE, а не выдаётся за поддержанный.
+  - Следование проверяется смещением БАЗОВОГО компонента (наряд: «смещение базового компонента -> зависимый смещается на ту же величину»); другие виды движения не измерялись.
+  - Правка полей зависимого положения не поддержана: маршрут правки сопряжения задаёт ParamValue, отвергается CAPABILITY_UNAVAILABLE.
 - `DRW-01.views.create_standard` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.

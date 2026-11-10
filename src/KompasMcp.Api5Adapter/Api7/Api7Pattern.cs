@@ -47,7 +47,8 @@ internal static class Api7Pattern
             {
                 (int)ksObj3dTypeEnum.o3d_meshCopy or (int)ksObj3dTypeEnum.o3d_circularCopy => "operations",
                 (int)ksObj3dTypeEnum.o3d_BodiesMeshCopy or (int)ksObj3dTypeEnum.o3d_BodiesCircularCopy => "bodies",
-                (int)ksObj3dTypeEnum.o3d_meshPartArray or (int)ksObj3dTypeEnum.o3d_circPartArray => "components",
+                (int)ksObj3dTypeEnum.o3d_meshPartArray or (int)ksObj3dTypeEnum.o3d_circPartArray
+                    or (int)ksObj3dTypeEnum.o3d_curvePartArray => "components",
                 _ => null,
             };
         }
@@ -62,6 +63,95 @@ internal static class Api7Pattern
         PatternMirrorMode.AllBodies => ksObj3dTypeEnum.o3d_mirrorAllOperation,
         _ => ksObj3dTypeEnum.o3d_mirrorOperation,
     };
+
+    /// <summary>The factory numeric type of the component array ALONG A CURVE.</summary>
+    /// <remarks>DOC: <c>copytype.html</c> — <c>o3d_curvePartArray=40</c> → <c>IPathPattern</c>. The type is named
+    /// once here because the read distinguishes the family by it: a component array along a curve answers the
+    /// same factory call as the other component arrays.
+    /// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+    public static ksObj3dTypeEnum PathType => ksObj3dTypeEnum.o3d_curvePartArray;
+
+    /// <summary>Create a component array along a curve, write its parameters, then <c>Update()</c>.</summary>
+    /// <remarks>INVARIANT: the write order is the measured one — the curve and the sources first, then count and
+    /// step, because a path array without a trajectory exists as a feature that builds nothing.
+    /// MEASURED: the curve is stored only when it is an EDGE of a component; a sketch is accepted by COM and
+    /// dropped by the model, and <c>Update()</c> then answers false.
+    /// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+    public static (IPathPattern? Pattern, string? Failure) TryCreatePath(
+        IModelContainer container,
+        object[] sources7,
+        object curve,
+        int count,
+        bool byStep,
+        double stepMm,
+        bool reverseDirection,
+        bool saveInitialOrientation)
+    {
+        try
+        {
+            if (container.FeaturePatterns is not { } patterns)
+            {
+                return (null, "IModelContainer.FeaturePatterns → null: фабрика недостижима");
+            }
+
+            if (patterns.Add(PathType) is not IPathPattern path)
+            {
+                return (null, "FeaturePatterns.Add не отдал объект, отвечающий на QI(IPathPattern)");
+            }
+
+            path.Curves = curve;
+            if (CurveCount(path) is null)
+            {
+                // THE READ-BACK IS THE TEST, not the absence of a COM fault: the measured refusal of a sketch
+                // raises nothing and leaves Curves null, and a feature without a trajectory builds nothing.
+                return (path, "IPathPattern.Curves не принял объект: после записи траектория не читается "
+                    + "(измерено: эскиз и элемент EntityCollection(111) отвергаются так)");
+            }
+
+            if (WireComponentSources(path, sources7) is { } refusal)
+            {
+                return (path, refusal);
+            }
+
+            path.Count = count;
+            path.ByStep = byStep;
+            path.Step = byStep ? stepMm : 0d;
+            path.ReverseDirection = reverseDirection;
+            path.SaveInitialOrientation = saveInitialOrientation;
+
+            return path.Update()
+                ? (path, null)
+                : (path, "IPathPattern.Update() вернул false — признак создан, но не построен");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (null, Describe(ex));
+        }
+    }
+
+    /// <summary>How many curves the trajectory holds. <c>null</c> — not read, never "zero curves".</summary>
+    /// <remarks>DOC: <c>ipathpattern_curves.html</c> — one curve comes back as <c>VT_DISPATCH</c>, several as
+    /// <c>VT_ARRAY|VT_DISPATCH</c>.</remarks>
+    public static int? CurveCount(IFeaturePattern pattern)
+    {
+        try
+        {
+            return pattern switch
+            {
+                IPathPattern path => path.Curves switch
+                {
+                    null => null,
+                    Array array => array.Length,
+                    _ => 1,
+                },
+                _ => null,
+            };
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>The grid-pattern building method. Values read from the interop constants assembly
     /// (<c>ksLinearPatternBuildingTypeEnum</c>: <c>ksLPSaveAll=0</c>, <c>ksLPSaveAlongPerimeter=1</c>,
@@ -635,9 +725,46 @@ internal static class Api7Pattern
     }
 
     /// <summary>Read a specific pattern feature.</summary>
+    /// <remarks>INVARIANT: the family is the QI answer, and the path branch stands first because a path array
+    /// carries its own members (<c>Count</c>/<c>Step</c>/<c>ByStep</c>/<c>Curves</c>) that a linear or circular
+    /// read would misreport as a direction of a grid.
+    /// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
     public static PatternReadout ReadPattern(IFeaturePattern pattern)
     {
         var (count1, count2) = ExemplarCounts(pattern);
+
+        if (pattern is IPathPattern path)
+        {
+            return new PatternReadout(
+                Family: "path",
+                CopyKind: CopyKindOf(pattern),
+                TypeName: SafeString(() => path.ModelObjectType.ToString()),
+                Count1: SafeInt(() => path.Count),
+                Count2: count2,
+                Step1: SafeDouble(() => path.Step),
+                Step2: null,
+                Angle1Deg: null,
+                Angle2Deg: null,
+                Direction1: null,
+                Direction2: null,
+                Boundary1: null,
+                Boundary2: null,
+                BuildingType: null,
+                StepByAxis: null,
+                ReverseDirection: SafeBool(() => path.ReverseDirection),
+                SaveInitialOrientation: SafeBool(() => path.SaveInitialOrientation),
+                GeometryPattern: null,
+                AxisPresent: null,
+                Axis2Present: null,
+                PlanePresent: null,
+                SaveInitialObjects: null,
+                InitialObjectCount: InitialObjectCount(pattern),
+                DeletedInstanceCount: DeletedInstanceCount(pattern),
+                OwnerName: SafeString(() => pattern.Owner?.Name),
+                UpdateStamp: SafeInt(() => pattern.Owner?.UpdateStamp),
+                CurveCount: CurveCount(pattern),
+                ByStep: SafeBool(() => path.ByStep));
+        }
 
         if (pattern is ILinearPattern linear)
         {
@@ -882,14 +1009,14 @@ internal static class Api7Pattern
         : $"{ex.GetType().Name}: {ex.Message}";
 }
 
-/// <summary>Read pattern-feature parameters. A <c>null</c> field means "not read", not "zero": an
-/// empty field and zero are different answers, and they must not be mixed here any more than in
-/// measure.</summary>
-/// <param name="Family">linear | circular | mirror | unknown — by the QI answer, not by memory. A component
-/// array answers one of these too; what it COPIES is <paramref name="CopyKind"/>.</param>
+/// <summary>Read pattern-feature parameters. A <c>null</c> field means "not read", not "zero".</summary>
+/// <param name="Family">linear | circular | mirror | path | unknown — by the QI answer, not by memory.</param>
 /// <param name="CopyKind">operations | bodies | components — from <c>ModelObjectType</c> (DOC
 /// <c>copytype.html</c>); null when the order was not read.</param>
-/// <param name="DeletedInstanceCount">Number of <c>InstanceDeletedIndexes</c> entries; inapplicable for mirror.</param>
+/// <param name="CurveCount">Curves of a PATH array's trajectory; null for every other family.</param>
+/// <param name="ByStep">Building method of a PATH array; null for every other family.</param>
+/// <param name="DeletedInstanceCount">Entries of <c>InstanceDeletedIndexes</c>; inapplicable for mirror.</param>
+/// <param name="UpdateStamp">Owner's update stamp; <c>InitialObjectCount</c> is 1 unless the list is an array.</param>
 public sealed record PatternReadout(
     string Family,
     string? CopyKind,
@@ -916,4 +1043,6 @@ public sealed record PatternReadout(
     int? InitialObjectCount,
     int? DeletedInstanceCount,
     string? OwnerName,
-    int? UpdateStamp);
+    int? UpdateStamp,
+    int? CurveCount = null,
+    bool? ByStep = null);

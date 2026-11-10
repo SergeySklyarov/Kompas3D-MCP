@@ -4123,11 +4123,7 @@ public sealed partial class Api5Session
     public TopologyReadResult ReadTopology(ReadTopologyCommand command)
     {
         var document = RequireDocument(command.DocumentId);
-        var stored = References.Require(command.BodyRef, document.Id, document.Revision);
-        if (stored.Payload is not ksBody body)
-        {
-            throw new KompasContractException(ErrorCodes.InvalidArgument, "body_ref указывает не на тело.");
-        }
+        var (body, notes) = TopologyBody(document, command);
 
         var faces = new List<FaceRowDto>();
         var edges = new List<EdgeRowDto>();
@@ -4178,7 +4174,78 @@ public sealed partial class Api5Session
             }
         }
 
-        return new TopologyReadResult(faceCount, rawEdgeRefs, seenEdges.Count, faces, edges);
+        return new TopologyReadResult(faceCount, rawEdgeRefs, seenEdges.Count, faces, edges, notes);
+    }
+
+    /// <summary>The body whose topology is read: a <c>body:</c> of this document, or the FIRST body of an
+    /// assembly component (<c>ksPart.BodyCollection()</c>).</summary>
+    /// <remarks>WHY THE COMPONENT BRANCH EXISTS: the only trajectory <c>kompas_pattern_path</c> accepts is an
+    /// edge of a component (measured), and a component body has no <c>body:</c> reference. INVARIANT: exactly one
+    /// of the two fields — both or neither is the caller's error and is named, not guessed.
+    /// DOC: <c>kspart_bodycollection.html</c>, <c>ksbody_facecollection.html</c>, <c>ksface_edgecollection.html</c>.
+    /// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+    private (ksBody Body, IReadOnlyList<string> Notes) TopologyBody(
+        DocumentEntry document, ReadTopologyCommand command)
+    {
+        var notes = new List<string>();
+        var byBody = !string.IsNullOrEmpty(command.BodyRef);
+        var byComponent = !string.IsNullOrEmpty(command.ComponentRef);
+        if (byBody == byComponent)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Топология читается либо по body_ref (тело этого документа), либо по component_ref "
+                + "(первое тело компонента сборки) — задан "
+                + (byBody ? "только body_ref и component_ref" : byComponent ? "только component_ref" : "ни один")
+                + ". Ровно одно из двух.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["has_body_ref"] = byBody,
+                    ["has_component_ref"] = byComponent,
+                });
+        }
+
+        if (byBody)
+        {
+            var stored = References.Require(command.BodyRef!, document.Id, document.Revision);
+            return stored.Payload is ksBody body
+                ? (body, notes)
+                : throw new KompasContractException(
+                    ErrorCodes.InvalidArgument, "body_ref указывает не на тело.");
+        }
+
+        var storedComponent = References.Require(command.ComponentRef!, document.Id, document.Revision);
+        if (storedComponent.Payload is not ComponentPayload component)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"component_ref указывает не на компонент (kind={storedComponent.Kind}).",
+                RetryPolicy.Never);
+        }
+
+        if (component.Ordinal == NestedComponentOrdinal)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Компонент вложен в подсборку: тела и рёбра читаются по плоскому PartCollection, который "
+                + "вложенных не перечисляет. Адресация вложенного — отдельный наряд; топология не читалась.",
+                RetryPolicy.Never);
+        }
+
+        if (ComponentPart5At(document, component.Ordinal) is not { } part
+            || part.BodyCollection() is not ksBodyCollection bodies || bodies.GetCount() == 0
+            || bodies.GetByIndex(0) is not ksBody componentBody)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Тело компонента не прочитано (ksPart.BodyCollection): топология не читалась.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        notes.Add("component_frame — строки описывают тело КОМПОНЕНТА в его собственных координатах: "
+            + "размещение компонента к ним не применено");
+        return (componentBody, notes);
     }
 
     private FaceRowDto DescribeFace(DocumentEntry document, ksFaceDefinition face)
@@ -5187,9 +5254,12 @@ public sealed record ExtrudeResult(
 
 public sealed record RebuildResult(long NewRevision, DocumentContextDto Context);
 
+/// <param name="Notes">Named facts about the read — e.g. that the rows of a component are in the component's
+/// own frame.</param>
 public sealed record TopologyReadResult(
     int FaceCount,
     int RawEdgeReferences,
     int UniqueEdgeCount,
     IReadOnlyList<FaceRowDto> Faces,
-    IReadOnlyList<EdgeRowDto> Edges);
+    IReadOnlyList<EdgeRowDto> Edges,
+    IReadOnlyList<string>? Notes = null);

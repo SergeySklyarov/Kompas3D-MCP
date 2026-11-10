@@ -402,6 +402,7 @@ public sealed class CommandDispatcher
             WorkerCommands.PatternGrid => _sta.Run(() => PatternGrid(request), "pattern.grid", cancellationToken),
             WorkerCommands.PatternCircular => _sta.Run(() => PatternCircular(request), "pattern.circular", cancellationToken),
             WorkerCommands.PatternMirror => _sta.Run(() => PatternMirror(request), "pattern.mirror", cancellationToken),
+            WorkerCommands.PatternPath => _sta.Run(() => PatternPath(request), "pattern.path", cancellationToken),
             WorkerCommands.PatternRead => _sta.Run(() => PatternRead(request), "pattern.read", cancellationToken),
             WorkerCommands.SuppressFeature => _sta.Run(() => SuppressFeature(request), "feat.suppress", cancellationToken),
             WorkerCommands.DeleteFeature => _sta.Run(() => DeleteFeature(request), "feat.delete", cancellationToken),
@@ -1327,6 +1328,16 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.PatternMirror(command), document);
     }
 
+    /// <summary>Component array along a curve (profile <c>assembly-ext-v1</c>, ASM-13). The document comes from
+    /// <c>document_id</c>, like the other component arrays.</summary>
+    private object? PatternPath(IpcFrame request)
+    {
+        var command = Argument<PatternPathCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.PatternPath(command), document);
+    }
+
     /// <summary>Read pattern parameters. Bypasses the mutation journal: it changes nothing. The revision is returned
     /// but not bumped — the same rule as <c>get_feature</c> and <c>sketch.status</c>.</summary>
     private object? PatternRead(IpcFrame request)
@@ -1335,6 +1346,7 @@ public sealed class CommandDispatcher
         var document = _session.DocumentForReference(command.FeatureRef);
         return Tagged(document.Id, document.Revision, _session.PatternRead(command));
     }
+
     /// <summary>Sketch status is a read, bypassing the mutation journal like <c>measure</c> and <c>get_feature</c>. The
     /// revision is returned but NOT bumped: MEASURED that reading the status changed neither the volume nor the
     /// topology counters.</summary> <remarks><c>Tagged</c>, not <c>TaggedAfter</c>: bumping the revision for a read

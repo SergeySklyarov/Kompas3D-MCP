@@ -2467,6 +2467,57 @@ public static class ToolCatalog
                 requiresDocument: false,
                 requiresRevision: true),
 
+            Mutation("kompas_pattern_path", "Массив компонентов по кривой",
+                "Массив КОМПОНЕНТОВ сборки вдоль КРИВОЙ. Маршрут: IModelContainer.FeaturePatterns.Add(o3d_curvePartArray=40) → " +
+                "QI(IPathPattern) → Curves → AddInitialObjects(компоненты) → Count/ByStep/Step → Update(). " +
+                "ТРАЕКТОРИЯ - РЕБРО (curve_refs, ровно одна ссылка edge:). Это ИЗМЕРЕНО, а не выбрано: эскиз и элемент " +
+                "EntityCollection(o3d_curveElement=111) запись принимает молча, но IPathPattern.Curves читается обратно как null, " +
+                "Update() возвращает false и массив не строится. Ребро компонента читается kompas_read_topology с component_ref " +
+                "(у тела компонента нет ссылки body:). ПОЛОЖЕНИЕ ЭКЗЕМПЛЯРОВ: копии НЕ встают на саму кривую - их начала равны " +
+                "началу исходного компонента плюс смещение вдоль траектории, поэтому проверяется СМЕЩЕНИЕ (k·шаг или доля длины), " +
+                "а не абсолютная точка на кривой; это измерено на компоненте, сдвинутом от начала координат. " +
+                "ШАГ И «НА ВСЮ ДЛИНУ»: by_step=true (по умолчанию) требует step_mm и кладёт экземпляры через шаг вдоль " +
+                "траектории; by_step=false разносит их по всей длине - крайние встают на её концы, шаг вычисляет модель. " +
+                "reverse_direction=true строит массив в обратную сторону (измерено: набор начал меняет знак). " +
+                "save_initial_orientation по умолчанию true (копии сохраняют ориентацию исходника) - это измеренный режим; при false " +
+                "экземпляры доворачиваются к траектории, правило их начал не измерено, и сверка смещений честно снимается в " +
+                "unverified_aspects. УСПЕХ - не Update(): перечитываются CurveCount, Count, ByStep, ReverseDirection, число " +
+                "экземпляров (count×1 по ifeaturepattern_getexemplarscounts.html), число компонентов (прирост источник×(count-1)) " +
+                "и смещения начал в допуске 0.01 мм. ОТКАЗЫ: INVALID_ARGUMENT до мутации - пустой curve_refs, больше одной кривой " +
+                "нет (сшивание кривых не измерено), count<2, by_step без положительного step_mm, ссылка не ребро, документ не " +
+                "сборка; CAPABILITY_UNAVAILABLE - вложенный компонент, ребро не переносится в API7; GEOMETRY_FAILED с " +
+                "partial_effects и details.failure_snapshot - массив создан, но не построен или экземпляры не перечитались.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("source_refs", Sch.Arr(Sch.Ref("#/$defs/reference"),
+                        "Копируемые компоненты: component:-ссылки компонентов ВЕРХНЕГО уровня этой сборки. Пустой список " +
+                        "отвергается до обращения к КОМПАС.", 1)),
+                    ("curve_refs", Sch.Arr(Sch.Ref("#/$defs/reference"),
+                        "Траектория: РОВНО ОДНА ссылка edge: на ребро компонента (kompas_read_topology с component_ref). " +
+                        "Эскиз траекторией не является - измерено. Пустой список отвергается; вторая кривая отвергается " +
+                        "схемой (maxItems=1, INVALID_ARGUMENT), потому что сшивание нескольких кривых в одну траекторию " +
+                        "не измерено, а рабочий слой на тот же вход отвечает CAPABILITY_UNAVAILABLE, если запрос пришёл " +
+                        "мимо схемы.", 1, 1)),
+                    ("count", Sch.Int(
+                        "Число экземпляров ВКЛЮЧАЯ исходный (IPathPattern.Count). Не меньше 2: при одном экземпляре " +
+                        "копировать нечего.", 2, 100_000)),
+                    ("step_mm", Sch.Nullable(Sch.Num(
+                        "Шаг вдоль траектории, мм. Обязателен при by_step=true; при by_step=false не используется, потому что " +
+                        "шаг там вычисляет модель из длины траектории и числа экземпляров.", 0d, 1e9d, exclusiveMin: true))),
+                    ("by_step", Sch.Nullable(Sch.Bool(
+                        "Способ построения (IPathPattern.ByStep): true - по шагу, false - вдоль всей направляющей, крайние " +
+                        "экземпляры на её концах (страница ipathpattern_bystep.html). Не задано - true.", true))),
+                    ("reverse_direction", Sch.Nullable(Sch.Bool(
+                        "Обратное направление вдоль траектории (IPathPattern.ReverseDirection). Не задано - false."))),
+                    ("save_initial_orientation", Sch.Nullable(Sch.Bool(
+                        "Ориентация экземпляров (IPathPattern.SaveInitialOrientation): true - сохранять ориентацию исходника, " +
+                        "false - доворачивать к траектории. Не задано - true, и это измеренный режим: при false набор начал " +
+                        "из запроса не выводится, поэтому сверка смещений снимается и названа в unverified_aspects.", true)))),
+                WorkerCommands.PatternPath,
+                requiresDocument: false,
+                requiresRevision: true),
+
             ReadOnly("kompas_get_pattern", "Параметры массива",
                 "Что сервер видит в существующем признаке массива либо зеркала: семейство (по ответу на " +
                 "QI, а не по памяти вызывающего), направления, шаги, количества, углы, способ построения, " +
@@ -2486,6 +2537,9 @@ public static class ToolCatalog
                 "У зеркального массива поле пропусков экземпляров читается, но объявляется НЕПРИМЕНИМЫМ " +
                 "со ссылкой на glava_48_obzhie_svedeniy: исключение экземпляров для зеркального массива " +
                 "недоступно. Это предметная неприменимость с источником, а не пустая клетка. " +
+                "СЕМЕЙСТВО path — массив компонентов вдоль кривой (o3d_curvePartArray=40): тогда Count1 несёт " +
+                "IPathPattern.Count, Step1 — IPathPattern.Step, а curve_count и by_step читаются отдельно; " +
+                "Step1 при by_step=false равно 0, потому что шаг там вычисляет модель. " +
                 "Признак сопоставляется с элементом IModelContainer.FeaturePatterns по имени владельца, " +
                 "а не по индексу: КОМПАС переставляет элементы коллекции. Несопоставленный признак — это " +
                 "названная причина, а не отказ всего чтения.",
@@ -4217,10 +4271,23 @@ public static class ToolCatalog
                 requiresDocument: false),
 
             ReadOnly("kompas_read_topology", "Топология тела",
-                "Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры.",
+                "Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры. " +
+                "ВТОРАЯ ФОРМА АДРЕСА - component_ref: первое тело КОМПОНЕНТА сборки (ksPart.BodyCollection → ksBody.FaceCollection → ksFaceDefinition.EdgeCollection). " +
+                "Она нужна потому, что единственная траектория, которую принимает kompas_pattern_path, - РЕБРО компонента, а у тела компонента нет ссылки body: " +
+                "(список тел документа его не перечисляет). ГРАНИЦЫ: ровно одно из body_ref и component_ref, обе сразу или ни одной - INVALID_ARGUMENT; " +
+                "вложенный в подсборку компонент отвергается CAPABILITY_UNAVAILABLE, потому что плоский PartCollection вложенных не перечисляет. " +
+                "КООРДИНАТЫ: строки компонента - в ЕГО СОБСТВЕННЫХ координатах, размещение компонента к ним не применено, и это названо в notes (component_frame); " +
+                "числа строк тела документа - в координатах модели.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
-                    ("body_ref", Sch.Ref("#/$defs/reference")),
+                    ("body_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Тело ЭТОГО документа из kompas_list_bodies. Взаимоисключающе с component_ref.")),
+                    ("component_ref", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                        "Компонент сборки верхнего уровня из kompas_list_components: читается его ПЕРВОЕ тело. " +
+                        "Взаимоисключающе с body_ref. Ссылки граней и рёбер, выданные так, пригодны как curve_refs " +
+                        "у kompas_pattern_path.")),
                     ("include", Sch.Enum("Что читать.", "faces", "edges", "both"))),
                 WorkerCommands.ReadTopology,
                 requiresDocument: true),

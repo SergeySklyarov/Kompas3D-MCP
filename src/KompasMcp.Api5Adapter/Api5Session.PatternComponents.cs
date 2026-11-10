@@ -54,7 +54,7 @@ public partial class Api5Session
         var top = RequireComponentPatternTop(document);
 
         var before = ReadComponents(top);
-        var (sources, sourceOrigins) = ResolveComponentSources(document, top, command.SourceRefs);
+        var (sources, sourceOrigins, _) = ResolveComponentSources(document, top, command.SourceRefs);
 
         var axisNotes = new List<string>();
         var axis1 = Api7Rotated.TryBuildAxisBy2Points(
@@ -143,7 +143,7 @@ public partial class Api5Session
         var top = RequireComponentPatternTop(document);
 
         var before = ReadComponents(top);
-        var (sources, sourceOrigins) = ResolveComponentSources(document, top, command.SourceRefs);
+        var (sources, sourceOrigins, _) = ResolveComponentSources(document, top, command.SourceRefs);
 
         var axis = Api7Rotated.TryBuildAxisBy2Points(
             bridge, part, command.AxisPoint1Mm.ToArray(), command.AxisPoint2Mm.ToArray());
@@ -602,8 +602,10 @@ public partial class Api5Session
     /// <summary>Resolve <c>component:</c> sources into API7 objects, with the origins the comparison needs.</summary>
     /// <remarks>INVARIANT: a source must be a TOP-LEVEL component of THIS assembly and its placement must be
     /// readable before the mutation — a pattern whose sources cannot be located afterwards cannot be
-    /// compared, and refusing after the feature is built would leave it in the tree.</remarks>
-    private (object[] Objects, List<double[]> Origins) ResolveComponentSources(
+    /// compared, and refusing after the feature is built would leave it in the tree.
+    /// <paramref name="Placements"/> carries the 4×4 matrices for the callers that need a FRAME (the path array
+    /// rotates the curve's direction by it); the grid and circular proofs need the origins only.</remarks>
+    private (object[] Objects, List<double[]> Origins, List<double[]?> Placements) ResolveComponentSources(
         DocumentEntry document, IPart7 top, IReadOnlyList<string> sourceRefs)
     {
         if (sourceRefs.Count == 0)
@@ -616,6 +618,7 @@ public partial class Api5Session
 
         var objects = new List<object>(sourceRefs.Count);
         var origins = new List<double[]>(sourceRefs.Count);
+        var placements = new List<double[]?>(sourceRefs.Count);
         foreach (var reference in sourceRefs)
         {
             var stored = References.Require(reference, document.Id, document.Revision);
@@ -664,9 +667,10 @@ public partial class Api5Session
 
             objects.Add(model);
             origins.Add(new[] { matrix[12], matrix[13], matrix[14] });
+            placements.Add(matrix);
         }
 
-        return (objects.ToArray(), origins);
+        return (objects.ToArray(), origins, placements);
     }
 
     private static double[] Difference(double[] to, double[] from) =>

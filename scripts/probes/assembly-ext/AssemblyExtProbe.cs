@@ -60,6 +60,11 @@ internal sealed partial class AssemblyExtProbe : IDisposable
             {
                 NestedAddressScenario();
             }
+
+            if (only is null or "path-pattern")
+            {
+                PathPatternScenario();
+            }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException
                                        or NotSupportedException)
@@ -114,8 +119,9 @@ internal sealed partial class AssemblyExtProbe : IDisposable
         return (_doc5, _doc7, top);
     }
 
-    /// <summary>Part file with one box W×D×H on XOY, saved to <paramref name="path"/>.</summary>
-    private string PartFile(string path, double h)
+    /// <summary>Part file with one box W×D×H on XOY, saved to <paramref name="path"/>. The length along X is
+    /// given by the caller where a longer edge is needed as a trajectory.</summary>
+    private string PartFile(string path, double h, double length = PartW)
     {
         var (doc5, _doc7Local, _) = NewDocument(isPart: true);
         var part = doc5.GetPart(-1) as ksPart ?? throw new InvalidOperationException("GetPart(-1) → null");
@@ -127,9 +133,9 @@ internal sealed partial class AssemblyExtProbe : IDisposable
         definition.SetPlane(plane);
         sketch.Create();
         var editor = definition.BeginEdit() as ksDocument2D ?? throw new InvalidOperationException("BeginEdit → не ksDocument2D");
-        editor.ksLineSeg(0, 0, PartW, 0, 1);
-        editor.ksLineSeg(PartW, 0, PartW, PartD, 1);
-        editor.ksLineSeg(PartW, PartD, 0, PartD, 1);
+        editor.ksLineSeg(0, 0, length, 0, 1);
+        editor.ksLineSeg(length, 0, length, PartD, 1);
+        editor.ksLineSeg(length, PartD, 0, PartD, 1);
         editor.ksLineSeg(0, PartD, 0, 0, 1);
         definition.EndEdit();
 

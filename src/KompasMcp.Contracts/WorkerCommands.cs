@@ -266,6 +266,14 @@ public static class WorkerCommands
     /// <summary>Re-read the parameters of an existing pattern or mirror from the model.</summary>
     public const string PatternRead = "pattern.read";
 
+    /// <summary>Component array along a curve (profile <c>assembly-ext-v1</c>, ASM-13):
+    /// <c>IModelContainer.FeaturePatterns.Add(o3d_curvePartArray=40)</c> → <c>QI(IPathPattern)</c>.</summary>
+    /// <remarks>DOC: <c>copytype.html</c> («o3d_curvePartArray 40 IPathPattern»), <c>ipathpattern_props.html</c>.
+    /// MEASURED by the probe: the trajectory must be an EDGE of the assembly's component — a sketch and a
+    /// collection element of <c>o3d_curveElement</c> are written and read back as null, and <c>Update()</c>
+    /// answers false. History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+    public const string PatternPath = "pattern.path";
+
     /// <summary>Suppress and restore a feature (ksFeature.excluded, MEASURED).</summary>
     public const string SuppressFeature = "feat.suppress";
 
@@ -1045,7 +1053,18 @@ public sealed record ReadTopologyCommand
 {
     public required string DocumentId { get; init; }
 
-    public required string BodyRef { get; init; }
+    /// <summary>Body of THIS document (<c>kompas_list_bodies</c>). Exactly one of this and
+    /// <see cref="ComponentRef"/>. Coordinates in the rows are the body's own — for a part, model coordinates.</summary>
+    public string? BodyRef { get; init; }
+
+    /// <summary>Assembly component whose FIRST body is read: <c>ksPart.BodyCollection()</c> of the component,
+    /// the same documented route the component list uses for its body and face counts.</summary>
+    /// <remarks>WHY IT EXISTS: a component edge is the only trajectory <c>kompas_pattern_path</c> accepts
+    /// (measured), and a component body has no <c>body:</c> reference, so the edges of a component are
+    /// unreachable without this field. INVARIANT: the rows of a component are in the COMPONENT'S LOCAL frame —
+    /// the placement is not applied to them — and that is what the answer says.
+    /// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+    public string? ComponentRef { get; init; }
 
     /// <summary>faces | edges | both</summary>
     public required string Include { get; init; }
@@ -1547,6 +1566,54 @@ public sealed record PatternCircularCommand
 
     /// <summary>Analytic axis coordinates of the instances in model coordinates, mm.</summary>
     public IReadOnlyList<IReadOnlyList<double>>? ExpectedHoleCentersMm { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+}
+
+/// <summary>Component array along a curve (profile <c>assembly-ext-v1</c>, ASM-13).</summary>
+/// <remarks>ROUTE, measured: <c>FeaturePatterns.Add(o3d_curvePartArray=40)</c> → <c>QI(IPathPattern)</c> →
+/// <c>Curves</c> → <c>AddInitialObjects</c> → <c>Count</c>/<c>ByStep</c>/<c>Step</c> → <c>Update()</c>.
+/// MEASURED: the trajectory must be an EDGE of a component — a sketch and an element of
+/// <c>EntityCollection(o3d_curveElement=111)</c> read back as <c>null</c> and build nothing.
+/// INVARIANT: copies are NOT placed ON the curve; the proof compares offsets from the source.
+/// LIMIT: exactly one curve; a chained trajectory was never measured.
+/// History: docs/decisions/assembly-ext.md#path-pattern</remarks>
+public sealed record PatternPathCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Copied components: <c>component:</c> references of TOP-LEVEL components, as in the grid mode.</summary>
+    public required IReadOnlyList<string> SourceRefs { get; init; }
+
+    /// <summary>The trajectory: exactly one <c>edge:</c> reference. In an assembly the edge is read from a
+    /// component by <c>kompas_read_topology</c> with <c>component_ref</c>.</summary>
+    public required IReadOnlyList<string> CurveRefs { get; init; }
+
+    /// <summary>Instance count INCLUDING the source. At least 2.</summary>
+    public required int Count { get; init; }
+
+    /// <summary>Step along the trajectory, mm. Mandatory when <see cref="ByStep"/> is true; ignored
+    /// otherwise, where the model spreads the instances over the whole trajectory.</summary>
+    public double? StepMm { get; init; }
+
+    /// <summary><c>IPathPattern.ByStep</c>: true — instances by step, false — along the whole trajectory
+    /// (the first and the last land on its ends). DOC: <c>ipathpattern_bystep.html</c>.</summary>
+    public bool ByStep { get; init; } = true;
+
+    /// <summary><c>IPathPattern.ReverseDirection</c>: the other way along the trajectory.
+    /// DOC: <c>ipathpattern_reversedirection.html</c>.</summary>
+    public bool ReverseDirection { get; init; }
+
+    /// <summary><c>IPathPattern.SaveInitialOrientation</c>: true — copies keep the source orientation, false —
+    /// they turn to the trajectory. DOC: <c>ipathpattern_saveinitialorientation.html</c>. Not set — true, the
+    /// measured mode.</summary>
+    public bool? SaveInitialOrientation { get; init; }
+
+    /// <summary>Orientation written when the client omits the field.</summary>
+    public const bool DefaultSaveInitialOrientation = true;
+
+    /// <summary>The orientation actually written: the client's value, else the measured default.</summary>
+    public bool EffectiveSaveInitialOrientation => SaveInitialOrientation ?? DefaultSaveInitialOrientation;
 
     public required long ExpectedRevision { get; init; }
 }

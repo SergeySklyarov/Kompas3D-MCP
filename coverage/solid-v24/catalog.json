@@ -6647,6 +6647,49 @@
      "modes": [],
      "mcp_support": "kompas_replace_component по ссылке вложенного компонента; сохранение верхней сборки называет записанный файл подсборки полем saved_subassembly_files",
      "next_step": "Живой прогон группы ASM-11/ASM-12 прибора scripts/mcp-smoke.py пройден: замена nested-a.m3d на nested-c.m3d с сохранённым локальным размещением, переоткрытием и названным файлом подсборки в ответе сохранения."
+    },
+    {
+      "id": "ASM-13.component_pattern.path",
+      "name": "Массив КОМПОНЕНТОВ сборки по кривой",
+      "level": "mcp_verified",
+      "doc_source": [
+        "copytype",
+        "ipathpattern_props",
+        "ipathpattern_curves",
+        "ipathpattern_count",
+        "ipathpattern_bystep",
+        "ipathpattern_step",
+        "ipathpattern_reversedirection",
+        "ipathpattern_saveinitialorientation",
+        "ifeaturepatterns_add",
+        "ifeaturepattern_issuitableobject",
+        "ifeaturepattern_addinitialobjects",
+        "ifeaturepattern_getexemplarscounts",
+        "ipart7_parts",
+        "ipart7_getsummmatrix",
+        "kspart_bodycollection",
+        "ksbody_facecollection",
+        "ksface_edgecollection"
+      ],
+      "interfaces": {
+        "api7": [
+          "IModelContainer.FeaturePatterns.Add(o3d_curvePartArray=40) -> IFeaturePattern",
+          "QI: IPathPattern (Curves, Count, ByStep, Step, ReverseDirection, SaveInitialOrientation, Update)",
+          "IFeaturePattern.IsSuitableObject(IModelObject) / AddInitialObjects(VARIANT VT_DISPATCH)",
+          "IFeaturePattern.GetExemplarsCounts(out, out) — у массива по кривой Count2 = 1",
+          "IPart7.Parts -> IPart7, IPart7.GetSummMatrix(Part7) -> 16 элементов 4x4"
+        ]
+      },
+      "clone_variants": [
+        {
+          "api": "o3d_curvePartArray=40",
+          "id": "ASM-13.component_pattern.path.components",
+          "level": "mcp_verified"
+        }
+      ],
+      "modes": [],
+      "mcp_support": "kompas_pattern_path (curve_refs — ребро компонента из kompas_read_topology с component_ref); чтение — kompas_get_pattern (семейство path: curve_count, count, step, by_step), удаление — kompas_delete_feature",
+      "next_step": "Живой прогон группы ASM-13 прибора scripts/mcp-smoke.py пройден: 3 экземпляра вдоль ребра 100 мм с шагом 30, режим «на всю длину», чтение семейства path, переоткрытие, удаление и каждый отказ. Траектория — только ребро: эскиз ядро не принимает (измерено)."
     }
    ]
   },

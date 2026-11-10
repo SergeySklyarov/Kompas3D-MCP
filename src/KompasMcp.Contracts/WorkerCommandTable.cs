@@ -200,6 +200,7 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.PatternGrid, WorkerAction.ModelMutation);
         Cad(WorkerCommands.PatternCircular, WorkerAction.ModelMutation);
         Cad(WorkerCommands.PatternMirror, WorkerAction.ModelMutation);
+        Cad(WorkerCommands.PatternPath, WorkerAction.ModelMutation);
 
         // ---- body operations ----
         // The same API7 route as the hole plus a re-read of every body of the document after the

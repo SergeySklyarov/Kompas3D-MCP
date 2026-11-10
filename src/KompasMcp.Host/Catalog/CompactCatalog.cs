@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts.Schema;
 
@@ -78,6 +78,7 @@ public static class CompactCatalog
         ["kompas_export_flat_dxf"] = "file",
         ["kompas_pattern_grid"] = "pattern", ["kompas_pattern_circular"] = "pattern",
         ["kompas_pattern_mirror"] = "pattern", ["kompas_get_pattern"] = "pattern",
+        ["kompas_pattern_path"] = "pattern",
         ["kompas_insert_component"] = "assembly", ["kompas_replace_component"] = "assembly",
         ["kompas_reposition"] = "assembly", ["kompas_set_component_placement"] = "assembly",
         ["kompas_delete_component"] = "assembly", ["kompas_list_components"] = "assembly",

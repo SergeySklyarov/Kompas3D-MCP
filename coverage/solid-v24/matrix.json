@@ -108,6 +108,10 @@
         "artifact": "coverage/solid-v24/release-profiles/bom-minimal-v1.json",
         "title": "BOM по сборке v24: сводка состава по документированному ksPart и её выгрузка в файл"
       },
+      "spec-ext-v1": {
+        "artifact": "coverage/solid-v24/release-profiles/spec-ext-v1.json",
+        "title": "Документ-спецификация v24: строки .spw, прочитанные документированным маршрутом"
+      },
       "dismantle-minimal-v1": {
         "artifact": "coverage/solid-v24/release-profiles/dismantle-minimal-v1.json",
         "title": "Разнесённый вид сборки v24: режим, шаги разнесения и доказательство разнесения по матрице компонента"
@@ -16351,6 +16355,68 @@
         "Номер раздела принадлежит стилю спецификации, а не порядку разделов ГОСТ (измерено: Документация 5, Детали 20); поэтому раздел читается, но не выводится из названия и обратно.",
         "Позиция и количество читаются текстом колонки, а не числом: инструмент не разбирает формат чисел стиля.",
         "Запись объектов спецификации вне наряда: единственная запись - постановка прибора документированными ksSpcObjectCreate/ksSetSpcObjectColumnText/ksSpcObjectEnd."
+      ]
+    },
+    {
+      "operation_id": "SPEC-01.specdoc.read",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-ext-v1",
+      "queue": "SPEC_READ_SPW",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261110-spec-ext-7d463a0/",
+        "docs/decisions/bom.md#spec-read-spw"
+      ],
+      "parameters_schema": "schemas/kompas_get_specification_document.json",
+      "adapter_route": "kompas_get_specification_document: IDocuments.Open(PathName, Visible, ReadOnly) -> IKompasDocument (DocumentType = ksDocumentSpecification) -> SpecificationDescriptions.Active -> ISpecificationDescription.Objects (порядок визуальный) -> ISpecificationObject.Columns -> Column[тип, 1, 0] -> ColumnItems.Item(i).Value; название раздела - SpecificationStyle.Sections по номеру; объекты без колонок - ObjectType из ksspecificationobjecttypeenum; вторая дорога - SpcActiveDocument().GetSpecification() -> ksGetSpcObject(unique) -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcSectionName + ksGetSpcObjectColumnText, только у активного документа (idocuments_open.html, documenttypeenum.html, ikompasdocument_specificationdescriptions.html, ispecificationdescription_objects.html, ispecificationobject_objecttype.html, ksspecificationobjecttypeenum.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationstyle_sections.html, ispecificationsectionstyles_item.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, kompasobject_spcactivedocument.html, ksspcdocument_getspecification.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "блок SPEC_READ_SPW читает документ; создание строк .spw - наряды SPEC_ADD_ROW, SPEC_EDIT_ROW и SPEC_DELETE_ROW",
+        "edit": "инструмент ничего не пишет в .spw: правка строк - отдельные наряды блока spec-ext-v1",
+        "rebuild": "перестроение не требуется: чтение не меняет документ",
+        "suppress_restore": "у чтения документа-спецификации нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строки сверяются с постановкой и с независимой дорогой API5, а не измеряются геометрией: у .spw геометрии строк нет"
+      },
+      "tests": [
+        "SPEC-01.discovery",
+        "SPEC-01.schema",
+        "SPEC-01.open_path",
+        "SPEC-01.row_values",
+        "SPEC-01.second_road",
+        "SPEC-01.list_documents",
+        "SPEC-01.context_kind",
+        "SPEC-01.close_clean",
+        "SPEC-01.read_by_id",
+        "SPEC-01.save_as",
+        "SPEC-01.model_object_types",
+        "SPEC-01.negative_input",
+        "SPEC-01.negative_path",
+        "SPEC-01.negative_missing",
+        "SPEC-01.negative_kind",
+        "SPEC-01.reopen"
+      ],
+      "limitations": [
+        "Запись строк .spw (создание, правка, удаление) в наряд не входит: инструмент только читает, и открытый по path документ открыт в режиме только для чтения.",
+        "Вторая, независимая дорога (API5 SpcActiveDocument) читается ТОЛЬКО у активного документа; чтение его не активирует. Когда дорога недоступна, это названо в unverified_aspects, и расхождение дорог - заметка, а не выбор одной молча.",
+        "Открытие по path без application_id возможно только при ОДНОМ подключённом экземпляре: при двух сервер не выбирает (AMBIGUOUS_APPLICATION) и называет выход - kompas_open_document с application_id и чтение по document_id.",
+        "Название раздела берётся из стиля спецификации по номеру; если стиль раздела не называет, section = null, а номер раздел остаётся прочитанным и причина названа.",
+        "Колонка, которой нет в стиле, публикуется как null, а не как пустая строка: «в стиле нет колонки» и «колонка пуста» - разные ответы, и оба названы в notes."
       ]
     },
     {

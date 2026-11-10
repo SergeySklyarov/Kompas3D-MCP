@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 160,
+   "operations": 161,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 236,
+   "modes_and_variants": 237,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8535,7 +8535,7 @@
     "runtime": "измерено 26.10.2026 на build 24.0.0.2799 прибором scripts/probes/bom/ и группой --bom-only: 6 экземпляров и 3 уникальных файла верхнего уровня; два разных part.m3d с одним именем файла не склеиваются при группировке по полному пути; скрытый и исключённый экземпляры остаются в коллекции и в числе экземпляров; исключённый не появляется в API7-перечислении IPart7.PartsEx; флаги переживают save -> reopen"
    },
    "route": "ksDocument3D.PartCollection(true) -> ksPartCollection.GetCount/GetByIndex -> ksPart.fileName/name/marking/material/hidden/excluded/standardComponent/MultiBodyParts; рекурсия - открытием файла компонента тем же маршрутом и закрытием в finally; выгрузка - те же строки в CSV (UTF-8 с BOM-меткой, «;») или JSON; объекты спецификации - через ISpecificationDescription.Objects и ksSpecification (ksGetSpcObject/ksGetSpcSectionName/ksGetSpcObjectColumnText)",
-   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties / kompas_get_specification",
+   "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties / kompas_get_specification / kompas_get_specification_document",
    "next_step": "Профиль bom-minimal-v1. Запись объектов спецификации - BOM_SPEC_WRITE, только по слову заказчика.",
    "operations": [
     {
@@ -8590,6 +8590,20 @@
       {
        "id": "BOM-04.specification.read",
        "name": "Прочитать объекты спецификации модели: раздел, позиция, обозначение, наименование, количество",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SPEC-01",
+     "name": "Чтение документа-спецификации (.spw)",
+     "level": "mcp_verified",
+     "doc_source": "idocuments_open.html, documenttypeenum.html, ikompasdocument_specificationdescriptions.html, ispecificationdescription_objects.html, ispecificationobject_objecttype.html, ksspecificationobjecttypeenum.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationstyle_sections.html, ispecificationsectionstyles_item.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, kompasobject_spcactivedocument.html, ksspcdocument_getspecification.html",
+     "route": "IDocuments.Open(PathName, Visible, ReadOnly) -> IKompasDocument (DocumentType = ksDocumentSpecification) -> SpecificationDescriptions.Active -> ISpecificationDescription.Objects (весь список, порядок визуальный) -> ISpecificationObject.Columns -> Column[тип, 1, 0] -> ColumnItems.Item(i).Value; название раздела - SpecificationStyle.Sections по номеру; объекты, не являющиеся базовыми, называются типом ksspecificationobjecttypeenum; вторая дорога - SpcActiveDocument().GetSpecification() -> ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcSectionName + ksGetSpcObjectColumnText, только у активного документа",
+     "modes": [
+      {
+       "id": "SPEC-01.specdoc.read",
+       "name": "Прочитать строки документа-спецификации .spw: раздел, позиция, обозначение, наименование, количество",
        "level": "mcp_verified"
       }
      ]

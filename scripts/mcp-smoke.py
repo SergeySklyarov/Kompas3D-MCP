@@ -819,8 +819,9 @@ def step_metadata_export(client, app_id, path):
 # → 121 (DIRECT_FACES_DELETE_RESTORE: kompas_delete_faces и kompas_restore_faces)
 # → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
 # → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf)
-# → 130 (ASM_PATTERN_PATH: kompas_pattern_path).
-EXPECTED_TOOL_COUNT = 130
+# → 130 (ASM_PATTERN_PATH: kompas_pattern_path)
+# → 131 (SPEC_READ_SPW: kompas_get_specification_document).
+EXPECTED_TOOL_COUNT = 131
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -1040,6 +1041,11 @@ RUN_GROUPS = (
      "документа, чужая мутация без переоткрытия, положительный контроль по отпечатку, своя мутация "
      "ровно +1, отписка при закрытии и восстановление после убитого Worker "
      "(наряд EVENTS_FINGERPRINT, спец. 1.7)"),
+    ("specification", "specification", "specification-acceptance.json",
+     "Приёмка SPEC-01: документ-спецификация .spw - открытие по path и по document_id, чтение строк "
+     "сверкой с постановкой, вторая дорога API5, объекты без колонок документированным типом, "
+     "закрытие чистого документа, запись копией и каждый отказ (наряд SPEC_READ_SPW, профиль "
+     "spec-ext-v1)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -1126,6 +1132,9 @@ ALL_GROUPS_EXTRA = (
     # Свежий сеанс ей подходит: проба привязывается к АКТИВНОМУ документу единственного экземпляра,
     # а второй живой КОМПАС ломает привязку (измерено пробой).
     ("events", ["--events-only"]),
+    # Группа SPEC строит свои документы (копия .spw и сборки постановки) и не зависит от общего
+    # сеанса: свежий сеанс ей подходит, и .spw открывается в нём же документированным маршрутом.
+    ("specification", ["--specification-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -2380,6 +2389,8 @@ FLAGS = (
     ("--diag-only", False, "группа DG: диагностический пакет без содержимого моделей"),
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
     ("--events-only", False, "группа EV: внешнее изменение документа по событиям модели"),
+    ("--specification-only", False,
+     "группа SPEC: документ-спецификация .spw - открытие, чтение строк, вторая дорога, отказы"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -20644,6 +20655,9 @@ def main():
     # клетка матрицы находится по ИМЕНИ строки (`BOM.<NN>.<действие>`). Группа запускает прибор
     # `scripts/probes/bom/`, потому что флаги `hidden`/`excluded` у MCP инструмента записи не имеют.
     bom_only = "--bom-only" in sys.argv
+    # Домен СПЕЦИФИКАЦИИ-ДОКУМЕНТА (наряд SPEC_READ_SPW, профиль `spec-ext-v1`): одна группа SPEC на
+    # своём сеансе - клетка матрицы находится по ИМЕНИ строки (`SPEC.<NN>.<действие>`).
+    specification_only = "--specification-only" in sys.argv
     # Домен СЕЧЕНИЙ (наряд G11, профиль `sections-minimal-v1`): одна группа SEC на своём сеансе -
     # клетка матрицы обязана находиться по ИМЕНИ строки (`SEC.<NN>.<действие>`).
     sections_only = "--sections-only" in sys.argv
@@ -20832,6 +20846,7 @@ def main():
         "threads": threads_only,
         "copy_geometry": copy_geometry_only,
         "bom": bom_only,
+        "specification": specification_only,
         "dismantle": dismantle_only,
         "sections": sections_only,
         "e5": e5_only,
@@ -21592,6 +21607,14 @@ def main():
 
         if bom_only:
             bom_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if specification_only:
+            specification_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -58514,6 +58537,272 @@ def bom_checks(client, rep, app_id, workdir):
         if reopened else None
 
 
+def specification_checks(client, rep, app_id, workdir):
+    """SPEC-01 - документ-спецификация `.spw`: открытие по path и по document_id, строки, вторая
+    дорога, отказ (наряд SPEC_READ_SPW, профиль `spec-ext-v1`).
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Постановка - файл `.spw` прибора исследования с ОДНОЙ известной строкой
+    (`SPC.401.001` / «Строка спецификации» / 7 в разделе 20 «Детали») и сборка `spec-asm.m3d` той же
+    постановки со своими известными объектами. Продукт открывает их и читает, и строки сверяются с
+    этими значениями, а не с «status=succeeded».
+
+    ЧЕГО ЗДЕСЬ НЕТ. Запись строк `.spw` в наряд не входит: инструмент только читает. Вторая дорога
+    (API5) читается лишь у АКТИВНОГО документа, а активировать его чтение не вправе, поэтому
+    проверка требует ЧЕСТНОСТИ: расхождения нет, а недоступность дороги НАЗВАНА в unverified_aspects.
+    Само чтение API5 у активного `.spw` измерено прибором
+    (`docs/acceptance/evidence/20261110-spec-ext-7d463a0/`).
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def why(env):
+        err = (env or {}).get("error") or {}
+        return err.get("code") if isinstance(err, dict) else None
+
+    def rows(answer):
+        lines = answer.get("rows")
+        return lines if isinstance(lines, list) else []
+
+    def known(answer):
+        """The known row of the fixture, or an empty list when it does not match."""
+        return [r for r in rows(answer)
+                if str(r.get("marking") or "") == "SPC.401.001"
+                and r.get("section_number") == 20
+                and str(r.get("section") or "") == "Детали"
+                and str(r.get("name") or "") == "Строка спецификации"
+                and str(r.get("quantity") or "") == "7"]
+
+    def read(**args):
+        env, code = call("kompas_get_specification_document", args)
+        return result(env), code
+
+    def docs():
+        """Open documents of this instance, as kompas_list_documents answers them."""
+        env, _code = call("kompas_list_documents", {"application_id": app_id})
+        payload = result(env)
+        return payload if isinstance(payload, list) else []
+
+    def id_of(path):
+        wanted = os.path.normcase(os.path.abspath(path))
+        for item in docs():
+            if isinstance(item, dict) \
+                    and os.path.normcase(os.path.abspath(str(item.get("path") or ""))) == wanted:
+                return item.get("id")
+        return None
+
+    def close(document_id, policy="discard"):
+        return call("kompas_close_document",
+                    {"document_id": document_id, "dirty_policy": policy})[1] if document_id else None
+
+    # ===== SPEC-01: обнаружение и схема =====
+    registry = (client.catalog() or {}).get("registry") or []
+    entry = entry_of(client, "kompas_get_specification_document")
+    schema = (entry or {}).get("inputSchema") or {}
+    props = set(schema.get("properties") or {}) - {"timeout_ms"}
+    required = set(schema.get("required") or [])
+    rep.add("SPEC-01.discovery", "инструмент чтения документа-спецификации есть в реестре каталога",
+            "PASS" if "kompas_get_specification_document" in registry else "FAIL",
+            f"в реестре={len(registry)}")
+    rep.add("SPEC-01.schema",
+            "схема несёт ровно path и document_id, и НИ ОДНО не обязательно: источник выбирает "
+            "правило «ровно одно» на сервере, а не схема",
+            "PASS" if (entry is not None and props == {"path", "document_id"} and not required) else "FAIL",
+            f"поля={sorted(props)} обязательные={sorted(required)}")
+
+    # ===== SPEC-01: постановка копией входа исследования =====
+    # Копия, а не открытие на месте: политика путей продукта не включает docs/acceptance/ (наряд
+    # разрешает взять .spw копией входа исследования). p1/p2 нужны сборке: пути компонентов в ней
+    # относительные.
+    evidence = os.path.join(ROOT, "docs", "acceptance", "evidence", "20261110-spec-ext-7d463a0")
+    fixture_dir = os.path.join(workdir, "spec-acceptance")
+    os.makedirs(fixture_dir, exist_ok=True)
+    spw_path = os.path.join(fixture_dir, "spec.spw")
+    model_path = os.path.join(fixture_dir, "spec-asm.m3d")
+    copy_path = os.path.join(fixture_dir, "spec-copy.spw")
+    for name in ("spec.spw", "spec-asm.m3d", "p1.m3d", "p2.m3d"):
+        shutil.copyfile(os.path.join(evidence, name), os.path.join(fixture_dir, name))
+    if os.path.isfile(copy_path):
+        os.remove(copy_path)
+
+    # ===== SPEC-01: открытие по path и известная строка =====
+    answer, code = read(path=spw_path)
+    document = answer.get("document") or {}
+    opened_path = os.path.normcase(os.path.abspath(str(document.get("path") or "")))
+    rep.add("SPEC-01.open_path",
+            "файл открывается по path ЭТИМ вызовом: opened_by_tool=true, kind=specification, путь "
+            "назван",
+            "PASS" if (not code and document.get("opened_by_tool") is True
+                       and document.get("kind") == "specification"
+                       and opened_path == os.path.normcase(os.path.abspath(spw_path))) else "FAIL",
+            f"код={code} документ={document} строк={len(rows(answer))}")
+    rep.add("SPEC-01.row_values",
+            "известная строка постановки прочитана: раздел 20 «Детали», обозначение SPC.401.001, "
+            "наименование «Строка спецификации», количество 7",
+            "PASS" if len(known(answer)) == 1 and answer.get("count") == len(rows(answer)) else "FAIL",
+            f"count={answer.get('count')} строк={rows(answer)}")
+
+    # ===== SPEC-01: вторая дорога - названная или сверенная, но не молчащая =====
+    unverified = " ".join(str(n) for n in (answer.get("unverified_aspects") or []))
+    api5_named = "api5_road_unavailable" in unverified
+    disagreements = [n for n in (answer.get("notes") or [])
+                     if "specification_api5_disagrees" in str(n)]
+    rep.add("SPEC-01.second_road",
+            "вторая дорога (API5) либо сверена без расхождений, либо её недоступность НАЗВАНА в "
+            "unverified_aspects: молчания о том, что дорога одна, нет",
+            "PASS" if (api5_named or not unverified) and not disagreements else "FAIL",
+            f"вторая_дорога={'названа недоступной' if api5_named else 'сверена'} "
+            f"расхождений={disagreements} unverified={unverified[:200]!r}")
+
+    # ===== SPEC-01: список документов и чистота .spw =====
+    spw_doc = id_of(spw_path)
+    listed = [d for d in docs() if isinstance(d, dict) and d.get("id") == spw_doc]
+    rep.add("SPEC-01.list_documents",
+            "kompas_list_documents показывает открытый .spw видом specification и НЕ считает его "
+            "изменённым (dirty=false): отпечаток построен по строкам документа",
+            "PASS" if (spw_doc and listed and listed[0].get("kind") == "specification"
+                       and listed[0].get("dirty") is False) else "FAIL",
+            f"найдено={listed}")
+
+    context, context_code = (lambda pair: (result(pair[0]), pair[1]))(
+        call("kompas_get_context", {"document_id": spw_doc, "detail": "minimal"})) if spw_doc \
+        else ({}, "no_document")
+    rep.add("SPEC-01.context_kind",
+            "kompas_get_context называет вид specification и не считает документ изменённым; "
+            "признаков модели у него нет и это НАЗВАНО неприменимым, а не нулём",
+            "PASS" if (spw_doc and not context_code and context.get("kind") == "specification"
+                       and context.get("dirty") is False
+                       and context.get("feature_count") is None) else "FAIL",
+            f"код={context_code} вид={context.get('kind')} dirty={context.get('dirty')} "
+            f"feature_count={context.get('feature_count')}")
+
+    closed_code = close(spw_doc, "refuse")
+    rep.add("SPEC-01.close_clean",
+            "открытый только для чтения .spw закрывается политикой refuse: DOCUMENT_DIRTY здесь была "
+            "бы ложью о несохранённых правках",
+            "PASS" if spw_doc and not closed_code else "FAIL", f"код={closed_code}")
+
+    # ===== SPEC-01: штатное открытие и чтение по document_id =====
+    env, open_code = call("kompas_open_document",
+                          {"application_id": app_id, "path": spw_path, "access": "read_only"})
+    opened_id = doc_id(env)
+    by_id, by_id_code = read(document_id=opened_id) if opened_id else ({}, "no_document")
+    rep.add("SPEC-01.read_by_id",
+            "kompas_open_document на .spw отдаёт document_id с видом specification, и чтение по нему "
+            "даёт ту же строку, НЕ называя документ открытым этим вызовом",
+            "PASS" if (opened_id and not open_code and not by_id_code
+                       and len(known(by_id)) == 1
+                       and (by_id.get("document") or {}).get("opened_by_tool") is False) else "FAIL",
+            f"код={open_code},{by_id_code} документ={by_id.get('document')} строк={rows(by_id)}")
+
+    # ===== SPEC-01: запись копией документированным SaveAs =====
+    save_revision = 1
+    if opened_id:
+        fresh, _fresh_code = (lambda pair: (result(pair[0]), pair[1]))(
+            call("kompas_get_context", {"document_id": opened_id, "detail": "minimal"}))
+        save_revision = fresh.get("revision") or 1
+    saved, save_code = (lambda pair: (result(pair[0]), pair[1]))(
+        call("kompas_save_document", {"document_id": opened_id, "target_path": copy_path,
+                                      "expected_revision": save_revision})) \
+        if opened_id else ({}, "no_document")
+    copy_row, copy_code = read(path=copy_path) if os.path.isfile(copy_path) else ({}, "no_file")
+    rep.add("SPEC-01.save_as",
+            "kompas_save_document с target_path записывает .spw документированным "
+            "IKompasDocument.SaveAs, и записанная копия открывается и даёт ту же строку",
+            "PASS" if (not save_code and os.path.isfile(copy_path)
+                       and not copy_code and len(known(copy_row)) == 1) else "FAIL",
+            f"save_код={save_code} файл={os.path.isfile(copy_path)} "
+            f"размер={(saved or {}).get('byte_length')} copy_код={copy_code} строк={rows(copy_row)}")
+    copy_doc = id_of(copy_path)
+
+    # ===== SPEC-01: объекты без колонок названы документированным типом =====
+    env, model_code = call("kompas_open_document",
+                           {"application_id": app_id, "path": model_path, "access": "read_only"})
+    model_id = doc_id(env)
+    model_spec, model_spec_code = (lambda pair: (result(pair[0]), pair[1]))(
+        call("kompas_get_specification", {"document_id": model_id})) if model_id else ({}, "no_document")
+    typed = [n for n in (model_spec.get("notes") or [])
+             if "specification_object_not_base" in str(n)
+             and any(f"({number})" in str(n) for number in (2, 3, 4, 5, 6, 7, 8))]
+    wrapper_names = [n for n in (model_spec.get("notes") or []) if "__ComObject" in str(n)]
+    known_model_row = [r for r in rows(model_spec)
+                       if str(r.get("marking") or "") == "SPC.301.002"
+                       and str(r.get("name") or "") == "Пластина API5"
+                       and str(r.get("quantity") or "") == "9"]
+    rep.add("SPEC-01.model_object_types",
+            "объекты списка без колонок называются ДОКУМЕНТИРОВАННЫМ типом (имя раздела, комментарий, "
+            "начало блока...), а не «__ComObject», и базовые строки при этом не теряются",
+            "PASS" if (not model_code and not model_spec_code and typed and not wrapper_names
+                       and len(known_model_row) == 1) else "FAIL",
+            f"код={model_code},{model_spec_code} с_типом={typed} без_типа={wrapper_names} "
+            f"известная_строка={known_model_row}")
+
+    # ===== SPEC-01: отказы =====
+    _e, both, _r = client.tool("kompas_get_specification_document",
+                               {"path": spw_path, "document_id": "0" * 32})
+    _e, neither, _r = client.tool("kompas_get_specification_document", {})
+    rep.add("SPEC-01.negative_input",
+            "оба входа сразу и ни одного отвергаются INVALID_ARGUMENT до обращения к КОМПАС",
+            "PASS" if why(both) == "INVALID_ARGUMENT" and why(neither) == "INVALID_ARGUMENT" else "FAIL",
+            f"оба={why(both)} ни_одного={why(neither)}")
+
+    outside = os.path.join("C:\\Windows", "Temp", "spec-outside.spw")
+    _e, denied, _r = client.tool("kompas_get_specification_document", {"path": outside})
+    rep.add("SPEC-01.negative_path",
+            "путь вне разрешённых корней отвергается PATH_NOT_ALLOWED и файла не открывает",
+            "PASS" if why(denied) == "PATH_NOT_ALLOWED" else "FAIL", f"код={why(denied)}")
+
+    absent = os.path.join(fixture_dir, "absent.spw")
+    _e, missing, _r = client.tool("kompas_get_specification_document", {"path": absent})
+    rep.add("SPEC-01.negative_missing",
+            "отсутствующий файл в разрешённом корне отвергается DOCUMENT_NOT_FOUND",
+            "PASS" if why(missing) == "DOCUMENT_NOT_FOUND" else "FAIL", f"код={why(missing)}")
+
+    env, part_env = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    part_id = doc_id(env)
+    _e, not_spec, _r = client.tool("kompas_get_specification_document",
+                                   {"document_id": part_id}) if part_id else ({}, {}, None)
+    _e, spec_on_spw, _r = client.tool("kompas_get_specification",
+                                      {"document_id": opened_id}) if opened_id else ({}, {}, None)
+    rep.add("SPEC-01.negative_kind",
+            "деталь вместо .spw отвергается CAPABILITY_UNAVAILABLE, а kompas_get_specification на "
+            ".spw — WRONG_DOCUMENT_KIND: два инструмента адресуют разные документы",
+            "PASS" if (part_id and why(not_spec) == "CAPABILITY_UNAVAILABLE"
+                       and why(spec_on_spw) == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"деталь={why(not_spec)} .spw_в_модельном={why(spec_on_spw)}")
+
+    # ===== SPEC-01: закрытие и повторное открытие =====
+    for document_id in (part_id, model_id, copy_doc, opened_id):
+        close(document_id)
+    reopened, reopen_code = read(path=spw_path)
+    rep.add("SPEC-01.reopen",
+            "закрытый .spw открывается заново и даёт ту же строку: чтение не зависит от сеанса, в "
+            "котором файл был открыт впервые",
+            "PASS" if (not reopen_code and len(known(reopened)) == 1
+                       and (reopened.get("document") or {}).get("opened_by_tool") is True) else "FAIL",
+            f"код={reopen_code} документ={reopened.get('document')} строк={rows(reopened)}")
+    for leftover in (reopen_code,):
+        _ = leftover
+    for item in docs():
+        if isinstance(item, dict) and os.path.normcase(os.path.abspath(str(item.get("path") or ""))) \
+                in (os.path.normcase(os.path.abspath(spw_path)),
+                    os.path.normcase(os.path.abspath(copy_path)),
+                    os.path.normcase(os.path.abspath(model_path))):
+            close(item.get("id"))
+
+
 def dismantle_checks(client, rep, app_id, workdir):
     """DSM-01…DSM-13 - разнесённый вид сборки (наряд G9, профиль `dismantle-minimal-v1`).
 
@@ -64752,6 +65041,7 @@ EXTRA_GROUP_CHECKS = {
     "catalog": lambda c, r, a, w, v, p: catalog_checks(c.host_exe, c.config, w, r),
     "copy_geometry": lambda c, r, a, w, v, p: copy_geometry_checks(c, r, a, w),
     "bom": lambda c, r, a, w, v, p: bom_checks(c, r, a, w),
+    "specification": lambda c, r, a, w, v, p: specification_checks(c, r, a, w),
     "dismantle": lambda c, r, a, w, v, p: dismantle_checks(c, r, a, w),
     "sections": lambda c, r, a, w, v, p: sections_checks(c, r, a, w),
     "e5": lambda c, r, a, w, v, p: e5_checks(c, r, a, w),

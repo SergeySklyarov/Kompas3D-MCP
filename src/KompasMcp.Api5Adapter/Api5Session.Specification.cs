@@ -4,6 +4,7 @@ using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Bom;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -102,6 +103,10 @@ public partial class Api5Session
     /// <summary>The whole list of specification objects in display order.</summary>
     /// <remarks>DOC: <c>ispecificationdescription_objects.html</c> — VARIANT: one object is VT_DISPATCH,
     /// several are VT_ARRAY|VT_DISPATCH, and the order is the visual order of the description.
+    /// INVARIANT: the list holds MORE than base objects — a section name, a comment, a block start, a
+    /// reserve or empty string, a billet object and a common name live in it too
+    /// (<c>ksspecificationobjecttypeenum.html</c>). Such an object is neither a row nor a lost row: it is
+    /// named by its DOCUMENTED type, not by the .NET wrapper name.
     /// History: docs/decisions/bom.md#spec-read</remarks>
     private static List<ISpecificationBaseObject> SpecificationObjects(
         ISpecificationDescription description, List<string> notes)
@@ -118,16 +123,7 @@ public partial class Api5Session
                 case Array array:
                     foreach (var item in array)
                     {
-                        if (item is ISpecificationBaseObject single)
-                        {
-                            objects.Add(single);
-                        }
-                        else
-                        {
-                            notes.Add($"specification_object_not_base — в списке объект типа "
-                                + $"{item?.GetType().Name ?? "null"}: базовым объектом он не является, "
-                                + "строка не прочитана");
-                        }
+                        ClassifySpecificationObject(item, objects, notes);
                     }
 
                     break;
@@ -147,6 +143,56 @@ public partial class Api5Session
 
         return objects;
     }
+
+    /// <summary>One element of the list: a base object becomes a row, anything else is named by type.</summary>
+    /// <remarks>INVARIANT: a non-base object is reported with its <c>ObjectType</c> from
+    /// <c>ksSpecificationObjectTypeEnum</c>. MEASURED: the former note said only «__ComObject: базовым
+    /// объектом он не является», which named the wrapper and hid that three of the seven objects were a
+    /// section name and the like — the class of "silently dropped row" a reader could not check.
+    /// History: docs/decisions/bom.md#spec-read</remarks>
+    private static void ClassifySpecificationObject(
+        object? item, List<ISpecificationBaseObject> objects, List<string> notes)
+    {
+        if (item is ISpecificationBaseObject baseObject)
+        {
+            objects.Add(baseObject);
+            return;
+        }
+
+        if (item is ISpecificationObject specificationObject)
+        {
+            var type = SafeRead.TryRead(() => specificationObject.ObjectType);
+            notes.Add($"specification_object_not_base — в списке объект типа "
+                + $"{SpecificationObjectTypeName(type.Ok ? type.Value : null)}: не базовый объект, "
+                + "строкой не публикуется");
+            return;
+        }
+
+        notes.Add("specification_object_unclassified — в списке объект "
+            + $"{item?.GetType().Name ?? "null"}: ни ISpecificationObject, ни ISpecificationBaseObject "
+            + "не получены, его тип не прочитан");
+    }
+
+    /// <summary>The documented name of an object type, in the language of the help page.</summary>
+    /// <remarks>DOC: <c>ksspecificationobjecttypeenum.html</c> — the numbers and the names are the
+    /// vendor's. <c>null</c> is printed as "не прочитан", never as the zero value of the enum. The page
+    /// lists 8 «общее наименование», which the shipped <c>Kompas6Constants</c> (0..7) does not declare —
+    /// the number is therefore named by its documented meaning, not by a member the build lacks.
+    /// History: docs/decisions/bom.md#spec-read</remarks>
+    private static string SpecificationObjectTypeName(ksSpecificationObjectTypeEnum? type) => type switch
+    {
+        null => "не прочитан",
+        ksSpecificationObjectTypeEnum.ksSpecificationUnknownObject => "неизвестный тип (0)",
+        ksSpecificationObjectTypeEnum.ksSpecificationBaseObject => "базовый объект (1)",
+        ksSpecificationObjectTypeEnum.ksSpecificationComment => "комментарий (2)",
+        ksSpecificationObjectTypeEnum.ksSpecificationSectionName => "имя раздела (3)",
+        ksSpecificationObjectTypeEnum.ksSpecificationBlock => "начало блока (4)",
+        ksSpecificationObjectTypeEnum.ksSpecificationReserveString => "резервная строка (5)",
+        ksSpecificationObjectTypeEnum.ksSpecificationEmptyString => "пустая строка (6)",
+        ksSpecificationObjectTypeEnum.ksSpecificationBilletObject => "объект-заготовка (7)",
+        (ksSpecificationObjectTypeEnum)8 => "общее наименование (8)",
+        _ => $"тип {(int)type.Value} (страница справки его не называет)",
+    };
 
     /// <summary>The API5 side, which owns the texts and the section name.</summary>
     /// <remarks>DOC: <c>ksdocument3d_getspecification.html</c> — <c>ksDocument3D.GetSpecification()</c>

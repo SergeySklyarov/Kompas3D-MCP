@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Bom;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.Journaling;
@@ -316,6 +317,21 @@ public sealed class ToolInvoker : IAsyncDisposable
     /// mode, unsupported combinations rejected rather than normalised away.</summary>
     private static IEnumerable<SchemaViolation> ModeViolations(ToolDefinition tool, JsonObject arguments)
     {
+        if (tool.Name == "kompas_get_specification_document")
+        {
+            // "path OR document_id" cannot be expressed without oneOf, which not every client evaluates;
+            // the pure rule is therefore applied by the server BEFORE the path policy and BEFORE COM, and
+            // the Worker applies the SAME rule again.
+            // History: docs/decisions/bom.md#spec-read-spw
+            if (SpecificationDocumentInput.Parse(
+                    ReadString(arguments, "path"), ReadString(arguments, "document_id"), out var refusal) is null)
+            {
+                yield return new SchemaViolation("/path", "oneOf", refusal!);
+            }
+
+            yield break;
+        }
+
         if (tool.Name == "kompas_edit_sketch")
         {
             var mode = ReadString(arguments, "mode") ?? "append";

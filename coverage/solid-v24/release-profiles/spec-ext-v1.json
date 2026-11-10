@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "profile_id": "spec-ext-v1",
+    "title": "Документ-спецификация v24: строки .spw, прочитанные документированным маршрутом",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "11.11.2026",
+        "change": "профиль заведён нарядом SPEC_READ_SPW (поправка плана девяносто седьмая): документ-спецификация .spw открывается документированным IDocuments.Open, строки читаются через IKompasDocument.SpecificationDescriptions и сверяются независимой дорогой API5 (docs/decisions/bom.md#spec-read-spw); запись строк .spw в профиль не входит"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "SPEC_READ_SPW": "Первый наряд блока spec-ext-v1: чтение документа-спецификации .spw"
+    }
+  },
+  "modes": [
+    {
+      "ref": "SPEC-01.specdoc.read",
+      "title": "Строки документа-спецификации .spw: открытие по path и по document_id, чтение и сверка двумя дорогами",
+      "family": "BOM",
+      "queue": "SPEC_READ_SPW",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Открытие - документированным IDocuments.Open(PathName, Visible, ReadOnly), тип подтверждается IKompasDocument.DocumentType = ksDocumentSpecification. Строки - IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (порядок визуальный) -> ISpecificationObject.Columns -> Column[type, 1, 0] -> ColumnItems.Item(i).Value по ТИПУ колонки; название раздела - ISpecificationStyle.Sections по номеру, потому что номер принадлежит стилю, а не порядку ГОСТ. Объекты списка, не являющиеся базовыми (имя раздела, комментарий, начало блока, резервная и пустая строка, объект-заготовка), называются своим документированным типом ksSpecificationObjectTypeEnum, а не выбрасываются и не выдаются за строки. Вторая, независимая дорога - SpcActiveDocument -> GetSpecification -> ksGetSpcObject/ksGetSpcObjectNumber/ksGetSpcObjectColumnText - читается только у АКТИВНОГО документа; расхождение дорог и недоступность второй дороги названы. Открытие по path не делает документ активным и не пишет файл: документ открывается только для чтения, закрытие остаётся за клиентом."
+    }
+  ],
+  "common_dependencies": [],
+  "explicitly_out_of_scope": [
+    "Запись строк .spw (создание, правка, удаление) - наряды SPEC_ADD_ROW, SPEC_EDIT_ROW и SPEC_DELETE_ROW блока spec-ext-v1 (поправка плана девяносто седьмая).",
+    "Синхронизация .spw со сборкой, листы сборочного чертежа (ksSpcDocument.ksGetSpcSheetSB) и IDocuments.DocumentSynchronize: маршруты документированы, но профилем не востребованы, и постановки у них нет.",
+    "Связь строки с компонентом через ISpecificationBaseObjects.AddWithParam и IPropertyKeeper: точки входа IPropertyKeeper в COM нет (решение наряда BOM_RESEARCH), поэтому связь в профиль не входит.",
+    "Создание документа-спецификации инструментом (kompas_create_document): постановка приёмки берётся копией входа исследования, а создание .spw программой в блок не входит."
+  ]
+}

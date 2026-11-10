@@ -353,7 +353,8 @@ public static class ToolCatalog
                 + "До обращения к КОМПАС файл проверяется на занятость другим процессом: занятый файл даёт FILE_LOCKED с причиной и, если ОС называет владельца, процессом-владельцем. "
                 + "Владелец может быть НЕ назван: поиск идёт с собственным коротким бюджетом, чтобы отказ не опоздал (опоздавший отказ клиент видит как running), и тогда owner_process пуст, а причина названа в owner_process_note. "
                 + "Это нужно потому, что на занятый файл КОМПАС показывает модальный диалог и вызов открытия не возвращается, пока диалог не закроют вручную. "
-                + "Сессия видит ТОЛЬКО документы того экземпляра КОМПАС, к которому подключена: файл, открытый в другом окне КОМПАС, открывается этим вызовом заново в своём экземпляре.",
+                + "Сессия видит ТОЛЬКО документы того экземпляра КОМПАС, к которому подключена: файл, открытый в другом окне КОМПАС, открывается этим вызовом заново в своём экземпляре. "
+                + "Документ-спецификация .spw открывается документированным IDocuments.Open и получает kind=specification: его строки читает kompas_get_specification_document.",
                 Sch.Props(
                     ("application_id", Sch.Ref("#/$defs/application_id")),
                     ("path", Sch.Ref("#/$defs/path")),
@@ -566,14 +567,48 @@ public static class ToolCatalog
                 + "Список читается ISpecificationDescription.Objects (порядок — визуальный), тексты и "
                 + "название раздела — ksGetSpcObjectColumnText по ТИПУ колонки и ksGetSpcSectionName. "
                 + "В модели нет объектов спецификации — пустой список и заметка, а не отказ. Поле, "
-                + "которого не прочитано, возвращается null. ПРЕДЕЛ: документ-спецификация .spw не "
-                + "читается — его единственный документированный вход SpcDocument/SpcActiveDocument "
-                + "адресует активный документ сеанса, а не запрошенный document_id, и типа документа для "
-                + ".spw у инструментов открытия нет; запись объектов спецификации — отдельный наряд.",
+                + "которого не прочитано, возвращается null. ПРЕДЕЛ: сам документ-спецификация .spw этим "
+                + "инструментом не читается — его строки читает kompas_get_specification_document; "
+                + "объекты, не являющиеся базовыми (имя раздела, комментарий, начало блока и т.п.), "
+                + "называются в notes своим документированным типом, а не выбрасываются молча; запись "
+                + "объектов спецификации — отдельный наряд.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.GetSpecification,
                 requiresDocument: true,
+                requiresOperationId: false),
+
+            // SPEC-01: the DOCUMENT level of the same block — the .spw itself, opened by its own
+            // documented route and read through IKompasDocument, independent of the active tab.
+            // History: docs/decisions/bom.md#spec-read-spw
+            ReadOnly("kompas_get_specification_document", "Строки документа-спецификации (.spw)",
+                "Объекты родной спецификации ДОКУМЕНТА .spw: {section, section_number, position, marking, "
+                + "name, quantity} — тот же вид строк, что у kompas_get_specification, но прочитанный у "
+                + "самого документа-спецификации. Адресация — РОВНО ОДНО из path (абсолютный путь к .spw, "
+                + "политика путей чтения) и document_id уже открытого документа: оба поля сразу или ни "
+                + "одного — INVALID_ARGUMENT до обращения к КОМПАС. Маршрут чтения — API7: IDocuments.Open → "
+                + "IKompasDocument.SpecificationDescriptions.Active → Objects → Columns → ColumnItems, "
+                + "поэтому активный документ сеанса не нужен. Открытие по path НЕ делает документ "
+                + "активным: ответ называет document.opened_by_tool=true, и закрытие остаётся за клиентом "
+                + "(kompas_close_document). Вторая, независимая дорога (API5 SpcActiveDocument → "
+                + "GetSpecification → ksGetSpcObjectColumnText) читается ТОЛЬКО когда документ активен; "
+                + "когда недоступна — это названо в unverified_aspects, а расхождение дорог — в notes. "
+                + "Объекты без колонок (имя раздела, комментарий, начало блока и т.п.) называются в notes "
+                + "своим документированным типом, а не выбрасываются молча. Отказы: PATH_NOT_ALLOWED, "
+                + "DOCUMENT_NOT_FOUND (нет файла или не открылся), CAPABILITY_UNAVAILABLE (это не "
+                + "документ-спецификация либо API7 недоступен). ПРЕДЕЛ: правка и запись строк .spw этим "
+                + "выпуском не входят; открытый по path документ открыт только для чтения.",
+                Sch.Props(
+                    ("path", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/path")),
+                        "Абсолютный путь к файлу .spw. Нужен, когда документ ещё не открыт: файл "
+                        + "открывается документированным IDocuments.Open в режиме только для чтения. Ровно "
+                        + "одно из path и document_id.")),
+                    ("document_id", Sch.Described(
+                        Sch.Nullable(Sch.Ref("#/$defs/document_id")),
+                        "UUID уже открытого документа-спецификации (kompas_open_document по .spw). Ровно "
+                        + "одно из path и document_id."))),
+                WorkerCommands.GetSpecificationDocument,
                 requiresOperationId: false),
 
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====

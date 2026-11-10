@@ -428,6 +428,8 @@ public sealed class CommandDispatcher
                 "bom.component_properties", cancellationToken),
             WorkerCommands.GetSpecification => _sta.Run(() => GetSpecification(request),
                 "bom.get_specification", cancellationToken),
+            WorkerCommands.GetSpecificationDocument => _sta.Run(() => GetSpecificationDocument(request),
+                "bom.get_specification_document", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
             WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
@@ -1643,6 +1645,9 @@ public sealed class CommandDispatcher
 
     private object? GetSpecification(IpcFrame request) =>
         _session.GetSpecification(Argument<GetSpecificationCommand>(request));
+
+    private object? GetSpecificationDocument(IpcFrame request) =>
+        _session.GetSpecificationDocument(Argument<GetSpecificationDocumentCommand>(request));
 
     private object? ListComponents(IpcFrame request) =>
         _session.ListComponents(Argument<ListComponentsCommand>(request));

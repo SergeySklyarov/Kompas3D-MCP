@@ -234,6 +234,9 @@ public static class WorkerCommandTable
         Cad(WorkerCommands.GetComponentProperties, WorkerAction.Read, 120_000);
         // One COM call per column of every specification object; the list itself is one VARIANT read.
         Cad(WorkerCommands.GetSpecification, WorkerAction.Read, 120_000);
+        // Opening a .spw reads a file, and every row costs one column read per field; the API5 cross-check
+        // is one call per row. History: docs/decisions/bom.md#spec-read-spw
+        Cad(WorkerCommands.GetSpecificationDocument, WorkerAction.Read, 120_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

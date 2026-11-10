@@ -7,6 +7,11 @@ public enum DocumentKind
     Assembly,
     Drawing,
     Fragment,
+
+    /// <summary>A <c>.spw</c> — the specification document itself, not the rows of a model.</summary>
+    /// <remarks>DOC: <c>documenttypeenum.html</c> — «ksDocumentSpecification»; <c>idocuments_open.html</c> is
+    /// the open route that yields it. History: docs/decisions/bom.md#spec-read-spw</remarks>
+    Specification,
 }
 
 /// <summary>Axis-aligned box in public units (mm).</summary>

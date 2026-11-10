@@ -939,3 +939,51 @@ requires_*). Ничего не исполняет.
 **Что теряет клиент.** Схему операции в `tools/list` (её даёт `describe`) и аннотации ПО ОПЕРАЦИЯМ:
 у `kompas_run` они объявлены по худшей. Порядок работы — найти, описание, вызов; он записан в
 `initialize.instructions` режима `compact`.
+
+## 2.19. Документ-спецификация `.spw` (наряд `SPEC_READ_SPW`, 11.11.2026)
+
+**Новый вид документа и новый инструмент.** `kompas_open_document` принимает `.spw`: вид документа
+`specification` (значение `DocumentKind.Specification`, на проводе — слово `specification`), и он же
+виден в `kompas_list_documents`, `kompas_get_context`, `kompas_close_document` и
+`kompas_save_document`. Строки документа читает `kompas_get_specification_document`; строки МОДЕЛИ
+по-прежнему читает `kompas_get_specification`, и перекрёстный вызов отвергается названно
+(`CAPABILITY_UNAVAILABLE` для модели в документном инструменте, `WRONG_DOCUMENT_KIND` для `.spw` в
+модельном).
+
+**Вход — ровно один источник.** `path` (абсолютный путь к `.spw`, политика путей чтения) ЛИБО
+`document_id` уже открытого документа. Оба поля сразу и ни одного — `INVALID_ARGUMENT` до журнала и
+до COM; правило применяет Хост и повторяет Worker, чистая функция — `SpecificationDocumentInput`.
+Оба поля необязательны в схеме намеренно: «ровно одно» выражено сервером, а не `oneOf`, который
+оценивают не все клиенты. При `path` без `application_id` и НЕСКОЛЬКИХ подключённых экземплярах —
+`AMBIGUOUS_APPLICATION`: сервер не выбирает экземпляр за вызывающего и называет выход
+(`kompas_open_document` с `application_id`, затем чтение по `document_id`).
+
+**Ответ.** `document` (`path`, `kind: "specification"`, `opened_by_tool` — истина только если файл
+открыл ЭТОТ вызов), `rows` того же вида, что у `kompas_get_specification` (`section`,
+`section_number`, `position`, `marking`, `name`, `quantity`), `count`, `route`, `notes`,
+`unverified_aspects`. Файл по `path` открывается документированным `IDocuments.Open` в режиме только
+для чтения и НЕ становится активным: `opened_by_tool=true` означает, что закрытие остаётся за
+клиентом. Уже открытый файл возвращает тот же `document_id` и `opened_by_tool=false`.
+
+**Чтение и сверка.** Маршрут — API7: `IKompasDocument.SpecificationDescriptions.Active` → `Objects` →
+`ISpecificationObject.Columns` → `Column[тип, 1, 0]` → `ColumnItems.Item(i).Value`; название раздела —
+`SpecificationStyle.Sections` по номеру. Вторая, независимая дорога (API5 `SpcActiveDocument` →
+`GetSpecification` → `ksGetSpcObject`/`ksGetSpcObjectNumber`/`ksGetSpcSectionName`/
+`ksGetSpcObjectColumnText`) читается ТОЛЬКО у активного документа и его не активирует; когда она
+недоступна, `unverified_aspects` называет `api5_road_unavailable` с причиной, а расхождение дорог
+идёт в `notes`. Объекты списка, не являющиеся базовыми (имя раздела, комментарий, начало блока,
+резервная и пустая строка, объект-заготовка), называются своим документированным типом
+`ksSpecificationObjectTypeEnum`, а не выбрасываются и не выдаются за строки.
+
+**Отказы.** `INVALID_ARGUMENT` (оба источника или ни одного), `PATH_NOT_ALLOWED` (политика путей),
+`DOCUMENT_NOT_FOUND` (нет файла, `IDocuments.Open` вернул NULL), `CAPABILITY_UNAVAILABLE` (файл
+открылся, но его тип не `ksDocumentSpecification` — документ закрывается обратно и тип назван; либо
+API7 недоступен), `AMBIGUOUS_APPLICATION` (см. выше). Открытый `read_only` документ отвергает
+сохранение «на место» прежним правилом доступа; `kompas_save_document` с `target_path` пишет копию
+документированным `IKompasDocument.SaveAs` и подтверждается файлом.
+
+**Пределы.** Запись строк `.spw` (создание, правка, удаление) в этот контракт не входит — это наряды
+`SPEC_ADD_ROW`, `SPEC_EDIT_ROW`, `SPEC_DELETE_ROW` блока `spec-ext-v1`. Создание `.spw` инструментом
+не вводится. Синхронизация `.spw` со сборкой, листы сборочного чертежа и связь строки с компонентом
+(`IPropertyKeeper`) в профиль не входят. Приёмка — группа `mcp-smoke.py --specification-only`,
+строки `SPEC-01.*` матрицы.

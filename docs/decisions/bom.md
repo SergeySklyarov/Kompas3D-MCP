@@ -255,3 +255,55 @@
   `kompas_specification_add_row`/`edit_row`/`delete_row`), контракт аддитивный → MINOR. Порядок
   нарядов - раздел 6 отчёта.
 
+## #spec-read-spw — документ-спецификация `.spw` читается по документной ссылке (наряд `SPEC_READ_SPW`, 11.11.2026)
+
+Первый наряд блока `spec-ext-v1`: вид документа «спецификация» в реестре и `kompas_get_specification_document`.
+Предел `#spec-read` («`.spw` вне объёма») снят не обходом, а документом: `IDocuments.Open` отдаёт
+`IKompasDocument`, а `SpecificationDescriptions` объявлено свойством БАЗОВОГО `IKompasDocument`, а не
+`IKompasDocument3D` (`idocuments_open.html`, `ikompasdocument.html`,
+`ikompasdocument_specificationdescriptions.html`).
+
+- **Открытие - документированным `IDocuments.Open(PathName, Visible, ReadOnly)`.** `ReadOnly` = TRUE:
+  чтение не пишет файл. Тип подтверждается ответом документа (`DocumentType` →
+  `ksDocumentSpecification` = 3, `documenttypeenum.html`), а не расширением: файл другого типа
+  закрывается обратно и отвергается `CAPABILITY_UNAVAILABLE` с типом. Открытие НЕ активирует документ:
+  ответ несёт `document.opened_by_tool`, закрытие остаётся за клиентом, как у прочих открытий.
+- **Один вход, не два.** Ровно одно из `path` и `document_id`; правило живёт чистым кодом
+  (`SpecificationDocumentInput.Parse`), применяется Хостом до журнала и до COM и повторяется Worker-ом.
+  Открытие по `path` без `application_id` возможно только при ОДНОМ подключённом экземпляре; при
+  нескольких - `AMBIGUOUS_APPLICATION` с выходом «kompas_open_document с application_id, затем чтение
+  по document_id».
+- **Строки читаются API7, `section` берётся из стиля.** `SpecificationDescriptions.Active` →
+  `Objects` → `ISpecificationObject.Columns` → `Column[тип, 1, 0]` → `ColumnItems.Item(i).Value` по
+  ТИПУ колонки (`ispecificationobject_columns.html`, `ispecificationcolumns_column.html`,
+  `ispecificationcolumnitems_item.html`). Название раздела - `SpecificationStyle.Sections` по номеру
+  (`ispecificationstyle_sections.html`, `ispecificationsectionstyle_number.html`,
+  `ispecificationsectionstyle_name.html`): api5-дорога требует активного документа, а стиль - нет.
+  Колонки, которой нет в стиле, соответствует `null` и заметка `specification_column_absent`; «нет
+  колонки» и «колонка пуста» - разные ответы.
+- **Объекты без колонок - документированный тип, а не `__ComObject`.** Список описания содержит не
+  только базовые объекты: имя раздела, комментарий, начало блока, резервную и пустую строку,
+  объект-заготовку (`ksspecificationobjecttypeenum.html`, `ispecificationobject_objecttype.html`).
+  Прежняя заметка называла тип .NET-обёртки и скрывала, что именно пропущено; теперь называется
+  документированный тип, и это общий код обоих инструментов. Измерено на постановке
+  `spec-asm.m3d`: 3 объекта из 7 - «имя раздела (3)», «пустая строка (6)» и «начало блока (4)», при
+  4 базовых строках.
+- **Вторая дорога - только у активного документа, и это названо.** API5
+  `SpcActiveDocument().GetSpecification()` возвращает NULL, если документ не активен
+  (`kompasobject_spcactivedocument.html`); чтение его не активирует. Когда дорога доступна, значения
+  сверяются (`ksGetSpcObject` + `ksGetSpcObjectNumber` = сверка указателя, `ksGetSpcSectionName`,
+  `ksGetSpcObjectColumnText`), и расхождение идёт в `notes`; когда недоступна - в `unverified_aspects`
+  приходит `api5_road_unavailable` с причиной. Молчания «дорога одна» нет.
+- **Сохранность `.spw` считается по его строкам.** У документа-спецификации нет `ksDocument3D`, поэтому
+  отпечаток (`ComputeFingerprint`) строится по числу объектов и текстам их колонок. Измерено: открытый
+  по `path` `.spw` показывается в `kompas_list_documents` и `kompas_get_context` как `dirty=false`, и
+  `kompas_close_document` с `dirty_policy=refuse` закрывает его; `DOCUMENT_DIRTY` здесь была бы ложью.
+  Сохранение идёт документированным `IKompasDocument.Save/SaveAs` и подтверждается файлом, как у
+  чертежа; сохранение «на место» у открытого только для чтения документа по-прежнему отвергается.
+- **Пределы наряда.** Запись строк `.spw` (создание, правка, удаление) не входит - это наряды
+  `SPEC_ADD_ROW`/`SPEC_EDIT_ROW`/`SPEC_DELETE_ROW`. Создание `.spw` инструментом не вводится:
+  постановка приёмки берётся копией входа исследования. Синхронизация `.spw` со сборкой и листы
+  сборочного чертежа не входят.
+
+
+

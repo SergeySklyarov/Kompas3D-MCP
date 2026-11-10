@@ -303,6 +303,12 @@ public static class WorkerCommands
     // Level (b) of the BOM (block BOM_SPEC_READ): the native specification objects of a model.
     public const string GetSpecification = "bom.get_specification";
 
+    /// <summary>Rows of a <c>.spw</c> DOCUMENT — the document-level read of the specification block.</summary>
+    /// <remarks>DOC: <c>idocuments_open.html</c> (open by the documented route),
+    /// <c>ikompasdocument_specificationdescriptions.html</c> (the collection is a property of the base
+    /// <c>IKompasDocument</c>). History: docs/decisions/bom.md#spec-read-spw</remarks>
+    public const string GetSpecificationDocument = "bom.get_specification_document";
+
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
     // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common

@@ -75,6 +75,18 @@ public sealed record GetSpecificationCommand
     public required string DocumentId { get; init; }
 }
 
+/// <summary>Read the rows of a <c>.spw</c> DOCUMENT: an already-open one, or a file opened by this call.</summary>
+/// <remarks>INVARIANT: exactly one of the two fields names the source. Both or neither is refused before
+/// COM — the server never picks a source for the caller. History: docs/decisions/bom.md#spec-read-spw</remarks>
+public sealed record GetSpecificationDocumentCommand
+{
+    /// <summary>Absolute path of a <c>.spw</c>, already checked by the read path policy.</summary>
+    public string? Path { get; init; }
+
+    /// <summary>A specification document this session registered, from kompas_open_document.</summary>
+    public string? DocumentId { get; init; }
+}
+
 /// <summary>One specification object as the document answers it. A null field means "not read", never
 /// an empty string and never zero.</summary>
 /// <remarks>INVARIANT: every field rests on its own documented read call; a field without one does not
@@ -98,6 +110,27 @@ public sealed record GetSpecificationResult(
     int Count,
     string Route,
     IReadOnlyList<string> Notes);
+
+/// <summary>The document the rows came from and who opened it.</summary>
+/// <param name="OpenedByTool">True only when THIS call opened the file; the closing then stays with the
+/// client, exactly as for every other open. A document that was already open answers false.</param>
+public sealed record SpecificationDocumentDto(
+    string? Path,
+    DocumentKind Kind,
+    bool OpenedByTool);
+
+/// <summary>Rows of a <c>.spw</c>, the document they belong to, the routes walked and what stayed
+/// unverified.</summary>
+/// <remarks>INVARIANT: the second, independent road (API5) is read only while the document IS active; when
+/// it is unavailable the answer NAMES that in <c>UnverifiedAspects</c> instead of implying one road was
+/// two. History: docs/decisions/bom.md#spec-read-spw</remarks>
+public sealed record GetSpecificationDocumentResult(
+    SpecificationDocumentDto Document,
+    IReadOnlyList<SpecificationLineDto> Rows,
+    int Count,
+    string Route,
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string> UnverifiedAspects);
 
 /// <summary>The properties as <c>ksPart</c> answers them. A null value means "not read", never empty,
 /// zero or false.</summary>

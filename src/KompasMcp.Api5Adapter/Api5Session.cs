@@ -643,6 +643,12 @@ public sealed partial class Api5Session : IDisposable
     /// through the API7 route already carries it.</summary>
     private IKompasDocument? DocumentAsApi7(DocumentEntry document)
     {
+        if (document.SpecificationDocument is { } specification)
+        {
+            // A .spw was obtained from API7 in the first place: no transfer is needed or possible.
+            return specification;
+        }
+
         if (document.Drawing7 is IKompasDocument drawing7)
         {
             return drawing7;
@@ -906,6 +912,14 @@ public sealed partial class Api5Session : IDisposable
         {
             GuardFileNotLocked(command.Path);
             return OpenDrawingDocument(application, command);
+        }
+
+        // A specification document ('.spw') is NOT a ksDocument3D either: its documented route is
+        // IDocuments.Open, and the type is confirmed by the document's own answer afterwards.
+        // History: docs/decisions/bom.md#spec-read-spw
+        if (IsSpecificationPath(command.Path))
+        {
+            return OpenSpecificationDocument(application, command.Path, command.Access);
         }
 
         GuardFileNotLocked(command.Path);
@@ -1230,7 +1244,8 @@ public sealed partial class Api5Session : IDisposable
         string? path,
         bool kindVerified,
         ksDocument2D? drawing = null,
-        IDrawingDocument? drawing7 = null)
+        IDrawingDocument? drawing7 = null,
+        IKompasDocument? specification = null)
     {
         var entry = new DocumentEntry(
             Guid.NewGuid().ToString("N"),
@@ -1240,7 +1255,8 @@ public sealed partial class Api5Session : IDisposable
             document,
             part,
             drawing,
-            drawing7)
+            drawing7,
+            specification)
         {
             Revision = 1,
             KindVerified = kindVerified,
@@ -1495,6 +1511,12 @@ public sealed partial class Api5Session : IDisposable
     /// History: docs/decisions/adapter-core.md#document-events</remarks>
     public string ComputeFingerprint(DocumentEntry document)
     {
+        if (document.SpecificationDocument is not null)
+        {
+            // A .spw has no ksDocument3D: its own rows are the state a read shows.
+            return SpecificationFingerprint(document);
+        }
+
         try
         {
             var bodies = CountBodies(document);
@@ -1893,6 +1915,12 @@ public sealed partial class Api5Session : IDisposable
                     kompasDocument.Close(DocumentCloseOptions.kdDoNotSaveChanges);
                 }
             }
+            else if (document.SpecificationDocument is IKompasDocument specification)
+            {
+                // A .spw was obtained from API7, so it closes through the same documented
+                // IKompasDocument.Close with the "discard" option (documentcloseoptions.html).
+                specification.Close(DocumentCloseOptions.kdDoNotSaveChanges);
+            }
         }
         catch (Exception ex) when (ex is COMException)
         {
@@ -1907,6 +1935,7 @@ public sealed partial class Api5Session : IDisposable
 
             ComApartment.Release(document.Document);
             ComApartment.Release(document.Drawing);
+            ComApartment.Release(document.SpecificationDocument);
         }
     }
 
@@ -2003,6 +2032,22 @@ public sealed partial class Api5Session : IDisposable
                 else
                 {
                     kompasDocument.SaveAs(path);
+                }
+
+                return true;
+            }
+
+            if (document.SpecificationDocument is IKompasDocument specification)
+            {
+                // The same documented pair on the same base interface: a .spw has no 3D and no 2D handle.
+                // History: docs/decisions/bom.md#spec-read-spw
+                if (targetPath is null)
+                {
+                    specification.Save();
+                }
+                else
+                {
+                    specification.SaveAs(path);
                 }
 
                 return true;
@@ -2355,7 +2400,7 @@ public sealed class DocumentEntry
     public DocumentEntry(
         string id, string applicationId, DocumentKind kind, string? path,
         ksDocument3D? document, ksPart? part, ksDocument2D? drawing = null,
-        IDrawingDocument? drawing7 = null)
+        IDrawingDocument? drawing7 = null, IKompasDocument? specification = null)
     {
         Id = id;
         ApplicationId = applicationId;
@@ -2365,6 +2410,7 @@ public sealed class DocumentEntry
         Part = part;
         Drawing = drawing;
         Drawing7 = drawing7;
+        SpecificationDocument = specification;
     }
 
     public string Id { get; }
@@ -2384,7 +2430,15 @@ public sealed class DocumentEntry
     /// right now. INVARIANT: a mutation runs only on such a document, so its FILE is held by KOMPAS and
     /// must not be overwritten from a control copy; the decision is <see
     /// cref="KompasMcp.Domain.Files.ControlCopyRestorePolicy"/>, this is the fact it is fed.</summary>
-    public bool OpenInKompas => Document is not null || Drawing is not null || Drawing7 is not null;
+    public bool OpenInKompas => Document is not null || Drawing is not null || Drawing7 is not null
+                                || SpecificationDocument is not null;
+
+    /// <summary>The API7 handle of a specification document (<c>.spw</c>), set by the open that yielded
+    /// it. Null for every other kind: a model and a drawing never carry one.</summary>
+    /// <remarks>DOC: <c>idocuments_open.html</c> returns <c>IKompasDocument</c>. The handle is kept because
+    /// the rows are read through <c>IKompasDocument.SpecificationDescriptions</c>, which belongs to that
+    /// interface and not to a 3D document. History: docs/decisions/bom.md#spec-read-spw</remarks>
+    public IKompasDocument? SpecificationDocument { get; }
 
     /// <summary>The API5 3D document handle. Null for a drawing.</summary>
     public ksDocument3D? Document { get; }    /// <summary>The 3D handle as a NON-NULL value, or a NAMED refusal. Every 3D-only operation reads the

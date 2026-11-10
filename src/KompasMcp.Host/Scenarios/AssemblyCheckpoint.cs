@@ -371,7 +371,7 @@ internal sealed class AssemblyCheckpoint
         {
             var evidence = ReassignEvidence(topReassigned);
             evidence["verification_reads"] = new JsonArray(verification.ReadCounts
-                .Select(count => (JsonNode)JsonValue.Create(count)!).ToArray());
+                .Select(count => (JsonNode)JsonValue.Create(count)).ToArray());
             return Refuse(report, "copy_not_verified",
                 "Ссылки в копии не совпали с графом: " + string.Join("; ", verification.Mismatches),
                 verification.Mismatches, moved, stepError: verification.Error, evidence: evidence);
@@ -1087,7 +1087,7 @@ internal sealed class AssemblyCheckpoint
         {
             ["field"] = "checkpoint_policy",
             ["cause"] = cause,
-            ["files"] = new JsonArray(files.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
+            ["files"] = new JsonArray(files.Select(f => (JsonNode)JsonValue.Create(f)).ToArray()),
         };
         // INVARIANT: what the steps answered before the refusal travels with it, so the cause is read from
         // the answer instead of being guessed from a repeat run.

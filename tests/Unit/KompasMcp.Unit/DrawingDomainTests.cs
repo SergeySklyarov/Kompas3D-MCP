@@ -360,7 +360,7 @@ public class DrawingDomainTests
                                 Array.Empty<string>()));
 
         Assert.True(result.RebuildReturned);
-        Assert.Equal(result.ViewBefore!.Number, result.ViewAfter!.Number);
+        Assert.Equal(result.ViewBefore.Number, result.ViewAfter.Number);
         Assert.Contains("RebuildDocument", result.Route, StringComparison.Ordinal);
     }
 

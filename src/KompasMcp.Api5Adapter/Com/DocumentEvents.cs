@@ -124,7 +124,7 @@ public sealed class DocumentEventSubscription : IDisposable
 
     private readonly Action<string>? _warn;
     private IAdviseRelease? _release;
-    private int _cookie = -1;
+    private int _cookie;
 
     private DocumentEventSubscription(IAdviseRelease release, int cookie, Action<string>? warn)
     {

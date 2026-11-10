@@ -187,7 +187,7 @@ public class EulerOrientationTests
         var representative = EulerOrientation.AxisPointFromPlacement(throughSecond);
 
         Assert.NotNull(representative);
-        Assert.Equal(5d, representative![0], Precision);
+        Assert.Equal(5d, representative[0], Precision);
         Assert.Equal(0d, representative[1], Precision);
         Assert.Equal(0d, representative[2], Precision);
 

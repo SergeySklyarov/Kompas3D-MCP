@@ -126,6 +126,6 @@ public class RotationContractTests
 
         var description = target["description"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(description));
-        Assert.Contains("ПОСЛЕ операции", description!, StringComparison.Ordinal);
+        Assert.Contains("ПОСЛЕ операции", description, StringComparison.Ordinal);
     }
 }

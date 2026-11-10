@@ -174,13 +174,13 @@ public sealed class Api7TwinLayoutTests
         var adapter = Assembly.LoadFrom(AdapterPath());
         var resolver = adapter.GetType("KompasMcp.Api5Adapter.KompasInteropResolver");
         Assert.NotNull(resolver);
-        var installed = resolver!.GetMethod("TryInstall")!.Invoke(null, new object?[] { null });
+        var installed = resolver.GetMethod("TryInstall")!.Invoke(null, new object?[] { null });
         Assert.True(installed is true,
             "интероп КОМПАС не найден: раскладку двойника проверить нечем, и это НЕ «пройдено»");
 
         var type = adapter.GetType("KompasMcp.Api5Adapter.Api7." + name);
         Assert.NotNull(type);
-        return type!;
+        return type;
     }
 
     /// <summary>The value of a public constant of the twin declarations.</summary>
@@ -189,9 +189,9 @@ public sealed class Api7TwinLayoutTests
         var adapter = Assembly.LoadFrom(AdapterPath());
         var owner = adapter.GetType("KompasMcp.Api5Adapter.Api7.Api7InteropTwin");
         Assert.NotNull(owner);
-        var value = owner!.GetField(field, BindingFlags.Public | BindingFlags.Static)?.GetRawConstantValue();
+        var value = owner.GetField(field, BindingFlags.Public | BindingFlags.Static)?.GetRawConstantValue();
         Assert.True(value is string, $"у двойника нет константы «{field}»");
-        return (string)value!;
+        return (string)value;
     }
 
     /// <summary>The adapter assembly built in the configuration the tests are running in.</summary>

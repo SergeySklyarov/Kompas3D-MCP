@@ -165,7 +165,7 @@ public partial class Api5Session
             // projection is created on the PART, because the drawing is built from the part's file.
             var projectionName = matrix is null
                 ? null
-                : PrepareTiltedProjection(document, matrix, unverified);
+                : PrepareTiltedProjection(document, matrix);
             var requested = matrix is null ? FlatPartViewList(view!.Flag) : new object[] { 1 };
             requestedName = projectionName ?? view!.Name;
             bool accepted;
@@ -498,7 +498,7 @@ public partial class Api5Session
     /// comes out in that orientation; adding a projection does NOT mark the document changed, while
     /// deleting it does — so it is left in place.
     /// History: docs/decisions/flat-part.md#tilted-normal</remarks>
-    private string PrepareTiltedProjection(DocumentEntry document, double[] matrix, List<string> unverified)
+    private string PrepareTiltedProjection(DocumentEntry document, double[] matrix)
     {
         var document7 = BridgeFor(document).TransferTo7(document.Document3D) as IKompasDocument3D;
         var manager = (document7 as IKompasDocument3D1)?.ViewProjectionManager as IViewProjectionManager;

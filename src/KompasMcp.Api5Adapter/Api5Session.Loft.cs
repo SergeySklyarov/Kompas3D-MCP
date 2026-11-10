@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
@@ -107,7 +107,6 @@ public partial class Api5Session
 
         var volumeBefore = ReadVolume(document);
         var bodiesBefore = CountBodies(document);
-        var facesBefore = CountFaces(document);
 
         ILoft? loft = null;
         string? creationFailure = null;

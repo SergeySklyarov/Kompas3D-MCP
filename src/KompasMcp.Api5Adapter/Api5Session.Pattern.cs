@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -282,7 +282,7 @@ public partial class Api5Session
                     continue;
                 }
 
-                if (MatchesEntity(bridge, container, i, entity, document))
+                if (MatchesEntity(container, i, entity))
                 {
                     readout = candidate;
                     matched = i;
@@ -308,7 +308,7 @@ public partial class Api5Session
 
     /// <summary>Match a tree feature with a pattern-collection element by <c>Owner.Name</c> and
     /// <c>UpdateStamp</c>: the collection index is not an address (KOMPAS reorders elements).</summary>
-    private bool MatchesEntity(Api7Bridge bridge, IModelContainer container, int index, ksEntity entity, DocumentEntry document)
+    private bool MatchesEntity(IModelContainer container, int index, ksEntity entity)
     {
         try
         {

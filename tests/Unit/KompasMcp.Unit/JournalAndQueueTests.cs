@@ -46,7 +46,7 @@ public class OperationJournalTests : IDisposable
         var blocking = journal.NeedsReconciliationFor("doc-1");
 
         Assert.NotNull(blocking);
-        Assert.Equal(id, blocking!.OperationId);
+        Assert.Equal(id, blocking.OperationId);
         Assert.Null(journal.NeedsReconciliationFor("doc-2"));
     }
 
@@ -114,7 +114,7 @@ public class OperationJournalTests : IDisposable
         var history = journal.UnresolvedOfPreviousProcesses();
 
         Assert.NotNull(history);
-        Assert.Equal(2, history!.UnresolvedCount);
+        Assert.Equal(2, history.UnresolvedCount);
         Assert.Equal(old, history.OldestStartedUtc);
         Assert.Null(history.HostPid);
     }
@@ -159,7 +159,7 @@ public class OperationJournalTests : IDisposable
 
         Assert.False(second.Proceed, "незавершённая операция не имеет права быть отправленной второй раз");
         Assert.NotNull(second.Existing);
-        Assert.Equal(JournalOutcome.InFlight, second.Existing!.Outcome);
+        Assert.Equal(JournalOutcome.InFlight, second.Existing.Outcome);
         Assert.True(second.IsReplay);
     }
 

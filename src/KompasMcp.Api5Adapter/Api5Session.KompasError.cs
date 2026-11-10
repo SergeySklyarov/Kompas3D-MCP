@@ -81,7 +81,7 @@ public sealed partial class Api5Session
     /// History: docs/decisions/adapter-core.md#kompas-error-route</remarks>
     private string? ReadKompasErrorDescription(DocumentEntry document)
     {
-        var (error, unavailable) = KompasErrorOf(document);
+        var (error, _) = KompasErrorOf(document);
         if (error is null)
         {
             return null;

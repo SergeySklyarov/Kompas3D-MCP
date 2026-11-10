@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
 
   <!--
     Single place where the target framework and bitness are pinned.
@@ -78,6 +78,31 @@
     <KompasRoot Condition="'$(KompasRoot)' == ''">D:\Programs\KOMPAS-3Dv24</KompasRoot>
     <KompasInteropDir Condition="'$(KompasInteropDir)' == ''">$(KompasRoot)\Libs\PolynomLib\Bin\Client</KompasInteropDir>
     <KompasTlbDir Condition="'$(KompasTlbDir)' == ''">$(KompasRoot)\Bin</KompasTlbDir>
+  </PropertyGroup>
+
+  <!--
+    Analyzer scope: product projects and their tests. It is a development-only dependency
+    (PrivateAssets=all), so it appears in no consumer graph and in no delivery output; the license
+    this local use rests on is recorded in docs/decisions/build.md#analyzers.
+    Turn it off for one build with -p:EnableSonarAnalyzer=false.
+  -->
+  <PropertyGroup>
+    <EnableSonarAnalyzer Condition="'$(EnableSonarAnalyzer)' == '' and ($(MSBuildProjectDirectory.Contains('\src\')) or $(MSBuildProjectDirectory.Contains('\tests\')))">true</EnableSonarAnalyzer>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableSonarAnalyzer)' == 'true'">
+    <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    INVARIANT: analyzer warnings never fail the build. TreatWarningsAsErrors covers compiler warnings;
+    these IDs name every rule the project keeps ON - the measured set whose findings were fixed - and
+    the rest are off in .globalconfig with their reason. MEASURED: Roslyn has no wildcard here ("S*"
+    stays an error), so a rule enabled from now on must be added to this list by hand.
+    History: docs/decisions/build.md#analyzers
+  -->
+  <PropertyGroup Condition="'$(EnableSonarAnalyzer)' == 'true' and '$(TreatWarningsAsErrors)' == 'true'">
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);S101;S108;S1144;S1155;S1172;S1481;S1854;S1905;S2365;S3604;S4487;S6580;S8969</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

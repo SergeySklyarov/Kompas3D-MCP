@@ -210,7 +210,7 @@ public static class AssemblyCopyPlan
             ["external_parts"] = externalParts,
             ["captured_at"] = capturedAt.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
             ["verified"] = verified,
-            ["verification_notes"] = new JsonArray(verificationNotes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+            ["verification_notes"] = new JsonArray(verificationNotes.Select(n => (JsonNode)JsonValue.Create(n)).ToArray()),
             ["file_count"] = entries.Count,
             ["files"] = files,
         };

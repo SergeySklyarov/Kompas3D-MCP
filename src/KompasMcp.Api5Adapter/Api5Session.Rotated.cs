@@ -19,9 +19,6 @@ namespace KompasMcp.Api5Adapter;
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Tolerance for matching a cylindrical face against the expected rotation radius, mm.</summary>
-    private const double RotationRadiusToleranceMm = 0.01d;
-
     /// <summary>Rotation family name in server responses.</summary>
     private const string RotationFamily = "rotation";
 
@@ -42,7 +39,6 @@ public partial class Api5Session
 
         var part = document.PartNow();
         var volumeBefore = ReadVolume(document);
-        var facesBefore = CountFaces(document);
         var bodiesBefore = CountBodies(document);
 
         // Named body snapshots — each body's volume and bounds. They let the answer to "which body
@@ -135,7 +131,6 @@ public partial class Api5Session
         BumpRevision(document, "rotated." + operationName);
 
         var volumeAfter = ReadVolume(document);
-        var facesAfter = CountFaces(document);
         var bodiesAfter = CountBodies(document);
 
         var bodiesAfterSnapshot = ReadBodySnapshots(part);
@@ -343,7 +338,7 @@ public partial class Api5Session
             // stay in the tree carrying a kernel error. The reference is registered above, so the refusal
             // names the feature to remove.
             // History: docs/decisions/adapter-features.md#feature-error-refusal
-            RequireNoFeatureError(document, reference, referenceDto!.Id, "Вращение");
+            RequireNoFeatureError(document, reference, referenceDto.Id, "Вращение");
         }
 
         if (reference is null)
@@ -627,7 +622,6 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["code"] = "rotation_feature_not_matched" });
         }
 
-        var readBefore = Api7Rotated.Read(container, found);
         var write = Api7Rotated.TryWriteAngleAndDirection(
             container, found, command.RotationAngleDeg, command.RotationDirection);
         if (!write.Written)

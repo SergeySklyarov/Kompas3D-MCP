@@ -47,9 +47,9 @@ public class SuppressionRestorePolicyTests
         Assert.True(comparison.IsAvailable);
         Assert.False(comparison.IsMatched);
         Assert.NotNull(comparison.Reason);
-        Assert.Contains("не вернуло", comparison.Reason!, StringComparison.Ordinal);
+        Assert.Contains("не вернуло", comparison.Reason, StringComparison.Ordinal);
         Assert.NotNull(comparison.VolumeDeltaMm3);
-        Assert.True(Math.Abs(comparison.VolumeDeltaMm3!.Value - 1570.7963267949d) < 1e-6);
+        Assert.True(Math.Abs(comparison.VolumeDeltaMm3.Value - 1570.7963267949d) < 1e-6);
     }
 
     [Fact]

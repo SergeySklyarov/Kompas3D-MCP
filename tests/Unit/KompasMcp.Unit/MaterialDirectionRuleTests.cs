@@ -29,7 +29,7 @@ public class MaterialDirectionRuleTests
     {
         var direction = MaterialDirectionRule.Toward(UpZ, removing, negative, symmetric: false);
         Assert.NotNull(direction);
-        Assert.Equal(expected.Replace("-", Minus), MaterialDirectionRule.Describe(direction!, both: false));
+        Assert.Equal(expected.Replace("-", Minus), MaterialDirectionRule.Describe(direction, both: false));
     }
 
     [Theory]

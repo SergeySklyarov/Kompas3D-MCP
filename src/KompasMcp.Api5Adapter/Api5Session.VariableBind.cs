@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Contracts;
@@ -293,7 +293,6 @@ public sealed partial class Api5Session
     /// History: docs/decisions/variables-material.md#g3-route</remarks>
     public ListFeatureParametersResult ListFeatureParameters(ListFeatureParametersCommand command)
     {
-        var document = RequirePartDocument(command.DocumentId);
         var notes = new List<string>();
         var (document2, entity) = RequireFeatureEntity(command.FeatureRef);
 

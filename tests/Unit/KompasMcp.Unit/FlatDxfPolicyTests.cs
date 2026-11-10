@@ -82,11 +82,11 @@ public class FlatDxfPolicyTests
             var window = new DxfBox(0d, 0d, 80d, 40d);
             var contour = DxfContourReader.Read(path, window, FlatDxfPolicy.WindowToleranceMm);
             Assert.NotNull(contour);
-            Assert.Equal(4, contour!.LineCount);
+            Assert.Equal(4, contour.LineCount);
             Assert.Equal(1, contour.CircleCount);
             Assert.Equal(0, contour.ArcCount);
             Assert.NotNull(contour.Box);
-            Assert.Equal(80d, contour.Box!.Width, 3);
+            Assert.Equal(80d, contour.Box.Width, 3);
             Assert.Equal(40d, contour.Box.Height, 3);
         }
         finally
@@ -113,7 +113,7 @@ public class FlatDxfPolicyTests
             Assert.NotNull(contour?.Box);
             Assert.Equal(
                 "10x50",
-                contour!.Box!.Width.ToString("0.###", CultureInfo.InvariantCulture) + "x"
+                contour.Box.Width.ToString("0.###", CultureInfo.InvariantCulture) + "x"
                 + contour.Box.Height.ToString("0.###", CultureInfo.InvariantCulture));
         }
         finally

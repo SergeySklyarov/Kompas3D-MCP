@@ -92,7 +92,7 @@ public sealed partial class Api5Session
 
         var diagnostics = new List<string> { $"Маршрут: {Api7AuxEnumeration.Route}." };
         string? referenceId = null;
-        var kind = command.Kind;
+        string kind;
         string? mode = null;
         string? subKind = null;
         string? name = null;
@@ -117,7 +117,7 @@ public sealed partial class Api5Session
             {
                 var support = ResolvePlaneSupport(document, bridge, command, diagnostics);
                 var (plane, planeFailure) = Api7AuxGeometry.CreatePlaneByOffset(
-                    RequirePlanes(auxiliary, diagnostics),
+                    RequirePlanes(auxiliary),
                     support,
                     command.OffsetMm ?? throw Missing("offset_mm", key),
                     command.Direction ?? true,
@@ -148,7 +148,7 @@ public sealed partial class Api5Session
                 var baseLine = ResolveAxisObject(document, bridge, command.BaseAxisRef, diagnostics);
                 var requestedAngle = command.AngleDeg ?? throw Missing("angle_deg", key);
                 var (plane, planeFailure) = Api7AuxGeometry.CreatePlaneByAngle(
-                    RequirePlanes(auxiliary, diagnostics),
+                    RequirePlanes(auxiliary),
                     support,
                     baseLine,
                     requestedAngle,
@@ -185,7 +185,7 @@ public sealed partial class Api5Session
             case "axis/by_2_points":
             {
                 var (axis, axisFailure) = Api7AuxGeometry.CreateAxisBy2Points(
-                    RequireAxes(auxiliary, diagnostics),
+                    RequireAxes(auxiliary),
                     model,
                     command.Point1Mm ?? throw Missing("point1_mm", key),
                     command.Point2Mm ?? throw Missing("point2_mm", key),
@@ -212,7 +212,7 @@ public sealed partial class Api5Session
             {
                 var face = RequireModelObject(document, bridge, command.FaceRef, "face", "face_ref");
                 var (axis, axisFailure) = Api7AuxGeometry.CreateAxisByFace(
-                    RequireAxes(auxiliary, diagnostics), face, command.Name);
+                    RequireAxes(auxiliary), face, command.Name);
                 if (axis is null)
                 {
                     throw Geometry("ось по поверхности не создана", axisFailure);
@@ -233,7 +233,7 @@ public sealed partial class Api5Session
             {
                 var edge = RequireModelObject(document, bridge, command.EdgeRef, "edge", "edge_ref");
                 var (axis, axisFailure) = Api7AuxGeometry.CreateAxisByEdge(
-                    RequireAxes(auxiliary, diagnostics), edge, command.Name);
+                    RequireAxes(auxiliary), edge, command.Name);
                 if (axis is null)
                 {
                     throw Geometry("ось по ребру не создана", axisFailure);
@@ -737,7 +737,7 @@ public sealed partial class Api5Session
 
         if (include is "planes" or "all")
         {
-            var planes = RequirePlanes(auxiliary, notes);
+            var planes = RequirePlanes(auxiliary);
             counts["planes"] = Api7AuxGeometry.SafeCount(planes);
             var (planeRows, planeFailure) = Api7AuxEnumeration.Planes(planes, limit);
             if (planeFailure is not null)
@@ -750,7 +750,7 @@ public sealed partial class Api5Session
 
         if (include is "axes" or "all")
         {
-            var axes = RequireAxes(auxiliary, notes);
+            var axes = RequireAxes(auxiliary);
             counts["axes"] = Api7AuxGeometry.SafeCount(axes);
             var (axisRows, axisFailure) = Api7AuxEnumeration.Axes(axes, limit);
             if (axisFailure is not null)
@@ -849,7 +849,7 @@ public sealed partial class Api5Session
             Api7AuxGeometry.SafeCount(auxiliary.Axes3D) ?? 0,
             Api7AuxGeometry.SafeCount(model.Points3D) ?? 0);
 
-    private IPlanes3D RequirePlanes(IAuxiliaryGeomContainer auxiliary, List<string> notes)
+    private IPlanes3D RequirePlanes(IAuxiliaryGeomContainer auxiliary)
     {
         var planes = auxiliary.Planes3D;
         if (planes is null)
@@ -863,7 +863,7 @@ public sealed partial class Api5Session
         return planes;
     }
 
-    private IAxes3D RequireAxes(IAuxiliaryGeomContainer auxiliary, List<string> notes)
+    private IAxes3D RequireAxes(IAuxiliaryGeomContainer auxiliary)
     {
         var axes = auxiliary.Axes3D;
         if (axes is null)

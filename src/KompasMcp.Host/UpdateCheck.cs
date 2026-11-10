@@ -320,7 +320,7 @@ public sealed class UpdateCheck
                 return null;
             }
 
-            var checkedUtc = DateTimeOffset.Parse(node["checked_utc"]?.GetValue<string>() ?? string.Empty, null, System.Globalization.DateTimeStyles.RoundtripKind);
+            var checkedUtc = DateTimeOffset.Parse(node["checked_utc"]?.GetValue<string>() ?? string.Empty, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
             return new UpdateRecord(
                 node["tag"]?.GetValue<string>(),
                 node["release_url"]?.GetValue<string>(),

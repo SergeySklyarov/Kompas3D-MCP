@@ -173,7 +173,6 @@ public sealed partial class Api5Session : IDisposable
 
         var after = KompasInteropResolver.SnapshotProcessIds("KOMPAS");
         var appeared = after.Except(before).ToArray();
-        var appearedNote = appeared.Length == 1 ? appeared[0] : (int?)null;
 
         // Two ways to bind the object to a process; at least one must succeed (P0.4).
         var pid = ResolveProcessId(created, appeared);
@@ -1047,7 +1046,7 @@ public sealed partial class Api5Session : IDisposable
                 if (documents.Add(DocumentTypeEnum.ksDocumentDrawing, application.DocumentsVisible)
                         is IDrawingDocument added)
                 {
-                    return RegisterDrawing7(application, command, added, route: "API7.Documents.Add");
+                    return RegisterDrawing7(application, added, route: "API7.Documents.Add");
                 }
             }
             catch (COMException ex)
@@ -1074,7 +1073,7 @@ public sealed partial class Api5Session : IDisposable
     /// and no API5 2D handle of its own, so <see cref="DocumentEntry.Drawing"/> stays null and every 2D
     /// route reaches the sheet through <see cref="DocumentEntry.Drawing7"/>.</summary>
     private DocumentEntry RegisterDrawing7(
-        ApplicationEntry application, CreateDocumentCommand command, IDrawingDocument added, string route)
+        ApplicationEntry application, IDrawingDocument added, string route)
     {
         var entry = RegisterDocument(
             document: null, part: null, application, DocumentKind.Drawing, path: null,
@@ -2078,7 +2077,7 @@ public sealed partial class Api5Session : IDisposable
 
                 throw new KompasContractException(
                     ErrorCodes.SaveFailed,
-                    SaveNotWrittenMessage(path, unconfirmed, after, snapshot, attempt),
+                    SaveNotWrittenMessage(path, unconfirmed, snapshot, attempt),
                     RetryPolicy.SameOperationId,
                     partialEffects: true,
                     details: details);
@@ -2105,7 +2104,7 @@ public sealed partial class Api5Session : IDisposable
 
         return new SaveDocumentResult(
             path,
-            after!.ByteLength,
+            after.ByteLength,
             after.Sha256!,
             Context(document, includeTopology: false),
             document.Revision,
@@ -2158,7 +2157,7 @@ public sealed partial class Api5Session : IDisposable
     /// <summary>The refusal text of a save the call reported as done and the file did not: it says the file
     /// was NOT saved, names the reason, and says where the content most likely went.</summary>
     private static string SaveNotWrittenMessage(
-        string path, string reason, SavedFileStamp? after, Dictionary<string, object?> snapshot, int attempts)
+        string path, string reason, Dictionary<string, object?> snapshot, int attempts)
     {
         var what = reason switch
         {

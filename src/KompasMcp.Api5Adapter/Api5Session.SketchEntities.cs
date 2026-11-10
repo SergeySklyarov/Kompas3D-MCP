@@ -1,4 +1,4 @@
-﻿using Kompas6API5;
+using Kompas6API5;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -474,32 +474,5 @@ public sealed partial class Api5Session
         {
             return null;
         }
-    }
-
-    /// <summary>The document that owns an API7 object: climb up via <c>Parent</c>. NOT
-    /// <c>IApplication.ActiveDocument</c> — "active document" is a WINDOW state, and in an inactive
-    /// document the address would be issued by a FOREIGN document, i.e. silently wrong.</summary>
-    private static IKompasDocument? DocumentOf(IKompasAPIObject? start)
-    {
-        var node = start;
-        for (var depth = 0; depth < 32 && node is not null; depth++)
-        {
-            if (node is IKompasDocument document)
-            {
-                return document;
-            }
-
-            try
-            {
-                node = node.Parent;
-            }
-            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
-                or InvalidCastException)
-            {
-                return null;
-            }
-        }
-
-        return null;
     }
 }

@@ -25,7 +25,7 @@ public class ResultVerificationTests
             OperationStatus.Succeeded);
 
         Assert.NotNull(block);
-        Assert.Equal(VerificationLevel.SyntaxChecked, block!.Level);
+        Assert.Equal(VerificationLevel.SyntaxChecked, block.Level);
         Assert.Equal(new[] { "geometry_roundtrip_not_checked" }, block.UnverifiedAspects);
     }
 
@@ -55,7 +55,7 @@ public class ResultVerificationTests
             OperationStatus.Succeeded);
 
         Assert.NotNull(block);
-        Assert.Equal(VerificationLevel.StructureChecked, block!.Level);
+        Assert.Equal(VerificationLevel.StructureChecked, block.Level);
         Assert.Equal(new[] { ResultVerification.NoAspects }, block.UnverifiedAspects);
     }
 

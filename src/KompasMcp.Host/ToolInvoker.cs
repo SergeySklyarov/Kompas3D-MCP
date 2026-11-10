@@ -64,8 +64,6 @@ public sealed class ToolInvoker : IAsyncDisposable
     /// With the gate the waiting command is visibly <c>queued</c> (spec 1.8).</summary>
     private readonly SemaphoreSlim _cadGate = new(1, 1);
 
-    private readonly JsonNode _schemaRoot;
-
     public ToolInvoker(HostOptions options, WorkerSupervisor worker, OperationJournal journal, HostLog log)
     {
         _options = options;
@@ -74,12 +72,6 @@ public sealed class ToolInvoker : IAsyncDisposable
         _log = log;
         _queue = new CadCommandQueue(options.QueueCapacity);
         _pathPolicy = new PathPolicy(options.ReadOnlyRoots, options.WritableRoots.Concat(options.ExportRoots));
-
-        // One root so $ref inside a tool schema resolves the same way as in the published schema.
-        _schemaRoot = new JsonObject
-        {
-            ["$defs"] = (JsonNode)ToolCatalog.SharedDefinitions.DeepClone(),
-        };
     }
 
     public IReadOnlyList<ToolDefinition> Tools => ToolCatalog.All;
@@ -748,8 +740,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                 new JsonObject
                 {
                     ["field"] = field,
-                    ["read_only_roots"] = new JsonArray(_options.ReadOnlyRoots.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
-                    ["writable_roots"] = new JsonArray(_options.WritableRoots.Concat(_options.ExportRoots).Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+                    ["read_only_roots"] = new JsonArray(_options.ReadOnlyRoots.Select(r => (JsonNode)JsonValue.Create(r)).ToArray()),
+                    ["writable_roots"] = new JsonArray(_options.WritableRoots.Concat(_options.ExportRoots).Select(r => (JsonNode)JsonValue.Create(r)).ToArray()),
                 });
         }
 
@@ -873,7 +865,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
 
         var attempt = DescribeAttempt(tool, arguments);
-        var decision = _journal.TryBegin(operationId, tool.Name, Canonical(tool, arguments), documentId,
+        var decision = _journal.TryBegin(operationId, tool.Name, Canonical(arguments), documentId,
             ReadLong(arguments, "expected_revision"), documentUnresolved, attempt);
 
         if (!decision.Proceed && decision.Existing is { } existing)
@@ -951,7 +943,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         {
             var payload = new JsonObject
             {
-                ["references"] = new JsonArray(references.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+                ["references"] = new JsonArray(references.Select(r => (JsonNode)JsonValue.Create(r)).ToArray()),
             };
             var timeout = TimeSpan.FromMilliseconds(CommandBudgets.HostWaitMs(
                 WorkerCommands.ReferenceDocuments, _options.OperationBudgetMs));
@@ -1014,7 +1006,7 @@ public sealed class ToolInvoker : IAsyncDisposable
                 // The same shared budget as reads: the Host waits longer than the Worker (see the comment
                 // in RunReadAsync), else its "giving up" is not a timeout observation but a self-refusal.
                 var timeout = TimeSpan.FromMilliseconds(BudgetFor(tool));
-                var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(tool, arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
+                var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
 
                 if (frame.Error is null)
                 {
@@ -1211,10 +1203,10 @@ public sealed class ToolInvoker : IAsyncDisposable
     }
 
     /// <summary>Request as it will actually be sent: the declared fields plus nothing else.</summary>
-    private static JsonNode CanonicalNode(ToolDefinition tool, JsonObject arguments) => arguments.DeepClone();
+    private static JsonNode CanonicalNode(JsonObject arguments) => arguments.DeepClone();
 
     /// <summary>Stable serialisation used as the idempotency key.</summary>
-    private static string Canonical(ToolDefinition tool, JsonObject arguments)
+    private static string Canonical(JsonObject arguments)
     {
         var ordered = new JsonObject();
         foreach (var pair in arguments.OrderBy(p => p.Key, StringComparer.Ordinal))
@@ -1347,7 +1339,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             RetryPolicy.Never,
             null,
             false,
-            new JsonObject { ["available"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray()) }),
+            new JsonObject { ["available"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)).ToArray()) }),
     };
 
     /// <summary>Read the Worker's own verification block, if it sent one. Absent or unparseable means the

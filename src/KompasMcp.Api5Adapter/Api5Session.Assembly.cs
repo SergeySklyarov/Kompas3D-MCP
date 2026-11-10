@@ -305,7 +305,7 @@ public partial class Api5Session
     {
         try
         {
-            return parent is Part7 typedParent && child is Part7 typedChild
+            return parent is Part7 && child is Part7 typedChild
                 ? parent.InstanceCount[typedChild]
                 : null;
         }
@@ -1765,10 +1765,6 @@ public partial class Api5Session
     private static (double X, double Y, double Z) Vec3(IReadOnlyList<double> v) =>
         (v.Count > 0 ? v[0] : 0, v.Count > 1 ? v[1] : 0, v.Count > 2 ? v[2] : 0);
 
-    private static (double X, double Y, double Z) Cross(
-        double ax, double ay, double az, double bx, double by, double bz) =>
-        (ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
-
     private static bool SafeFileExists(string path)
     {
         try
@@ -1797,8 +1793,6 @@ public partial class Api5Session
     private static bool? Bool(Func<bool?> read) => SafeRead.Bool(read);
 
     private static int? Int(Func<int> read) => SafeRead.Int(read);
-
-    private static long? Long(Func<long> read) => SafeRead.Long(read);
 
     private static double? Double(Func<double> read) => SafeRead.Double(read);
 

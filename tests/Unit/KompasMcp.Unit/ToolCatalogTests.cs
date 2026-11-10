@@ -34,11 +34,11 @@ public class ToolCatalogTests
 
         Assert.NotNull(properties);
         Assert.True(
-            properties!.ContainsKey("operation_id"),
+            properties.ContainsKey("operation_id"),
             $"{name}: помечен как мутация, но схема не объявляет operation_id — обязательное поле " +
             "остаётся недостижимым для клиента, а strict-валидация отвергает вызов.");
         Assert.NotNull(required);
-        Assert.Contains("operation_id", required!.Select(node => node!.GetValue<string>()));
+        Assert.Contains("operation_id", required.Select(node => node!.GetValue<string>()));
     }
 
     [Theory]
@@ -288,7 +288,7 @@ public class ToolCatalogTests
         var schema = Tool(tool).InputSchema;
         var required = schema["required"] as JsonArray;
         Assert.NotNull(required);
-        Assert.DoesNotContain("base", required!.Select(node => node!.GetValue<string>()));
+        Assert.DoesNotContain("base", required.Select(node => node!.GetValue<string>()));
 
         var payload = JsonNode.Parse("""
             {"document_id":"0123456789abcdef0123456789abcdef","expected_revision":1,

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -213,7 +213,6 @@ public partial class Api5Session
         }
 
         var index = matches[0];
-        var before = Api7Fillet.Read(container, index);
 
         var written = Api7Fillet.TryWriteRadius(container, index, requested, null, null);
         if (!written.Written)
@@ -234,7 +233,6 @@ public partial class Api5Session
 
         var after = Api7Fillet.Read(container, index);
         var volumeAfter = ReadVolume(document);
-        var facesAfter = CountFaces(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 

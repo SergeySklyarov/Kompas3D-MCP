@@ -70,10 +70,10 @@ public class VolumeBoundTests
         Assert.True(outcome.IsWithinBound);
         Assert.False(outcome.IsOutsideBound);
         Assert.NotNull(outcome.Reason);
-        Assert.StartsWith(VolumeBound.NotComputedCode, outcome.Reason!, StringComparison.Ordinal);
-        Assert.Contains("ВЕРХНЯЯ граница", outcome.Reason!, StringComparison.Ordinal);
-        Assert.Contains("162112.2958", outcome.Reason!, StringComparison.Ordinal);
-        Assert.Contains("291030.8602", outcome.Reason!, StringComparison.Ordinal);
+        Assert.StartsWith(VolumeBound.NotComputedCode, outcome.Reason, StringComparison.Ordinal);
+        Assert.Contains("ВЕРХНЯЯ граница", outcome.Reason, StringComparison.Ordinal);
+        Assert.Contains("162112.2958", outcome.Reason, StringComparison.Ordinal);
+        Assert.Contains("291030.8602", outcome.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

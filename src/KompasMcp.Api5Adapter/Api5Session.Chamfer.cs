@@ -645,7 +645,7 @@ public partial class Api5Session
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
-                    ["existing_building_type"] = existingApi7!.BuildingType,
+                    ["existing_building_type"] = existingApi7.BuildingType,
                     ["write_route_supports"] = TwoSidesBuildingType,
                     ["angle_deg"] = existingApi7.AngleDeg,
                     ["distance2_mm_derived"] = existingApi7.Distance2Mm,

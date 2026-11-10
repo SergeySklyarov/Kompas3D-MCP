@@ -130,7 +130,7 @@ public class SketchBulkTests
 
         Assert.Null(outcome.AreaMm2);
         Assert.NotNull(outcome.UnavailableReason);
-        Assert.Contains("сплайном", outcome.UnavailableReason!, StringComparison.Ordinal);
+        Assert.Contains("сплайном", outcome.UnavailableReason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class SketchBulkTests
             new double[] { -3, 1 }, new double[] { 5, 1 }, new double[] { 5, 7 }));
 
         Assert.NotNull(box);
-        Assert.Equal(-3d, box!.Value.MinU, 9);
+        Assert.Equal(-3d, box.Value.MinU, 9);
         Assert.Equal(1d, box.Value.MinV, 9);
         Assert.Equal(5d, box.Value.MaxU, 9);
         Assert.Equal(7d, box.Value.MaxV, 9);

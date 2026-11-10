@@ -242,7 +242,7 @@ public class ControlCopyTests : IDisposable
         var failure = copies.DeleteAfterSuccess(copy.Path);
 
         Assert.Null(failure);
-        Assert.False(File.Exists(copy.Path!), "копия успешной мутации обязана удаляться");
+        Assert.False(File.Exists(copy.Path), "копия успешной мутации обязана удаляться");
     }
 
     [Fact]

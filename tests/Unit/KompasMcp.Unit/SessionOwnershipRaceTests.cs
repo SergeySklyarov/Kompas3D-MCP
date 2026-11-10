@@ -78,7 +78,7 @@ public class SessionOwnershipRaceTests : IDisposable
         // The participants are OTHER "identities" with the same pid: they claim to release a foreign session.
         var results = RunInParallel(8, ownership => ownership.BeginRelease() ? OwnershipOutcome.Acquired : OwnershipOutcome.RefusedActiveOwner);
 
-        Assert.True(results.Count(o => o == OwnershipOutcome.Acquired) == 0,
+        Assert.True(!results.Any(o => o == OwnershipOutcome.Acquired),
             "освободить сеанс имеет право только владелец: чужое поколение не трогается");
 
         // The owner meanwhile stays the owner and can release the session itself.
@@ -94,7 +94,7 @@ public class SessionOwnershipRaceTests : IDisposable
         owner.BeginRelease();
 
         var published = RunInParallel(8, ownership => ownership.CompleteRelease() ? OwnershipOutcome.Acquired : OwnershipOutcome.RefusedActiveOwner);
-        Assert.True(published.Count(o => o == OwnershipOutcome.Acquired) == 0);
+        Assert.True(!published.Any(o => o == OwnershipOutcome.Acquired));
 
         Assert.True(owner.CompleteRelease(), "владелец публикует released ровно один раз");
         Assert.False(owner.CompleteRelease(), "повторная публикация не выдаётся за успех");

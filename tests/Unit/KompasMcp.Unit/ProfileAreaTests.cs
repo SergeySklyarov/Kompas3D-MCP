@@ -426,7 +426,7 @@ public class ProfileAreaTests
 
         Assert.Null(outcome.AreaMm2);
         Assert.False(string.IsNullOrWhiteSpace(outcome.UnavailableReason));
-        Assert.Contains("ветв", outcome.UnavailableReason!, StringComparison.Ordinal);
+        Assert.Contains("ветв", outcome.UnavailableReason, StringComparison.Ordinal);
     }
 
     [Fact]

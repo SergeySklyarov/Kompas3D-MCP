@@ -132,7 +132,7 @@ public sealed partial class Api5Session
 
         var projectionName = string.IsNullOrWhiteSpace(command.ProjectionName)
             ? DefaultProjectionName
-            : command.ProjectionName!;
+            : command.ProjectionName;
 
         var projectionTypes = ResolveProjectionTypes(command.Projections);
 
@@ -145,7 +145,7 @@ public sealed partial class Api5Session
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
 
-        var before = ReadViewRefs(document, views);
+        var before = ReadViewRefs(views);
 
         var scale = command.Scale ?? DefaultScale;
         var dx = command.DX ?? DefaultViewGapMm;
@@ -185,7 +185,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        var after = ReadViewRefs(document, views);
+        var after = ReadViewRefs(views);
         var created = after.Where(id => !before.Contains(id)).ToList();
 
         BumpRevision(document, "drawing.create_views");
@@ -580,7 +580,7 @@ public sealed partial class Api5Session
         var view = ResolveView(document, command.ViewRef);
         try
         {
-            return ReadDimensions(document, view, command.Limit);
+            return ReadDimensions(view, command.Limit);
         }
         finally
         {
@@ -599,7 +599,7 @@ public sealed partial class Api5Session
         + (SafeInt(() => (container.RadialDimensions as IRadialDimensions)?.Count ?? 0) ?? 0)
         + (SafeInt(() => (container.DiametralDimensions as IDiametralDimensions)?.Count ?? 0) ?? 0);
 
-    private ListDimensionsResult ReadDimensions(DocumentEntry document, IView view, int limit)
+    private ListDimensionsResult ReadDimensions(IView view, int limit)
     {
         const string route =
             "IView(QI ISymbols2DContainer).LineDimensions/RadialDimensions/DiametralDimensions "
@@ -832,7 +832,7 @@ public sealed partial class Api5Session
                 }
 
                 var dims = container.LineDimensions
-                    ?? throw NoCollection(command, kind);
+                    ?? throw NoCollection(kind);
                 var dim = dims.Add()
                     ?? throw AddReturnedNull(kind);
                 try
@@ -849,10 +849,10 @@ public sealed partial class Api5Session
 
                     ConfirmUpdate(dim.Update(), kind);
                     var valueMm = Distance(p1, p2);
-                    var row = ReadLineDimension(document, command.ViewRef, dim, "linear", valueMm);
+                    var row = ReadLineDimension(document, dim, "linear", valueMm);
                     RefusePointMismatch(document, p1, p2, row);
                     BumpRevision(document, "drawing.add_dimension");
-                    return FinishDimension(document, row, valueMm);
+                    return FinishDimension(row, valueMm);
                 }
                 finally
                 {
@@ -887,7 +887,7 @@ public sealed partial class Api5Session
                     var collection = container.RadialDimensions;
                     if (collection is null)
                     {
-                        throw NoCollection(command, kind);
+                        throw NoCollection(kind);
                     }
 
                     var radial = collection.Add() ?? throw AddReturnedNull(kind);
@@ -923,7 +923,7 @@ public sealed partial class Api5Session
                     var collection = container.DiametralDimensions;
                     if (collection is null)
                     {
-                        throw NoCollection(command, kind);
+                        throw NoCollection(kind);
                     }
 
                     var diametral = collection.Add() ?? throw AddReturnedNull(kind);
@@ -966,7 +966,7 @@ public sealed partial class Api5Session
                     Valid = updated,
                 };
                 BumpRevision(document, "drawing.add_dimension");
-                return FinishDimension(document, row, value);
+                return FinishDimension(row, value);
             }
 
             default:
@@ -983,7 +983,7 @@ public sealed partial class Api5Session
         }
     }
 
-    private AddDimensionResult FinishDimension(DocumentEntry document, DimensionRowDto row, double? readValue)
+    private AddDimensionResult FinishDimension(DimensionRowDto row, double? readValue)
     {
         var checks = new List<NamedCheck>
         {
@@ -2319,7 +2319,7 @@ public sealed partial class Api5Session
             : null;
 
     /// <summary>Identifiers of the views currently in the collection, for a before/after comparison.</summary>
-    private static List<string> ReadViewRefs(DocumentEntry document, IViews views)
+    private static List<string> ReadViewRefs(IViews views)
     {
         var ids = new List<string>();
         for (var i = 0; i < views.Count; i++)
@@ -2330,7 +2330,7 @@ public sealed partial class Api5Session
                 view = views.get_View(i);
                 if (view is not null)
                 {
-                    ids.Add(((int)view.Reference).ToString(CultureInfo.InvariantCulture));
+                    ids.Add(view.Reference.ToString(CultureInfo.InvariantCulture));
                 }
             }
             catch (COMException)
@@ -2745,7 +2745,7 @@ public sealed partial class Api5Session
             });
     }
 
-    private static KompasContractException NoCollection(AddDimensionCommand command, string kind) =>
+    private static KompasContractException NoCollection(string kind) =>
         new(
             ErrorCodes.CapabilityUnavailable,
             $"Контейнер размеров вида не отдал коллекцию '{kind}'.",
@@ -2775,7 +2775,7 @@ public sealed partial class Api5Session
     /// the registry. The reference is a display handle only: the server never resolves a dimension
     /// reference back into an object, so there is nothing to look up.</remarks>
     private DimensionRowDto ReadLineDimension(
-        DocumentEntry document, string viewRef, ILineDimension dim, string kind, double? valueMm)
+        DocumentEntry document, ILineDimension dim, string kind, double? valueMm)
     {
         return new DimensionRowDto
         {

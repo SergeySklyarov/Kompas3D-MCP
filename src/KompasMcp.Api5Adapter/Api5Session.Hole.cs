@@ -323,7 +323,6 @@ public partial class Api5Session
             command.Mode == HoleMode.BlindFlat, IsConicEntrance(command.Mode), referenceDto?.Id,
             checks, unverified);
 
-        var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = effect.Verdict == HoleEffectVerdict.Confirmed
             && readBack is not null
             && checks.Exists(c => c.Name == "parameters_read_back" && c.Passed)
@@ -566,24 +565,24 @@ public partial class Api5Session
                         RetryPolicy.Never);
                 }
 
-                RejectPresent(command, "counterbore_diameter_mm", command.CounterboreDiameterMm, "blind_flat");
-                RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "blind_flat");
-                RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "blind_flat");
-                RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "blind_flat");
-                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "blind_flat");
+                RejectPresent("counterbore_diameter_mm", command.CounterboreDiameterMm, "blind_flat");
+                RejectPresent("counterbore_depth_mm", command.CounterboreDepthMm, "blind_flat");
+                RejectPresent("countersink_diameter_mm", command.CountersinkDiameterMm, "blind_flat");
+                RejectPresent("countersink_angle_deg", command.CountersinkAngleDeg, "blind_flat");
+                RejectPresent("conic_angle_deg", command.ConicAngleDeg, "blind_flat");
                 break;
 
             case HoleMode.ThroughConic:
-                RejectPresent(command, "depth_mm", command.DepthMm, "through_conic");
-                RejectPresent(command, "counterbore_diameter_mm", command.CounterboreDiameterMm, "through_conic");
-                RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "through_conic");
-                RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "through_conic");
-                RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "through_conic");
+                RejectPresent("depth_mm", command.DepthMm, "through_conic");
+                RejectPresent("counterbore_diameter_mm", command.CounterboreDiameterMm, "through_conic");
+                RejectPresent("counterbore_depth_mm", command.CounterboreDepthMm, "through_conic");
+                RejectPresent("countersink_diameter_mm", command.CountersinkDiameterMm, "through_conic");
+                RejectPresent("countersink_angle_deg", command.CountersinkAngleDeg, "through_conic");
                 RequireConeAngle(command.ConicAngleDeg, "through_conic");
                 break;
 
             case HoleMode.ThroughCounterbore:
-                RejectPresent(command, "depth_mm", command.DepthMm, "through_counterbore");
+                RejectPresent("depth_mm", command.DepthMm, "through_counterbore");
                 if (command.CounterboreDiameterMm is not double bore || bore <= 0d)
                 {
                     throw new KompasContractException(
@@ -618,13 +617,13 @@ public partial class Api5Session
                         });
                 }
 
-                RejectPresent(command, "countersink_diameter_mm", command.CountersinkDiameterMm, "through_counterbore");
-                RejectPresent(command, "countersink_angle_deg", command.CountersinkAngleDeg, "through_counterbore");
-                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_counterbore");
+                RejectPresent("countersink_diameter_mm", command.CountersinkDiameterMm, "through_counterbore");
+                RejectPresent("countersink_angle_deg", command.CountersinkAngleDeg, "through_counterbore");
+                RejectPresent("conic_angle_deg", command.ConicAngleDeg, "through_counterbore");
                 break;
 
             case HoleMode.ThroughCountersink:
-                RejectPresent(command, "depth_mm", command.DepthMm, "through_countersink");
+                RejectPresent("depth_mm", command.DepthMm, "through_countersink");
                 if (command.CountersinkDiameterMm is not double mouth || mouth <= 0d)
                 {
                     throw new KompasContractException(
@@ -657,17 +656,17 @@ public partial class Api5Session
                         });
                 }
 
-                RejectPresent(command, "counterbore_diameter_mm", command.CounterboreDiameterMm, "through_countersink");
-                RejectPresent(command, "counterbore_depth_mm", command.CounterboreDepthMm, "through_countersink");
-                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_countersink");
+                RejectPresent("counterbore_diameter_mm", command.CounterboreDiameterMm, "through_countersink");
+                RejectPresent("counterbore_depth_mm", command.CounterboreDepthMm, "through_countersink");
+                RejectPresent("conic_angle_deg", command.ConicAngleDeg, "through_countersink");
                 break;
 
             case HoleMode.ThroughCounterdrill:
                 // Three numbers of THIS mode: the spotfacing diameter and depth, and the cone angle.
                 // Reused field names, because the meaning is the same: the spotfacing IS the
                 // cylindrical recess, and the angle is the cone's apex angle.
-                RejectPresent(command, "depth_mm", command.DepthMm, "through_counterdrill");
-                RejectPresent(command, "conic_angle_deg", command.ConicAngleDeg, "through_counterdrill");
+                RejectPresent("depth_mm", command.DepthMm, "through_counterdrill");
+                RejectPresent("conic_angle_deg", command.ConicAngleDeg, "through_counterdrill");
                 RequireSpotfacing(command, "through_counterdrill");
                 RequireConeAngle(command.CountersinkAngleDeg, "through_counterdrill");
                 if (command.CountersinkDiameterMm is not null)
@@ -763,7 +762,7 @@ public partial class Api5Session
             details: new Dictionary<string, object?> { ["conic_angle_deg"] = angleDeg });
     }
 
-    private static void RejectPresent(HoleCommand command, string field, double? value, string mode)
+    private static void RejectPresent(string field, double? value, string mode)
     {
         if (value is not null)
         {
@@ -1282,14 +1281,6 @@ public partial class Api5Session
         // INVARIANT: a declared expectation that did not hold is NOT a refusal — the call succeeded, and
         // the mismatch is published as a failed check, a warning and a lowered level. MEASURED: the model
         // sometimes reads one operation behind, so refusing here rejected a correct model.
-        if (declaredDelta.IsNotConfirmed)
-        {
-        }
-
-        if (declaredVolume.IsNotConfirmed)
-        {
-        }
-
         var deltaMatched = declaredDelta.IsDeclared ? declaredDelta.IsConfirmed : (bool?)null;
         var volumeMatched = declaredVolume.IsDeclared ? declaredVolume.IsConfirmed : (bool?)null;
 
@@ -1397,41 +1388,41 @@ public partial class Api5Session
             case HoleMode.BlindSphere:
             {
                 var modeName = mode == HoleMode.BlindSphere ? "blind_sphere" : "blind_flat";
-                RejectForeignHoleEditField(command, modeName, "counterbore_diameter_mm",
+                RejectForeignHoleEditField(modeName, "counterbore_diameter_mm",
                     command.CounterboreDiameterMm);
-                RejectForeignHoleEditField(command, modeName, "counterbore_depth_mm",
+                RejectForeignHoleEditField(modeName, "counterbore_depth_mm",
                     command.CounterboreDepthMm);
-                RejectForeignHoleEditField(command, modeName, "countersink_diameter_mm",
+                RejectForeignHoleEditField(modeName, "countersink_diameter_mm",
                     command.CountersinkDiameterMm);
-                RejectForeignHoleEditField(command, modeName, "countersink_angle_deg",
+                RejectForeignHoleEditField(modeName, "countersink_angle_deg",
                     command.CountersinkAngleDeg);
-                RejectForeignHoleEditField(command, modeName, "conic_angle_deg", command.ConicAngleDeg);
+                RejectForeignHoleEditField(modeName, "conic_angle_deg", command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, modeName);
                 PositiveHoleEditValue("depth_mm", command.DepthMm, modeName);
                 break;
             }
 
             case HoleMode.ThroughConic:
-                RejectForeignHoleEditField(command, "through_conic", "depth_mm", command.DepthMm);
-                RejectForeignHoleEditField(command, "through_conic", "counterbore_diameter_mm",
+                RejectForeignHoleEditField("through_conic", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField("through_conic", "counterbore_diameter_mm",
                     command.CounterboreDiameterMm);
-                RejectForeignHoleEditField(command, "through_conic", "counterbore_depth_mm",
+                RejectForeignHoleEditField("through_conic", "counterbore_depth_mm",
                     command.CounterboreDepthMm);
-                RejectForeignHoleEditField(command, "through_conic", "countersink_diameter_mm",
+                RejectForeignHoleEditField("through_conic", "countersink_diameter_mm",
                     command.CountersinkDiameterMm);
-                RejectForeignHoleEditField(command, "through_conic", "countersink_angle_deg",
+                RejectForeignHoleEditField("through_conic", "countersink_angle_deg",
                     command.CountersinkAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_conic");
                 PositiveHoleEditValue("conic_angle_deg", command.ConicAngleDeg, "through_conic");
                 break;
 
             case HoleMode.ThroughCounterbore:
-                RejectForeignHoleEditField(command, "through_counterbore", "depth_mm", command.DepthMm);
-                RejectForeignHoleEditField(command, "through_counterbore", "countersink_diameter_mm",
+                RejectForeignHoleEditField("through_counterbore", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField("through_counterbore", "countersink_diameter_mm",
                     command.CountersinkDiameterMm);
-                RejectForeignHoleEditField(command, "through_counterbore", "countersink_angle_deg",
+                RejectForeignHoleEditField("through_counterbore", "countersink_angle_deg",
                     command.CountersinkAngleDeg);
-                RejectForeignHoleEditField(command, "through_counterbore", "conic_angle_deg",
+                RejectForeignHoleEditField("through_counterbore", "conic_angle_deg",
                     command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_counterbore");
                 PositiveHoleEditValue("counterbore_diameter_mm", command.CounterboreDiameterMm,
@@ -1441,12 +1432,12 @@ public partial class Api5Session
                 break;
 
             case HoleMode.ThroughCountersink:
-                RejectForeignHoleEditField(command, "through_countersink", "depth_mm", command.DepthMm);
-                RejectForeignHoleEditField(command, "through_countersink", "counterbore_diameter_mm",
+                RejectForeignHoleEditField("through_countersink", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField("through_countersink", "counterbore_diameter_mm",
                     command.CounterboreDiameterMm);
-                RejectForeignHoleEditField(command, "through_countersink", "counterbore_depth_mm",
+                RejectForeignHoleEditField("through_countersink", "counterbore_depth_mm",
                     command.CounterboreDepthMm);
-                RejectForeignHoleEditField(command, "through_countersink", "conic_angle_deg",
+                RejectForeignHoleEditField("through_countersink", "conic_angle_deg",
                     command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_countersink");
                 PositiveHoleEditValue("countersink_diameter_mm", command.CountersinkDiameterMm,
@@ -1456,10 +1447,10 @@ public partial class Api5Session
                 break;
 
             case HoleMode.ThroughCounterdrill:
-                RejectForeignHoleEditField(command, "through_counterdrill", "depth_mm", command.DepthMm);
-                RejectForeignHoleEditField(command, "through_counterdrill", "countersink_diameter_mm",
+                RejectForeignHoleEditField("through_counterdrill", "depth_mm", command.DepthMm);
+                RejectForeignHoleEditField("through_counterdrill", "countersink_diameter_mm",
                     command.CountersinkDiameterMm);
-                RejectForeignHoleEditField(command, "through_counterdrill", "conic_angle_deg",
+                RejectForeignHoleEditField("through_counterdrill", "conic_angle_deg",
                     command.ConicAngleDeg);
                 PositiveHoleEditValue("diameter_mm", command.DiameterMm, "through_counterdrill");
                 PositiveHoleEditValue("counterbore_diameter_mm", command.CounterboreDiameterMm,
@@ -1480,7 +1471,6 @@ public partial class Api5Session
     }
 
     private static void RejectForeignHoleEditField(
-        UpdateFeatureCommand command,
         string mode,
         string field,
         double? value)

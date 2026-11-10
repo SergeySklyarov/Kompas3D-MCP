@@ -24,8 +24,6 @@ public sealed class StaExecutor : IDisposable
 {
     private const int WaitSliceMs = 250;
 
-    private static readonly IntPtr[] NoHandles = Array.Empty<IntPtr>();
-
     private readonly ConcurrentQueue<WorkItem> _queue = new();
     private readonly EventWaitHandle _workArrived = new(false, EventResetMode.AutoReset);
     private readonly ManualResetEvent _shutdown = new(false);
@@ -300,10 +298,8 @@ public sealed class StaExecutor : IDisposable
 
         public const uint WAIT_OBJECT_0 = 0x00000000;
 
-        public const uint WAIT_TIMEOUT = 0x00000102;
-
         [StructLayout(LayoutKind.Sequential)]
-        public struct MSG
+        public struct Msg
         {
             public IntPtr hwnd;
 
@@ -321,13 +317,13 @@ public sealed class StaExecutor : IDisposable
         }
 
         [DllImport("user32.dll")]
-        public static extern bool PeekMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
+        public static extern bool PeekMessage(out Msg lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
 
         [DllImport("user32.dll")]
-        public static extern bool TranslateMessage(ref MSG lpMsg);
+        public static extern bool TranslateMessage(ref Msg lpMsg);
 
         [DllImport("user32.dll")]
-        public static extern IntPtr DispatchMessage(ref MSG lpMsg);
+        public static extern IntPtr DispatchMessage(ref Msg lpMsg);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint MsgWaitForMultipleObjectsEx(

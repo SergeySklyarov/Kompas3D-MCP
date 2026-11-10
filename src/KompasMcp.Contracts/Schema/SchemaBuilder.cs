@@ -24,7 +24,7 @@ public static class Sch
 
         if (required.Count > 0)
         {
-            obj["required"] = new JsonArray(required.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+            obj["required"] = new JsonArray(required.Select(r => (JsonNode)JsonValue.Create(r)).ToArray());
         }
 
         if (description is not null)
@@ -205,7 +205,7 @@ public static class Sch
     {
         ["type"] = "string",
         ["description"] = description,
-        ["enum"] = new JsonArray(values.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray()),
+        ["enum"] = new JsonArray(values.Select(v => (JsonNode)JsonValue.Create(v)).ToArray()),
     };
 
     /// <summary>Nullable variant. JSON Schema expresses "string or null" as a type array, but a $ref cannot carry a

@@ -61,7 +61,7 @@ public partial class Api5Session
 
         var target = RequireSketch(command.SketchRef);
         var document = target.Document;
-        var (container, sheet) = RequireSheetMetal(document, "Тело не создавалось");
+        var (_, sheet) = RequireSheetMetal(document, "Тело не создавалось");
 
         if (BridgeFor(document).TransferTo7(target.Sketch) is not ISketch sketch7)
         {
@@ -345,7 +345,7 @@ public partial class Api5Session
             throw SheetMetalRefusal(refusal, command.UnfoldType ?? before.UnfoldType);
         }
 
-        var (container, sheet) = RequireSheetMetal(document, "Правка невозможна");
+        var (_, sheet) = RequireSheetMetal(document, "Правка невозможна");
         var repeat = SheetMetalBodyPolicy.IsRepeat(
             before, command.ThicknessMm, command.BendRadiusMm, command.UnfoldType,
             command.BendCoefficient, command.BendValue, command.BendReduction);
@@ -507,7 +507,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = "edge_ref" });
         }
 
-        var (container, sheet) = RequireSheetMetal(document, "Сгиб не создавался");
+        var (_, sheet) = RequireSheetMetal(document, "Сгиб не создавался");
         var bendsBefore = ReadCount(() => sheet.SheetMetalBends.Count);
         var facesBefore = CountFaces(document);
         var extentBefore = ExtentOfBody(document, body).Extent;
@@ -700,7 +700,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = "base_face_ref" });
         }
 
-        var (container, sheet) = RequireSheetMetal(document, "Отверстие не создавалось");
+        var (_, sheet) = RequireSheetMetal(document, "Отверстие не создавалось");
         var holesBefore = ReadCount(() => sheet.SheetMetalHoles.Count);
         var facesBefore = CountFaces(document);
 
@@ -822,7 +822,7 @@ public partial class Api5Session
 
         return new CreateSheetMetalHoleResult(
             ToDto(holeRef, $"sheet metal hole D{command.DiameterMm:0.###}"),
-            read!,
+            read,
             holesBefore!.Value,
             holesAfter!.Value,
             ReadBody(document, body, ordinal: null),
@@ -904,7 +904,7 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        var (container, sheet) = RequireSheetMetal(document, "Вырез не создавался");
+        var (_, sheet) = RequireSheetMetal(document, "Вырез не создавался");
         var cutsBefore = ReadCount(() => sheet.SheetMetalCuts.Count);
         var facesBefore = CountFaces(document);
         var gabaritBefore = DescribeBody(document).Gabarit;
@@ -1020,7 +1020,7 @@ public partial class Api5Session
 
         return new CreateSheetMetalCutResult(
             ToDto(cutRef, $"sheet metal cut {command.CutType}"),
-            read!,
+            read,
             cutsBefore!.Value,
             cutsAfter!.Value,
             facesBefore,

@@ -73,7 +73,7 @@ public partial class Api5Session
         }
 
         var thickness = SafeDouble(() => body.Thickness);
-        var (extentBefore, sourceBefore) = ExtentOfBody(document, body);
+        var (extentBefore, _) = ExtentOfBody(document, body);
 
         try
         {

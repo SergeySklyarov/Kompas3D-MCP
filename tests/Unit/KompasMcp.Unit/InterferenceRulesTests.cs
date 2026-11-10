@@ -115,7 +115,7 @@ public class InterferenceRulesTests
         var second = new double[] { 10, 0, 0 };
         var segment = InterferenceRules.Segment(true, first, true, second);
         Assert.NotNull(segment);
-        Assert.Equal(2, segment!.Count);
+        Assert.Equal(2, segment.Count);
         Assert.Equal(5d, segment[0][0]);
         Assert.Equal(10d, segment[1][0]);
 

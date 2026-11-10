@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
@@ -1105,7 +1105,7 @@ public partial class Api5Session
                 });
         }
 
-        var before = ReadShellFeature(document, entity, definition, out var readNote);
+        ReadShellFeature(document, entity, definition, out var readNote);
         var currentThickness = SafeDouble(() => definition.thickness);
         var currentThinType = SafeBool(() => definition.thinType);
 

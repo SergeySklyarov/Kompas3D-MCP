@@ -803,7 +803,7 @@ public sealed partial class Api5Session
             return null;
         }
 
-        var separator = text!.IndexOf('-', StringComparison.Ordinal);
+        var separator = text.IndexOf('-', StringComparison.Ordinal);
         return separator > 0 ? text[..separator] : null;
     }
 

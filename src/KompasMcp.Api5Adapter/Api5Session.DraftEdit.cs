@@ -54,7 +54,6 @@ public partial class Api5Session
 
         var angleBefore = SafeDouble(() => incline.Angle);
         var flagBefore = SafeBool(() => incline.Direction);
-        var facesBefore = InclineFaceCount(incline);
 
         var angle = command.AngleDeg ?? angleBefore;
         if (angle is not double targetAngle || !DraftRules.AngleInRange(targetAngle))

@@ -19,6 +19,11 @@
     <!-- Runtime hosting for the Host process. -->
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
 
+    <!-- Development-only analyzer: referenced with PrivateAssets=all, so it never reaches a
+         consumer graph or a delivery. The license this local use rests on, and the customer
+         decision that accepted it, are recorded in docs/decisions/build.md#analyzers. -->
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
+
     <!-- Tests. -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />

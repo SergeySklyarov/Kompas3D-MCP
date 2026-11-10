@@ -304,7 +304,7 @@ public sealed class HostSession : IAsyncDisposable
                 {
                     ["id"] = id,
                     ["nearest_ids"] = new JsonArray(
-                        CompactCatalog.NearestIds(id).Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                        CompactCatalog.NearestIds(id).Select(n => (JsonNode)JsonValue.Create(n)).ToArray()),
                 },
                 remedy: "Возьмите точный id из kompas_find_operations.");
         }
@@ -393,7 +393,7 @@ public sealed class HostSession : IAsyncDisposable
                 {
                     ["id"] = id,
                     ["nearest_ids"] = new JsonArray(
-                        CompactCatalog.NearestIds(id ?? string.Empty).Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+                        CompactCatalog.NearestIds(id ?? string.Empty).Select(n => (JsonNode)JsonValue.Create(n)).ToArray()),
                 },
                 remedy: "Возьмите точный id из kompas_find_operations.");
         }
@@ -1418,7 +1418,7 @@ public sealed class HostSession : IAsyncDisposable
 
         if (inFlight.Count > 0)
         {
-            node["operation_ids"] = new JsonArray(inFlight.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray());
+            node["operation_ids"] = new JsonArray(inFlight.Select(id => (JsonNode)JsonValue.Create(id)).ToArray());
         }
 
         if (activeCalls > 0 && inFlight.Count > 0)
@@ -1521,7 +1521,7 @@ public sealed class HostSession : IAsyncDisposable
                 RetryPolicy.Never,
                 new JsonObject
                 {
-                    ["documents"] = new JsonArray(dirty.Select(d => (JsonNode)d.DeepClone()).ToArray()),
+                    ["documents"] = new JsonArray(dirty.Select(d => d.DeepClone()).ToArray()),
                     ["document_count"] = dirty.Count,
                 },
                 remedy: "Сохраните документы kompas_save_document (или закройте их "
@@ -1665,12 +1665,12 @@ public sealed class HostSession : IAsyncDisposable
         // The client must be able to tell three statements apart: what is published, what exists in the
         // registry, and what of that is reached through kompas_run. One list for all three would tell a
         // client it has 97 tools it cannot call.
-        node["tools"] = new JsonArray(published.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+        node["tools"] = new JsonArray(published.Select(t => (JsonNode)JsonValue.Create(t.Name)).ToArray());
         node["tool_count"] = published.Count;
         node["operations"] = new JsonArray(
-            ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+            ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)).ToArray());
         node["operations_via_run"] = new JsonArray(
-            CompactCatalog.ViaRun.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
+            CompactCatalog.ViaRun.Select(n => (JsonNode)JsonValue.Create(n)).ToArray());
         node["operations_note"] =
             "operations - весь реестр; каждая операция достижима: direct - опубликованным "
             + "инструментом, run - через kompas_run (reachable_via в kompas_find_operations).";
@@ -1685,10 +1685,10 @@ public sealed class HostSession : IAsyncDisposable
         if (options is not null)
         {
             node["read_only_roots"] = new JsonArray(
-                options.ReadOnlyRoots.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+                options.ReadOnlyRoots.Select(r => (JsonNode)JsonValue.Create(r)).ToArray());
             node["writable_roots"] = new JsonArray(
                 options.WritableRoots.Concat(options.ExportRoots)
-                    .Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+                    .Select(r => (JsonNode)JsonValue.Create(r)).ToArray());
         }
 
         if (!node.ContainsKey("rot_kompas_entries"))
@@ -1768,7 +1768,7 @@ public sealed class HostSession : IAsyncDisposable
     }
 
     private static JsonArray Strings(IReadOnlyList<string> values) =>
-        new(values.Select(value => (JsonNode)JsonValue.Create(value)!).ToArray());
+        new(values.Select(value => (JsonNode)JsonValue.Create(value)).ToArray());
 
     private static ResultEnvelope<JsonNode?> Succeeded(
         JsonNode? result,
@@ -1816,7 +1816,7 @@ public sealed class HostSession : IAsyncDisposable
             RetryPolicy.Never,
             null,
             false,
-            new JsonObject { ["available"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray()) }),
+            new JsonObject { ["available"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)).ToArray()) }),
         Warnings = new List<string>(),
     };
 

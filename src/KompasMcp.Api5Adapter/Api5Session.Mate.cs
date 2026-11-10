@@ -471,12 +471,12 @@ public sealed partial class Api5Session
         BumpRevision(document, "mate.set_parameter");
 
         var matched = before is not null && after is not null
-            && Math.Abs(after.Value - command.ParamValue!.Value) <= 1e-6;
+            && Math.Abs(after.Value - command.ParamValue.Value) <= 1e-6;
         var checks = new List<NamedCheck>
         {
             new("param_value_read_back", matched,
                 Observed: after?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: command.ParamValue!.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
+                Expected: command.ParamValue.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
         };
 
         // A FAILED MANDATORY CHECK IS NOT SUCCESS: the re-read parameter did not match the requested
@@ -489,7 +489,7 @@ public sealed partial class Api5Session
                 + (after is null
                     ? "НЕ ЧИТАЕТСЯ"
                     : after.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))
-                + ", запрошено " + command.ParamValue!.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
+                + ", запрошено " + command.ParamValue.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
                 + ". Успехом это не считается: модель изменена, параметр не подтверждён.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true,

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -669,7 +669,7 @@ public partial class Api5Session
         BumpRevision(document, stored.Kind + ".delete");
 
         var countsAfter = AuxCountsOf(document);
-        var stillPresent = NonFeatureStillPresent(document, stored, countsBefore, countsAfter);
+        var stillPresent = NonFeatureStillPresent(stored, countsBefore, countsAfter);
         var removed = deleted && !stillPresent;
         var treeAfter = FeatureTreeElements(document);
         var volumeAfter = ReadVolume(document);
@@ -906,7 +906,7 @@ public partial class Api5Session
     /// (<c>IsCreated</c>) and an auxiliary object is judged by its collection's count. The count is the
     /// primary evidence: a re-enumerated wrapper would compare unequal even if the object were alive.</remarks>
     private bool NonFeatureStillPresent(
-        DocumentEntry document, StoredReference stored,
+        StoredReference stored,
         (int? Planes, int? Axes, int? Points) before, (int? Planes, int? Axes, int? Points) after)
     {
         if (stored.Payload is ksEntity entity && stored.Kind == "sketch")

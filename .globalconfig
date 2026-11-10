@@ -1,0 +1,79 @@
+# SonarAnalyzer.CSharp 10.35.0.4138 - the rules this repository keeps OFF.
+# Every line here is a measured decision from the SONAR_ANALYZER_TRIAL measurement over src/ and
+# tests/ (483 findings, 34 rules); the findings behind each line sit in that trial's report.
+# The analyzer itself is wired in Directory.Build.props, and its license decision, the enabled rules
+# and the way the list is kept are in docs/decisions/build.md#analyzers.
+# INVARIANT: a rule is turned off here only with its reason on the line above; a rule whose findings
+# are defects or dead code is fixed instead, never muted.
+is_global = true
+
+# 91 findings: a nested ternary inside an object initialiser states a three-way choice next to the
+# field it fills; extracted into locals it loses the connection to that field.
+dotnet_diagnostic.S3358.severity = none
+
+# 77 findings: turning instance members static changes the call surface of the adapter and the
+# provider classes for zero behaviour. The finding names no defect.
+dotnet_diagnostic.S2325.severity = none
+
+# 24 findings: these are walks over КОМПАС collections whose body both filters and reads; the
+# "Where" rewrite keeps the same work and hides the read behind a query.
+dotnet_diagnostic.S3267.severity = none
+
+# 23 findings: the suggested *Async variant would make a synchronous path async (a pipe Dispose in
+# the sync close path, a cancel inside a finally) and add an await point where the order is the point.
+dotnet_diagnostic.S6966.severity = none
+
+# 11 findings: "!= true" / "== false" on a nullable COM bool IS the meaning - a failed read (null)
+# must not be read as false, and "== true" is not the same as the value.
+dotnet_diagnostic.S1125.severity = none
+
+# 5 findings: the shadowing member is a nested type's property with a deliberate name; renaming it
+# would hide which object the member belongs to.
+dotnet_diagnostic.S3218.severity = none
+
+# 5 findings: four compare face/body COUNTS held as double, the fifth compares Math.Clamp's own
+# result with its input. All five are exact by nature, so a tolerance would be wrong.
+dotnet_diagnostic.S1244.severity = none
+
+# 4 findings: three are JSON-pointer prefixes ("/" + field), not file paths; the fourth is the
+# product's own GitHub feed address, which is a constant of the update check, not an installation path.
+dotnet_diagnostic.S1075.severity = none
+
+# 3 findings: layout only - the overloads sit next to the calls that use them.
+dotnet_diagnostic.S4136.severity = none
+
+# 3 findings: all three patterns are the product's own literals over short inputs; a timeout would
+# add a RegexMatchTimeoutException path to schema validation and to the update check.
+dotnet_diagnostic.S6444.severity = none
+
+# 3 findings: "args[++i]" is how a command-line switch that takes a value consumes its argument.
+dotnet_diagnostic.S127.severity = none
+
+# 2 findings: the read loop already gets the lifetime token inside the delegate it passes; the second
+# asks for a CancellationToken.Register overload that does not exist in the BCL.
+dotnet_diagnostic.S8949.severity = none
+
+# 2 findings: the outer and the inner condition carry their own comments and their own refusals;
+# merging them would hide which one refused.
+dotnet_diagnostic.S1066.severity = none
+
+# 2 findings: WaitForMultipleObjects needs a raw handle array. The two SafeWaitHandles are owned by
+# the executor for its whole life and closed only in Dispose, so they cannot be finalized under a wait.
+dotnet_diagnostic.S3869.severity = none
+
+# 1 finding: layout only - the method is called from the outer class as well.
+dotnet_diagnostic.S3398.severity = none
+
+# 1 finding: the retry bound is inside SavedFileWrite.MayRepeat(unconfirmed, attempt); the empty
+# "for" condition says "retry once, then refuse", and the body always breaks or throws.
+dotnet_diagnostic.S1994.severity = none
+
+# 1 finding: the nested block is the argument-parse switch; extracting it would separate a case from
+# the loop that feeds it.
+dotnet_diagnostic.S1199.severity = none
+
+# 1 finding: Version3 is compared through CompareTo only; the operators would be new, unused public API.
+dotnet_diagnostic.S1210.severity = none
+
+# 1 finding: SHA-1 here derives a UUIDv5 name-based id (RFC 4122), not a security control.
+dotnet_diagnostic.S4790.severity = none

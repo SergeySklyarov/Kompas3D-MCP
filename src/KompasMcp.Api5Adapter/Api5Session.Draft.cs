@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -18,9 +18,6 @@ namespace KompasMcp.Api5Adapter;
 /// History: docs/decisions/adapter-features.md#draft-route-and-direction</remarks>
 public partial class Api5Session
 {
-    /// <summary><c>o3d_incline</c> — «Уклон» от основания.</summary>
-    private const short InclineType = 42;
-
     /// <summary>Tolerance for reading the base orientation from the body's own extent, mm.</summary>
     private const double DraftBaseSideToleranceMm = 1e-6d;
 
@@ -78,7 +75,6 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["direction"] = command.Direction });
         }
 
-        var part = document.PartNow();
         var volumeBefore = ReadVolume(document);
         var facesBefore = CountFaces(document);
         var revisionBefore = document.Revision;
@@ -472,7 +468,7 @@ public partial class Api5Session
                 planeReference, new List<string>())
             : ResolvePlaneEntity(document, plane);
         var bridge = BridgeFor(document);
-        var (point, normal) = ReadPlanePlacement(document, bridge, entity, plane);
+        var (point, normal) = ReadPlanePlacement(bridge, entity, plane);
         if (point is null || normal is null)
         {
             throw new KompasContractException(
@@ -556,7 +552,7 @@ public partial class Api5Session
     /// same call is not yet visible to API7, so <c>TransferTo7</c> of it gives no <c>IPlane3D</c> and the
     /// side stayed unknown; the axis the caller named is known without the model.</remarks>
     private (double[]? Point, double[]? Normal) ReadPlanePlacement(
-        DocumentEntry document, Api7Bridge bridge, object payload, PlaneRefDto plane)
+        Api7Bridge bridge, object payload, PlaneRefDto plane)
     {
         if (plane.Reference is null && plane.Base is { } standard)
         {

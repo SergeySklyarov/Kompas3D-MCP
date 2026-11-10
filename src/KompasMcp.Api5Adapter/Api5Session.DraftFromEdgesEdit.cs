@@ -222,7 +222,7 @@ public partial class Api5Session
         var stateAfter = ReadFeatureState(entity);
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
-        var (angleReadBack, reverseReadBack, edgesReadBack) = ReadDraftFromEdgesFull(draft);
+        var (angleReadBack, reverseReadBack, _) = ReadDraftFromEdgesFull(draft);
 
         var checks = new List<NamedCheck>
         {

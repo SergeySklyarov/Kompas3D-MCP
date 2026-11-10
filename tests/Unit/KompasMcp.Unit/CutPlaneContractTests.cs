@@ -79,7 +79,7 @@ public sealed class CutPlaneContractTests
 
             var dto = Deserialize(payload);
             Assert.NotNull(dto.Base);
-            Assert.Equal(value, dto.Base!.Value.ToString().ToLowerInvariant());
+            Assert.Equal(value, dto.Base.Value.ToString().ToLowerInvariant());
             Assert.Equal(0d, dto.OffsetMm);
 
             // INVARIANT: the declared outcome must be REACHABLE — the old schema/DTO desync made exactly

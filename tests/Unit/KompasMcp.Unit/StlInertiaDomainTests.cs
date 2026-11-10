@@ -176,7 +176,7 @@ public sealed class StlInertiaDomainTests
         Assert.Equal(InertiaBlock.PrincipalSystem, block.Principal!.System);
         Assert.Empty(block.Notes);
         Assert.Equal(3d, block.Axial!.Jz);
-        Assert.Equal(3d, block.Principal!.Jz0);
+        Assert.Equal(3d, block.Principal.Jz0);
         Assert.Equal(new[] { 1d, 0, 0 }, block.PrincipalAxes!.X);
     }
 

@@ -68,7 +68,7 @@ public sealed class SketchConstraintContractTests
     {
         var tool = ToolCatalog.All.SingleOrDefault(t => t.Name == toolName);
         Assert.NotNull(tool);
-        Assert.Equal(command, tool!.WorkerCommand);
+        Assert.Equal(command, tool.WorkerCommand);
         Assert.Equal(mutation, !tool.Behaviour.ReadOnly);
     }
 

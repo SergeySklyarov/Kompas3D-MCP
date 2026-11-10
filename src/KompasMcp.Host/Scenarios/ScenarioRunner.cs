@@ -280,7 +280,7 @@ internal sealed class ScenarioRunner
             ["on_error"] = onError,
             ["status"] = failedStep is null ? "succeeded" : "failed",
             ["failed_step"] = failedStep,
-            ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)!).ToArray()),
+            ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)).ToArray()),
             ["steps"] = steps,
             ["checkpoint"] = checkpoint,
             ["restore"] = restore,
@@ -295,7 +295,7 @@ internal sealed class ScenarioRunner
         {
             ["failed_step"] = failedStep,
             ["step_error"] = failedError?.DeepClone(),
-            ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)!).ToArray()),
+            ["partial_effects"] = new JsonArray(mutated.Select(m => (JsonNode)JsonValue.Create(m)).ToArray()),
             ["restore_attempted"] = JsonScalars.ReadBool(restore["attempted"]) ?? false,
             ["restored"] = JsonScalars.ReadBool(restore["succeeded"]) ?? false,
         };

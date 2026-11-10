@@ -414,7 +414,7 @@ internal static class ViewSwap
                     continue;
                 }
 
-                return (int)projection.GetViewProjectonType();
+                return projection.GetViewProjectonType();
             }
             catch (COMException)
             {
@@ -465,7 +465,7 @@ internal static class ViewSwap
     {
         try
         {
-            return (int)projection.GetViewProjectonType();
+            return projection.GetViewProjectonType();
         }
         catch (COMException)
         {

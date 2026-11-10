@@ -38,7 +38,7 @@ public class SketchProfileDiagnosisTests
         Assert.Equal(ProfileInputState.Defect, outcome.State);
         Assert.NotNull(outcome.UnavailableReason);
 
-        var reason = outcome.UnavailableReason!;
+        var reason = outcome.UnavailableReason;
         Assert.Contains("самопересекается", reason, StringComparison.Ordinal);
         // The reviewer's joints, zero-based, in the order the caller passed the primitives. Both are
         // named: a client that fixes only the first would come back with the same refusal.
@@ -62,7 +62,7 @@ public class SketchProfileDiagnosisTests
         Assert.Equal(ProfileInputState.Consistent, outcome.State);
         Assert.Null(outcome.UnavailableReason);
         Assert.NotNull(outcome.AreaMm2);
-        Assert.True(Math.Abs(outcome.AreaMm2!.Value - 9.861096585699007d) <= 1e-9,
+        Assert.True(Math.Abs(outcome.AreaMm2.Value - 9.861096585699007d) <= 1e-9,
             $"площадь {outcome.AreaMm2.Value:R} против измеренной на контуре файла 9.861096585699007");
     }
 
@@ -80,7 +80,7 @@ public class SketchProfileDiagnosisTests
         Assert.Equal(ProfileInputState.Consistent, outcome.State);
         Assert.Null(outcome.UnavailableReason);
         Assert.NotNull(outcome.AreaMm2);
-        Assert.True(Math.Abs(outcome.AreaMm2!.Value - 63.29497d) <= 5e-5,
+        Assert.True(Math.Abs(outcome.AreaMm2.Value - 63.29497d) <= 5e-5,
             $"площадь {outcome.AreaMm2.Value:R} против ответа клиента 63.29497");
     }
 

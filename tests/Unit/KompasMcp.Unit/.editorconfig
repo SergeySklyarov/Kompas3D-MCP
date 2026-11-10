@@ -1,0 +1,8 @@
+# Test doubles are not product types. Here the dispose pattern (S3881), a deliberate Thread.Sleep
+# that exercises a timeout (S2925) and parameters fixed by the interface a double implements (S1172)
+# are all correct, so the rules are turned off for this project only. The analyzer and the reason
+# behind every other exception are in the repository root: Directory.Build.props and .globalconfig.
+[*.cs]
+dotnet_diagnostic.S3881.severity = none
+dotnet_diagnostic.S2925.severity = none
+dotnet_diagnostic.S1172.severity = none

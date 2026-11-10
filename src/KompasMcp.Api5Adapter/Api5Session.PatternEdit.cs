@@ -1,4 +1,4 @@
-﻿using Kompas6API5;
+using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -56,7 +56,7 @@ public partial class Api5Session
         var bridge = BridgeFor(document);
         var container = RequirePatternContainer(bridge, document);
 
-        var (index, before) = MatchPatternForEdit(bridge, container, entity, document, command.FeatureRef);
+        var (index, before) = MatchPatternForEdit(container, entity, command.FeatureRef);
 
         // The family is taken from the LIVE object (a QI answer), not from the caller's memory: "what
         // it was created as" is not a fact about what the object answers now.
@@ -104,7 +104,7 @@ public partial class Api5Session
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
-            command.Pattern!.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
+            command.Pattern.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         DeclaredExpectation.AddIfDeclared(checks, "volume_after_update", declared);
 
         var volumeMatched = declared.IsConfirmed;
@@ -187,16 +187,14 @@ public partial class Api5Session
     /// point to a feature the collection does not show (e.g. it was rolled back, or issued for another
     /// document). A silent write "into the first one found" would change a foreign feature.</remarks>
     private (int Index, PatternReadout Readout) MatchPatternForEdit(
-        Api7Bridge bridge,
         IModelContainer container,
         ksEntity entity,
-        DocumentEntry document,
         string featureRef)
     {
         var count = Api7Pattern.Count(container) ?? 0;
         for (var i = 0; i < count; i++)
         {
-            if (!MatchesEntity(bridge, container, i, entity, document))
+            if (!MatchesEntity(container, i, entity))
             {
                 continue;
             }
@@ -239,7 +237,7 @@ public partial class Api5Session
 
         static bool SameInt(int? got, int? want) => got is int g && want is int w && g == w;
 
-        static bool SameBool(bool? got, bool? want) => got is bool g && want is bool w && g == want;
+        static bool SameBool(bool? got, bool? want) => got is bool g && want is bool w && g == w;
 
         if (edit.Count1 is int c1)
         {

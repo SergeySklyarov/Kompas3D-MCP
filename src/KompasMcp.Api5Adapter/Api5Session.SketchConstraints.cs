@@ -122,9 +122,9 @@ public sealed partial class Api5Session
         var notes = new List<string>();
         var outcome = InWriteSession(sketch7, notes, (_, objects) =>
         {
-            var targetObject = ResolveSketchObject(objects, command.ObjectRef!, "object_ref");
-            var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
-            RefusePolylineVertex(targetObject.Kind, command.PointIndex, "point_index", command.ObjectRef!);
+            var targetObject = ResolveSketchObject(objects, command.ObjectRef, "object_ref");
+            var host = ResolveObject(objects, command.ObjectRef, "object_ref");
+            RefusePolylineVertex(targetObject.Kind, command.PointIndex, "point_index", command.ObjectRef);
             var before = Api7SketchConstraints.ReadRows(host, notes);
 
             object? partner = null;
@@ -132,7 +132,7 @@ public sealed partial class Api5Session
             if (command.PartnerRefs is { Count: > 0 } partners)
             {
                 partner = partners
-                    .Select(address => (object)ResolveObject(objects, address, "partner_refs", notes))
+                    .Select(address => (object)ResolveObject(objects, address, "partner_refs"))
                     .ToArray();
             }
             else if (command.PartnerRef is { Length: > 0 } partnerRef)
@@ -160,10 +160,6 @@ public sealed partial class Api5Session
             var partnerShapeBefore = partnerObject is null
                 ? null
                 : Api7SketchConstraints.ReadShape(partnerObject.Drawing, notes);
-            var axisShapeBefore = axisObject is null
-                ? null
-                : Api7SketchConstraints.ReadShape(axisObject.Drawing, notes);
-
             var created = Api7SketchConstraints.Create(
                 host, type, command.PointIndex, partner, command.PartnerPointIndex, axis,
                 command.Value, command.Expression, command.Variable);
@@ -300,7 +296,7 @@ public sealed partial class Api5Session
         var stateAfter = ReadSketchState(bridge, target.Sketch, notes);
 
         return new SketchConstraintCreateResult(
-            ObjectRef: command.ObjectRef!,
+            ObjectRef: command.ObjectRef,
             ConstraintType: command.ConstraintType,
             TypeCode: (int)type,
             Applied: true,
@@ -460,7 +456,7 @@ public sealed partial class Api5Session
         var notes = new List<string>();
         var outcome = InWriteSession(sketch7, notes, (_, objects) =>
         {
-            var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
+            var host = ResolveObject(objects, command.ObjectRef, "object_ref");
             var before = Api7SketchConstraints.ReadRows(host, notes);
 
             bool? result;
@@ -525,7 +521,7 @@ public sealed partial class Api5Session
         var stateAfter = ReadSketchState(bridge, target.Sketch, notes);
 
         return new SketchConstraintDeleteResult(
-            ObjectRef: command.ObjectRef!,
+            ObjectRef: command.ObjectRef,
             All: deleteAll,
             Applied: true,
             ConstraintCountBefore: outcome.Before.Count,
@@ -658,7 +654,7 @@ public sealed partial class Api5Session
     /// <summary>Finds the object by its ADDRESS inside the enumerated objects. The address is the one the
     /// enumeration itself issued, so a foreign address cannot be silently substituted.</summary>
     private static KompasAPI7.IDrawingObject1 ResolveObject(
-        IReadOnlyList<SketchConstraintObject> objects, string address, string field, List<string> notes)
+        IReadOnlyList<SketchConstraintObject> objects, string address, string field)
     {
         var matches = objects.Where(o => string.Equals(o.Address, address, StringComparison.Ordinal)).ToList();
         if (matches.Count != 1)

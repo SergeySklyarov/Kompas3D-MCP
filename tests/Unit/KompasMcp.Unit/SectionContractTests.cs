@@ -33,7 +33,7 @@ public sealed class SectionContractTests
         // the Worker sees the request.
         var hostFields = new HashSet<string> { "operation_id", "timeout_ms" };
         var names = commandType.GetProperties().Select(property => property.Name).ToHashSet();
-        foreach (var (field, _) in properties!.Where(pair => !hostFields.Contains(pair.Key)))
+        foreach (var (field, _) in properties.Where(pair => !hostFields.Contains(pair.Key)))
         {
             Assert.True(
                 names.Contains(Pascal(field)),

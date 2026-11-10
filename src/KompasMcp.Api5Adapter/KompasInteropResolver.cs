@@ -103,7 +103,7 @@ public static class KompasInteropResolver
             var list = LoadedAssemblies.ToList();
             if (!list.Contains(name.Name, StringComparer.OrdinalIgnoreCase))
             {
-                list.Add(name.Name!);
+                list.Add(name.Name);
                 LoadedAssemblies = list;
             }
         }

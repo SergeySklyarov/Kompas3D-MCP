@@ -27,9 +27,6 @@ public partial class Api5Session
     /// History: docs/decisions/sheet-metal.md#flat-dxf-tool</remarks>
     private const string UnfoldProjectionName = "Развертка";
 
-    /// <summary><c>ksViewProjectionType.ksVPUnfold</c>: the projection type that says «unfold».</summary>
-    private const int UnfoldProjectionType = 9;
-
     /// <summary>Export the unfolded body as DXF through a temporary drawing.</summary>
     public ExportSheetMetalFlatDxfResult ExportSheetMetalFlatDxf(ExportSheetMetalFlatDxfCommand command)
     {

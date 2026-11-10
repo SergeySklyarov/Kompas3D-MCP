@@ -44,7 +44,7 @@ public class FileLockOwnerLookupTests
         Assert.False(result.IsNamed);
         Assert.Null(result.Owner);
         Assert.NotNull(result.UnavailableReason);
-        Assert.Contains("не вернул", result.UnavailableReason!, StringComparison.Ordinal);
+        Assert.Contains("не вернул", result.UnavailableReason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class FileLockOwnerLookupTests
         Assert.False(result.IsNamed);
         Assert.Null(result.Owner);
         Assert.NotNull(result.UnavailableReason);
-        Assert.Contains("50 мс", result.UnavailableReason!, StringComparison.Ordinal);
+        Assert.Contains("50 мс", result.UnavailableReason, StringComparison.Ordinal);
         // The call returns in the budget's order, not the probe's: a wide margin keeps the assertion
         // robust on a loaded machine while still excluding "waited for the probe".
         Assert.True(stopwatch.ElapsedMilliseconds < 2000,
@@ -82,7 +82,7 @@ public class FileLockOwnerLookupTests
         Assert.False(result.IsNamed);
         Assert.Null(result.Owner);
         Assert.NotNull(result.UnavailableReason);
-        Assert.Contains("InvalidOperationException", result.UnavailableReason!, StringComparison.Ordinal);
+        Assert.Contains("InvalidOperationException", result.UnavailableReason, StringComparison.Ordinal);
     }
 
     [Fact]

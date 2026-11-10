@@ -192,9 +192,9 @@ public sealed class HoleEditClassificationTests
         Assert.Contains("command.DepthMm is not null && !Owned(\"depth_mm\")", ops, StringComparison.Ordinal);
 
         // (2) For THROUGH modes the depth is still foreign: the exception was granted to the FAMILY, not the mode.
-        Assert.Contains("RejectForeignHoleEditField(command, \"through_counterbore\", \"depth_mm\"",
+        Assert.Contains("RejectForeignHoleEditField(\"through_counterbore\", \"depth_mm\"",
             hole, StringComparison.Ordinal);
-        Assert.Contains("RejectForeignHoleEditField(command, \"through_countersink\", \"depth_mm\"",
+        Assert.Contains("RejectForeignHoleEditField(\"through_countersink\", \"depth_mm\"",
             hole, StringComparison.Ordinal);
 
         // (3) Discriminating control: the exception was granted to EXACTLY ONE caller.

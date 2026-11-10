@@ -69,7 +69,7 @@ public class TargetBodyGuardTests
         var verdict = TargetBodyGuard.ProfileMayAffectBody(HoleOverBlob, PlaneBase.Xy, PlateMin, PlateMax);
 
         Assert.NotNull(verdict);
-        Assert.False(verdict!.Value);
+        Assert.False(verdict.Value);
     }
 
     [Fact]

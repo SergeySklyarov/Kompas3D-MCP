@@ -827,8 +827,6 @@ public static class ProfileArea
     /// History: docs/decisions/adapter-sketch.md#profile-input-diagnosis</summary>
     private sealed record SelfCrossing(IReadOnlyList<Crossing> Places, int Count)
     {
-        private const int Listed = 3;
-
         /// <summary>The refusal line. <paramref name="label"/> names the single primitive a self-crossing
         /// polygon was built from; null means a chain, where the two primitives are named instead.</summary>
         public string Describe(string? label)

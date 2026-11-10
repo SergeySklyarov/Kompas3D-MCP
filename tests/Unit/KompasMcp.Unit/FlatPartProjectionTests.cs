@@ -69,7 +69,7 @@ public sealed class FlatPartProjectionTests
         var matrix = FlatPartProjection.Matrix(new[] { x, y, z });
 
         Assert.NotNull(matrix);
-        Assert.Equal(16, matrix!.Length);
+        Assert.Equal(16, matrix.Length);
         Assert.Equal(new[] { x, y, z }, new[] { matrix[8], matrix[9], matrix[10] });
         Assert.NotNull(FlatPartProjection.Choose(new[] { x, y, z }));
     }

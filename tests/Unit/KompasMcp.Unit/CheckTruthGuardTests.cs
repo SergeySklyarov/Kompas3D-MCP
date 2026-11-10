@@ -34,7 +34,6 @@ public sealed class CheckTruthGuardTests
         ["Api5Session.Chamfer.cs:api7_write_applied"] = Outside,
         ["Api5Session.Chamfer.cs:set_chamfer_param"] = Outside,
         ["Api5Session.CopyGeometry.cs:source_readable"] = Outside,
-        ["Api5Session.Exchange.cs:file_created"] = Outside,
         ["Api5Session.FilletEdit.cs:api7_write_applied"] = Outside,
         ["Api5Session.Geometry.cs:feature_created"] = Outside,
         ["Api5Session.Pattern.cs:pattern_created"] = Outside,

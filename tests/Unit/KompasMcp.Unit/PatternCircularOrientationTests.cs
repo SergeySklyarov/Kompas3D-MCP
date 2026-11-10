@@ -91,7 +91,7 @@ public class PatternCircularOrientationTests
         var edit = KompJson.Deserialize<PatternEditDto>("""{"count2":6}""");
 
         Assert.NotNull(edit);
-        Assert.Null(edit!.SaveInitialOrientation);
+        Assert.Null(edit.SaveInitialOrientation);
     }
 
     /// <summary>INVARIANT: the PUBLISHED contract names the default and both meanings. The client reads the tool

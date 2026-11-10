@@ -179,16 +179,16 @@ public static class JsonSchemaValidator
         switch (value?.GetValueKind())
         {
             case JsonValueKind.Object:
-                ValidateObject(nodeSchema, path, value!.AsObject(), root, errors);
+                ValidateObject(nodeSchema, path, value.AsObject(), root, errors);
                 break;
             case JsonValueKind.Array:
-                ValidateArray(nodeSchema, path, value!.AsArray(), root, errors);
+                ValidateArray(nodeSchema, path, value.AsArray(), root, errors);
                 break;
             case JsonValueKind.String:
-                ValidateString(nodeSchema, path, value!.GetValue<string>(), errors);
+                ValidateString(nodeSchema, path, value.GetValue<string>(), errors);
                 break;
             case JsonValueKind.Number:
-                ValidateNumber(nodeSchema, path, value!, errors);
+                ValidateNumber(nodeSchema, path, value, errors);
                 break;
         }
     }

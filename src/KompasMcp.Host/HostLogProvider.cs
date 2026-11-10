@@ -51,7 +51,7 @@ public sealed class HostLogProvider : ILoggerProvider
             return null;
         }
 
-        var lines = stack!.Split('\n');
+        var lines = stack.Split('\n');
         return string.Join(" | ", lines.Take(5).Select(l => l.Trim()));
     }
 

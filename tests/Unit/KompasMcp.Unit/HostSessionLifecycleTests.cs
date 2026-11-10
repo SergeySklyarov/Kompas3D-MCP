@@ -356,7 +356,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Equal(OperationStatus.Failed, envelope.Status);
         Assert.Equal(ErrorCodes.SessionNotAcquired, envelope.Error!.Code);
         Assert.NotNull(envelope.Error.Details);
-        Assert.True(envelope.Error.Details!.ContainsKey("remedy"), "отказ обязан нести инструкцию, а не только код");
+        Assert.True(envelope.Error.Details.ContainsKey("remedy"), "отказ обязан нести инструкцию, а не только код");
 
         // REFUSAL BEFORE THE JOURNAL: lines are counted, not file existence — the journal is created already at
         // acquire, so "no file" would prove nothing here.

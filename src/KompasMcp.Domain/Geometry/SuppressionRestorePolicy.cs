@@ -17,7 +17,7 @@ public readonly record struct ModelStateSnapshot(double? VolumeMm3, int BodyCoun
     /// <summary>Both sides readable and all three numbers equal within the volume tolerance.</summary>
     public bool Matches(ModelStateSnapshot other) =>
         IsReadable && other.IsReadable
-        && Math.Abs(other.VolumeMm3!.Value - VolumeMm3!.Value) <= ProfileArea.Tolerance(VolumeMm3!.Value)
+        && Math.Abs(other.VolumeMm3!.Value - VolumeMm3!.Value) <= ProfileArea.Tolerance(VolumeMm3.Value)
         && other.BodyCount == BodyCount
         && other.FaceCount == FaceCount;
 }
@@ -117,9 +117,9 @@ public static class SuppressionRestorePolicy
         }
 
         var reasons = new List<string>();
-        if (Math.Abs(delta) > ProfileArea.Tolerance(record.Before.VolumeMm3!.Value))
+        if (Math.Abs(delta) > ProfileArea.Tolerance(record.Before.VolumeMm3.Value))
         {
-            reasons.Add($"объём {record.Before.VolumeMm3!.Value:0.######} → {after.VolumeMm3!.Value:0.######} "
+            reasons.Add($"объём {record.Before.VolumeMm3.Value:0.######} → {after.VolumeMm3.Value:0.######} "
                 + $"(расхождение {delta:+0.######;-0.######})");
         }
 

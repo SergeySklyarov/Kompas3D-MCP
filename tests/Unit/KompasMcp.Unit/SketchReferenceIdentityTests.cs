@@ -33,7 +33,7 @@ public class SketchReferenceIdentityTests
         var found = registry.FindLiveByIdentity("sketch", Document, 1, Identity);
 
         Assert.NotNull(found);
-        Assert.Equal(id, found!.Id);
+        Assert.Equal(id, found.Id);
     }
 
     /// <summary>INVARIANT (the measured defect): an ORDINARY revision move re-stamps the reference in
@@ -47,7 +47,7 @@ public class SketchReferenceIdentityTests
         var found = registry.FindLiveByIdentity("sketch", Document, 2, Identity);
 
         Assert.NotNull(found);
-        Assert.Equal(id, found!.Id);
+        Assert.Equal(id, found.Id);
     }
 
     /// <summary>INVARIANT: after a rebuild or reopen nothing from the previous revision survives, so a

@@ -165,7 +165,7 @@ public class SavedFileWriteTests
         var stamp = SavedFileWrite.Capture(path);
 
         Assert.NotNull(stamp);
-        Assert.False(stamp!.Exists);
+        Assert.False(stamp.Exists);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class SavedFileWriteTests
             var stamp = SavedFileWrite.Capture(path);
 
             Assert.NotNull(stamp);
-            Assert.True(stamp!.Exists);
+            Assert.True(stamp.Exists);
             Assert.Equal(bytes.Length, stamp.ByteLength);
             Assert.Equal(FileHash.Sha256(bytes), stamp.Sha256);
         }

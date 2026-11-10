@@ -96,9 +96,6 @@ public class AssemblyCheckpointTests : IDisposable
         /// <c>&lt;file&gt;.$$$</c> instead of replacing the file (MEASURED КОМПАС behaviour).</summary>
         public Queue<bool> LeaveTemporary { get; } = new();
 
-        /// <summary>Every save leaves the temporary file: the file is never replaced.</summary>
-        public bool LeaveTemporaryAlways { get; init; }
-
         /// <summary>The save number (1-based) from which every save leaves the temporary file.</summary>
         public int LeaveTemporaryFrom { get; init; } = -1;
 
@@ -113,11 +110,6 @@ public class AssemblyCheckpointTests : IDisposable
 
         private bool LeavesTemporary()
         {
-            if (LeaveTemporaryAlways)
-            {
-                return true;
-            }
-
             if (LeaveTemporaryFrom >= 0 && _saves >= LeaveTemporaryFrom)
             {
                 return true;
@@ -290,7 +282,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.Empty(session.Replaced);
         var details = outcome.Error!["details"]!.AsObject();
         Assert.Equal("top_refs_not_reassigned", details["cause"]!.GetValue<string>());
-        Assert.Contains("порядок строк", outcome.Error!["message"]!.GetValue<string>());
+        Assert.Contains("порядок строк", outcome.Error["message"]!.GetValue<string>());
         Assert.False(outcome.Report["taken"]!.GetValue<bool>());
     }
 
@@ -350,7 +342,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("copy_not_written", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("PATH_NOT_ALLOWED",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
         Assert.False(outcome.Report["taken"]!.GetValue<bool>());
     }
 
@@ -375,7 +367,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("reopen_failed", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("PATH_NOT_ALLOWED",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
         // The copy is closed at that point, so the answer must not offer its id as a live document.
         Assert.Null(outcome.Report["document_id_after"]);
     }
@@ -399,8 +391,8 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("copy_not_written", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("PATH_NOT_ALLOWED",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
-        Assert.Contains("вложенных сборок", outcome.Error!["message"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
+        Assert.Contains("вложенных сборок", outcome.Error["message"]!.GetValue<string>());
     }
 
     [Fact]
@@ -423,7 +415,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("copy_not_verified", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("PATH_NOT_ALLOWED",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
     }
 
     [Fact]
@@ -446,7 +438,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("copy_not_verified", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("CAPABILITY_UNAVAILABLE",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
     }
 
     [Fact]
@@ -467,7 +459,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("top_refs_not_reassigned", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         Assert.Equal("CAPABILITY_UNAVAILABLE",
-            outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+            outcome.Error["step_error"]!["code"]!.GetValue<string>());
     }
 
     /// <summary>The refusal AFTER the top SaveAs: the copy is open, and the answer must name it.</summary>
@@ -494,7 +486,7 @@ public class AssemblyCheckpointTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Equal("copy_not_saved", outcome.Error!["details"]!["cause"]!.GetValue<string>());
         // The refused call's own code reaches the client: this is the code the client saw.
-        Assert.Equal("SAVE_FAILED", outcome.Error!["step_error"]!["code"]!.GetValue<string>());
+        Assert.Equal("SAVE_FAILED", outcome.Error["step_error"]!["code"]!.GetValue<string>());
         // The copy's document is NOT closed: the client's next save goes there, and it must be told.
         Assert.DoesNotContain("kompas_close_document", session.Tools);
         Assert.Equal("copy-1", outcome.Report["document_id_after"]!.GetValue<string>());

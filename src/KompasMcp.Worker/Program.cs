@@ -247,6 +247,6 @@ public sealed class WorkerOptions
             Environment.Exit(2);
         }
 
-        return new WorkerOptions { PipeName = pipe!, LogPath = log, ControlCopyDirectory = copies! };
+        return new WorkerOptions { PipeName = pipe, LogPath = log, ControlCopyDirectory = copies };
     }
 }

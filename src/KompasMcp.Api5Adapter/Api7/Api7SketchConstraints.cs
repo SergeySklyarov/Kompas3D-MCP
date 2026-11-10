@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
@@ -109,7 +109,7 @@ internal static class Api7SketchConstraints
         // unwrapped rather than reported as "not an array".
         if (raw is IParametriticConstraint single)
         {
-            rows.Add(Describe(single, 0, notes));
+            rows.Add(Describe(single, 0));
             return rows;
         }
 
@@ -127,7 +127,7 @@ internal static class Api7SketchConstraints
         {
             if (array.GetValue(i) is IParametriticConstraint constraint)
             {
-                rows.Add(Describe(constraint, i, notes));
+                rows.Add(Describe(constraint, i));
             }
             else
             {
@@ -138,7 +138,7 @@ internal static class Api7SketchConstraints
         return rows;
     }
 
-    private static SketchConstraintRow Describe(IParametriticConstraint constraint, int index, List<string> notes)
+    private static SketchConstraintRow Describe(IParametriticConstraint constraint, int index)
     {
         var local = new List<string>();
         int? typeCode = ReadInt(() => (int)constraint.ConstraintType, local, "тип ограничения");

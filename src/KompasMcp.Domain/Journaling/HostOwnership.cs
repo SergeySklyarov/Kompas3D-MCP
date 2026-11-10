@@ -219,7 +219,7 @@ public sealed class HostOwnership : IDisposable
     /// </param>
     public Acquisition TryAcquire(bool explicitRequest)
     {
-        var taken = EnterGate(out var lockProblem);
+        var taken = EnterGate(out _);
         if (!taken)
         {
             return Failure(OwnershipOutcome.RecordUnavailable, ErrorCodes.JournalUnavailable,

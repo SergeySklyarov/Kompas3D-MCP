@@ -45,7 +45,7 @@ public class DeclaredExpectationTests
         Assert.Equal(80214.60183660255d, outcome.ExpectedMm3);
         Assert.Equal(79214.60183660254d, outcome.MeasuredMm3);
         Assert.NotNull(outcome.DifferenceMm3);
-        Assert.True(Math.Abs(outcome.DifferenceMm3!.Value - (-1000d)) < 1e-6);
+        Assert.True(Math.Abs(outcome.DifferenceMm3.Value - (-1000d)) < 1e-6);
 
         // The check is NAMED and FAILED, and carries the declared, the measured, the difference and the
         // tolerance: a caller that reads one field must not have to re-derive the others. The numbers are
@@ -61,8 +61,8 @@ public class DeclaredExpectationTests
         // The warning is published and names the three numbers.
         var warnings = DeclaredExpectation.Warnings(outcome);
         Assert.NotNull(warnings);
-        Assert.Single(warnings!);
-        Assert.Contains("Заявленное ожидание не подтверждено", warnings![0], StringComparison.Ordinal);
+        Assert.Single(warnings);
+        Assert.Contains("Заявленное ожидание не подтверждено", warnings[0], StringComparison.Ordinal);
         Assert.Contains("80214.601837", warnings[0], StringComparison.Ordinal);
         Assert.Contains("79214.601837", warnings[0], StringComparison.Ordinal);
         Assert.Contains("перечитайте объём", warnings[0], StringComparison.Ordinal);
@@ -166,9 +166,9 @@ public class DeclaredExpectationTests
         Assert.True(outcome.IsUnverifiable);
         Assert.False(outcome.IsNotConfirmed);
         Assert.NotNull(outcome.Reason);
-        Assert.Contains("declared_expectation_reads_diverged", outcome.Reason!, StringComparison.Ordinal);
-        Assert.Contains("79123.456789", outcome.Reason!, StringComparison.Ordinal);
-        Assert.Contains("80321.987654", outcome.Reason!, StringComparison.Ordinal);
+        Assert.Contains("declared_expectation_reads_diverged", outcome.Reason, StringComparison.Ordinal);
+        Assert.Contains("79123.456789", outcome.Reason, StringComparison.Ordinal);
+        Assert.Contains("80321.987654", outcome.Reason, StringComparison.Ordinal);
 
         // The published reason prefers the divergence text over the generic "could not be compared".
         var reason = DeclaredExpectation.UnverifiableReason("объём после правки", outcome);
@@ -237,7 +237,7 @@ public class DeclaredExpectationTests
         var warnings = DeclaredExpectation.Warnings(delta, volume);
 
         Assert.NotNull(warnings);
-        Assert.Equal(2, warnings!.Count);
+        Assert.Equal(2, warnings.Count);
         Assert.Contains("заявлено 100", warnings[0], StringComparison.Ordinal);
         Assert.Contains("заявлено 200", warnings[1], StringComparison.Ordinal);
     }
@@ -261,8 +261,8 @@ public class DeclaredExpectationTests
 
         var warnings = DeclaredExpectation.Warnings(outcome);
         Assert.NotNull(warnings);
-        Assert.Single(warnings!);
-        Assert.DoesNotContain("модель могла отстать", warnings![0], StringComparison.Ordinal);
+        Assert.Single(warnings);
+        Assert.DoesNotContain("модель могла отстать", warnings[0], StringComparison.Ordinal);
         Assert.Contains("знаки противоположны", warnings[0], StringComparison.Ordinal);
     }
 

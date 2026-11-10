@@ -524,10 +524,10 @@ public static class DiagnosticPackage
                 ["max_records_per_file"] = MaxRecordsPerFile,
                 ["max_package_bytes"] = MaxPackageBytes,
             },
-            ["allowed_journal_fields"] = new JsonArray(JournalFields.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
-            ["allowed_log_fields"] = new JsonArray(LogFields.Select(f => (JsonNode)JsonValue.Create(f)!).ToArray()),
+            ["allowed_journal_fields"] = new JsonArray(JournalFields.Select(f => (JsonNode)JsonValue.Create(f)).ToArray()),
+            ["allowed_log_fields"] = new JsonArray(LogFields.Select(f => (JsonNode)JsonValue.Create(f)).ToArray()),
             ["files"] = entries,
-            ["notes"] = new JsonArray(notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+            ["notes"] = new JsonArray(notes.Select(n => (JsonNode)JsonValue.Create(n)).ToArray()),
         };
     }
 

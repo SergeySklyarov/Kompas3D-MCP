@@ -129,7 +129,7 @@ public sealed partial class Api5Session
                 }
                 else
                 {
-                    var segmentHost = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
+                    var segmentHost = ResolveObject(objects, command.ObjectRef, "object_ref");
                     var segment = segmentHost as KompasAPI7.ILineSegment;
                     if (segment is null)
                     {
@@ -210,7 +210,7 @@ public sealed partial class Api5Session
 
         // The length is read AFTER the rebuild, through a fresh enumeration: the value is expected to
         // have moved the geometry, and that is the fact the caller is buying.
-        var lengthAfter = ReadSegmentLength(sketch7, command.ObjectRef!, notes);
+        var lengthAfter = ReadSegmentLength(sketch7, command.ObjectRef, notes);
         var applied = outcome.PointsMatchSegment == true
                       && outcome.ValueRead is { } read && Math.Abs(read - valueMm) < 1e-6
                       && lengthAfter is { } after && Math.Abs(after - valueMm) < 1e-6;
@@ -237,7 +237,7 @@ public sealed partial class Api5Session
         }
 
         return new SketchDimensionCreateResult(
-            ObjectRef: command.ObjectRef!,
+            ObjectRef: command.ObjectRef,
             DimensionRef: outcome.DimensionRef ?? string.Empty,
             ValueMm: valueMm,
             Applied: true,
@@ -401,7 +401,7 @@ public sealed partial class Api5Session
 
         var mm = kind == SketchDimensionKind.Angular ? (double?)null : wanted;
         return new SketchDimensionCreateResult(
-            ObjectRef: command.ObjectRef!,
+            ObjectRef: command.ObjectRef,
             DimensionRef: outcome.DimensionRef ?? string.Empty,
             ValueMm: mm,
             Applied: true,
@@ -478,7 +478,7 @@ public sealed partial class Api5Session
             // The measured object is resolved and its KIND checked BEFORE the kernel is asked to create
             // anything: a dimension placed on the wrong object would either be refused mid-write or,
             // worse, accepted as a different measurement.
-            var first = ResolveSketchObject(objects, command.ObjectRef!, "object_ref");
+            var first = ResolveSketchObject(objects, command.ObjectRef, "object_ref");
             var firstShape = ShapeOf(first.Drawing);
             var accepted = SketchDimensionRule.AcceptedShapes(kind);
             if (firstShape is null || !accepted.Contains(firstShape.Value))
@@ -572,7 +572,7 @@ public sealed partial class Api5Session
                     added.BaseObject1 = first.Drawing;
                     added.BaseObject2 = second!.Drawing;
                     notes.Add($"IAngleDimensions.Add(ksDrADimension): BaseObject1 = отрезок " +
-                              $"[{first.Index}], BaseObject2 = отрезок [{second!.Index}]; Update() → " +
+                              $"[{first.Index}], BaseObject2 = отрезок [{second.Index}]; Update() → " +
                               $"{SafeBoolText(() => added.Update())}");
                     dimension = added;
                     break;
@@ -646,7 +646,7 @@ public sealed partial class Api5Session
         CreateSketchDimensionCommand command,
         List<string> notes)
     {
-        var first = FindByAddress(objects, command.ObjectRef!);
+        var first = FindByAddress(objects, command.ObjectRef);
         if (first is null)
         {
             notes.Add($"геометрия до: объект '{command.ObjectRef}' не найден среди перечисленных");

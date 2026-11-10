@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -78,11 +78,6 @@ public sealed partial class Api5Session
         // tool performs yet (the contract document plans one under the name kompas_validate_export);
         // it is never implied by this call.
         var structural = StepFileInspector.Inspect(destination, document.Kind is DocumentKind.Assembly);
-        var checks = new List<NamedCheck>
-        {
-            new("file_created", true, Observed: structural.ByteLength.ToString(CultureInfo.InvariantCulture) + " байт"),
-            new("header_parsed", structural.HeaderParsed, Observed: structural.Schema ?? "не распознана"),
-        };
 
         var level = structural.HeaderParsed ? VerificationLevel.SyntaxChecked : VerificationLevel.FileCreated;
         return new ExportResultDto
@@ -439,7 +434,6 @@ public sealed partial class Api5Session
     /// Integration tests assert on this instead of trusting the constants.</summary>
     public UnitProbeResult UnitProbe(UnitProbeCommand command)
     {
-        var application = RequireApplication(command.ApplicationId);
         var document = CreateDocument(new CreateDocumentCommand
         {
             ApplicationId = command.ApplicationId,

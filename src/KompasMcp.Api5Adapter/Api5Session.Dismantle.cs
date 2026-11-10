@@ -203,7 +203,7 @@ public partial class Api5Session
         var parts = new List<object>();
         foreach (var reference in step.ComponentRefs)
         {
-            parts.Add(RequireComponent(document, top, reference));
+            parts.Add(RequireComponent(document, reference));
         }
 
         var direction = RequireDirection(document, step.DirectionRef);
@@ -266,7 +266,7 @@ public partial class Api5Session
     }
 
     /// <summary>The component of this assembly addressed by a reference, as the step expects it.</summary>
-    private IPart7 RequireComponent(DocumentEntry document, IPart7 top, string reference)
+    private IPart7 RequireComponent(DocumentEntry document, string reference)
     {
         var stored = References.Require(reference, document.Id, document.Revision);
         if (stored.Payload is not ComponentPayload payload)

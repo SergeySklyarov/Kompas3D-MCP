@@ -294,7 +294,7 @@ public sealed partial class Api5Session
         }
 
         BumpRevision(document, "model.set_section_mode");
-        return new SetSectionModeResult(read!.Value,
+        return new SetSectionModeResult(read.Value,
             new VerificationDto(VerificationLevel.StructureChecked, checks, Array.Empty<string>()),
             notes);
     }

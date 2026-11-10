@@ -36,7 +36,7 @@ public class SketchProfileTests
 
         // The second call turns the disc into a ring — the accumulated profile must see it.
         profile.Append(new[] { Circle(0, 0, 5) });
-        Assert.Equal(Math.PI * 75d, profile.AreaMm2!.Value, 9);
+        Assert.Equal(Math.PI * 75d, profile.AreaMm2.Value, 9);
     }
 
     [Fact]

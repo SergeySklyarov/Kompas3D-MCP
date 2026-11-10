@@ -138,7 +138,7 @@ public class ComDisconnectClassificationTests
             var published = WinErrorValue(header, symbol);
             Assert.True(published.HasValue,
                 $"символ {symbol} не найден в {header} — число классификации нельзя подтвердить");
-            Assert.Equal(published!.Value, value);
+            Assert.Equal(published.Value, value);
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -308,7 +308,7 @@ public sealed partial class Api5Session
             unverified.Add("parts_less_than_two");
         }
 
-        if (command.ExpectedVolumeMm3 is double expected)
+        if (command.ExpectedVolumeMm3 is not null)
         {
             var beforeVolume = bodiesBefore.FirstOrDefault(b => b.Index == targetIndex)?.Volume;
             if (beforeVolume is double before && !VolumeMatches(partsVolume, before))
@@ -1226,7 +1226,7 @@ public sealed partial class Api5Session
 
         public bool WasPresent(ksEntity entity) => IndexOf(entity) >= 0;
 
-        public string[] Names => Elements.Select(e => e.Name).ToArray();
+        public string[] Names() => Elements.Select(e => e.Name).ToArray();
     }
 
     /// <summary>The address of the just-created feature — an API5 TREE ELEMENT, not an API7 object.</summary>
@@ -1291,7 +1291,7 @@ public sealed partial class Api5Session
                 ["expected_tree_type"] = expectedTreeType,
                 ["new_names"] = newNames.ToArray(),
                 ["new_elements"] = newElements.ToArray(),
-                ["names_before"] = before.Names.OrderBy(n => n, StringComparer.Ordinal).ToArray(),
+                ["names_before"] = before.Names().OrderBy(n => n, StringComparer.Ordinal).ToArray(),
                 ["elements_before"] = before.Count,
             });
     }
@@ -1333,27 +1333,6 @@ public sealed partial class Api5Session
 
         return true;
     }
-
-    /// <summary>OBSOLETE. The former "body untouched" sign for cutting: it compared the candidate's
-    /// volume with the TARGET's, so a foreign body was never recognised and every other body was
-    /// declared untouched WITHOUT proof. Superseded by body-composition matching in
-    /// <c>SolidCutByPlane</c>; kept as a record, nothing calls it.
-    /// History: docs/decisions/adapter-solid.md#cut-untouched</summary>
-    private static bool IsUntouched(SolidBodyDto row, List<BodySnapshot> before, int targetIndex)
-    {
-        var snapshot = before.FirstOrDefault(b => b.Index == targetIndex);
-        if (snapshot?.Volume is not double volume || row.VolumeMm3 is not double actual)
-        {
-            return false;
-        }
-
-        return VolumeMatches(actual, volume);
-    }
-
-    /// <summary>Whether the body matches at least one "before" snapshot — by BOUNDING BOX AND VOLUME, not by its
-    /// place in the collection: the operation consumes the target body, and a part takes its index.</summary>
-    private static bool MatchesAnySnapshot(SolidBodyDto row, List<BodySnapshot> before) =>
-        before.Any(b => MatchesSnapshot(row, b));
 
     private static string BodyVolumesText(List<BodySnapshot> snapshots) =>
         NumberListText(snapshots.Select(b => b.Volume).ToList());

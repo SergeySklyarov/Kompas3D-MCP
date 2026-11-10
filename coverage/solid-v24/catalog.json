@@ -8585,7 +8585,7 @@
      "name": "Чтение родной спецификации модели",
      "level": "mcp_verified",
      "doc_source": "ikompasdocument_specificationdescriptions.html, ispecificationdescriptions_active.html, ispecificationdescription_objects.html, ispecificationobject_section.html, ispecificationobject_uniquenumber.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html",
-     "route": "IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (весь список, порядок визуальный) -> UniqueNumber -> ksGetSpcObject -> ksGetSpcSectionName + ksGetSpcObjectColumnText по типу колонки; пустая спецификация - пустой список и заметка; .spw вне объёма",
+     "route": "IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (весь список, порядок визуальный) -> UniqueNumber -> ksGetSpcObject -> ksGetSpcSectionName + ksGetSpcObjectColumnText по типу колонки; пустая спецификация - пустой список и заметка; строки ДОКУМЕНТА .spw читает SPEC-01 (kompas_get_specification_document), этот инструмент читает модель",
      "modes": [
       {
        "id": "BOM-04.specification.read",

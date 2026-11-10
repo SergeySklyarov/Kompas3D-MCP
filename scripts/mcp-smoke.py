@@ -3661,13 +3661,11 @@ def assembly_checks(client, rep, app_id, workdir):
             f"вторая_вставка={second_err} error={code}")
     call("kompas_close_document", {"document_id": asm_p, "dirty_policy": "discard"})
 
-    # ========= ASM.03: ВЛОЖЕННЫЙ КОМПОНЕНТ ЧИТАЕТСЯ, НО НЕ АДРЕСУЕТСЯ =========
-    #
-    # ИЗМЕРЕНО 05.10.2026 выборочным аудитом кода (п. D): обход структуры нумеровал ВСЁ дерево ОДНИМ
-    # счётчиком и передавал номер вложенного компонента в ksDocument3D.PartCollection — а тот
-    # перечисляет компоненты ПЛОСКО, поэтому такой номер адресовал бы ЧУЖОЙ компонент. Ограничение
-    # выпуска названо прямо: вложенный компонент ЧИТАЕТСЯ, но адреса у него нет, и мутация по нему
-    # отвергается, а не выполняется по предположительному номеру.
+    # ========= ASM.03: A NESTED COMPONENT IS READ AND ADDRESSED BY PATH =========
+    # INVARIANT: a nested address is the path of indexes from the top assembly; a flat
+    # ksDocument3D.PartCollection index names ANOTHER component, so it is never guessed.
+    # DOC: ipart7_parts.html, iparts7_part.html; the transport is the component_ref tail "<uuid>/<i>".
+    # MEASURED: a path that names no instance refuses STALE_REFERENCE before any mutation.
     env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
                                                 "name": "ASM-nested"})
     asm_n = doc_id(env)
@@ -3692,11 +3690,11 @@ def assembly_checks(client, rep, app_id, workdir):
     nested = [r for r in rows_r if (r.get("depth") or 0) > 0]
     nested_ref = nested[0].get("component_ref") if nested else None
     rep.add("ASM.03.recursive_read",
-            "рекурсивное чтение показывает вложенный компонент и НАЗЫВАЕТ предел адресации",
-            "PASS" if (nested and any("nested_components_not_addressable" in str(n) for n in notes_r))
+            "рекурсивное чтение показывает вложенный компонент и называет, ЧЕМ он адресуется",
+            "PASS" if (nested and any("nested_component_addressed_by_path" in str(n) for n in notes_r))
             else "FAIL",
             f"вставка_подсборки={sub_insert_err} rows={len(rows_r)} вложенных={len(nested)} "
-            f"depth={[r.get('depth') for r in rows_r]} notes={notes_r} error={code}")
+            f"ref={nested_ref} depth={[r.get('depth') for r in rows_r]} notes={notes_r} error={code}")
     # ── ASM.03.subassembly_placement: a subassembly IS a top-level component and HAS an address ────
     # INVARIANT: a subassembly enters the assembly as ONE top-level component, so its placement is set
     # and read back like any other; a refusal would have to be a NAMED code, not a silent write.
@@ -3731,15 +3729,23 @@ def assembly_checks(client, rep, app_id, workdir):
             + " глубина=" + str(read_n[0].get("depth") if read_n else None)
             + " ревизия=" + str(rev_sub_before) + "->" + str(rev_sub_after)
             + " msg=" + str(emsg(env_sub))[:120])
-    if nested_ref:
+    # A stale reference would refuse for the wrong reason (revision), so the path is broken on a FRESH one.
+    env_n, _c_n = call("kompas_list_components", {"document_id": asm_n, "recursive": True})
+    fresh_nested = [r for r in (result(env_n).get("components") or []) if (r.get("depth") or 0) > 0]
+    fresh_ref = fresh_nested[0].get("component_ref") if fresh_nested else None
+    if fresh_ref:
+        broken_ref = str(fresh_ref) + "/9"
+        rev_bad_before = current_rev(asm_n)
         env, code = call("kompas_set_component_placement", {
-            "document_id": asm_n, "expected_revision": current_rev(asm_n),
-            "component_ref": nested_ref,
+            "document_id": asm_n, "expected_revision": rev_bad_before,
+            "component_ref": broken_ref,
             "transform": {"origin_mm": [10, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        rev_bad_after = current_rev(asm_n)
         rep.add("ASM.03.negative_tests",
-                "размещение ВЛОЖЕННОГО компонента отвергается, а не выполняется по догадке",
-                "PASS" if code in ("CAPABILITY_UNAVAILABLE", "STALE_REFERENCE") else "FAIL",
-                f"error={code} msg={emsg(env)}")
+                "битый путь вложенного адреса отвергается STALE_REFERENCE, модель не меняется",
+                "PASS" if (code == "STALE_REFERENCE" and rev_bad_after == rev_bad_before) else "FAIL",
+                f"ref={broken_ref} error={code} msg={emsg(env)} "
+                f"ревизия={rev_bad_before}->{rev_bad_after}")
     else:
         rep.add("ASM.03.negative_tests", "вложенный компонент для отрицательной проверки", "FAIL",
                 f"вложенных строк нет: rows={len(rows_r)} notes={notes_r}")

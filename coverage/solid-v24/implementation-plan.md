@@ -1399,3 +1399,7 @@ UNKNOWN, FAIL 0; попытка 3 меняла только прибор вне 
 **ДАТИРОВАННАЯ ПОПРАВКА 10.11.2026, девяносто третья (решение техлида: приёмка `ASM_PATTERN_COMPONENTS`).**
 
 `ASM_PATTERN_COMPONENTS` принят (`f78e995`): `copy_kind=components` в `kompas_pattern_grid` и `kompas_pattern_circular`, сверка чтением назад (числа, начала, углы), строки `ASM-09`/`ASM-10`, группа `--pattern-components-only` в `--all`. Зачётный `--all` на чистом `f78e995` - PASS 2191 / NAMED 10 / UNKNOWN 3 / FAIL 0. Принято аддитивное поле `instance_deleted_indexes` (отказ `CAPABILITY_UNAVAILABLE`). Очередь без изменений: `MATE_SYMMETRIC_DEPENDENT` (выдан) -> `ASM_NESTED_COMPONENTS` -> `ASM_PATTERN_PATH` -> исследование спецификации. Новых строк долга нет.
+
+**ДАТИРОВАННАЯ ПОПРАВКА 10.11.2026, девяносто четвёртая (решение техлида: приёмка `MATE_SYMMETRIC_DEPENDENT`).**
+
+`MATE_SYMMETRIC_DEPENDENT` принят (`0af6644`): `constraint_type=symmetric|dependent` в `kompas_create_mate` с проверкой зеркалом и следованием, чтение в `kompas_list_mates`, строки `MATE-08`/`MATE-09`, группа `--mate-ext-only` в `--all`. Зачётный `--all` на чистом `0af6644` - PASS 2209 / NAMED 10 / UNKNOWN 3 / FAIL 0, не-PASS те же 13 строк. Принято отступление: удаление этих видов - документированным `ksDocument3D.DeleteObject` объекта сопряжения (`RemoveMateConstraint` на них не работает, измерено); `by_sample=false` и правка полей - `CAPABILITY_UNAVAILABLE` с причиной. Выдан `ASM_NESTED_COMPONENTS`. Очередь: `ASM_NESTED_COMPONENTS` (выдан) -> `ASM_PATTERN_PATH` -> исследование спецификации. Новых строк долга нет.

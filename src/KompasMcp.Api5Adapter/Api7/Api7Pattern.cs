@@ -18,18 +18,44 @@ internal static class Api7Pattern
 {
     /// <summary>The factory numeric type for a grid or circular pattern.</summary>
     /// <remarks>A pattern OF BODIES is a separate type, not a flag: <c>o3d_BodiesMeshCopy=528</c> /
-    /// <c>o3d_BodiesCircularCopy=529</c> versus <c>o3d_meshCopy=35</c> / <c>o3d_circularCopy=36</c>.</remarks>
+    /// <c>o3d_BodiesCircularCopy=529</c> versus <c>o3d_meshCopy=35</c> / <c>o3d_circularCopy=36</c>, and a
+    /// pattern of ASSEMBLY COMPONENTS is a third one: <c>o3d_meshPartArray=39</c> /
+    /// <c>o3d_circPartArray=38</c> (DOC: <c>copytype.html</c>).</remarks>
     public static ksObj3dTypeEnum LinearType(PatternCopyKind kind) => kind switch
     {
         PatternCopyKind.Bodies => ksObj3dTypeEnum.o3d_BodiesMeshCopy,
+        PatternCopyKind.Components => ksObj3dTypeEnum.o3d_meshPartArray,
         _ => ksObj3dTypeEnum.o3d_meshCopy,
     };
 
     public static ksObj3dTypeEnum CircularType(PatternCopyKind kind) => kind switch
     {
         PatternCopyKind.Bodies => ksObj3dTypeEnum.o3d_BodiesCircularCopy,
+        PatternCopyKind.Components => ksObj3dTypeEnum.o3d_circPartArray,
         _ => ksObj3dTypeEnum.o3d_circularCopy,
     };
+
+    /// <summary>What a pattern copies, read from the ORDER of the live object.</summary>
+    /// <remarks>DOC: <c>copytype.html</c> publishes the numbers; the QI answer cannot tell operations from
+    /// components — a component array answers the same <c>ILinearPattern</c> (MEASURED), so "what it was
+    /// created as" is read from <c>ModelObjectType</c>, not from the interface.</remarks>
+    public static string? CopyKindOf(IFeaturePattern pattern)
+    {
+        try
+        {
+            return (int)pattern.ModelObjectType switch
+            {
+                (int)ksObj3dTypeEnum.o3d_meshCopy or (int)ksObj3dTypeEnum.o3d_circularCopy => "operations",
+                (int)ksObj3dTypeEnum.o3d_BodiesMeshCopy or (int)ksObj3dTypeEnum.o3d_BodiesCircularCopy => "bodies",
+                (int)ksObj3dTypeEnum.o3d_meshPartArray or (int)ksObj3dTypeEnum.o3d_circPartArray => "components",
+                _ => null,
+            };
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
 
     public static ksObj3dTypeEnum MirrorType(PatternMirrorMode mode) => mode switch
     {
@@ -120,8 +146,23 @@ internal static class Api7Pattern
                 return (null, "FeaturePatterns.Add не отдал объект, отвечающий на QI(ILinearPattern)");
             }
 
-            linear.InitialObjects = sources7;
             linear.Axis1 = axis1;
+
+            // A COMPONENT SOURCE IS TAKEN BY THE DOCUMENTED PAIR, NOT BY THE VARIANT SETTER: the measured
+            // route checks suitability and appends (ifeaturepattern_issuitableobject.html,
+            // ifeaturepattern_addinitialobjects.html). A refusal here leaves the feature in the tree
+            // unbuilt, so the caller receives the OBJECT together with the reason.
+            if (kind == PatternCopyKind.Components)
+            {
+                if (WireComponentSources(linear, sources7) is { } refusal)
+                {
+                    return (linear, refusal);
+                }
+            }
+            else
+            {
+                linear.InitialObjects = sources7;
+            }
 
             linear.Step1 = step1;
             linear.Count1 = count1;
@@ -170,6 +211,57 @@ internal static class Api7Pattern
         }
     }
 
+    /// <summary>Bind assembly components as the pattern's source objects, one by one.</summary>
+    /// <remarks>INVARIANT: every source is checked for suitability BEFORE it is added, so "the kernel cannot
+    /// copy this object" is a named refusal and not a pattern built from a wrong set. A COM fault is
+    /// answered as a reason, not thrown: the feature already exists in the tree and the caller must be able
+    /// to say so.
+    /// DOC: <c>ifeaturepattern_issuitableobject.html</c> («TRUE - указанный объект можно скопировать»),
+    /// <c>ifeaturepattern_addinitialobjects.html</c> (объект — VARIANT VT_DISPATCH).</remarks>
+    private static string? WireComponentSources(IFeaturePattern pattern, object[] sources)
+    {
+        try
+        {
+            foreach (var source in sources)
+            {
+                if (source is not IModelObject model)
+                {
+                    return $"исходный объект компонента не приводится к IModelObject ({source.GetType().Name})";
+                }
+
+                if (!pattern.IsSuitableObject(model))
+                {
+                    return $"IsSuitableObject(компонент «{NameOf(model) ?? "?"}») вернул false: копировать " +
+                        "этот объект операцией массива компонентов нельзя";
+                }
+
+                if (!pattern.AddInitialObjects(model))
+                {
+                    return $"AddInitialObjects(компонент «{NameOf(model) ?? "?"}») вернул false: исходный " +
+                        "объект не принят";
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return "привязка исходных компонентов прервалась: " + Describe(ex);
+        }
+    }
+
+    private static string? NameOf(IModelObject model)
+    {
+        try
+        {
+            return model is IPart7 part ? part.Name : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Create a circular pattern, write its parameters, then <c>Update()</c>.</summary>
     public static (ICircularPattern? Pattern, string? Failure) TryCreateCircular(
         IModelContainer container,
@@ -200,8 +292,19 @@ internal static class Api7Pattern
                 return (null, "FeaturePatterns.Add не отдал объект, отвечающий на QI(ICircularPattern)");
             }
 
-            circular.InitialObjects = sources7;
             circular.Axis = axis;
+
+            if (kind == PatternCopyKind.Components)
+            {
+                if (WireComponentSources(circular, sources7) is { } refusal)
+                {
+                    return (circular, refusal);
+                }
+            }
+            else
+            {
+                circular.InitialObjects = sources7;
+            }
 
             circular.Count1 = count1;
             circular.Step1 = step1;
@@ -540,6 +643,7 @@ internal static class Api7Pattern
         {
             return new PatternReadout(
                 Family: "linear",
+                CopyKind: CopyKindOf(pattern),
                 TypeName: SafeString(() => linear.ModelObjectType.ToString()),
                 Count1: count1,
                 Count2: count2,
@@ -570,6 +674,7 @@ internal static class Api7Pattern
         {
             return new PatternReadout(
                 Family: "circular",
+                CopyKind: CopyKindOf(pattern),
                 TypeName: SafeString(() => circular.ModelObjectType.ToString()),
                 Count1: count1,
                 Count2: count2,
@@ -600,6 +705,7 @@ internal static class Api7Pattern
         {
             return new PatternReadout(
                 Family: "mirror",
+                CopyKind: CopyKindOf(pattern),
                 TypeName: SafeString(() => mirror.ModelObjectType.ToString()),
                 Count1: count1,
                 Count2: count2,
@@ -628,6 +734,7 @@ internal static class Api7Pattern
 
         return new PatternReadout(
             Family: "unknown",
+                CopyKind: CopyKindOf(pattern),
             TypeName: SafeString(() => pattern.ModelObjectType.ToString()),
             Count1: count1,
             Count2: count2,
@@ -778,10 +885,14 @@ internal static class Api7Pattern
 /// <summary>Read pattern-feature parameters. A <c>null</c> field means "not read", not "zero": an
 /// empty field and zero are different answers, and they must not be mixed here any more than in
 /// measure.</summary>
-/// <param name="Family">linear | circular | mirror | unknown — by the QI answer, not by memory.</param>
+/// <param name="Family">linear | circular | mirror | unknown — by the QI answer, not by memory. A component
+/// array answers one of these too; what it COPIES is <paramref name="CopyKind"/>.</param>
+/// <param name="CopyKind">operations | bodies | components — from <c>ModelObjectType</c> (DOC
+/// <c>copytype.html</c>); null when the order was not read.</param>
 /// <param name="DeletedInstanceCount">Number of <c>InstanceDeletedIndexes</c> entries; inapplicable for mirror.</param>
 public sealed record PatternReadout(
     string Family,
+    string? CopyKind,
     string? TypeName,
     int? Count1,
     int? Count2,

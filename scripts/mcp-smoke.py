@@ -965,6 +965,10 @@ RUN_GROUPS = (
     ("shutdown", "shutdown", "shutdown-acceptance.json",
      "Приёмка SD: завершение сеанса не оставляет висящий КОМПАС, а несохранённая работа сохраняется "
      "спасательной копией (наряд SHUTDOWN_NO_ORPHANS)"),
+    ("pattern_components", "pattern-components", "pattern-components-acceptance.json",
+     "Приёмка ASM-09/ASM-10: массивы КОМПОНЕНТОВ сборки - сетка 3x1 и 2x2, круговой, чтение "
+     "семейства components с исходными ссылками, переоткрытие, правка, удаление и каждый отказ "
+     "(наряд ASM_PATTERN_COMPONENTS, профиль assembly-ext-v1)"),
     ("catalog", "catalog", "catalog-acceptance.json",
      "Приёмка CT: механизм каталога — список постоянен по размеру, find/describe/run, отказы по "
      "имени поля (наряды CATALOG_MECHANISM_RESEARCH и CATALOG_FULL_REMOVAL)"),
@@ -1047,6 +1051,7 @@ VERTICAL_GROUPS = (
 # порядок прогона в `--all`.
 ALL_GROUPS_EXTRA = (
     ("assembly", ["--assembly-only"]),
+    ("pattern_components", ["--pattern-components-only"]),
     ("mate", ["--mate-only"]),
     ("mech_mates", ["--mech-mates-only"]),
     ("sheet_metal", ["--sheet-metal-only"]),
@@ -2320,6 +2325,8 @@ FLAGS = (
     ("--sketch-profile", False, "группа SPD: причина непригодности профиля"),
     # Группы вне вертикали: их проверки вызываются только в своей ветке.
     ("--assembly-only", False, "группа ASM: минимальные сборки"),
+    ("--pattern-components-only", False,
+     "группа ASM-09/ASM-10: массивы КОМПОНЕНТОВ по сетке и концентрической сетке"),
     ("--mate-only", False, "группа MATE: сопряжения сборки"),
     ("--mech-mates-only", False, "группа MM: механическая передача"),
     ("--sheet-metal-only", False, "группа SMB: листовое тело"),
@@ -20564,6 +20571,9 @@ def main():
     # вызывает kompas_list_components, kompas_insert_component, kompas_set_component_placement,
     # kompas_replace_component и kompas_check_component_links.
     assembly_only = "--assembly-only" in sys.argv
+    # Группа ASM-09/ASM-10 (массивы КОМПОНЕНТОВ): своя ветка по той же причине - клетка матрицы
+    # находится по ИМЕНИ строки (`ASM.09.<действие>` / `ASM.10.<действие>`).
+    pattern_components_only = "--pattern-components-only" in sys.argv
     # То же для домена СОПРЯЖЕНИЙ (блок C2): одна группа MATE на своём сеансе. Отдельная ветка нужна
     # по той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
@@ -21461,6 +21471,14 @@ def main():
 
         if assembly_only:
             assembly_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if pattern_components_only:
+            pattern_components_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -62851,8 +62869,483 @@ def events_checks(client, rep, app_id, workdir):
             row6, detail6)
 
 
+# ── ASM-09 / ASM-10: массивы КОМПОНЕНТОВ сборки ───────────────────────────────────────────────────
+def pattern_components_checks(client, rep, app_id, workdir):
+    """Приёмка ASM-09/ASM-10: массивы компонентов по сетке и по концентрической сетке.
+
+    Наряд `ASM_PATTERN_COMPONENTS` (профиль `assembly-ext-v1`). Маршрут измерен пробой:
+    `FeaturePatterns.Add(o3d_meshPartArray=39 | o3d_circPartArray=38)` → `QI(ILinearPattern|ICircularPattern)`
+    → `IsSuitableObject` / `AddInitialObjects` → параметры → `Update()`.
+
+    ЧТО СЧИТАЕТСЯ ДОКАЗАТЕЛЬСТВОМ. `Update()=true` — «принято», а не «применено» (урок строки долга 62),
+    поэтому каждая строка создания СРАВНИВАЕТ с числом, выведенным из постановки: число компонентов выросло
+    ровно на `count1*count2-1`, а начала экземпляров совпали с узлами сетки (±0.01 мм) или угол между
+    соседними равен шагу (±0.01°). Проверки инструмента читаются из `result.checks` — уровня
+    `verification` они не поднимают, потому что `verification` отвечает за проверку Хостом аргументов;
+    рядом стоит НЕЗАВИСИМОЕ чтение структуры сборки через `kompas_list_components`, где начало берётся из
+    матрицы размещения.
+
+    ОТРИЦАТЕЛЬНЫЕ КОНТРОЛИ различимые, а не декоративные: сдвиг на 0.02 мм ломает «начала совпали», шаг 120
+    вместо 90 ломает «угол равен шагу». Каждый отказ наряда (§4) проверяется СВОИМ кодом.
+
+    ССЫЛКИ ЖИВУТ ДО ПЕРЕСТРОЕНИЯ. `kompas_rebuild` и переоткрытие документа поднимают ревизию, и ссылка
+    на признак, взятая до них, отвергается (`STALE_REFERENCE`). Поэтому признак каждый раз ищется заново
+    по имени владельца в `kompas_list_features` — тем же прибором, каким его увидит клиент.
+    """
+
+    def call(tool, payload, timeout=300):
+        payload = dict(payload)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return (env if isinstance(env, dict) else {}), error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def components(doc):
+        """Верхний уровень структуры сборки — как его видит kompas_list_components."""
+        env, code = call("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        return [r for r in rows if (r.get("depth") or 0) == 0], code
+
+    def origin(row):
+        matrix = row.get("matrix") or []
+        return [matrix[12], matrix[13], matrix[14]] if len(matrix) >= 15 else None
+
+    def origins(doc):
+        rows, code = components(doc)
+        return [origin(r) for r in rows], code
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
+
+    def same_set(actual, expected, tol=0.01):
+        """Взаимно-однозначное сопоставление: одно измеренное начало закрывает ровно одно ожидание."""
+        if len(actual) != len(expected):
+            return False
+        used = [False] * len(actual)
+        for want in expected:
+            hit = -1
+            for i, got in enumerate(actual):
+                if not used[i] and near(got, want, tol):
+                    hit = i
+                    break
+            if hit < 0:
+                return False
+            used[hit] = True
+        return True
+
+    def checks_of(env):
+        """Проверки вызова: у создания массива они в result.checks, у правки - в result.verification.checks.
+
+        Оба места читаются вместе, потому что имена проверок между ними не повторяются
+        (read_back_count1, instance_origins), а искать проверку в двух местах дешевле, чем угадывать
+        форму ответа каждого инструмента.
+        """
+        r = result(env)
+        found = list(r.get("checks") or [])
+        found += list((r.get("verification") or {}).get("checks") or [])
+        found += list(((env or {}).get("verification") or {}).get("checks") or [])
+        return found
+
+    def check_passed(env, name):
+        for row in checks_of(env):
+            if row.get("name") == name:
+                return bool(row.get("passed"))
+        return None
+
+    def unverified(env):
+        return result(env).get("unverified_aspects") or []
+
+    def feature_refs(doc):
+        env, code = call("kompas_list_features", {"document_id": doc})
+        rows = result(env) or []
+        if isinstance(rows, dict):
+            rows = rows.get("features") or []
+        return rows if isinstance(rows, list) else []
+
+    def ref_by_owner(doc, owner):
+        """Свежая ссылка на признак массива по имени владельца: прежняя могла устареть после перестроения."""
+        if not owner:
+            return None
+        for row in feature_refs(doc):
+            if isinstance(row, dict) and row.get("name") == owner:
+                ref = row.get("feature_ref") or row.get("ref") or {}
+                return ref.get("id") if isinstance(ref, dict) else ref
+        return None
+
+    def build_source(path):
+        """Деталь-источник: брусок 20 × 10, высота 5, сохранённый на диск."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                   "name": "PC-src"})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"документ детали: {code} {emsg(env)}"
+        prev = rev_of(env)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "PC-src-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0, 0], "width_mm": 20, "height_mm": 10}]})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": 5,
+                                            "direction": "positive"})
+        prev = rev_of(env, prev)
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, f"выдавливание: {code} {emsg(env)}"
+        env, code = call("kompas_save_document", {"document_id": doc, "expected_revision": prev,
+                                                  "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if saved else None), (None if saved else f"сохранение: {code} {emsg(env)}")
+
+    def new_assembly(name):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                   "name": name})
+        doc = doc_id(env)
+        return doc, rev_of(env), (None if doc else f"сборка: {code} {emsg(env)}")
+
+    def insert(doc, source_path):
+        env, code = call("kompas_insert_component", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "source_path": source_path, "fixed": False}, timeout=300)
+        ref = result(env).get("component_ref") or {}
+        return ref.get("id"), rev_of(env), code, emsg(env)
+
+    def grid(doc, source_ref, count1, step1=30.0, axis2=None, count2=None, step2=None):
+        payload = {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "copy_kind": "components", "source_refs": [source_ref],
+            "axis1_point1_mm": [0, 0, 0], "axis1_point2_mm": [1, 0, 0],
+            "step1_mm": step1, "count1": count1,
+        }
+        if axis2 is not None:
+            payload["axis2_point1_mm"] = list(axis2[0])
+            payload["axis2_point2_mm"] = list(axis2[1])
+            payload["step2_mm"] = step2
+            payload["count2"] = count2
+        return call("kompas_pattern_grid", payload, timeout=300)
+
+    def circular(doc, source_ref, count2, step2_deg=90.0, axis_point=(10.0, 0.0, 0.0)):
+        return call("kompas_pattern_circular", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "copy_kind": "components", "source_refs": [source_ref],
+            "axis_point1_mm": list(axis_point), "axis_point2_mm": [axis_point[0], axis_point[1], 1],
+            "count2": count2, "step2_deg": step2_deg}, timeout=300)
+
+    src_dir = os.path.join(workdir, "pattern-components")
+    os.makedirs(src_dir, exist_ok=True)
+    source_path = os.path.join(src_dir, "pc-source.m3d")
+    source, src_err = build_source(source_path)
+    rep.add("ASM.09.source", "деталь-источник массива компонентов сохранена на диск",
+            "PASS" if source else "FAIL", f"path={source} error={src_err}")
+    if not source:
+        return
+
+    # ========= ASM-09: сетка =========
+    asm, rev, asm_err = new_assembly("ASM-09")
+    if not asm:
+        rep.add("ASM.09.discover", "сборка для массива не создана", "FAIL", str(asm_err))
+        return
+    comp_ref, rev, code, msg = insert(asm, source)
+    rows, list_code = components(asm)
+    start_origins = [origin(r) for r in rows]
+    rep.add("ASM.09.discover",
+            "сборка с одним компонентом читается до массива (структура и начало)",
+            "PASS" if (comp_ref and not code and len(rows) == 1 and near(start_origins[0], [0, 0, 0]))
+            else "FAIL",
+            f"component_ref={comp_ref} компонентов={len(rows)} начала={start_origins} "
+            f"ошибка вставки={code} чтения={list_code} {msg}")
+
+    env, code = grid(asm, comp_ref, 3)
+    r = result(env)
+    after_origins, _ = origins(asm)
+    grown_ok = (r.get("components_before") == 1 and r.get("components_after") == 3)
+    origins_ok = same_set(r.get("instance_origins_mm") or [], [[0, 0, 0], [30, 0, 0], [60, 0, 0]])
+    created = check_passed(env, "instance_origins")
+    owner = (r.get("readout") or {}).get("owner_name")
+    rep.add("ASM.09.create",
+            "сетка 3×1: компонентов 1→3, экземпляры в узлах (0,0,0), (30,0,0), (60,0,0)",
+            "PASS" if (not code and grown_ok and origins_ok and created is True) else "FAIL",
+            f"компонентов {r.get('components_before')}→{r.get('components_after')} "
+            f"начала={r.get('instance_origins_mm')} проверка instance_origins={created} "
+            f"имя признака={owner} ошибка={code} {emsg(env)}")
+    rep.add("ASM.09.geometry_validation",
+            "начала экземпляров сверены НЕЗАВИСИМО структурой сборки (матрица размещения)",
+            "PASS" if same_set(after_origins, [[0, 0, 0], [30, 0, 0], [60, 0, 0]]) else "FAIL",
+            f"начала из kompas_list_components={after_origins}")
+
+    pattern_ref = ref_by_owner(asm, owner)
+    env, code = call("kompas_get_pattern", {"feature_ref": pattern_ref})
+    rd = result(env)
+    readout = rd.get("readout") or {}
+    initial = rd.get("initial_objects") or []
+    rep.add("ASM.09.read",
+            "массив читается как семейство components: copy_kind, числа, шаг, исходные компоненты",
+            "PASS" if (pattern_ref and not code and rd.get("family") == "components"
+                       and readout.get("copy_kind") == "components"
+                       and readout.get("count1") == 3 and readout.get("count2") == 1
+                       and near([readout.get("step1") or 0], [30.0], 0.01) and len(initial) >= 1)
+            else "FAIL",
+            f"ссылка найдена={bool(pattern_ref)} family={rd.get('family')} "
+            f"copy_kind={readout.get('copy_kind')} count={readout.get('count1')}×{readout.get('count2')} "
+            f"step1={readout.get('step1')} initial_objects={len(initial)} ошибка={code} {emsg(env)}")
+
+    env, code = call("kompas_rebuild", {"document_id": asm})
+    again, _ = origins(asm)
+    pattern_ref = ref_by_owner(asm, owner)
+    env2, code2 = call("kompas_get_pattern", {"feature_ref": pattern_ref})
+    rd2 = result(env2).get("readout") or {}
+    rep.add("ASM.09.rebuild",
+            "перестроение сохраняет и состав, и параметры массива",
+            "PASS" if (not code and same_set(again, [[0, 0, 0], [30, 0, 0], [60, 0, 0]])
+                       and rd2.get("count1") == 3) else "FAIL",
+            f"начала после перестроения={again} ссылка перечитана={bool(pattern_ref)} "
+            f"count1={rd2.get('count1')} ошибка перестроения={code} чтения={code2}")
+
+    # ── save → close → open через MCP ──
+    asm_path = os.path.join(src_dir, "pc-grid.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm,
+                                              "expected_revision": current_rev(asm),
+                                              "target_path": asm_path})
+    saved = (not code) and os.path.isfile(asm_path)
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, open_code = call("kompas_open_document", {"application_id": app_id, "path": asm_path,
+                                                   "access": "edit"})
+    reopened = doc_id(env)
+    reopened_origins, _ = origins(reopened) if reopened else ([], None)
+    rep.add("ASM.09.save_reopen",
+            "после сохранения и переоткрытия те же три начала и тот же признак массива",
+            "PASS" if (saved and reopened and not open_code
+                       and same_set(reopened_origins, [[0, 0, 0], [30, 0, 0], [60, 0, 0]]))
+            else "FAIL",
+            f"saved={saved} документ={reopened} начала={reopened_origins} ошибка={code or open_code}")
+    if not reopened:
+        return
+    asm = reopened
+    pattern_ref = ref_by_owner(asm, owner)
+
+    # ── правка параметров существующего массива ──
+    env, code = call("kompas_update_feature", {
+        "feature_ref": pattern_ref, "expected_revision": current_rev(asm),
+        "pattern": {"count1": 4}})
+    edited = check_passed(env, "read_back_count1")
+    edited_origins, _ = origins(asm)
+    rep.add("ASM.09.edit",
+            "правка count1 3→4: прочитанное значение и состав сборки совпали с ожидаемым",
+            "PASS" if (pattern_ref and not code and edited is True
+                       and same_set(edited_origins, [[0, 0, 0], [30, 0, 0], [60, 0, 0], [90, 0, 0]]))
+            else "FAIL",
+            f"read_back_count1={edited} начала={edited_origins} ошибка={code} {emsg(env)}")
+    pattern_ref = ref_by_owner(asm, owner)
+
+    # ── отказы: каждый своим кодом ──
+    refusals = []
+    env, code = call("kompas_pattern_grid", {
+        "document_id": asm, "expected_revision": current_rev(asm), "copy_kind": "components",
+        "source_refs": [], "axis1_point1_mm": [0, 0, 0], "axis1_point2_mm": [1, 0, 0],
+        "step1_mm": 30, "count1": 3})
+    refusals.append(("нет source_refs", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_pattern_grid", {
+        "document_id": asm, "expected_revision": current_rev(asm), "copy_kind": "components",
+        "source_refs": [comp_ref], "axis1_point1_mm": [0, 0, 0], "axis1_point2_mm": [1, 0, 0],
+        "step1_mm": 30, "count1": 1})
+    refusals.append(("count1<2", code, "INVALID_ARGUMENT"))
+
+    # ссылка НЕ компонент: собственный признак массива входит источником — это feature:-, а не component:-ссылка.
+    env, code = call("kompas_pattern_grid", {
+        "document_id": asm, "expected_revision": current_rev(asm), "copy_kind": "components",
+        "source_refs": [pattern_ref], "axis1_point1_mm": [0, 0, 0], "axis1_point2_mm": [1, 0, 0],
+        "step1_mm": 30, "count1": 2})
+    refusals.append(("ссылка не компонент", code, "INVALID_ARGUMENT"))
+
+    env, code = call("kompas_update_feature", {
+        "feature_ref": pattern_ref, "expected_revision": current_rev(asm),
+        "pattern": {"instance_deleted_indexes": [[1, 0]]}})
+    refusals.append(("instance_deleted_indexes", code, "CAPABILITY_UNAVAILABLE"))
+
+    # документ-деталь: массив компонентов в детали не существует.
+    part_env, part_code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                          "name": "PC-part"})
+    part_doc = doc_id(part_env)
+    if part_doc:
+        env, code = call("kompas_pattern_grid", {
+            "document_id": part_doc, "expected_revision": rev_of(part_env), "copy_kind": "components",
+            "source_refs": [comp_ref], "axis1_point1_mm": [0, 0, 0], "axis1_point2_mm": [1, 0, 0],
+            "step1_mm": 30, "count1": 2})
+        refusals.append(("документ-деталь", code, "INVALID_ARGUMENT"))
+        call("kompas_close_document", {"document_id": part_doc, "dirty_policy": "discard"})
+    else:
+        refusals.append(("документ-деталь", part_code or "нет документа", "INVALID_ARGUMENT"))
+
+    bad = [f"{name}: {got} (ждали {want})" for name, got, want in refusals if got != want]
+    rep.add("ASM.09.negative_tests",
+            "каждый отказ назван своим кодом до мутации: нет источников, count1<2, ссылка не компонент, "
+            "документ-деталь, instance_deleted_indexes",
+            "PASS" if not bad else "FAIL",
+            "коды: " + "; ".join(f"{n}={g}" for n, g, _w in refusals)
+            + ("; РАСХОЖДЕНИЯ: " + ", ".join(bad) if bad else ""))
+
+    # ── удаление массива: состав возвращается к исходному ──
+    pattern_ref = ref_by_owner(asm, owner)
+    env, code = call("kompas_delete_feature", {
+        "feature_ref": pattern_ref, "expected_revision": current_rev(asm),
+        "confirm_dependents": True})
+    left, _ = origins(asm)
+    rep.add("ASM.09.delete_dependencies",
+            "удаление массива возвращает состав сборки к исходному (один компонент)",
+            "PASS" if (pattern_ref and not code and len(left) == 1 and near(left[0], [0, 0, 0]))
+            else "FAIL",
+            f"компонентов после удаления={len(left)} начала={left} ошибка={code} {emsg(env)}")
+
+    # ── сетка 2×2 в отдельной сборке ──
+    asm2, rev2, err2 = new_assembly("ASM-09b")
+    comp2, rev2, code, msg = insert(asm2, source) if asm2 else (None, rev2, err2, None)
+    env, code = grid(asm2, comp2, 2, step1=30.0, axis2=([0, 0, 0], [0, 1, 0]), count2=2, step2=20.0)
+    r2 = result(env)
+    origins2 = r2.get("instance_origins_mm") or []
+    rep.add("ASM.09.create_2x2",
+            "сетка 2×2: компонентов 1→4, экземпляры в четырёх узлах",
+            "PASS" if (not code and r2.get("components_before") == 1 and r2.get("components_after") == 4
+                       and same_set(origins2, [[0, 0, 0], [30, 0, 0], [0, 20, 0], [30, 20, 0]])
+                       and check_passed(env, "instance_origins") is True)
+            else "FAIL",
+            f"компонентов {r2.get('components_before')}→{r2.get('components_after')} начала={origins2} "
+            f"ошибка={code} {emsg(env)}")
+    if asm2:
+        call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "discard"})
+
+    # ========= ASM-10: концентрическая сетка =========
+    # Источник стоит в начале координат, а ось проходит через (10,0,0): экземпляры кольца радиуса 10
+    # занимают (0,0,0), (10,−10,0), (20,0,0), (10,10,0). Ось ЧЕРЕЗ ИСТОЧНИК дала бы четыре копии в
+    # одной точке — такой постановкой нельзя различить ни шаг, ни число.
+    ring = [[0, 0, 0], [10, -10, 0], [20, 0, 0], [10, 10, 0]]
+    asm3, rev3, err3 = new_assembly("ASM-10")
+    comp3, rev3, code, msg = insert(asm3, source) if asm3 else (None, rev3, err3, None)
+    rows3, _ = components(asm3) if asm3 else ([], None)
+    rep.add("ASM.10.discover",
+            "сборка для кругового массива читается до операции",
+            "PASS" if (asm3 and comp3 and len(rows3) == 1) else "FAIL",
+            f"документ={asm3} component_ref={comp3} компонентов={len(rows3)} {msg}")
+    if not asm3:
+        return
+
+    env, code = circular(asm3, comp3, 4)
+    r3 = result(env)
+    ring_read = r3.get("instance_origins_mm") or []
+    angles_ok = check_passed(env, "instance_angles")
+    owner3 = (r3.get("readout") or {}).get("owner_name")
+    rep.add("ASM.10.create",
+            "круговой массив: компонентов 1→4, экземпляры на кольце, угол между соседними равен 90°",
+            "PASS" if (not code and r3.get("components_before") == 1 and r3.get("components_after") == 4
+                       and same_set(ring_read, ring, tol=0.02) and angles_ok is True)
+            else "FAIL",
+            f"компонентов {r3.get('components_before')}→{r3.get('components_after')} "
+            f"начала={ring_read} instance_angles={angles_ok} ошибка={code} {emsg(env)}")
+    independent, _ = origins(asm3)
+    rep.add("ASM.10.geometry_validation",
+            "кольцо сверено независимо структурой сборки: четыре начала и шаг 90°",
+            "PASS" if same_set(independent, ring, tol=0.02) else "FAIL",
+            f"начала из kompas_list_components={independent}")
+
+    ring_ref = ref_by_owner(asm3, owner3)
+    env, code = call("kompas_get_pattern", {"feature_ref": ring_ref})
+    rd3 = result(env)
+    ro3 = rd3.get("readout") or {}
+    rep.add("ASM.10.read",
+            "круговой массив компонентов читается: семейство components, count2 и угловой шаг",
+            "PASS" if (ring_ref and not code and rd3.get("family") == "components"
+                       and ro3.get("copy_kind") == "components" and ro3.get("count2") == 4
+                       and near([ro3.get("step2") or 0], [90.0], 0.01)) else "FAIL",
+            f"семейство={rd3.get('family')} count2={ro3.get('count2')} step2={ro3.get('step2')} "
+            f"ошибка={code} {emsg(env)}")
+
+    env, code = call("kompas_rebuild", {"document_id": asm3})
+    ring_after_rebuild, _ = origins(asm3)
+    rep.add("ASM.10.rebuild", "перестроение сохраняет кольцо из четырёх компонентов",
+            "PASS" if (not code and same_set(ring_after_rebuild, ring, tol=0.02)) else "FAIL",
+            f"начала после перестроения={ring_after_rebuild} ошибка={code}")
+
+    ring_path = os.path.join(src_dir, "pc-circular.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm3,
+                                              "expected_revision": current_rev(asm3),
+                                              "target_path": ring_path})
+    saved3 = (not code) and os.path.isfile(ring_path)
+    call("kompas_close_document", {"document_id": asm3, "dirty_policy": "save"})
+    env, open_code = call("kompas_open_document", {"application_id": app_id, "path": ring_path,
+                                                   "access": "edit"})
+    reopened3 = doc_id(env)
+    ring_reopened, _ = origins(reopened3) if reopened3 else ([], None)
+    rep.add("ASM.10.save_reopen",
+            "после сохранения и переоткрытия те же четыре начала кольца",
+            "PASS" if (saved3 and reopened3 and not open_code
+                       and same_set(ring_reopened, ring, tol=0.02)) else "FAIL",
+            f"saved={saved3} документ={reopened3} начала={ring_reopened} ошибка={code or open_code}")
+    if not reopened3:
+        return
+    asm3 = reopened3
+    ring_ref = ref_by_owner(asm3, owner3)
+
+    env, code = call("kompas_update_feature", {
+        "feature_ref": ring_ref, "expected_revision": current_rev(asm3),
+        "pattern": {"count2": 3}})
+    edited3 = check_passed(env, "read_back_count2")
+    ring_edited, _ = origins(asm3)
+    rep.add("ASM.10.edit",
+            "правка count2 4→3: прочитанное значение и состав сборки совпали с ожидаемым",
+            "PASS" if (ring_ref and not code and edited3 is True
+                       and same_set(ring_edited, [[0, 0, 0], [10, -10, 0], [20, 0, 0]], tol=0.02))
+            else "FAIL",
+            f"read_back_count2={edited3} начала={ring_edited} ошибка={code} {emsg(env)}")
+    ring_ref = ref_by_owner(asm3, owner3)
+
+    # отказ именем семейства: правка полем чужого направления на круговом массиве
+    env, alias_code = call("kompas_update_feature", {
+        "feature_ref": ring_ref, "expected_revision": current_rev(asm3),
+        "pattern": {"step2_mm": 10}})
+    alias_ok = alias_code == "INVALID_ARGUMENT"
+    ring_ref = ref_by_owner(asm3, owner3)
+    env, code = call("kompas_delete_feature", {
+        "feature_ref": ring_ref, "expected_revision": current_rev(asm3),
+        "confirm_dependents": True})
+    ring_left, _ = origins(asm3)
+    rep.add("ASM.10.negative_tests",
+            "поле чужого направления отвергается, а удаление массива возвращает один компонент",
+            "PASS" if (alias_ok and ring_ref and not code and len(ring_left) == 1
+                       and near(ring_left[0], [0, 0, 0])) else "FAIL",
+            f"step2_mm на круговом: {alias_code}; компонентов после удаления={len(ring_left)} "
+            f"начала={ring_left} ошибка удаления={code}")
+    call("kompas_close_document", {"document_id": asm3, "dirty_policy": "discard"})
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
+    "pattern_components": lambda c, r, a, w, v, p: pattern_components_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
     "mech_mates": lambda c, r, a, w, v, p: mech_mates_checks(c, r, a, w),
     "sheet_metal": lambda c, r, a, w, v, p: sheet_metal_checks(c, r, a, w),

@@ -114,7 +114,8 @@ public enum ExternalChangeDetection
 /// <summary>What exactly a pattern copies (docs/05 SM-18/SM-19; user help
 /// <c>48_3_1_vibor_kopiruemih_obtktov</c>).</summary> <remarks>DOC: <c>copytype.html</c> — the value maps to the
 /// numeric <c>ksObj3dTypeEnum</c>, published by the SDK page, not inferred: operations — <c>o3d_meshCopy=35</c>
-/// (<c>o3d_circularCopy=36</c>), bodies — <c>o3d_BodiesMeshCopy=528</c> (<c>o3d_BodiesCircularCopy=529</c>). INVARIANT:
+/// (<c>o3d_circularCopy=36</c>), bodies — <c>o3d_BodiesMeshCopy=528</c> (<c>o3d_BodiesCircularCopy=529</c>),
+/// components — <c>o3d_meshPartArray=39</c> (<c>o3d_circPartArray=38</c>). INVARIANT:
 /// a pattern of OPERATIONS inherits the scope of the source operation and creates no new bodies, while a pattern of
 /// BODIES creates copies and the body count grows. Hence a separate mode, not a flag.</remarks>
 public enum PatternCopyKind
@@ -124,6 +125,12 @@ public enum PatternCopyKind
 
     /// <summary>Bodies are copied. The body count grows.</summary>
     Bodies,
+
+    /// <summary>Assembly COMPONENTS are copied: <c>o3d_meshPartArray=39</c> /
+    /// <c>o3d_circPartArray=38</c>, sources are <c>component:</c> references and the document must be an
+    /// assembly. The instance count is the number of components, and it grows by
+    /// <c>count1*count2-1</c>.</summary>
+    Components,
 }
 
 /// <summary>What a mirror pattern reflects (docs/05 SM-23).</summary> <remarks>DOC: <c>copytype.html</c> —

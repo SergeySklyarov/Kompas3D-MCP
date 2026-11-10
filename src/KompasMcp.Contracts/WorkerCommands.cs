@@ -1357,11 +1357,14 @@ public sealed record PatternGridCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>What is copied: operations or bodies. The factory numeric type decides, not a flag.</summary>
+    /// <summary>What is copied: operations, bodies or components. The factory numeric type decides, not a flag.</summary>
+    /// <remarks><c>components</c> is the assembly mode: <c>o3d_meshPartArray=39</c>, sources are
+    /// <c>component:</c> references and the document must be an assembly.</remarks>
     public required PatternCopyKind CopyKind { get; init; }
 
-    /// <summary>Pattern source objects: <c>feature:</c> references (for operations) or <c>body:</c> references (for
-    /// bodies). An empty list is rejected before COM: a pattern without sources is not built.</summary>
+    /// <summary>Pattern source objects: <c>feature:</c> references (operations), <c>body:</c> references (bodies) or
+    /// <c>component:</c> references (components; assembly only). An empty list is rejected before COM: a pattern
+    /// without sources is not built.</summary>
     public required IReadOnlyList<string> SourceRefs { get; init; }
 
     /// <summary>First axis point of the first direction, model coordinates, mm.</summary>
@@ -1464,9 +1467,10 @@ public sealed record PatternCircularCommand
 {
     public required string DocumentId { get; init; }
 
+    /// <summary>What is copied: operations, bodies or components (<c>o3d_circPartArray=38</c>, assembly only).</summary>
     public required PatternCopyKind CopyKind { get; init; }
 
-    /// <summary>Pattern source objects: <c>feature:</c> or <c>body:</c> references.</summary>
+    /// <summary>Pattern source objects: <c>feature:</c>, <c>body:</c> or <c>component:</c> references.</summary>
     public required IReadOnlyList<string> SourceRefs { get; init; }
 
     /// <summary>First pattern axis point, model coordinates, mm.</summary>
@@ -1661,6 +1665,13 @@ public sealed record PatternEditDto
 
     /// <summary>Keep the source objects of a mirror pattern. Not applicable to grid or circular.</summary>
     public bool? SaveInitialObjects { get; init; }
+
+    /// <summary>Instances to exclude, each named by its two grid indices <c>[index1, index2]</c>.</summary>
+    /// <remarks>DOC: <c>ifeaturepattern_instancedeletedindexes.html</c> declares the member WRITABLE («управления
+    /// составом удалённых копий»). Nothing about writing it was measured — for a component pattern not at all — so
+    /// the value is refused CAPABILITY_UNAVAILABLE before COM instead of being written as an unmeasured set.
+    /// History: docs/decisions/assembly-ext.md#component-arrays</remarks>
+    public IReadOnlyList<IReadOnlyList<int>>? InstanceDeletedIndexes { get; init; }
 
     /// <summary>Analytic expectation of the document volume AFTER the edit, mm³.</summary>
     public double? ExpectedVolumeMm3 { get; init; }

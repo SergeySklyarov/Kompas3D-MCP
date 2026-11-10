@@ -927,6 +927,37 @@ UNKNOWN 3 / FAIL 0.
   вложенные компоненты, массив по кривой), затем исследование спецификации. Подробности и вопросы
   заказчику - `ASSEMBLY_EXT_RESEARCH_REPORT_20261110.md`.
 
+**10.11.2026 - массивы КОМПОНЕНТОВ сборки: `copy_kind=components` в сетке и концентрической сетке
+(наряд `ASM_PATTERN_COMPONENTS`).** Первый наряд реализации блока «расширение сборок» (профиль
+`assembly-ext-v1`). Новых имён инструментов нет: расширены существующие, контракт меняется аддитивно
+(MINOR), `<Version>` не поднимался.
+
+- **Маршрут.** `FeaturePatterns.Add(o3d_meshPartArray=39 | o3d_circPartArray=38)` → `QI` → ось →
+  `IsSuitableObject` + `AddInitialObjects` по каждому источнику → шаги и числа → `Update()` →
+  `RebuildModel` + `RebuildDocument`.
+- **Доказательство - СРАВНЕНИЕ, а не `Update()=true`:** число компонентов выросло на `count1*count2-1`,
+  `GetExemplarsCounts` равны запрошенным, начала совпали с узлами сетки (±0.01 мм) или угол между
+  соседними равен шагу (±0.01°). Экземпляры читаются из `IPart7.Parts` + `GetSummMatrix`: `Exemplar`
+  на массиве компонентов отвечает `null` (измерено).
+- **Ответ:** `feature_ref`, `components_before/after`, `exemplar_counts`, `instance_origins_mm`,
+  `verification`; `kompas_get_pattern` отдаёт семейство `components`, `copy_kind` и `initial_objects`
+  (найдены документированным `IsInitialObject`, отданы ссылками `component:`).
+- **Отказы:** `INVALID_ARGUMENT` до COM (нет источников, `count1<2`/`count2<2`, ссылка не компонент,
+  документ не сборка); `GEOMETRY_FAILED` с `partial_effects` и снимком (`Update()`/`IsSuitableObject`/
+  `AddInitialObjects` = false, числа или начала не совпали); `CAPABILITY_UNAVAILABLE` на вложенный
+  источник и на `instance_deleted_indexes` - набор документирован как записываемый, но его запись не
+  измерена, поэтому поле отвергается, а не пишется вслепую.
+- **Проверено живым прогоном** (группа `mcp-smoke.py --pattern-components-only`, включена в `--all`):
+  сетка 3×1 даёт начала `(0,0,0)`, `(30,0,0)`, `(60,0,0)`; сетка 2×2 - четыре узла; кольцо из четырёх
+  вокруг оси через `(10,0,0)` - `(0,0,0)`, `(10,−10,0)`, `(20,0,0)`, `(10,10,0)`; чтение, переоткрытие,
+  правка и удаление (состав возвращается к одному компоненту) проходят.
+- **Записи:** строки матрицы `ASM-09.component_pattern.grid`, `ASM-10.component_pattern.circular`,
+  раздел в `docs/decisions/assembly-ext.md`, отчёт `ASM_PATTERN_COMPONENTS_REPORT_20261110.md`.
+- **Долг.** Новых строк нет: все FAIL прогона наряда разобраны как дефекты прибора группы, а не
+  продукта (ссылки живут до перестроения - прибор брал устаревшую). Ограничения сверки названы в
+  `unverified_aspects` и в строке матрицы.
+- **Очередь:** `MATE_SYMMETRIC_DEPENDENT`, затем `ASM_NESTED_COMPONENTS`, `ASM_PATTERN_PATH`.
+
 ## Архив журнала
 
 - `docs/status/journal-2026-11.md` - записи 11.2026: журнал цикла выпуска 0.13.0 (разбор технического

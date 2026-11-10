@@ -34,6 +34,15 @@ public partial class Api5Session
     /// <summary>Grid pattern (SM-18).</summary>
     public PatternResult PatternGrid(PatternGridCommand command)
     {
+        // THE COMPONENT MODE IS A DIFFERENT DOCUMENT AND A DIFFERENT PROOF, not another flag on the same
+        // route: sources are components, the count that grows is the component count, and the instance
+        // positions are compared instead of the volume.
+        // History: docs/decisions/assembly-ext.md#component-arrays
+        if (command.CopyKind == PatternCopyKind.Components)
+        {
+            return PatternComponentGrid(command);
+        }
+
         ValidatePatternGridCommand(command);
 
         var document = RequireDocument(command.DocumentId);
@@ -119,6 +128,11 @@ public partial class Api5Session
     /// <summary>Concentric-grid pattern (SM-19).</summary>
     public PatternResult PatternCircular(PatternCircularCommand command)
     {
+        if (command.CopyKind == PatternCopyKind.Components)
+        {
+            return PatternComponentCircular(command);
+        }
+
         ValidatePatternCircularCommand(command);
 
         var document = RequireDocument(command.DocumentId);
@@ -272,6 +286,7 @@ public partial class Api5Session
         var count = Api7Pattern.Count(container);
         PatternReadout? readout = null;
         var matched = -1;
+        IFeaturePattern? live = null;
         if (count is int n)
         {
             for (var i = 0; i < n; i++)
@@ -286,24 +301,88 @@ public partial class Api5Session
                 {
                     readout = candidate;
                     matched = i;
+                    live = container.FeaturePatterns?.FeaturePattern[i];
                     break;
                 }
             }
         }
 
+        // A COMPONENT ARRAY ANSWERS THE SAME DIRECTION INTERFACE AS AN OPERATION ARRAY (MEASURED), so the
+        // family the client asked about is decided by ModelObjectType, and the source objects are read as
+        // component references — the only shape that can be fed back into the tool.
+        // History: docs/decisions/assembly-ext.md#component-arrays
+        var notes = new List<string>();
+        var components = readout?.CopyKind == "components";
+        var initialObjects = components && live is not null
+            ? ReadInitialComponentRefs(live, document, notes)
+            : null;
+        if (readout is null)
+        {
+            notes.Add("Признак не сопоставлен ни с одним элементом IModelContainer.FeaturePatterns: " +
+                "ссылка указывает на признак, который коллекция массивов не показывает.");
+        }
+
         return new PatternReadResult(
-            Family: readout?.Family ?? "not_matched",
+            Family: components ? "components" : readout?.Family ?? "not_matched",
             PatternIndex: matched >= 0 ? matched : null,
             PatternCount: count,
             Readout: readout,
-            DeletedInstancesApplicable: readout?.Family != "mirror",
-            Notes: readout is null
-                ? new[]
-                {
-                    "Признак не сопоставлен ни с одним элементом IModelContainer.FeaturePatterns: " +
-                    "ссылка указывает на признак, который коллекция массивов не показывает.",
-                }
-                : Array.Empty<string>());
+            DeletedInstancesApplicable: readout is not null && readout.Family != "mirror" && !components,
+            Notes: notes,
+            InitialObjects: initialObjects);
+    }
+
+    /// <summary>The component sources of a component array, read by the documented question, not by memory.</summary>
+    /// <remarks>DOC: <c>ifeaturepattern_isinitialobject.html</c> — «TRUE - если объект есть в списке
+    /// копируемых объектов». Asking the kernel is the only route that does not depend on the shape of
+    /// <c>InitialObjects</c> (VT_DISPATCH versus VT_ARRAY|VT_DISPATCH) or on object identity across API7 and
+    /// the registry.
+    /// INVARIANT: each answer is registered as a component reference with a CONFIRMED address, so the client
+    /// can feed it straight back into a call.</remarks>
+    private IReadOnlyList<ReferenceDto> ReadInitialComponentRefs(
+        IFeaturePattern pattern, DocumentEntry document, List<string> notes)
+    {
+        var result = new List<ReferenceDto>();
+        var top = TopPart7(document, notes);
+        if (top is null)
+        {
+            notes.Add("initial_objects_not_read — верхний компонент сборки не получен как IPart7: исходные "
+                + "компоненты не перечислены");
+            return result;
+        }
+
+        foreach (var child in ChildrenOf(top, notes))
+        {
+            if (child is not IModelObject model)
+            {
+                continue;
+            }
+
+            bool isSource;
+            try
+            {
+                isSource = pattern.IsInitialObject(model);
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                notes.Add("initial_object_query_failed — IsInitialObject прервался: " + ex.Message);
+                return result;
+            }
+
+            if (!isSource)
+            {
+                continue;
+            }
+
+            var matrix7 = SummMatrix7(top, child);
+            var ordinal = AddressOf(document, child, matrix7, ranks: null, notes);
+            var stored = References.Register(
+                ComponentRefKind, document.Id, document.Revision,
+                new ComponentPayload(child, top, Int(() => child.Reference), ordinal));
+            result.Add(ToDto(stored, "component"));
+        }
+
+        return result;
     }
 
     /// <summary>Match a tree feature with a pattern-collection element by <c>Owner.Name</c> and
@@ -950,15 +1029,31 @@ public sealed record PatternResult(
     /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did not
     /// hold is the one this release publishes.</summary>
     public IReadOnlyList<string>? Warnings { get; init; }
+
+    /// <summary>Top-level components of the assembly BEFORE a component pattern; null for every other
+    /// family, where the number has no meaning.</summary>
+    public int? ComponentsBefore { get; init; }
+
+    /// <summary>Top-level components AFTER the pattern was built — the counted side of the proof
+    /// «выросло ровно на count1*count2-1».</summary>
+    public int? ComponentsAfter { get; init; }
+
+    /// <summary>Instance origins READ from the model (<c>IPart7.Parts</c> + <c>GetSummMatrix</c>), in the
+    /// order of the expected nodes. Null for families that have no component instances.</summary>
+    public IReadOnlyList<IReadOnlyList<double>>? InstanceOriginsMm { get; init; }
 }
 
 /// <summary>Result of reading pattern parameters by a feature reference.</summary>
 /// <param name="DeletedInstancesApplicable"><c>false</c> for a mirror pattern — a domain
-/// inapplicability with a source, not an unclosed action.</param>
+/// inapplicability with a source, not an unclosed action. Also <c>false</c> for a component array, whose
+/// instance gaps were never measured.</param>
+/// <param name="InitialObjects">Sources of a COMPONENT array as component references; empty for every other
+/// family.</param>
 public sealed record PatternReadResult(
     string Family,
     int? PatternIndex,
     int? PatternCount,
     PatternReadout? Readout,
     bool DeletedInstancesApplicable,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<ReferenceDto>? InitialObjects = null);

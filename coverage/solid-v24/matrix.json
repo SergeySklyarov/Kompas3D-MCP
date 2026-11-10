@@ -16723,7 +16723,291 @@
         "read",
         "negative_tests"
       ]
+    },
+  {
+    "operation_id": "ASM-09.component_pattern.grid",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "ASM",
+    "catalog_refs": [
+      "ASM-09.component_pattern.grid"
+    ],
+    "parameters_schema": "schemas/kompas_pattern_grid.json",
+    "adapter_route": "API7: IModelContainer.FeaturePatterns.Add(o3d_meshPartArray=39) → QI(ILinearPattern) → IsSuitableObject + AddInitialObjects (компоненты) → Axis1/Step1/Count1 → Update() → RebuildModel + RebuildDocument; подтверждение — СРАВНЕНИЕ прочитанного с ожидаемым: число компонентов выросло на count1*count2-1 (IPart7.Parts), GetExemplarsCounts равны запрошенным, начала совпали с узлами сетки ±0.01 мм (IPart7.Parts + GetSummMatrix)",
+    "actions": {
+      "discover": "verified",
+      "create": "verified",
+      "read": "verified",
+      "edit": "verified",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "verified",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "ASM.09.discover",
+      "ASM.09.create",
+      "ASM.09.create_2x2",
+      "ASM.09.read",
+      "ASM.09.edit",
+      "ASM.09.rebuild",
+      "ASM.09.save_reopen",
+      "ASM.09.delete_dependencies",
+      "ASM.09.negative_tests",
+      "ASM.09.geometry_validation"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/pattern-components/pattern-components-acceptance.json",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "Начала экземпляров сверяются только там, где ожидаемый набор узлов выводится из запроса: building_type=save_all, direction1/direction2=true, boundary-факторы false, angle1=0, angle2=90, оси перпендикулярны. Иначе сверка не выполняется и это названо в unverified_aspects, а не выдано за проверку.",
+      "Удаление отдельного экземпляра (instance_deleted_indexes) не измерено: поле отвергается CAPABILITY_UNAVAILABLE до мутации, хотя справка ifeaturepattern_instancedeletedindexes.html объявляет набор записываемым.",
+      "Источник массива — компонент ВЕРХНЕГО уровня: у вложенного нет адреса API5, и копирование вложенного входит в отдельный наряд ASM_NESTED_COMPONENTS.",
+      "IFeaturePattern.Exemplar[i,j] на построенном массиве компонентов возвращает null (измерено): экземпляры читаются из IPart7.Parts, а не из Exemplar."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.component_address",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "suppress_restore": "подавление признака массива компонентов в профиль assembly-ext-v1 не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "document_id"
+          ]
+        }
+      ],
+      "note": "действие называется строкой ASM.09.discover и выполняется чтением структуры сборки"
+    },
+    "create_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_pattern_grid",
+          "require_args": [
+            "copy_kind"
+          ]
+        }
+      ]
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_get_pattern"
+        }
+      ]
+    },
+    "edit_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_update_feature"
+        }
+      ]
+    },
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "delete_dependencies_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_delete_feature"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_pattern_grid"
+        },
+        {
+          "tool": "kompas_update_feature"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
     }
+  },
+  {
+    "operation_id": "ASM-10.component_pattern.circular",
+    "kind": "profile_mode",
+    "profile": "assembly-ext-v1",
+    "priority": "practical_required",
+    "queue": "ASM_EXT",
+    "context": "assembly",
+    "catalog_ref": "ASM",
+    "catalog_refs": [
+      "ASM-10.component_pattern.circular"
+    ],
+    "parameters_schema": "schemas/kompas_pattern_circular.json",
+    "adapter_route": "API7: IModelContainer.FeaturePatterns.Add(o3d_circPartArray=38) → QI(ICircularPattern) → IsSuitableObject + AddInitialObjects (компоненты) → Axis/Count1/Step1/Count2/Step2 → Update() → RebuildModel + RebuildDocument; подтверждение — СРАВНЕНИЕ: число компонентов выросло на count1*count2-1, GetExemplarsCounts равны запрошенным, начала совпали с поворотом вокруг оси, угол между соседними равен шагу ±0.01°",
+    "actions": {
+      "discover": "verified",
+      "create": "verified",
+      "read": "verified",
+      "edit": "verified",
+      "rebuild": "verified",
+      "save_reopen": "verified",
+      "suppress_restore": "not_applicable",
+      "delete_dependencies": "verified",
+      "negative_tests": "verified",
+      "geometry_validation": "verified"
+    },
+    "tests": [
+      "ASM.10.discover",
+      "ASM.10.create",
+      "ASM.10.read",
+      "ASM.10.edit",
+      "ASM.10.rebuild",
+      "ASM.10.save_reopen",
+      "ASM.10.delete_dependencies",
+      "ASM.10.negative_tests",
+      "ASM.10.geometry_validation"
+    ],
+    "evidence": [
+      "docs/acceptance/evidence/20261110-assembly-ext-75357f8/README.md",
+      "docs/acceptance/pattern-components/pattern-components-acceptance.json",
+      "scripts/mcp-smoke.py"
+    ],
+    "limitations": [
+      "Ожидаемый набор начал выводится только для ОДНОГО радиального слоя (count1=1) при building_type=save_all, reverse_direction=false и step_by_axis_mm=0: направление радиального смещения ядром не измерено. Иначе сверка не выполняется и это названо в unverified_aspects.",
+      "Удаление отдельного экземпляра (instance_deleted_indexes) не измерено и отвергается CAPABILITY_UNAVAILABLE до мутации.",
+      "Источник — компонент ВЕРХНЕГО уровня; вложенный компонент входит в наряд ASM_NESTED_COMPONENTS."
+    ],
+    "depends_on": [
+      "dep.assembly.document_lifecycle",
+      "dep.assembly.component_address",
+      "dep.assembly.revisions"
+    ],
+    "catalog_level": "mcp_verified",
+    "not_applicable_reasons": {
+      "suppress_restore": "подавление признака массива компонентов в профиль assembly-ext-v1 не входит"
+    },
+    "discover_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components",
+          "require_args": [
+            "document_id"
+          ]
+        }
+      ],
+      "note": "действие называется строкой ASM.10.discover и выполняется чтением структуры сборки"
+    },
+    "create_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_pattern_circular",
+          "require_args": [
+            "copy_kind"
+          ]
+        }
+      ]
+    },
+    "read_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_get_pattern"
+        }
+      ]
+    },
+    "edit_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_update_feature"
+        }
+      ]
+    },
+    "rebuild_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_rebuild"
+        }
+      ]
+    },
+    "save_reopen_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_save_document"
+        },
+        {
+          "tool": "kompas_open_document"
+        }
+      ]
+    },
+    "delete_dependencies_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_delete_feature"
+        }
+      ]
+    },
+    "negative_tests_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_pattern_circular"
+        },
+        {
+          "tool": "kompas_update_feature"
+        }
+      ]
+    },
+    "geometry_validation_route": {
+      "mode": "any",
+      "routes": [
+        {
+          "tool": "kompas_list_components"
+        }
+      ]
+    }
+  }
   ],
   "pending_families": [
     "SM-06",

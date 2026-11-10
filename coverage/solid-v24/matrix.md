@@ -266,18 +266,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 386
-- **строк_полностью_закрыто:** 199
-- **строк_с_каким_либо_прогрессом:** 222
+- **строк_каталога:** 388
+- **строк_полностью_закрыто:** 201
+- **строк_с_каким_либо_прогрессом:** 224
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 153
+- **операций:** 155
 - **режимов_и_вариантов:** 236
-- **применимых_действий:** 3108
-- **действий_verified:** 1355
-- **покрытие_действий:** 43.6%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1355, 'not_applicable': 752, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 77, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **применимых_действий:** 3126
+- **действий_verified:** 1373
+- **покрытие_действий:** 43.9%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1373, 'not_applicable': 754, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 79, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
 - **уровни_каталога_режимов:** {'mcp_verified': 86, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -957,6 +957,8 @@
 | `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests, ASM.06.save_reopen |
 | `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen, ASM.07.geometry_validation |
 | `ASM-08.component.delete` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.08.discover, ASM.08.read, ASM.08.edit, ASM.08.rebuild, ASM.08.save_reopen, ASM.08.delete_dependencies, ASM.08.negative_tests, ASM.08.geometry_validation |
+| `ASM-09.component_pattern.grid` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.09.discover, ASM.09.create, ASM.09.create_2x2, ASM.09.read, ASM.09.edit, ASM.09.rebuild, ASM.09.save_reopen, ASM.09.delete_dependencies, ASM.09.negative_tests, ASM.09.geometry_validation |
+| `ASM-10.component_pattern.circular` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.10.discover, ASM.10.create, ASM.10.read, ASM.10.edit, ASM.10.rebuild, ASM.10.save_reopen, ASM.10.delete_dependencies, ASM.10.negative_tests, ASM.10.geometry_validation |
 | `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation, MATE.01.create_after_mate_moved |
 | `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
 | `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests, MATE.03.geometry_validation |
@@ -1551,6 +1553,15 @@
   - Живой прогон 12.10.2026 (группа ASM) на бинарях Debug; приёмка на бинарях ПОСТАВКИ - отдельный шаг.
   - Тождество владельца сопряжения решается ссылкой на RCW: пара «имя + файл» две вставки одного файла не различает (измерено пробой DC). Перекрёстная проверка ядром (ObjectConstraints) обязана сойтись, иначе вызов отказывает.
   - Два компонента с ОДНИМ источником и ОДНИМ размещением неразличимы: это НАЗВАНО отметкой addressed_instance_indistinguishable.
+- `ASM-09.component_pattern.grid` — закрыт целиком
+  - Начала экземпляров сверяются только там, где ожидаемый набор узлов выводится из запроса: building_type=save_all, direction1/direction2=true, boundary-факторы false, angle1=0, angle2=90, оси перпендикулярны. Иначе сверка не выполняется и это названо в unverified_aspects, а не выдано за проверку.
+  - Удаление отдельного экземпляра (instance_deleted_indexes) не измерено: поле отвергается CAPABILITY_UNAVAILABLE до мутации, хотя справка ifeaturepattern_instancedeletedindexes.html объявляет набор записываемым.
+  - Источник массива — компонент ВЕРХНЕГО уровня: у вложенного нет адреса API5, и копирование вложенного входит в отдельный наряд ASM_NESTED_COMPONENTS.
+  - IFeaturePattern.Exemplar[i,j] на построенном массиве компонентов возвращает null (измерено): экземпляры читаются из IPart7.Parts, а не из Exemplar.
+- `ASM-10.component_pattern.circular` — закрыт целиком
+  - Ожидаемый набор начал выводится только для ОДНОГО радиального слоя (count1=1) при building_type=save_all, reverse_direction=false и step_by_axis_mm=0: направление радиального смещения ядром не измерено. Иначе сверка не выполняется и это названо в unverified_aspects.
+  - Удаление отдельного экземпляра (instance_deleted_indexes) не измерено и отвергается CAPABILITY_UNAVAILABLE до мутации.
+  - Источник — компонент ВЕРХНЕГО уровня; вложенный компонент входит в наряд ASM_NESTED_COMPONENTS.
 - `MATE-01.mate.create` — закрыт целиком
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.

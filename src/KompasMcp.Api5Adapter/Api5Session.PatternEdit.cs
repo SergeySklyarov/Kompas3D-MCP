@@ -522,14 +522,14 @@ public partial class Api5Session
     }
 
     /// <summary>Edit values independent of family: counts and step signs.</summary>
-    private static void ValidatePatternEdit(PatternEditDto edit)
+    internal static void ValidatePatternEdit(PatternEditDto edit)
     {
         var any = edit.Count1 is not null || edit.Count2 is not null || edit.Step1Mm is not null
                   || edit.Step2Mm is not null || edit.Step2Deg is not null || edit.Angle1Deg is not null
                   || edit.Angle2Deg is not null || edit.Direction1 is not null || edit.Direction2 is not null
                   || edit.BuildingType is not null || edit.StepByAxisMm is not null
                   || edit.ReverseDirection is not null || edit.SaveInitialOrientation is not null
-                  || edit.SaveInitialObjects is not null;
+                  || edit.SaveInitialObjects is not null || edit.InstanceDeletedIndexes is not null;
         if (!any)
         {
             throw new KompasContractException(
@@ -588,6 +588,28 @@ public partial class Api5Session
                 ErrorCodes.InvalidArgument,
                 "step_by_axis_mm отрицателен: знак шага вдоль оси задаётся полем reverse_direction.",
                 RetryPolicy.Never);
+        }
+
+        // THE SET OF EXCLUDED INSTANCES IS DOCUMENTED AS WRITABLE AND MEASURED NOWHERE. Writing it would put
+        // an unmeasured set of I4 indices into a feature, and for a component array it would also change the
+        // component count that the whole mode is proven by.
+        // DOC: ifeaturepattern_instancedeletedindexes.html («управления составом удалённых копий»).
+        // History: docs/decisions/assembly-ext.md#component-arrays
+        if (edit.InstanceDeletedIndexes is not null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "instance_deleted_indexes не записывается: справка объявляет набор удалённых экземпляров "
+                + "записываемым (ifeaturepattern_instancedeletedindexes.html), но запись этого набора не "
+                + "измерена ни для одного семейства массивов, а для массива КОМПОНЕНТОВ удаление экземпляра "
+                + "не измерено отдельно. Свойство читается (deleted_instance_count в kompas_get_pattern), "
+                + "признак не изменён.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["field"] = "instance_deleted_indexes",
+                    ["documented_but_unmeasured"] = "ifeaturepattern_instancedeletedindexes.html",
+                });
         }
     }
 

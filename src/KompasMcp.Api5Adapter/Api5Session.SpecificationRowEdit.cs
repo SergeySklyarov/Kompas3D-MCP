@@ -12,7 +12,9 @@ namespace KompasMcp.Api5Adapter;
 /// <summary>Edit of one row of a MODEL specification — block <c>SPEC_EDIT_ROW</c>.</summary>
 /// <remarks>DOC: <c>ksspecification_ksspcobjectedit.html</c> — «После вызова данного метода у объекта можно
 /// изменить атрибуты, геометрию, линии выноски, позицию, массу»; «Редактирование объекта завершится вызовом
-/// метода ksSpecification::ksSpcObjectEnd»; <c>ksspecification_kssetspcobjectcolumntext.html</c> — текст
+/// метода ksSpecification::ksSpcObjectEnd»; <c>ksspecification_ksspcobjectend.html</c> — «Возвращаемое
+/// значение: указатель на объект спецификации», поэтому возврат не судится как вердикт;
+/// <c>ksspecification_kssetspcobjectcolumntext.html</c> — текст
 /// кладётся в колонку по её ТИПУ; <c>ksspecification_ksspccount.html</c>/<c>ksspecification_ksspcposition.html</c>
 /// — количество по номеру исполнения и номер позиции.
 /// MEASURED: an API7 column write answers <c>Update() = false</c> on an existing row and does not reach the
@@ -166,8 +168,8 @@ public partial class Api5Session
         }
 
         // The edit MUST be closed even when a setter refused: the object is open for editing, and leaving it
-        // open would be an effect the answer hid. MEASURED: ksSpcObjectEnd answers a pointer, not 1, so its
-        // return is named, never read as a verdict.
+        // open would be an effect the answer hid. DOC: ksspecification_ksspcobjectend.html names the return as
+        // «указатель на объект спецификации», not 1, so it is named in the answer, never read as a verdict.
         int? ended = null;
         string? endError = null;
         try
@@ -526,6 +528,7 @@ public partial class Api5Session
               + $"«{found.Row.Quantity}», позиция «{found.Row.Position}»";
 
     /// <summary>What the document itself says about where the row's data comes from.</summary>
+    /// <returns>True when the document does not call the row its own, so a deletion may not hold.</returns>
     /// <remarks>DOC: <c>ispecificationobject_state.html</c> — ksSpecificationObjectStateEnum: «объект создан в
     /// данном документе», «объект пришел из вставки другого документа», «объект из вставки другого документа,
     /// но редактировался в данном документе»; <c>ispecificationbaseobject_syncronizewithproperties.html</c> —
@@ -533,7 +536,7 @@ public partial class Api5Session
     /// INVARIANT: neither member NAMES a component, so the note reports them as READ and no row is refused for
     /// its origin. LIMIT: a documented sign tying a row to a component does not exist in COM (<c>IPropertyKeeper</c>
     /// has no entry point), so none is searched. History: docs/decisions/bom.md#spec-edit-row</remarks>
-    private static void AddRowOrigin(ISpecificationBaseObject listed, List<string> notes)
+    private static bool AddRowOrigin(ISpecificationBaseObject listed, List<string> notes)
     {
         var state = SafeRead.EnumOrNull<ksSpecificationObjectStateEnum>(() => listed.State);
         var syncs = SafeRead.Bool(() => listed.SyncronizeWithProperties);
@@ -542,6 +545,8 @@ public partial class Api5Session
             + (syncs is null ? "не прочитана" : syncs.Value ? "включена" : "выключена")
             + "; к какому компоненту строка относится, документ не называет";
         notes.Add(origin);
+        return (state is not null && state != ksSpecificationObjectStateEnum.ksObjectStateIndependent)
+               || syncs == true;
     }
 
     /// <summary>The state in the words of its help page; a value the page does not name is named as such.</summary>

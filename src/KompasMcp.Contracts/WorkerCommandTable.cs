@@ -243,6 +243,9 @@ public static class WorkerCommandTable
         // Editing a row opens it, writes one setter per field and closes it, then reads the row back through
         // both roads. History: docs/decisions/bom.md#spec-edit-row
         Cad(WorkerCommands.EditSpecificationRow, WorkerAction.ModelMutation, 120_000);
+        // Deleting a row is one COM call on the object, then a re-read of the whole list through both roads:
+        // four column reads per surviving row plus one pointer read each. History: docs/decisions/bom.md#spec-delete-row
+        Cad(WorkerCommands.DeleteSpecificationRow, WorkerAction.ModelMutation, 240_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

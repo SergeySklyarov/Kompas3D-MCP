@@ -434,6 +434,8 @@ public sealed class CommandDispatcher
                 "bom.specification_add_row", cancellationToken),
             WorkerCommands.EditSpecificationRow => _sta.Run(() => EditSpecificationRow(request),
                 "bom.specification_edit_row", cancellationToken),
+            WorkerCommands.DeleteSpecificationRow => _sta.Run(() => DeleteSpecificationRow(request),
+                "bom.specification_delete_row", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
             WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
@@ -1673,6 +1675,17 @@ public sealed class CommandDispatcher
         var document = _session.RequireDocument(command.DocumentId);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.EditSpecificationRow(command), document);
+    }
+
+    // SPEC-04: the deletion of a MODEL row is the same mutation point — control copy taken BEFORE, revision
+    // checked before COM — so a deletion that cannot be confirmed is rollable back to the file it came from.
+    // History: docs/decisions/bom.md#spec-delete-row
+    private object? DeleteSpecificationRow(IpcFrame request)
+    {
+        var command = Argument<DeleteSpecificationRowCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.DeleteSpecificationRow(command), document);
     }
 
     private object? ListComponents(IpcFrame request) =>

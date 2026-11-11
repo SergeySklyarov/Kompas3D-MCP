@@ -707,6 +707,42 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // SPEC-04: the DELETE of a model row. The documented API7 Delete() is the road; the answer is the
+            // absence read back through both roads, not the return of the call.
+            // History: docs/decisions/bom.md#spec-delete-row
+            Mutation("kompas_specification_delete_row", "Удалить строку спецификации модели",
+                "Удаляет СУЩЕСТВУЮЩУЮ строку спецификации модели (детали или сборки) и подтверждает удаление "
+                + "перечитыванием. Строка адресуется row_ref {document_id, unique_number, marking} — той же "
+                + "ссылкой, что отдают kompas_specification_add_row и чтение: строки с таким unique_number "
+                + "нет или её обозначение не равно row_ref.marking — STALE_REFERENCE, и модель не "
+                + "трогается. Маршрут — документированный ISpecificationObject.Delete() "
+                + "(ispecificationobject_delete.html: «удалить базовый или вспомогательный объект "
+                + "спецификации из документа и из коллекции»); строка находится по номеру тем же общим кодом, "
+                + "что у правки, и её указатель API5 сверяется через ksGetSpcObjectNumber до вызова. "
+                + "Успех — не возврат Delete(): после него список перечитывается ОБЕИМИ дорогами (API7 "
+                + "Objects и API5 ksGetSpcObject по удалённому номеру), и ответ называет удалённую строку с её "
+                + "значениями до удаления, число строк до и после, отсутствие строки, уменьшение ровно на "
+                + "одну и сохранность прочих строк по номеру и значениям. Delete() = false, исключение, "
+                + "неподтверждённое удаление, исчезнувшая не та строка или изменившиеся соседи — отказ с "
+                + "снимком, а не «успех». Происхождение строки ответ называет тем, что документ сам о нём "
+                + "говорит (State, SyncronizeWithProperties): строку, которую КОМПАС ведёт от компонента, "
+                + "инструмент удаляет как обычную и предупреждает в notes, что КОМПАС может восстановить её "
+                + "при перестроении или сохранении. Отказы: INVALID_ARGUMENT (нет row_ref, "
+                + "row_ref.document_id не равен document_id, обозначение не задано, номер не положителен, "
+                + "значение не того типа), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (не модель), "
+                + "STALE_REFERENCE, REVISION_CONFLICT, CAPABILITY_UNAVAILABLE (Delete() = false или "
+                + "исключение), GEOMETRY_FAILED (удаление не подтвердилось перечитыванием). ПРЕДЕЛ: строки "
+                + "документа-спецификации .spw этим инструментом не удаляются (у них ksSpcDocument.ksDeleteObj "
+                + "и свой наряд), перенумерация позиций после удаления не делается, файл этим вызовом НЕ "
+                + "пишется — сохранение делает kompas_save_document.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("row_ref", SpecificationRowRefSchema())),
+                WorkerCommands.DeleteSpecificationRow,
+                requiresDocument: true,
+                requiresRevision: true),
+
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
             // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.

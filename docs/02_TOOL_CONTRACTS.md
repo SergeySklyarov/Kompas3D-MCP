@@ -1087,5 +1087,56 @@ API7 (`Objects` → `Columns` → `ColumnItems`) и API5 (`ksGetSpcObject` → `
 инструмент правит как обычную, а `notes` называет то, что документ сам говорит о её происхождении
 (`State` по `ispecificationobject_state.html`, `SyncronizeWithProperties` по
 `ispecificationbaseobject_syncronizewithproperties.html`), не называя компонента. Удаление строки —
-наряд `SPEC_DELETE_ROW`. Приёмка — группа `mcp-smoke.py --specification-only`, строки `SPEC-03.*`
-матрицы.
+инструмент `kompas_specification_delete_row`, раздел 2.22. Приёмка — группа `mcp-smoke.py
+--specification-only`, строки `SPEC-03.*` матрицы.
+
+## 2.22. Удаление строки спецификации модели (наряд `SPEC_DELETE_ROW`, 11.11.2026)
+
+**Новый инструмент, четвёртая и последняя запись блока.** `kompas_specification_delete_row` (мутация:
+нужны `operation_id`, `document_id`, `expected_revision`) удаляет СУЩЕСТВУЮЩУЮ строку спецификации
+МОДЕЛИ. Вход — только `row_ref {document_id, unique_number, marking}`, та же ссылка, что отдают
+`kompas_specification_add_row`, `kompas_specification_edit_row` и чтение: удаление не меняет значений,
+поэтому других полей у него нет.
+
+**Маршрут — документированный API7 `ISpecificationObject.Delete()`.** Справка
+(`ispecificationobject_delete.html`): «Метод позволяет удалить базовый или вспомогательный объект
+спецификации из документа и из коллекции». Строка находится по `row_ref.unique_number` в
+`ISpecificationDescription.Objects` тем же общим кодом, что у правки, и подтверждается
+`ksGetSpcObject` → `ksGetSpcObjectNumber` (сверка указателя). Удаление через API5 не используется:
+страницы `ksDeleteSpcObject` в оглавлении v24 нет, а `ksSpcDocument.ksDeleteObj` удаляет объект
+документа-спецификации `.spw`, не строку модели.
+
+**Проверка до и после.** До вызова: строки с таким `unique_number` нет, её номер не подтверждён
+указателем или маркировка не равна `row_ref.marking` — `STALE_REFERENCE`, и модель не трогается.
+Значения строки сверяются обеими дорогами ДО удаления: после `Delete()` строку уже не прочитать.
+После `Delete()` список перечитывается ОБЕИМИ дорогами: API7 `Objects` (строки с этим номером нет,
+строк ровно на одну меньше, прочие строки на месте по номеру и значениям) и API5 `ksGetSpcObject` по
+удалённому номеру (указатель не отвечает). `Delete() = false`, исключение, `true` при оставшейся
+строке, исчезнувшая не та строка, изменившиеся соседи или появившаяся строка — отказ со снимком, а не
+успех.
+
+**Происхождение строки.** `State` и `SyncronizeWithProperties` читаются у объекта ДО удаления и
+называются в `notes`. Строку, которую КОМПАС ведёт от компонента, инструмент удаляет как обычную и
+предупреждает (`specification_row_may_return`), что КОМПАС может восстановить её при перестроении или
+сохранении; документированного признака связи с КОМПОНЕНТОМ в COM нет, и он не ищется. Восстанавливается
+ли такая строка — не измерено: постановки с ней нет (раздел `docs/decisions/bom.md#spec-delete-row`).
+
+**Ответ.** `row` — удалённая строка со значениями ДО удаления (включая `unique_number`), `rows_before`
+и `rows_after` — числа строк, прочитанные из документа; `route`, `verification` (уровень
+`structure_checked`, когда прошли все проверки перечитывания), `notes`, `unverified_aspects`;
+`expected_revision` следующего вызова приходит ревизией конверта. Ссылка не переиздаётся: она
+адресует строку, которой больше нет. Файл этим вызовом НЕ пишется: сохранение делает
+`kompas_save_document`, и переживание удаления проверяет приёмка.
+
+**Отказы.** `INVALID_ARGUMENT` до журнала и до COM — нет `row_ref`, `row_ref.document_id` не равен
+`document_id`, `row_ref.marking` не задан, `unique_number` не положителен, значение не того типа;
+`DOCUMENT_NOT_FOUND`; `WRONG_DOCUMENT_KIND` — не модель (`.spw`, чертёж); `STALE_REFERENCE` — строки нет,
+номер не подтверждён указателем, обозначение не совпало; `REVISION_CONFLICT`; `CAPABILITY_UNAVAILABLE` —
+`Delete()` вернул `false` или исключение, объект не приводит к `ISpecificationObject`;
+`GEOMETRY_FAILED` — удаление не подтвердилось перечитыванием.
+
+**Пределы.** Перенумерация позиций после удаления не делается. Удаление объектов `.spw`
+(`ksSpcDocument.ksDeleteObj`), запись строк `.spw` и удаление описания спецификации
+(`ISpecificationDescription.Delete()`) не входят. Профиль `spec-ext-v1` после этого наряда полон:
+четыре строки — четыре инструмента. Приёмка — группа `mcp-smoke.py --specification-only`, строки
+`SPEC-04.*` матрицы.

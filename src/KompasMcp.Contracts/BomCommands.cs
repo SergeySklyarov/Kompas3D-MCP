@@ -223,6 +223,38 @@ public sealed record EditSpecificationRowResult(
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> UnverifiedAspects);
 
+/// <summary>Delete one row of a MODEL specification — block <c>SPEC_DELETE_ROW</c>.</summary>
+/// <remarks>ROUTE: API7 <c>ISpecificationObject.Delete()</c> — «удалить базовый или вспомогательный объект
+/// спецификации из документа и из коллекции» (<c>ispecificationobject_delete.html</c>). The row is found by
+/// the SAME shared lookup the edit uses, and its marking is checked against the reference before the call.
+/// INVARIANT: a row that is gone, or whose marking no longer matches, is <c>STALE_REFERENCE</c> with the model
+/// untouched; success is the absence the document answers through BOTH roads after the call, never the answer
+/// of <c>Delete()</c> itself. History: docs/decisions/bom.md#spec-delete-row</remarks>
+public sealed record DeleteSpecificationRowCommand
+{
+    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Row reference issued by <c>kompas_specification_add_row</c> or the read, of THIS document.</summary>
+    public required SpecificationRowRefDto RowRef { get; init; }
+}
+
+/// <summary>The deleted row as it was, the row counts on both sides, and what stays unverified.</summary>
+/// <remarks>INVARIANT: <c>Row</c> is what the document answered BEFORE the deletion — the row is gone
+/// afterwards, so its values cannot be read later — and <c>RowsAfter</c> is counted from the document, not
+/// derived from <c>RowsBefore</c>. The reference is not reissued: it addresses a row that no longer exists.
+/// History: docs/decisions/bom.md#spec-delete-row</remarks>
+public sealed record DeleteSpecificationRowResult(
+    SpecificationLineDto Row,
+    int RowsBefore,
+    int RowsAfter,
+    string Route,
+    VerificationDto Verification,
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string> UnverifiedAspects);
+
 /// <summary>The properties as <c>ksPart</c> answers them. A null value means "not read", never empty,
 /// zero or false.</summary>
 /// <remarks>INVARIANT: every field here rests on its own help page of <c>IPart</c>; a field with no page

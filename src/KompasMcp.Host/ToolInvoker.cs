@@ -364,6 +364,29 @@ public sealed class ToolInvoker : IAsyncDisposable
             yield break;
         }
 
+        if (tool.Name == "kompas_specification_delete_row")
+        {
+            // The deletion rule is applied here too, not only in the Worker: a missing reference, a reference of
+            // another document and a reference without the marking must be refused BEFORE the journal and BEFORE
+            // COM. The Worker repeats the SAME pure rule.
+            // History: docs/decisions/bom.md#spec-delete-row
+            var rowRef = arguments["row_ref"] as JsonObject;
+            var refused = SpecificationRowDeleteInput.Validate(
+                ReadString(arguments, "document_id"),
+                rowRef is null
+                    ? null
+                    : new SpecificationRowRefValues(
+                        ReadString(rowRef, "document_id"),
+                        ReadDouble(rowRef, "unique_number"),
+                        ReadString(rowRef, "marking")));
+            if (refused is not null)
+            {
+                yield return new SchemaViolation("/" + refused.Field, "value", refused.Message);
+            }
+
+            yield break;
+        }
+
         if (tool.Name == "kompas_get_specification_document")
         {
             // "path OR document_id" cannot be expressed without oneOf, which not every client evaluates;

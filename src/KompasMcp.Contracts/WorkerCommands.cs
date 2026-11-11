@@ -322,6 +322,12 @@ public static class WorkerCommands
     /// History: docs/decisions/bom.md#spec-edit-row</remarks>
     public const string EditSpecificationRow = "bom.specification_edit_row";
 
+    /// <summary>Deletion of one row of a MODEL specification — the last write of the block.</summary>
+    /// <remarks>DOC: <c>ispecificationobject_delete.html</c> — the documented member removes a base or an
+    /// auxiliary specification object «из документа и из коллекции».
+    /// History: docs/decisions/bom.md#spec-delete-row</remarks>
+    public const string DeleteSpecificationRow = "bom.specification_delete_row";
+
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
     // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common

@@ -823,7 +823,7 @@ def step_metadata_export(client, app_id, path):
 # → 131 (SPEC_READ_SPW: kompas_get_specification_document)
 # → 132 (SPEC_ADD_ROW: kompas_specification_add_row)
 # → 133 (SPEC_EDIT_ROW: kompas_specification_edit_row).
-EXPECTED_TOOL_COUNT = 133
+EXPECTED_TOOL_COUNT = 134
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -2392,7 +2392,7 @@ FLAGS = (
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
     ("--events-only", False, "группа EV: внешнее изменение документа по событиям модели"),
     ("--specification-only", False,
-     "группа SPEC: документ-спецификация .spw - открытие, чтение строк, вторая дорога, отказы; строка модели - создание и правка, сохранение и переоткрытие"),
+     "группа SPEC: документ-спецификация .spw - открытие, чтение строк, вторая дорога, отказы; строки модели - создание, правка и удаление, сохранение и переоткрытие"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -58540,9 +58540,9 @@ def bom_checks(client, rep, app_id, workdir):
 
 
 def specification_checks(client, rep, app_id, workdir):
-    """SPEC-01/SPEC-02/SPEC-03 - блок «спецификация»: чтение документа `.spw` по path и по document_id
-    (наряд SPEC_READ_SPW), создание строки МОДЕЛИ (наряд SPEC_ADD_ROW) и правка строки модели (наряд
-    SPEC_EDIT_ROW, профиль `spec-ext-v1`).
+    """SPEC-01/SPEC-02/SPEC-03/SPEC-04 - блок «спецификация»: чтение документа `.spw` по path и по
+    document_id (наряд SPEC_READ_SPW), создание строки МОДЕЛИ (наряд SPEC_ADD_ROW), правка строки модели
+    (наряд SPEC_EDIT_ROW) и удаление строки модели (наряд SPEC_DELETE_ROW, профиль `spec-ext-v1`).
 
     ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Постановка - файл `.spw` прибора исследования с ОДНОЙ известной строкой
     (`SPC.401.001` / «Строка спецификации» / 7 в разделе 20 «Детали») и сборка `spec-asm.m3d` той же
@@ -58563,6 +58563,13 @@ def specification_checks(client, rep, app_id, workdir):
     изменений и пустое значение, ссылка на другой документ, устаревшая ревизия, устаревшая ссылка (в том
     числе после смены обозначения), несуществующий номер строки, `.spw` вместо модели и значение не того
     типа, что ждёт колонка.
+
+    SPEC-04. Удаление строки - на строке, созданной ЭТИМ прогоном, и на строке, которая была в постановке
+    до него (ссылку на вторую даёт чтение). Отсутствие строки и сохранность соседей показывает независимый
+    читатель, а удалённое не возвращается после сохранения и переоткрытия. Ответ обязан назвать
+    происхождение строки и предупредить о возможном восстановлении от компонента только когда документ не
+    называет строку своей. Отказы: нет ссылки, чужая ссылка, неположительный номер, устаревшая ревизия,
+    уже удалённая строка, ссылка после смены обозначения, несуществующий номер, `.spw` вместо модели.
     """
     import os
 
@@ -59346,6 +59353,301 @@ def specification_checks(client, rep, app_id, workdir):
                        and ((refused_wrong and quantity_after == quantity_before) or accepted_wrong)) else "FAIL",
             f"код={wrong_code} было={quantity_before} стало={quantity_after}")
     close(value_model)
+
+
+    # ===== SPEC-04: удаление строки МОДЕЛИ (наряд SPEC_DELETE_ROW) =====
+    # Постановка - та же копия входа исследования и строка, созданная ЭТИМ прогоном. Удаление не
+    # считается выполненным по ответу вызова: отсутствие строки и сохранность соседей показывает
+    # независимый читатель kompas_get_specification, а переживание удаления - файл после переоткрытия.
+    delete_entry = entry_of(client, "kompas_specification_delete_row")
+    delete_schema = (delete_entry or {}).get("inputSchema") or {}
+    delete_props = set(delete_schema.get("properties") or {}) - {"timeout_ms"}
+    delete_required = set(delete_schema.get("required") or {})
+    delete_ref = (delete_schema.get("properties") or {}).get("row_ref") or {}
+    delete_ref_props = set(delete_ref.get("properties") or {})
+    delete_ref_required = set(delete_ref.get("required") or {})
+    rep.add("SPEC-04.discovery", "инструмент удаления строки модели есть в реестре каталога",
+            "PASS" if delete_entry is not None else "FAIL", f"в реестре={len(registry)}")
+    rep.add("SPEC-04.schema",
+            "схема несёт только ссылку row_ref {document_id, unique_number, marking} и служебные поля: "
+            "удаление значений не меняет, поэтому других полей у него нет",
+            "PASS" if (delete_props == {"document_id", "expected_revision", "row_ref", "operation_id"}
+                       and delete_required == {"document_id", "expected_revision", "row_ref", "operation_id"}
+                       and delete_ref_props == {"document_id", "unique_number", "marking"}
+                       and delete_ref_required == {"document_id", "unique_number", "marking"}) else "FAIL",
+            f"поля={sorted(delete_props)} обязательные={sorted(delete_required)} "
+            f"ссылка={sorted(delete_ref_props)}/{sorted(delete_ref_required)}")
+
+    delete_env, delete_open_code = call("kompas_open_document",
+                                        {"application_id": app_id, "path": model_path, "access": "edit"})
+    delete_model = doc_id(delete_env)
+    delete_context, delete_context_code = context_of(delete_model)
+    delete_state = {"revision": delete_context.get("revision")}
+
+    def delete_rows():
+        """Строки модели удаления так, как их показывает НЕЗАВИСИМЫЙ читатель."""
+        return rows(specification_of(delete_model)[0])
+
+    def delete_census(row_list):
+        """Номер строки -> опубликованные значения: по этому сверяются соседи до и после удаления."""
+        return {r.get("unique_number"): {k: r.get(k) for k in
+                                         ("marking", "name", "quantity", "position", "section_number")}
+                for r in row_list}
+
+    def delete_signature(census):
+        """Подпись набора строк без номеров: переоткрытие файла сверяется по значениям, а не по номерам."""
+        return sorted(tuple(str(value.get(key)) for key in
+                            ("marking", "name", "quantity", "position", "section_number"))
+                      for value in census.values())
+
+    def delete_row(row_ref, revision=None):
+        payload = {"document_id": delete_model,
+                   "expected_revision": delete_state["revision"] if revision is None else revision,
+                   "row_ref": row_ref}
+        env, code = call("kompas_specification_delete_row", payload)
+        answer = result(env)
+        if answer.get("revision"):
+            delete_state["revision"] = answer["revision"]
+        return answer, code, ((env or {}).get("error") or {})
+
+    def deleted(census, marking):
+        return [number for number, value in census.items() if str(value.get("marking") or "") == marking]
+
+    rep.add("SPEC-04.prepare_model",
+            "модель открыта на запись, строки и ревизия прочитаны до удаления",
+            "PASS" if (delete_model and not delete_open_code and not delete_context_code
+                       and delete_state["revision"]) else "FAIL",
+            f"код={delete_open_code},{delete_context_code} ревизия={delete_state['revision']} "
+            f"строк={len(delete_rows())}")
+
+    # --- строка, созданная ЭТИМ прогоном ---
+    create_for_delete, create_for_delete_code = call(
+        "kompas_specification_add_row",
+        {"document_id": delete_model, "expected_revision": delete_state["revision"],
+         "section_number": 20, "marking": "SPC.701.001", "name": "Строка удаления",
+         "quantity": "2", "position": 4})
+    prepared = result(create_for_delete)
+    if prepared.get("revision"):
+        delete_state["revision"] = prepared["revision"]
+    ref_created = prepared.get("row_ref") or {}
+    before_created = delete_census(delete_rows())
+    answer, code, error = delete_row(ref_created)
+    after_created = delete_census(delete_rows())
+    removed = answer.get("row") or {}
+    rep.add("SPEC-04.delete_created",
+            "строка, созданная ЭТИМ прогоном, удалена: ответ называет её значения ДО удаления, обе дороги "
+            "подтверждают отсутствие, строк стало на одну меньше, и независимый читатель её не показывает",
+            "PASS" if (delete_model and not create_for_delete_code and ref_created.get("unique_number")
+                       and not code
+                       and removed.get("unique_number") == ref_created.get("unique_number")
+                       and str(removed.get("marking") or "") == "SPC.701.001"
+                       and str(removed.get("name") or "") == "Строка удаления"
+                       and str(removed.get("quantity") or "") == "2"
+                       and answer.get("rows_before") == len(before_created)
+                       and answer.get("rows_after") == len(after_created) == len(before_created) - 1
+                       and check_passed(answer, "row_absent_api7")
+                       and check_passed(answer, "row_absent_api5")
+                       and check_passed(answer, "rows_before_minus_one")
+                       and (answer.get("verification") or {}).get("level") == "structure_checked"
+                       and len(deleted(after_created, "SPC.701.001")) == 0) else "FAIL",
+            f"код={code},{create_for_delete_code} ссылка={ref_created} строка={removed} "
+            f"строк было={answer.get('rows_before')} стало={answer.get('rows_after')} "
+            f"читатель={len(after_created)} уровень={(answer.get('verification') or {}).get('level')} "
+            f"ошибка={str(error.get('message'))[:160]!r}")
+
+    removed_numbers = {ref_created.get("unique_number")}
+    neighbours_gone = sorted(number for number in before_created if number not in after_created)
+    neighbours_changed = sorted(
+        number for number, value in before_created.items()
+        if number in after_created and after_created[number] != value)
+    neighbours_new = sorted(number for number in after_created if number not in before_created)
+    rep.add("SPEC-04.neighbours_intact",
+            "соседние строки целы: по номеру и по всем опубликованным значениям ни одна не пропала, не "
+            "изменилась и не появилась — сверка идёт по независимому читателю, а не по счётчику",
+            "PASS" if (neighbours_gone == [n for n in removed_numbers if n is not None]
+                       and not neighbours_changed and not neighbours_new) else "FAIL",
+            f"пропали={neighbours_gone} изменились={neighbours_changed} появились={neighbours_new} "
+            f"было={len(before_created)} стало={len(after_created)}")
+
+    # Происхождение строки: ответ называет то, что документ сам о ней говорит, и предупреждает о
+    # возможном восстановлении от компонента РОВНО тогда, когда строка не объявлена своей.
+    origin_line = next((str(n) for n in (answer.get("notes") or [])
+                        if "specification_row_origin" in str(n)), "")
+    may_return = any("specification_row_may_return" in str(n) for n in (answer.get("notes") or []))
+    not_own = ("пришёл из вставки" in origin_line) or ("редактировался в данном документе" in origin_line) \
+        or ("синхронизация со свойствами объекта — включена" in origin_line)
+    rep.add("SPEC-04.origin_note",
+            "ответ называет происхождение удалённой строки (State и синхронизация со свойствами) и "
+            "предупреждает о возможном восстановлении от компонента ровно тогда, когда документ не "
+            "называет строку своей либо синхронизация включена: предупреждение не глухое и не постоянное",
+            "PASS" if origin_line and may_return == not_own else "FAIL",
+            f"происхождение={origin_line[:220]!r} предупреждение={may_return} чужая={not_own}")
+
+    # --- строка, которая была в постановке ДО прогона: ссылку даёт чтение ---
+    pre = [r for r in delete_rows() if str(r.get("marking") or "") == "SPC.301.002"]
+    ref_pre = ({"document_id": delete_model, "unique_number": pre[0].get("unique_number"),
+                "marking": pre[0].get("marking")} if len(pre) == 1 else None)
+    pre_was = dict(pre[0]) if len(pre) == 1 else {}
+    before_pre = delete_census(delete_rows())
+    answer_pre, code_pre, error_pre = delete_row(ref_pre) if ref_pre else ({}, "no_row", {})
+    after_pre = delete_census(delete_rows())
+    rep.add("SPEC-04.delete_preexisting",
+            "удаляется строка, которая была в постановке ДО прогона: ссылка собрана из чтения "
+            "(unique_number + marking + document_id), ответ называет прежние значения строки, а "
+            "независимый читатель её больше не показывает и строк стало на одну меньше",
+            "PASS" if (ref_pre is not None and not code_pre
+                       and len(deleted(after_pre, "SPC.301.002")) == 0
+                       and str((answer_pre.get("row") or {}).get("marking") or "") == "SPC.301.002"
+                       and (answer_pre.get("row") or {}).get("unique_number") == pre_was.get("unique_number")
+                       and answer_pre.get("rows_before") == len(before_pre)
+                       and answer_pre.get("rows_after") == len(after_pre) == len(before_pre) - 1
+                       and check_passed(answer_pre, "row_absent_api7")
+                       and check_passed(answer_pre, "row_absent_api5")) else "FAIL",
+            f"код={code_pre} ссылка={ref_pre} было={pre_was} ответ={answer_pre.get('row')} "
+            f"читатель={len(after_pre)} было_строк={answer_pre.get('rows_before')} "
+            f"ошибка={str(error_pre.get('message'))[:160]!r}")
+
+    reader_answer, reader_code = specification_of(delete_model)
+    reader_rows = rows(reader_answer)
+    hidden = [marking for marking in ("SPC.701.001", "SPC.301.002")
+              if not any(str(r.get("marking") or "") == marking for r in reader_rows)]
+    rep.add("SPEC-04.get_specification_absent",
+            "kompas_get_specification не показывает ни одной из удалённых строк, а его count равен числу "
+            "строк в ответе: удаление видно независимому чтению, а не только ответу удаления",
+            "PASS" if (not reader_code and len(hidden) == 2
+                       and reader_answer.get("count") == len(reader_rows)) else "FAIL",
+            f"код={reader_code} скрыто={hidden} count={reader_answer.get('count')} строк={len(reader_rows)}")
+
+    # --- ссылка после правки обозначения: старая отвергается, строка не меняется ---
+    marked = [r for r in delete_rows() if str(r.get("marking") or "") == "SPC.501.010"]
+    ref_str = ({"document_id": delete_model, "unique_number": marked[0].get("unique_number"),
+                "marking": marked[0].get("marking")} if len(marked) == 1 else None)
+    edit_for_delete = call("kompas_specification_edit_row",
+                           {"document_id": delete_model,
+                            "expected_revision": delete_state["revision"],
+                            "row_ref": ref_str, "marking": "SPC.501.011"}) \
+        if ref_str else ({}, "no_row")
+    edited = result(edit_for_delete[0])
+    if edited.get("revision"):
+        delete_state["revision"] = edited["revision"]
+    ref_renamed = edited.get("row_ref") or {}
+    before_stale = delete_census(delete_rows())
+    _stale_answer, stale_marking_code, stale_marking_error = delete_row(ref_str) if ref_str else ({}, "no_row", {})
+    after_stale = delete_census(delete_rows())
+    rep.add("SPEC-04.negative_stale_marking",
+            "ссылка, выданная на прежнее обозначение строки, отвергается STALE_REFERENCE, и список строк "
+            "остаётся ровно тем же: чужую строку под этим номером не удаляют",
+            "PASS" if (ref_str is not None and not edit_for_delete[1] and ref_renamed.get("marking") == "SPC.501.011"
+                       and stale_marking_code == "STALE_REFERENCE"
+                       and after_stale == before_stale) else "FAIL",
+            f"код={stale_marking_code},{edit_for_delete[1]} было={ref_str} стало={ref_renamed} "
+            f"строк={len(after_stale)} текст={str(stale_marking_error.get('message'))[:160]!r}")
+
+    # ===== SPEC-04: отказы =====
+    _e, no_ref_env, _r = client.tool("kompas_specification_delete_row",
+                                     {"document_id": delete_model,
+                                      "expected_revision": delete_state["revision"],
+                                      "operation_id": str(uuid.uuid4())})
+    no_ref_code = error_code(no_ref_env)
+    _e, foreign_env, _r = client.tool("kompas_specification_delete_row",
+                                      {"document_id": delete_model,
+                                       "expected_revision": delete_state["revision"],
+                                       "row_ref": {"document_id": "0" * 32, "unique_number": 3,
+                                                   "marking": "SPC.000.001"},
+                                       "operation_id": str(uuid.uuid4())})
+    foreign_code = error_code(foreign_env)
+    _e, zero_env, _r = client.tool("kompas_specification_delete_row",
+                                   {"document_id": delete_model,
+                                    "expected_revision": delete_state["revision"],
+                                    "row_ref": {"document_id": delete_model, "unique_number": 0,
+                                                "marking": "SPC.000.001"},
+                                    "operation_id": str(uuid.uuid4())})
+    zero_code = error_code(zero_env)
+    after_input = delete_census(delete_rows())
+    rep.add("SPEC-04.negative_input",
+            "нет ссылки, ссылка другого документа и неположительный номер строки отвергаются "
+            "INVALID_ARGUMENT до журнала и до КОМПАС, и строк после отказов столько же",
+            "PASS" if (no_ref_code == foreign_code == zero_code == "INVALID_ARGUMENT"
+                       and after_input == after_stale) else "FAIL",
+            f"нет_ссылки={no_ref_code} чужая={foreign_code} номер0={zero_code} строк={len(after_input)}")
+
+    _answer, revision_delete_code, _error = delete_row(
+        ref_renamed, revision=(delete_state["revision"] or 1) + 100) if ref_renamed else ({}, "no_row", {})
+    after_revision = delete_census(delete_rows())
+    rep.add("SPEC-04.negative_revision",
+            "устаревшая ревизия отвергается REVISION_CONFLICT до COM, и строки после отказа прежние",
+            "PASS" if (revision_delete_code == "REVISION_CONFLICT"
+                       and after_revision == after_input) else "FAIL",
+            f"код={revision_delete_code} строк={len(after_revision)}")
+
+    before_again = delete_census(delete_rows())
+    _again_answer, again_code, again_error = delete_row(ref_created)
+    after_again = delete_census(delete_rows())
+    rep.add("SPEC-04.negative_stale_deleted",
+            "ссылка на УЖЕ удалённую строку отвергается STALE_REFERENCE, и модель не тронута: список "
+            "строк до и после отказа совпадает",
+            "PASS" if (again_code == "STALE_REFERENCE" and after_again == before_again) else "FAIL",
+            f"код={again_code} строк={len(after_again)} текст={str(again_error.get('message'))[:160]!r}")
+
+    ghost = {"document_id": delete_model, "unique_number": 987654321, "marking": "SPC.000.000"}
+    _ghost_answer, ghost_code, ghost_error = delete_row(ghost)
+    after_ghost = delete_census(delete_rows())
+    rep.add("SPEC-04.negative_unknown_row",
+            "ссылка на несуществующий номер строки отвергается STALE_REFERENCE, а не удаляет чужую строку "
+            "и не создаёт пустоту в списке",
+            "PASS" if (ghost_code == "STALE_REFERENCE" and after_ghost == before_again) else "FAIL",
+            f"код={ghost_code} строк={len(after_ghost)} текст={str(ghost_error.get('message'))[:160]!r}")
+
+    spw_kind, _spw_kind_code = call("kompas_get_specification_document", {"path": spw_path})
+    spw_delete_doc = id_of(spw_path)
+    spw_delete_context, _ = context_of(spw_delete_doc)
+    _e, spw_delete_env, _r = client.tool(
+        "kompas_specification_delete_row",
+        {"document_id": spw_delete_doc,
+         "expected_revision": spw_delete_context.get("revision"),
+         "row_ref": {"document_id": spw_delete_doc, "unique_number": 1, "marking": "SPC.401.001"},
+         "operation_id": str(uuid.uuid4())}) if spw_delete_doc else ({}, {}, None)
+    spw_delete_code = error_code(spw_delete_env)
+    _e, missing_delete_env, _r = client.tool(
+        "kompas_specification_delete_row",
+        {"document_id": "0" * 32, "expected_revision": 1,
+         "row_ref": {"document_id": "0" * 32, "unique_number": 1, "marking": "SPC.000.001"},
+         "operation_id": str(uuid.uuid4())})
+    missing_delete_code = error_code(missing_delete_env)
+    rep.add("SPEC-04.negative_kind",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
+            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы, и .spw этим "
+            "инструментом не удаляется",
+            "PASS" if (missing_delete_code == "DOCUMENT_NOT_FOUND"
+                       and spw_delete_code == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"нет_документа={missing_delete_code} .spw={spw_delete_code}")
+    close(spw_delete_doc)
+
+    # ===== SPEC-04: сохранение и переоткрытие =====
+    final_census = delete_census(delete_rows())
+    _env, save_delete_code = call("kompas_save_document",
+                                  {"document_id": delete_model,
+                                   "expected_revision": delete_state["revision"]})
+    close(delete_model)
+    reopened_delete_env, reopen_delete_code = call("kompas_open_document",
+                                                   {"application_id": app_id, "path": model_path,
+                                                    "access": "read_only"})
+    reopened_delete_model = doc_id(reopened_delete_env)
+    reopened_delete_rows = rows(specification_of(reopened_delete_model)[0])
+    reopened_census = delete_census(reopened_delete_rows)
+    gone_in_file = [marking for marking in ("SPC.701.001", "SPC.301.002")
+                    if len(deleted(reopened_census, marking)) == 0]
+    rep.add("SPEC-04.save_reopen",
+            "kompas_save_document пишет модель, а переоткрытая сборка не показывает ни одной удалённой "
+            "строки и совпадает со списком в памяти по всем значениям: удаление живёт в файле, а не только "
+            "в сеансе, где его сделали",
+            "PASS" if (not save_delete_code and reopened_delete_model and not reopen_delete_code
+                       and len(gone_in_file) == 2
+                       and delete_signature(reopened_census) == delete_signature(final_census)) else "FAIL",
+            f"save_код={save_delete_code} переоткрытие={reopen_delete_code} удалённых_нет={gone_in_file} "
+            f"в_памяти={len(final_census)} в_файле={len(reopened_census)} "
+            f"до_удаления={sorted(delete_signature(final_census))} после={sorted(delete_signature(reopened_census))}")
+    close(reopened_delete_model)
 
 
 def dismantle_checks(client, rep, app_id, workdir):

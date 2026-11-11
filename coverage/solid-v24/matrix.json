@@ -16538,7 +16538,67 @@
         "subsection_number, additional_section и block в контракт не вошли: маршрут (AddWithParam / ISpecificationObjectCreateParam) документирован, но постановкой не проверен.",
         "Масса (ksSpcMassa) и составные значения (ksSpcChangeValue) не входят: не измерены.",
         "Строка адресуется row_ref, а его unique_number публикует чтение (kompas_get_specification) или ответ создания: правка не ищет строку по обозначению, потому что обозначение не уникально.",
-        "Удаление строки - наряд SPEC_DELETE_ROW; запись строк .spw в блок не входит."
+        "Удаление строки - отдельный инструмент (строка SPEC-04.row.delete); запись строк .spw в блок не входит."
+      ]
+    },
+    {
+      "operation_id": "SPEC-04.row.delete",
+      "context": "specification.model",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-ext-v1",
+      "queue": "SPEC_DELETE_ROW",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261110-spec-ext-7d463a0/",
+        "docs/decisions/bom.md#spec-delete-row"
+      ],
+      "parameters_schema": "schemas/kompas_specification_delete_row.json",
+      "adapter_route": "kompas_specification_delete_row: строка находится по row_ref.unique_number в ISpecificationDescription.Objects тем же общим кодом, что у правки, подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя), её маркировка сверяется со ссылкой ДО удаления (расхождение - STALE_REFERENCE, модель не тронута), затем документированный ISpecificationObject.Delete() (ispecificationobject_delete.html: «удалить базовый или вспомогательный объект спецификации из документа и из коллекции»); после удаления список перечитывается ОБЕИМИ дорогами: API7 Objects (строки с этим номером нет, строк ровно на одну меньше, прочие строки на месте по номеру и значениям) и API5 ksGetSpcObject по удалённому номеру (указатель не отвечает); Delete() = false, исключение или неподтверждённое удаление - отказ со снимком (CAPABILITY_UNAVAILABLE/GEOMETRY_FAILED), а не успех. Origin строки (State, SyncronizeWithProperties) читается до удаления и назван в notes; строка, которую КОМПАС ведёт от компонента, удаляется как обычная, с предупреждением о возможном восстановлении",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "создание строки - наряд SPEC_ADD_ROW: этот инструмент удаляет существующую строку",
+        "edit": "правка строки - наряд SPEC_EDIT_ROW: этот инструмент строку не меняет, а удаляет",
+        "rebuild": "удаление строки не перестраивает модель: строка - объект спецификации, а не признак дерева; восстановление строки, которую КОМПАС ведёт от компонента, приёмка не перестраивает и это названо в notes",
+        "suppress_restore": "у удаления нет режима подавления: строку от компонента инструмент удаляет и предупреждает в notes, что КОМПАС может вернуть её",
+        "geometry_validation": "строка спецификации геометрии не имеет: результат сверяется отсутствием строки и сохранностью соседей обеими дорогами и переоткрытием файла, а не измерением"
+      },
+      "tests": [
+        "SPEC-04.discovery",
+        "SPEC-04.schema",
+        "SPEC-04.prepare_model",
+        "SPEC-04.delete_created",
+        "SPEC-04.neighbours_intact",
+        "SPEC-04.origin_note",
+        "SPEC-04.delete_preexisting",
+        "SPEC-04.get_specification_absent",
+        "SPEC-04.negative_input",
+        "SPEC-04.negative_revision",
+        "SPEC-04.negative_stale_deleted",
+        "SPEC-04.negative_stale_marking",
+        "SPEC-04.negative_unknown_row",
+        "SPEC-04.negative_kind",
+        "SPEC-04.save_reopen"
+      ],
+      "limitations": [
+        "Удаление живёт в модели до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects самого ответа; переживание сохранения и переоткрытия проверяет приёмка (SPEC-04.save_reopen).",
+        "Строка адресуется row_ref, а его unique_number публикует чтение или ответ создания: инструмент не ищет строку по обозначению, потому что обозначение не уникально.",
+        "Строка, которую КОМПАС ведёт от компонента, удаляется как обычная и предупреждается в notes, но восстанавливается ли она после перестроения или сохранения - не измерено: постановки с такой строкой нет, а документированного маршрута, создающего связь строки с компонентом (AddWithParam + IPropertyKeeper), в COM нет.",
+        "Перенумерация позиций после удаления не делается: позиции остальных строк остаются теми, что записал документ, и это видно в перечитанном списке.",
+        "Удаление объектов документа-спецификации .spw (ksSpcDocument.ksDeleteObj) и удаление описания спецификации (ISpecificationDescription.Delete) не входят: у .spw свои строки и свой маршрут, а описание спецификации - не строка."
       ]
     },
     {

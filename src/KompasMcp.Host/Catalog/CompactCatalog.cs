@@ -93,6 +93,7 @@ public static class CompactCatalog
         ["kompas_get_specification_document"] = "assembly",
         ["kompas_specification_add_row"] = "assembly",
         ["kompas_specification_edit_row"] = "assembly",
+        ["kompas_specification_delete_row"] = "assembly",
         ["kompas_create_section"] = "feature", ["kompas_set_section_mode"] = "feature",
         ["kompas_list_sections"] = "feature",
         ["kompas_create_drawing_views"] = "drawing", ["kompas_list_drawing_views"] = "drawing",

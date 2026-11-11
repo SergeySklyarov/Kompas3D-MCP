@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 163,
+   "operations": 164,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 239,
+   "modes_and_variants": 240,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8632,6 +8632,20 @@
       {
        "id": "SPEC-03.row.edit",
        "name": "Править строку спецификации модели: обозначение, наименование, количество, позиция",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SPEC-04",
+     "name": "Удаление строки спецификации модели",
+     "level": "mcp_verified",
+     "doc_source": "ispecificationobject_delete.html, ispecificationobject_uniquenumber.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html, ksspecificationobjectstateenum.html, ispecificationdescription_objects.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_section.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html",
+     "route": "API7: ISpecificationDescription.Objects -> строка находится по row_ref.unique_number тем же общим кодом, что у правки -> api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> сверка маркировки со ссылкой до вызова -> ISpecificationObject.Delete(); после удаления отсутствие перечитывается ОБЕИМИ дорогами: API7 Objects (строки с этим номером нет, строк на одну меньше, прочие на месте по номеру и значениям) и API5 ksGetSpcObject по удалённому номеру (указателя нет); Delete() = false, исключение или неподтверждённое удаление - отказ со снимком, а не success",
+     "modes": [
+      {
+       "id": "SPEC-04.row.delete",
+       "name": "Удалить строку спецификации модели по ссылке row_ref: значения до удаления, число строк до и после",
        "level": "mcp_verified"
       }
      ]

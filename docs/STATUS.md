@@ -24,15 +24,16 @@
   ровно один релиз.
 - **Инструментов:** 14, операций **133** (из них через `run` 122), схем **133**, профилей **22**
   (**137/137** режимов, **82/82** зависимостей, `problems []`).
-- **Последний полный прогон:** **PASS 2261 / NAMED 10 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
-  `b2d4ef5` (`--all`, 2274 строки, 41 группа, Release этого же коммита: `build_stamp 0.13.0+b2d4ef5`),
-  каталог `scratch/mcp-smoke/runs/20261111-111928-all-b2d4ef5`, 40 минут. не-PASS строки - те же 10
-  NAMED и 3 UNKNOWN, что в прогоне `76bba32` (**PASS 2251 / FAIL 0**), поимённо; прирост PASS +10 = 10
-  строк новой группы `specification` наряда `SPEC_ADD_ROW` (26 PASS против 16). Зачётный прогон
-  поставки `v0.13.0` - **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
-  `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`; доказательства -
-  `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` - 36 PASS,
-  «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
+- **Последний полный прогон:** **PASS 2279 / NAMED 11 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
+  `0549279` (`--all`, 2293 строки, 41 группа, Release этого же коммита: `build_stamp 0.13.0+0549279`),
+  каталог `scratch/mcp-smoke/runs/20261111-124124-all-0549279`, 34 минуты. Сверка с прошлым зачётом
+  `b2d4ef5` (**PASS 2261 / NAMED 10 / UNKNOWN 3 / FAIL 0**): +18 PASS и +1 NAMED - это 19 новых строк
+  `SPEC-03.*` (группа `specification` 45 против 26) минус `OPS.07.budget_from_config`, ушедшая из PASS
+  в NAMED (`running` не наблюдался, строка от PASS отказалась); прочие NAMED и UNKNOWN те же поимённо.
+  Зачётный прогон поставки `v0.13.0` - **PASS 2154 / NAMED 9 /
+  UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`;
+  доказательства - `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` -
+  36 PASS, «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
 - **Клиентская приёмка 0.13.0:** **40 строк, 40 PASS** (12 выполнены заново на поставке `b31cd7e`,
   28 перенесены дословно), свод -
   `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/client-acceptance.json`.
@@ -1240,8 +1241,10 @@ UNKNOWN 3 / FAIL 0.
 - **Записи:** раздел `docs/decisions/bom.md#spec-edit-row`, `docs/02_TOOL_CONTRACTS.md` §2.21, строка
   матрицы `SPEC-03.row.edit`, каталог `SPEC-03` (+1 операция, +1 режим; счётчики обновлены вручную),
   профиль `spec-ext-v1` - 3/3 режима, отчёт `SPEC_EDIT_ROW_REPORT_20261111.md`.
+- **Полный прогон `--all` (зачётный).** `0549279`, чистое дерево: **PASS 2279 / NAMED 11 / UNKNOWN 3 /
+  FAIL 0**, код 0, 2293 строки, 41 группа, 34 минуты, каталог `scratch/mcp-smoke/runs/20261111-124124-all-0549279`.
+  К `b2d4ef5` (2261/10/3/0): +18 PASS = 19 строк `SPEC-03.*` минус 1 `OPS.07` (стал NAMED).
 - **Долг.** Новых строк нет: перенос раздела (`SetSection` не сохраняется), масса и составные значения
-  (`ksSpcMassa`, `ksSpcChangeValue`), запись строк `.spw` и связь строки с компонентом названы в
-  `unverified_aspects`, в строке матрицы и в описании инструмента. Замечено вне наряда: правка
-  адресуется только `row_ref`, поэтому строка без `unique_number` в чтении (`.spw`-документ) правится
-  лишь после того, как номер прочитан; `docs/STATUS.md` выше порога 100 КБ (перенос - шаг выпуска).
+  (`ksSpcMassa`, `ksSpcChangeValue`), запись строк `.spw` и связь с компонентом названы в
+  `unverified_aspects`, в строке матрицы и в описании инструмента; правка адресуется только `row_ref`
+  (`.spw` без `unique_number` - после чтения номера); `docs/STATUS.md` выше порога (перенос - в выпуск).

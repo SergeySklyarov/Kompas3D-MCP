@@ -24,13 +24,12 @@
   ровно один релиз.
 - **Инструментов:** 14, операций **132** (из них через `run` 121), схем **132**, профилей **22**
   (**136/136** режимов, **82/82** зависимостей, `problems []`).
-- **Последний полный прогон:** **PASS 2251 / NAMED 10 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
-  `76bba32` (`--all`, 2264 строки, 41 группа, Release этого же коммита: `build_stamp 0.13.0`), каталог
-  `scratch/mcp-smoke/runs/20261111-041058-all-76bba32`, 38 минут. не-PASS строки - те же 10 NAMED и
-  3 UNKNOWN, что в прогоне `c7b1153` (**PASS 2235 / FAIL 0**), поимённо; прирост PASS +16 = 16 строк
-  новой группы `--specification-only`, а оба FAIL прогона `5c7470c` (**PASS 2222 / FAIL 2**)
-  (`ASM.03.recursive_read`, `ASM.03.negative_tests`) исправлены в `d0979a9` и остаются PASS.
-  Зачётный прогон поставки `v0.13.0` - **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
+- **Последний полный прогон:** **PASS 2261 / NAMED 10 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
+  `b2d4ef5` (`--all`, 2274 строки, 41 группа, Release этого же коммита: `build_stamp 0.13.0+b2d4ef5`),
+  каталог `scratch/mcp-smoke/runs/20261111-111928-all-b2d4ef5`, 40 минут. не-PASS строки - те же 10
+  NAMED и 3 UNKNOWN, что в прогоне `76bba32` (**PASS 2251 / FAIL 0**), поимённо; прирост PASS +10 = 10
+  строк новой группы `specification` наряда `SPEC_ADD_ROW` (26 PASS против 16). Зачётный прогон
+  поставки `v0.13.0` - **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`, каталог
   `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`; доказательства -
   `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` - 36 PASS,
   «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
@@ -1192,10 +1191,17 @@ UNKNOWN 3 / FAIL 0.
 - **Приёмка.** Группа `--specification-only`: **54 PASS / 0 FAIL** (16 строк `SPEC-01.*` + 10 строк
   `SPEC-02.*`), постановка - копия входа исследования в `scratch`; строка проверяется независимым
   читателем `kompas_get_specification` и переоткрытием файла, а не ответом создания. Модульные тесты
-  Debug и Release - **1964 PASS / 0 FAIL**; `--self-test` прибора - 109 проверок, 0 FAIL.
+  Debug и Release - **1978 PASS / 0 FAIL**; `--self-test` прибора - 109 проверок, 0 FAIL.
 - **Записи:** раздел `docs/decisions/bom.md#spec-add-row`, `docs/02_TOOL_CONTRACTS.md` §2.20, строка
-  матрицы `SPEC-02.row.create`, каталог `SPEC-02` (+1 операция, +1 режим, счётчики сверены
-  генератором), профиль `spec-ext-v1` - 2/2 режима, отчёт `SPEC_ADD_ROW_REPORT_20261111.md`.
+  матрицы `SPEC-02.row.create`, каталог `SPEC-02` (+1 операция, +1 режим; счётчики обновлены вручную,
+  как и прошлым нарядом), профиль `spec-ext-v1` - 2/2 режима, отчёт
+  `SPEC_ADD_ROW_REPORT_20261111.md`.
+- **Полный прогон `--all` (зачётный).** На чистом закоммиченном `b2d4ef5`: **PASS 2261 / NAMED 10 /
+  UNKNOWN 3 / FAIL 0**, `exit_code=0`, 2274 строки, 41 группа, 40 минут, каталог
+  `scratch/mcp-smoke/runs/20261111-111928-all-b2d4ef5`. Сверка с прошлым зачётом (`76bba32`:
+  2251/10/3/0): прирост +10 PASS - ровно 10 строк `SPEC-02.*` (группа `specification` 26/0 против
+  16/0), NAMED и UNKNOWN совпадают поимённо, у прочих групп числа те же. FAIL - ноль, разбирать
+  нечего.
 - **Долг.** Новых строк нет: незаписанные в файл строки, отсутствие связи с компонентом и не включённые
   `subsection_number`/`additional_section`/`block` названы в `unverified_aspects` и в строке матрицы.
   Замечено вне наряда: `meta.counters.modes_and_variants` каталога (237 → 238) не равен пересчёту по

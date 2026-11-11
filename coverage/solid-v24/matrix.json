@@ -16420,6 +16420,62 @@
       ]
     },
     {
+      "operation_id": "SPEC-02.row.create",
+      "context": "specification.model",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-ext-v1",
+      "queue": "SPEC_ADD_ROW",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261110-spec-ext-7d463a0/",
+        "docs/decisions/bom.md#spec-add-row"
+      ],
+      "parameters_schema": "schemas/kompas_specification_add_row.json",
+      "adapter_route": "kompas_specification_add_row: SpecificationDescriptions.Active (если описания нет - документированный Add(\"\", 0, \"\") создаёт описание по умолчанию, и это названо) -> ISpecificationDescription.BaseObjects.Add(section, 0) добавляет объект только в КОЛЛЕКЦИЮ -> ISpecificationObject.Columns -> Column[тип, 1, 0] -> ColumnItems.Value по ValueType (ksValueTypeInteger/Float/String) -> ISpecificationObject.Update() создаёт строку в документе; успех подтверждается перечитыванием: описание берётся у документа заново, строка опознаётся как НОВЫЙ объект списка (номер созданной ручки документ не показывает), затем API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcObjectColumnText + ksGetSpcSectionName; расхождение - GEOMETRY_FAILED со снимком (ispecificationbaseobjects_add.html, ispecificationobject_update.html, ispecificationdescriptions_add.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_uniquenumber.html, ispecificationobject_delete.html, ispecificationstyle_sections.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ispecificationobject_section.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка строки - наряд SPEC_EDIT_ROW: этот инструмент только создаёт",
+        "rebuild": "создание строки не перестраивает модель: строка - объект спецификации, а не признак дерева",
+        "suppress_restore": "у создания строки нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами и сохранением с переоткрытием, а не измерением"
+      },
+      "tests": [
+        "SPEC-02.discovery",
+        "SPEC-02.schema",
+        "SPEC-02.create_assembly",
+        "SPEC-02.read_by_other_tool",
+        "SPEC-02.save_reopen",
+        "SPEC-02.create_part",
+        "SPEC-02.negative_input",
+        "SPEC-02.negative_section",
+        "SPEC-02.negative_revision",
+        "SPEC-02.negative_kind"
+      ],
+      "limitations": [
+        "Строка живёт в модели до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects самого ответа; переживание сохранения и переоткрытия проверяет приёмка (SPEC-02.save_reopen).",
+        "Связь строки с компонентом не создаётся: ISpecificationBaseObjects.AddWithParam связывает строку с IPropertyKeeper, а точки входа в IPropertyKeeper в COM нет (граница документации).",
+        "subsection_number, additional_section и block в контракт не вошли: маршрут (AddWithParam / ISpecificationObjectCreateParam) документирован, но постановкой не проверен.",
+        "Удаление объекта, попавшего только в коллекцию (ветка «в стиле нет колонки»), не измерялось: отказ называет результат Delete(), каким он был.",
+        "Позиция пишется только если задана; без неё нумерацию ставит документ, и прочитанная позиция - его ответ.",
+        "Перенос раздела (SetSection не сохраняется) и правка/удаление строк - другие наряды блока spec-ext-v1."
+      ]
+    },
+    {
       "operation_id": "SM-24.move_faces",
       "kind": "profile_mode",
       "context": "part.single_body",

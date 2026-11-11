@@ -237,6 +237,9 @@ public static class WorkerCommandTable
         // Opening a .spw reads a file, and every row costs one column read per field; the API5 cross-check
         // is one call per row. History: docs/decisions/bom.md#spec-read-spw
         Cad(WorkerCommands.GetSpecificationDocument, WorkerAction.Read, 120_000);
+        // Creating a row writes the collection, the columns and Update(), then reads the row back through
+        // both roads: one COM call per column written and per column read. History: docs/decisions/bom.md#spec-add-row
+        Cad(WorkerCommands.AddSpecificationRow, WorkerAction.ModelMutation, 120_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

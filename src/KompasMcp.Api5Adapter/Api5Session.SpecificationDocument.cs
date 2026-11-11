@@ -31,7 +31,7 @@ public partial class Api5Session
 
     /// <summary><c>DocumentTypeEnum.ksDocumentSpecification</c> — the API7 type of a specification
     /// document.</summary>
-    /// <remarks>DOC: <c>documenttypeenum.html</c>, «Спецификация» = 3. Measured on the probe document.
+    /// <remarks>DOC: <c>documenttypeenum.html</c>, «Спецификация» = 3.
     /// History: docs/decisions/bom.md#spec-read-spw</remarks>
     private const int SpecificationDocumentType = 3;
 
@@ -422,8 +422,9 @@ public partial class Api5Session
     /// <remarks>DOC: <c>ispecificationobject_columns.html</c>, <c>ispecificationcolumns_column.html</c>
     /// («type, ColumnNumber, BlockNumber»), <c>ispecificationcolumn_columnitems.html</c>,
     /// <c>ispecificationcolumnitems_item.html</c>, <c>ispecificationcolumnitem_value.html</c>.
-    /// INVARIANT: an absent column and an unread one are named apart, and a column of several элементов
-    /// (исполнения) is joined in order instead of one being picked for the caller.
+    /// INVARIANT: an absent column and an unread one are named apart, and a column that carries several
+    /// items (one per EMBODIMENT, «исполнения» in the vendor's wording) is joined in order instead of one
+    /// being picked for the caller.
     /// History: docs/decisions/bom.md#spec-read-spw</remarks>
     private static string? Api7Column(
         ISpecificationBaseObject item, ksSpecificationColumnTypeEnum type, string field, List<string> notes)

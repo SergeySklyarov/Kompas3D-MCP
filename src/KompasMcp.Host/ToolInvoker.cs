@@ -317,6 +317,26 @@ public sealed class ToolInvoker : IAsyncDisposable
     /// mode, unsupported combinations rejected rather than normalised away.</summary>
     private static IEnumerable<SchemaViolation> ModeViolations(ToolDefinition tool, JsonObject arguments)
     {
+        if (tool.Name == "kompas_specification_add_row")
+        {
+            // The row rule is applied here too, not only in the Worker: a blank required field or section 0
+            // must be refused BEFORE the journal and BEFORE COM, with the vendor's own wording for the zero
+            // section. The Worker repeats the SAME pure rule.
+            // History: docs/decisions/bom.md#spec-add-row
+            var refused = SpecificationRowInput.Validate(
+                (int)(ReadLong(arguments, "section_number") ?? 0),
+                ReadString(arguments, "marking"),
+                ReadString(arguments, "name"),
+                ReadString(arguments, "quantity"),
+                ReadLong(arguments, "position") is { } position ? (int)position : null);
+            if (refused is not null)
+            {
+                yield return new SchemaViolation("/" + refused.Field, "value", refused.Message);
+            }
+
+            yield break;
+        }
+
         if (tool.Name == "kompas_get_specification_document")
         {
             // "path OR document_id" cannot be expressed without oneOf, which not every client evaluates;

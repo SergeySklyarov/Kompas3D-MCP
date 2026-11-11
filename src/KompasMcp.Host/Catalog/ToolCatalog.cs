@@ -611,6 +611,49 @@ public static class ToolCatalog
                 WorkerCommands.GetSpecificationDocument,
                 requiresOperationId: false),
 
+            // SPEC-02: the first WRITE of the block — a MODEL row. Add() only fills the collection, Update()
+            // creates the row, and the answer is decided by reading it back through both roads.
+            // History: docs/decisions/bom.md#spec-add-row
+            Mutation("kompas_specification_add_row", "Создать строку спецификации модели",
+                "Создаёт СТРОКУ спецификации модели (детали или сборки) и подтверждает её обратным "
+                + "чтением. Маршрут — API7: SpecificationDescriptions.Active → BaseObjects.Add(раздел, 0) "
+                + "добавляет объект только в КОЛЛЕКЦИЮ, значения пишутся в колонки по ИХ ТИПУ "
+                + "(ksSColumnMark/ksSColumnName/ksSColumnCount/ksSColumnPosition), а в документе строка "
+                + "появляется только после ISpecificationObject.Update(). Поэтому успех — не возврат "
+                + "вызова: строка перечитывается ОБЕИМИ дорогами (API7: Objects → UniqueNumber → Columns → "
+                + "ColumnItems; API5: ksGetSpcObject → ksGetSpcObjectNumber → ksGetSpcObjectColumnText), и "
+                + "значения сверяются с запрошенными. Расхождение — GEOMETRY_FAILED со снимком, а не "
+                + "успех. Ответ: row_ref {document_id, unique_number, marking}, прочитанная строка, route, "
+                + "notes, verification и unverified_aspects: файл этим вызовом НЕ пишется — сохранение "
+                + "делает kompas_save_document, и переживание строки сохранением проверяет приёмка. "
+                + "Раздел берётся по номеру в СТИЛЕ спецификации (обычно 20 «Детали»), а не по порядку "
+                + "ГОСТ; если у документа нет описания спецификации, создаётся описание по умолчанию, и это "
+                + "названо в notes (и в отказе, если после создания строку некуда деть). Отказы: "
+                + "INVALID_ARGUMENT (пустые marking/name/quantity, section_number 0 — «Объект c номером "
+                + "раздела 0.0. добавить нельзя», значение не того типа, что ждёт колонка), "
+                + "WRONG_DOCUMENT_KIND (не модель: .spw, чертёж), CAPABILITY_UNAVAILABLE (раздела нет в "
+                + "стиле — с перечнем доступных; в стиле нет колонки нужного типа; Update() = false), "
+                + "GEOMETRY_FAILED (чтение назад не подтвердило строку). ПРЕДЕЛ: строка живёт в модели до "
+                + "сохранения; связь строки с компонентом (IPropertyKeeper) НЕ создаётся — точки входа в "
+                + "COM нет (граница документации), поэтому строка не привязана к экземпляру сборки; "
+                + "перенос раздела, правка и удаление строк — другие наряды.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("section_number", Sch.Int(
+                        "Номер раздела в стиле спецификации (обычно 20 — «Детали»). Номер принадлежит "
+                        + "стилю, а не порядку разделов ГОСТ; 0 не принимается: «Объект c номером раздела "
+                        + "0.0. добавить нельзя».", max: 100_000)),
+                    ("marking", Sch.Str("Обозначение строки, например SPC.402.001.")),
+                    ("name", Sch.Str("Наименование строки.")),
+                    ("quantity", Sch.Str("Количество как текст: колонку «Количество» документ читает "
+                        + "текстом, а элемент колонки приводит значение к своему типу.")),
+                    ("position", Sch.Nullable(Sch.Int(
+                        "Позиция строки. null — позицию ставит документ (нумерация раздела).", 0)))),
+                WorkerCommands.AddSpecificationRow,
+                requiresDocument: true,
+                requiresRevision: true),
+
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
             // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.

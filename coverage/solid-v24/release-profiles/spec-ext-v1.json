@@ -2,17 +2,23 @@
   "meta": {
     "profile_id": "spec-ext-v1",
     "title": "Документ-спецификация v24: строки .spw, прочитанные документированным маршрутом",
-    "revision": "1.0",
+    "revision": "1.1",
     "revision_history": [
       {
         "revision": "1.0",
         "date": "11.11.2026",
         "change": "профиль заведён нарядом SPEC_READ_SPW (поправка плана девяносто седьмая): документ-спецификация .spw открывается документированным IDocuments.Open, строки читаются через IKompasDocument.SpecificationDescriptions и сверяются независимой дорогой API5 (docs/decisions/bom.md#spec-read-spw); запись строк .spw в профиль не входит"
+      },
+      {
+        "revision": "1.1",
+        "date": "11.11.2026",
+        "change": "наряд SPEC_ADD_ROW: создание строки МОДЕЛИ через BaseObjects.Add + Update с перечитыванием обеими дорогами (docs/decisions/bom.md#spec-add-row); строка SPEC-02.row.create, инструмент kompas_specification_add_row"
       }
     ],
     "target_build": "24.0.0.2799",
     "queue": {
-      "SPEC_READ_SPW": "Первый наряд блока spec-ext-v1: чтение документа-спецификации .spw"
+      "SPEC_READ_SPW": "Первый наряд блока spec-ext-v1: чтение документа-спецификации .spw",
+      "SPEC_ADD_ROW": "Второй наряд блока spec-ext-v1: создание строки спецификации модели"
     }
   },
   "modes": [
@@ -30,6 +36,23 @@
         "negative_tests"
       ],
       "gap": "Открытие - документированным IDocuments.Open(PathName, Visible, ReadOnly), тип подтверждается IKompasDocument.DocumentType = ksDocumentSpecification. Строки - IKompasDocument.SpecificationDescriptions.Active -> ISpecificationDescription.Objects (порядок визуальный) -> ISpecificationObject.Columns -> Column[type, 1, 0] -> ColumnItems.Item(i).Value по ТИПУ колонки; название раздела - ISpecificationStyle.Sections по номеру, потому что номер принадлежит стилю, а не порядку ГОСТ. Объекты списка, не являющиеся базовыми (имя раздела, комментарий, начало блока, резервная и пустая строка, объект-заготовка), называются своим документированным типом ksSpecificationObjectTypeEnum, а не выбрасываются и не выдаются за строки. Вторая, независимая дорога - SpcActiveDocument -> GetSpecification -> ksGetSpcObject/ksGetSpcObjectNumber/ksGetSpcObjectColumnText - читается только у АКТИВНОГО документа; расхождение дорог и недоступность второй дороги названы. Открытие по path не делает документ активным и не пишет файл: документ открывается только для чтения, закрытие остаётся за клиентом."
+    },
+    {
+      "ref": "SPEC-02.row.create",
+      "title": "Создание строки спецификации модели: BaseObjects.Add + Update, перечитывание обеими дорогами, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_ADD_ROW",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Создание - API7: SpecificationDescriptions.Active (если описания нет, документированный Add(\"\", 0, \"\") создаёт описание по умолчанию, и это названо) -> ISpecificationDescription.BaseObjects.Add(section, 0) добавляет объект только в КОЛЛЕКЦИЮ (ispecificationbaseobjects_add.html) -> значения в колонки по ТИПУ (ksSColumnMark/ksSColumnName/ksSColumnCount/ksSColumnPosition) через ISpecificationColumnItem.Value по ValueType -> ISpecificationObject.Update() создаёт строку в документе (ispecificationobject_update.html). Раздел проверяется по стилю ДО Add (номер раздела принадлежит стилю), ноль отвергается дословной формулировкой справки, неизвестный раздел - с перечнем доступных. Успех подтверждается перечитыванием: описание берётся у документа заново, строка находится по UniqueNumber (или по запрошенным значениям при одном совпадении), затем читаются API7 (Objects -> Columns -> ColumnItems) и API5 (ksGetSpcObject -> ksGetSpcObjectNumber -> сверка указателя -> ksGetSpcObjectColumnText + ksGetSpcSectionName); расхождение - GEOMETRY_FAILED со снимком. Число сравнивается как число, текст - как текст. Ответ - row_ref {document_id, unique_number, marking}, прочитанная строка, verification, unverified_aspects (файл этим вызовом не пишется)."
     }
   ],
   "common_dependencies": [],

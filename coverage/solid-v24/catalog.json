@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 161,
+   "operations": 162,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 237,
+   "modes_and_variants": 238,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8604,6 +8604,20 @@
       {
        "id": "SPEC-01.specdoc.read",
        "name": "Прочитать строки документа-спецификации .spw: раздел, позиция, обозначение, наименование, количество",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SPEC-02",
+     "name": "Создание строки спецификации модели",
+     "level": "mcp_verified",
+     "doc_source": "ispecificationbaseobjects_add.html, ispecificationobject_update.html, ispecificationdescriptions_add.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_uniquenumber.html, ispecificationobject_delete.html, ispecificationstyle_sections.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ispecificationobject_section.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html",
+     "route": "API7: SpecificationDescriptions.Active (если описания нет - документированный Add(\"\", 0, \"\") создаёт описание по умолчанию, и это названо) -> ISpecificationDescription.BaseObjects.Add(section, 0) добавляет объект только в КОЛЛЕКЦИЮ -> значения в колонки по ТИПУ (ksSColumnMark/ksSColumnName/ksSColumnCount/ksSColumnPosition) через ISpecificationColumnItem.Value по ValueType -> ISpecificationObject.Update() создаёт строку в документе; успех подтверждается перечитыванием: описание берётся у документа заново, строка опознаётся как НОВЫЙ объект списка (номер созданной ручки документ не показывает), затем API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcObjectColumnText + ksGetSpcSectionName; расхождение - GEOMETRY_FAILED со снимком",
+     "modes": [
+      {
+       "id": "SPEC-02.row.create",
+       "name": "Создать строку спецификации модели: раздел, обозначение, наименование, количество, позиция",
        "level": "mcp_verified"
       }
      ]

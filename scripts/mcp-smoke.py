@@ -820,8 +820,9 @@ def step_metadata_export(client, app_id, path):
 # → 122 (RIB_CORE: kompas_rib) → 123 (IGES_EXPORT: kompas_export_iges)
 # → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf)
 # → 130 (ASM_PATTERN_PATH: kompas_pattern_path)
-# → 131 (SPEC_READ_SPW: kompas_get_specification_document).
-EXPECTED_TOOL_COUNT = 131
+# → 131 (SPEC_READ_SPW: kompas_get_specification_document)
+# → 132 (SPEC_ADD_ROW: kompas_specification_add_row).
+EXPECTED_TOOL_COUNT = 132
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -58538,19 +58539,21 @@ def bom_checks(client, rep, app_id, workdir):
 
 
 def specification_checks(client, rep, app_id, workdir):
-    """SPEC-01 - документ-спецификация `.spw`: открытие по path и по document_id, строки, вторая
-    дорога, отказ (наряд SPEC_READ_SPW, профиль `spec-ext-v1`).
+    """SPEC-01/SPEC-02 - блок «спецификация»: чтение документа `.spw` по path и по document_id
+    (наряд SPEC_READ_SPW) и создание строки МОДЕЛИ (наряд SPEC_ADD_ROW, профиль `spec-ext-v1`).
 
     ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Постановка - файл `.spw` прибора исследования с ОДНОЙ известной строкой
     (`SPC.401.001` / «Строка спецификации» / 7 в разделе 20 «Детали») и сборка `spec-asm.m3d` той же
     постановки со своими известными объектами. Продукт открывает их и читает, и строки сверяются с
     этими значениями, а не с «status=succeeded».
 
-    ЧЕГО ЗДЕСЬ НЕТ. Запись строк `.spw` в наряд не входит: инструмент только читает. Вторая дорога
-    (API5) читается лишь у АКТИВНОГО документа, а активировать его чтение не вправе, поэтому
-    проверка требует ЧЕСТНОСТИ: расхождения нет, а недоступность дороги НАЗВАНА в unverified_aspects.
-    Само чтение API5 у активного `.spw` измерено прибором
-    (`docs/acceptance/evidence/20261110-spec-ext-7d463a0/`).
+    SPEC-01. Запись строк `.spw` не входит; вторая дорога (API5) читается лишь у АКТИВНОГО документа.
+
+    SPEC-02. Создание строки модели - первая ЗАПИСЬ блока. Строка не считается созданной по ответу
+    вызова: её показывает независимый читатель `kompas_get_specification`, и она обязана пережить
+    сохранение и переоткрытие. Созданная у детали без описания спецификация по умолчанию НАЗЫВАЕТСЯ в
+    notes, а не правит модель молча. Отказы: раздел 0 и пустые поля, несуществующий раздел (с перечнем
+    доступных), устаревшая ревизия, неизвестный документ и `.spw` вместо модели.
     """
     import os
 
@@ -58800,6 +58803,209 @@ def specification_checks(client, rep, app_id, workdir):
                 in (os.path.normcase(os.path.abspath(spw_path)),
                     os.path.normcase(os.path.abspath(copy_path)),
                     os.path.normcase(os.path.abspath(model_path))):
+            close(item.get("id"))
+
+    # ===== SPEC-02: создание строки МОДЕЛИ (наряд SPEC_ADD_ROW) =====
+    # Постановка - та же копия входа исследования; модель открывается на ЗАПИСЬ, потому что проверяется
+    # создание. Строка сверяется не с ответом создания, а с ЧИТАТЕЛЕМ спецификации и с файлом после
+    # переоткрытия: инструмент мог бы ответить и ложно.
+    entry = entry_of(client, "kompas_specification_add_row")
+    schema = (entry or {}).get("inputSchema") or {}
+    spec_props = set(schema.get("properties") or {}) - {"timeout_ms"}
+    spec_required = set(schema.get("required") or [])
+    rep.add("SPEC-02.discovery", "инструмент создания строки модели есть в реестре каталога",
+            "PASS" if entry is not None else "FAIL", f"в реестре={len(registry)}")
+    rep.add("SPEC-02.schema",
+            "схема называет семь полей входа и, как всякая мутация, operation_id; позиция необязательна — "
+            "её отсутствие оставляет нумерацию документу",
+            "PASS" if (spec_props == {"document_id", "expected_revision", "section_number", "marking",
+                                      "name", "quantity", "position", "operation_id"}
+                       and spec_required == {"document_id", "expected_revision", "section_number",
+                                             "marking", "name", "quantity", "operation_id"}) else "FAIL",
+            f"поля={sorted(spec_props)} обязательные={sorted(spec_required)}")
+
+    def context_of(document_id):
+        answer, code = (lambda pair: (result(pair[0]), pair[1]))(
+            call("kompas_get_context", {"document_id": document_id, "detail": "minimal"})) \
+            if document_id else ({}, "no_document")
+        return answer, code
+
+    def specification_of(document_id):
+        answer, code = (lambda pair: (result(pair[0]), pair[1]))(
+            call("kompas_get_specification", {"document_id": document_id})) \
+            if document_id else ({}, "no_document")
+        return answer, code
+
+    def row_matches(answer, marking, name, quantity):
+        return [r for r in rows(answer)
+                if str(r.get("marking") or "") == marking
+                and str(r.get("name") or "") == name
+                and str(r.get("quantity") or "") == quantity
+                and r.get("section_number") == 20]
+
+    edit_env, edit_code = call("kompas_open_document",
+                               {"application_id": app_id, "path": model_path, "access": "edit"})
+    write_model = doc_id(edit_env)
+    write_context, write_context_code = context_of(write_model)
+    rows_before = rows(specification_of(write_model)[0])
+
+    requested = {"section_number": 20, "marking": "SPC.402.001", "name": "Строка наряда",
+                 "quantity": "4", "position": 5}
+    create_env, create_code = call("kompas_specification_add_row",
+                                   dict(document_id=write_model,
+                                        expected_revision=write_context.get("revision"), **requested)) \
+        if write_model else ({}, "no_document")
+    created = result(create_env)
+    row_ref = created.get("row_ref") or {}
+    created_row = created.get("row") or {}
+    create_checks = (created.get("verification") or {}).get("checks") or []
+    failed_checks = [c.get("name") for c in create_checks if not c.get("passed")]
+    rep.add("SPEC-02.create_assembly",
+            "строка создана в сборке: Update(), перечитывание обеими дорогами и сверка значений прошли; "
+            "ответ несёт row_ref с unique_number и прочитанную строку с запрошенными значениями",
+            "PASS" if (write_model and not create_code
+                       and row_ref.get("unique_number") is not None
+                       and str(row_ref.get("marking") or "") == requested["marking"]
+                       and str(created_row.get("marking") or "") == requested["marking"]
+                       and str(created_row.get("name") or "") == requested["name"]
+                       and str(created_row.get("quantity") or "") == requested["quantity"]
+                       and created_row.get("section_number") == 20
+                       and (created.get("verification") or {}).get("level") == "structure_checked"
+                       and not failed_checks) else "FAIL",
+            f"код={create_code},{write_context_code} row_ref={row_ref} строка={created_row} "
+            f"уровень={(created.get('verification') or {}).get('level')} непрошедшие={failed_checks}")
+
+    # Читатель спецификации обязан показать строку сам, а не повторить ответ создания.
+    read_answer, read_code = specification_of(write_model)
+    rep.add("SPEC-02.read_by_other_tool",
+            "kompas_get_specification показывает созданную строку с запрошенными значениями, и строк стало "
+            "на одну больше: читатель видит её независимо от ответа создания",
+            "PASS" if (not read_code and len(row_matches(read_answer, requested["marking"],
+                                                         requested["name"], requested["quantity"])) == 1
+                       and len(rows(read_answer)) == len(rows_before) + 1) else "FAIL",
+            f"код={read_code} было={len(rows_before)} стало={len(rows(read_answer))} "
+            f"строка={row_matches(read_answer, requested['marking'], requested['name'], requested['quantity'])}")
+
+    # Строка должна пережить запись файла и переоткрытие: «создана» без файла - не тот ответ.
+    save_context, save_context_code = context_of(write_model)
+    _save_env, save_code = (lambda pair: (pair[0], pair[1]))(
+        call("kompas_save_document",
+             {"document_id": write_model, "expected_revision": save_context.get("revision")}))
+    close(write_model)
+    reopened_env, reopen_model_code = call("kompas_open_document",
+                                          {"application_id": app_id, "path": model_path,
+                                           "access": "read_only"})
+    reopen_model = doc_id(reopened_env)
+    reopened_spec, reopened_spec_code = specification_of(reopen_model)
+    rep.add("SPEC-02.save_reopen",
+            "kompas_save_document пишет модель, а переоткрытая сборка показывает ту же строку с теми же "
+            "значениями: строка живёт в файле, а не только в сеансе создания",
+            "PASS" if (write_model and not save_code and reopen_model and not reopened_spec_code
+                       and not save_context_code and len(row_matches(
+                           reopened_spec, requested["marking"], requested["name"],
+                           requested["quantity"])) == 1) else "FAIL",
+            f"save_код={save_code},{save_context_code} переоткрытие={reopen_model_code},"
+            f"{reopened_spec_code} строка="
+            f"{row_matches(reopened_spec, requested['marking'], requested['name'], requested['quantity'])}")
+    close(reopen_model)
+
+    # Деталь: у только что созданной детали описания может не быть, и тогда оно создаётся по умолчанию —
+    # это НАЗВАНО в notes, и приёмка сверяет название с ответом ЧИТАТЕЛЯ о том же документе.
+    part_env, _part_open = call("kompas_create_document", {"application_id": app_id, "kind": "part"})
+    part_doc = doc_id(part_env)
+    part_before, _part_before_code = specification_of(part_doc)
+    part_had_description = "specification_absent" not in " ".join(
+        str(n) for n in (part_before.get("notes") or []))
+    part_context, part_context_code = context_of(part_doc)
+    part_env2, part_code = call("kompas_specification_add_row",
+                                {"document_id": part_doc,
+                                 "expected_revision": part_context.get("revision"),
+                                 "section_number": 20, "marking": "SPC.403.001",
+                                 "name": "Пластина наряда", "quantity": "1"}) \
+        if part_doc else ({}, "no_document")
+    part_created = result(part_env2)
+    part_notes = " ".join(str(n) for n in (part_created.get("notes") or []))
+    part_spec, part_spec_code = specification_of(part_doc)
+    part_row = [r for r in rows(part_spec) if str(r.get("marking") or "") == "SPC.403.001"]
+    description_named = "specification_description_created" in part_notes
+    rep.add("SPEC-02.create_part",
+            "строка создаётся и в ДЕТАЛИ; если описания спецификации у неё не было, оно создаётся по "
+            "умолчанию и это НАЗВАНО в notes — молчаливой правки модели нет",
+            "PASS" if (part_doc and not part_code and not part_context_code and len(part_row) == 1
+                       and (part_had_description or description_named)) else "FAIL",
+            f"код={part_code},{part_context_code} описание_было={part_had_description} "
+            f"создание_названо={description_named} notes={part_notes[:160]!r} строка={part_row}")
+    close(part_doc)
+
+    # ===== SPEC-02: отказы =====
+    refuse_env, refuse_open = call("kompas_open_document",
+                                   {"application_id": app_id, "path": model_path, "access": "edit"})
+    refuse_model = doc_id(refuse_env)
+    refuse_context, refuse_context_code = context_of(refuse_model)
+    refuse_revision = refuse_context.get("revision")
+    rows_before_refusals = rows(specification_of(refuse_model)[0])
+
+    def refusal(**fields):
+        payload = {"document_id": refuse_model, "expected_revision": refuse_revision}
+        payload.update(fields)
+        env, code = call("kompas_specification_add_row", payload)
+        return code, ((env or {}).get("error") or {}).get("message") or ""
+
+    zero_code, zero_message = refusal(section_number=0, marking="SPC.404.001", name="Строка",
+                                      quantity="1") if refuse_model else (None, "")
+    blank_code, _blank_message = refusal(section_number=20, marking="  ", name="Строка",
+                                         quantity="1") if refuse_model else (None, "")
+    rep.add("SPEC-02.negative_input",
+            "раздел 0 и пустое обозначение отвергаются INVALID_ARGUMENT ДО обращения к КОМПАС, и у "
+            "нулевого раздела повторена дословная формулировка справки",
+            "PASS" if (zero_code == "INVALID_ARGUMENT" and blank_code == "INVALID_ARGUMENT"
+                       and "0.0." in zero_message) else "FAIL",
+            f"раздел0={zero_code} пустое={blank_code} текст={zero_message[:160]!r}")
+
+    section_code, section_message = refusal(section_number=999, marking="SPC.404.002", name="Строка",
+                                            quantity="1") if refuse_model else (None, "")
+    rep.add("SPEC-02.negative_section",
+            "несуществующий раздел отвергается CAPABILITY_UNAVAILABLE, и причина называет ДОСТУПНЫЕ "
+            "разделы стиля, а не сообщает «не удалось»",
+            "PASS" if (section_code == "CAPABILITY_UNAVAILABLE"
+                       and "Доступные разделы" in section_message) else "FAIL",
+            f"код={section_code} текст={section_message[:200]!r}")
+
+    stale_code, _stale_message = refusal(expected_revision=(refuse_revision or 1) + 100,
+                                         section_number=20, marking="SPC.404.003", name="Строка",
+                                         quantity="1") if refuse_model else (None, "")
+    rows_after_refusals = rows(specification_of(refuse_model)[0])
+    rep.add("SPEC-02.negative_revision",
+            "устаревшая ревизия отвергается REVISION_CONFLICT до COM, и после отказов строк не прибавилось: "
+            "ложного создания нет",
+            "PASS" if (stale_code == "REVISION_CONFLICT"
+                       and len(rows_after_refusals) == len(rows_before_refusals)) else "FAIL",
+            f"код={stale_code} строк было={len(rows_before_refusals)} стало={len(rows_after_refusals)}")
+
+    missing_code, _missing_message = refusal(document_id="0" * 32, section_number=20,
+                                             marking="SPC.404.004", name="Строка", quantity="1") \
+        if refuse_model else (None, "")
+    spw_for_kind, spw_for_kind_code = call("kompas_get_specification_document", {"path": spw_path})
+    spw_kind_doc = id_of(spw_path)
+    spw_context, _spw_context_code = context_of(spw_kind_doc)
+    spw_kind_code, spw_kind_message = (lambda pair: (
+        error_code(pair[0]), ((pair[0] or {}).get("error") or {}).get("message") or ""))(
+        call("kompas_specification_add_row",
+             {"document_id": spw_kind_doc, "expected_revision": spw_context.get("revision"),
+              "section_number": 20, "marking": "SPC.404.005", "name": "Строка", "quantity": "1"})) \
+        if spw_kind_doc else (None, "")
+    rep.add("SPEC-02.negative_kind",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
+            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы",
+            "PASS" if (missing_code == "DOCUMENT_NOT_FOUND"
+                       and spw_kind_code == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"нет_документа={missing_code} .spw={spw_kind_code} текст={spw_kind_message[:160]!r}")
+    for document_id in (spw_kind_doc, refuse_model):
+        close(document_id)
+    for item in docs():
+        if isinstance(item, dict) and os.path.normcase(os.path.abspath(str(item.get("path") or ""))) in (
+                os.path.normcase(os.path.abspath(model_path)),
+                os.path.normcase(os.path.abspath(spw_path))):
             close(item.get("id"))
 
 

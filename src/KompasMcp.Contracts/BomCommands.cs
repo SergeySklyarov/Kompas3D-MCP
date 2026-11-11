@@ -132,6 +132,52 @@ public sealed record GetSpecificationDocumentResult(
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> UnverifiedAspects);
 
+/// <summary>Create one row of a MODEL specification — block <c>SPEC_ADD_ROW</c>, mode
+/// <c>SPEC-02.row.create</c>.</summary>
+/// <remarks>ROUTE: <c>ISpecificationDescription.BaseObjects.Add(section, 0)</c> puts the object into the
+/// COLLECTION only; the columns and <c>Update()</c> are what create it in the document
+/// (<c>ispecificationbaseobjects_add.html</c>, <c>ispecificationobject_update.html</c>).
+/// INVARIANT: the answer is not "the call returned" — the row is read back through BOTH documented roads
+/// and compared with the request; a disagreement is a refusal with a snapshot, never a success.
+/// History: docs/decisions/bom.md#spec-add-row</remarks>
+public sealed record AddSpecificationRowCommand
+{
+    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>The number a section carries in the specification STYLE, not its ordinal.</summary>
+    public required int SectionNumber { get; init; }
+
+    public required string Marking { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string Quantity { get; init; }
+
+    /// <summary>Row position; null leaves the numbering to the document.</summary>
+    public int? Position { get; init; }
+}
+
+/// <summary>The row that was created, named the way the rest of the contract names a row.</summary>
+/// <param name="UniqueNumber">Read from the object itself and confirmed by <c>ksGetSpcObjectNumber</c>;
+/// it is what a later edit/delete addresses.</param>
+public sealed record SpecificationRowRefDto(string DocumentId, double UniqueNumber, string? Marking);
+
+/// <summary>The created row, read back through both roads, plus what stayed unverified.</summary>
+/// <remarks>INVARIANT: <c>Row</c> is the row the DOCUMENT answered after <c>Update()</c>, not a retelling of
+/// the request; a field the document did not give stays null. The verification level names only what the
+/// checks confirmed, and the aspects list what they do not cover (the file itself is not written here).
+/// History: docs/decisions/bom.md#spec-add-row</remarks>
+public sealed record AddSpecificationRowResult(
+    SpecificationRowRefDto RowRef,
+    SpecificationLineDto Row,
+    string Route,
+    VerificationDto Verification,
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string> UnverifiedAspects);
+
 /// <summary>The properties as <c>ksPart</c> answers them. A null value means "not read", never empty,
 /// zero or false.</summary>
 /// <remarks>INVARIANT: every field here rests on its own help page of <c>IPart</c>; a field with no page

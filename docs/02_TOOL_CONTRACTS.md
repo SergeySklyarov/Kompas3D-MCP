@@ -987,3 +987,46 @@ API7 недоступен), `AMBIGUOUS_APPLICATION` (см. выше). Откры
 не вводится. Синхронизация `.spw` со сборкой, листы сборочного чертежа и связь строки с компонентом
 (`IPropertyKeeper`) в профиль не входят. Приёмка — группа `mcp-smoke.py --specification-only`,
 строки `SPEC-01.*` матрицы.
+
+## 2.20. Создание строки спецификации модели (наряд `SPEC_ADD_ROW`, 11.11.2026)
+
+**Новый инструмент, первая ЗАПИСЬ блока.** `kompas_specification_add_row` (мутация: нужны
+`operation_id`, `document_id`, `expected_revision`) создаёт строку спецификации МОДЕЛИ — детали или
+сборки. Вход: `section_number` (номер раздела в СТИЛЕ), `marking`, `name`, `quantity` (строки) и
+необязательная `position` (`int`, ≥ 0; без неё позицию ставит документ). `subsection_number`,
+`additional_section` и `block` из отчёта исследования НЕ включены: маршрут документирован, но
+постановкой не проверен (`docs/decisions/bom.md#spec-add-row`).
+
+**Маршрут и почему успех — не `Update()`.** `SpecificationDescriptions.Active` →
+`BaseObjects.Add(section, 0)` добавляет объект только в КОЛЛЕКЦИЮ (`ispecificationbaseobjects_add.html`),
+значения пишутся в колонки по ИХ ТИПУ (`ksSColumnMark`/`ksSColumnName`/`ksSColumnCount`/
+`ksSColumnPosition`) через `ColumnItems.Value` по `ValueType`, а в документе строка появляется только
+после `ISpecificationObject.Update()`. Поэтому ответ подтверждается ПЕРЕЧИТЫВАНИЕМ: описание
+перечитывается у документа, строка находится по `UniqueNumber` (или, если документ показал её под
+другим номером, по запрошенным значениям — и только при ОДНОМ совпадении), затем читаются обе дороги:
+API7 (`Objects` → `Columns` → `ColumnItems`) и API5 (`ksGetSpcObject` → `ksGetSpcObjectNumber` → сверка
+указателя → `ksGetSpcObjectColumnText` + `ksGetSpcSectionName`). Расхождение с запросом —
+`GEOMETRY_FAILED` со снимком, а не успех.
+
+**Описание спецификации.** Если у документа нет описания (`Active = NULL`), создаётся описание по
+умолчанию документированным `Add("", 0, "")`, и это НАЗВАНО в `notes`
+(`specification_description_created`) и в отказе. Молчаливой правки модели нет.
+
+**Ответ.** `row_ref` (`document_id`, `unique_number`, `marking`), прочитанная строка того же вида, что
+у `kompas_get_specification` (`section`, `section_number`, `position`, `marking`, `name`, `quantity`),
+`route`, `notes`, `verification` (уровень `structure_checked`, когда прошли все проверки
+перечитывания) и `unverified_aspects`. Файл этим вызовом НЕ пишется: строка живёт в модели до
+`kompas_save_document`, и переживание сохранения проверяет приёмка.
+
+**Отказы.** `INVALID_ARGUMENT` до COM — пустые `marking`/`name`/`quantity`, `section_number` 0 (дословно
+«Объект c номером раздела 0.0. добавить нельзя»), значение, которое элемент колонки не принимает;
+`WRONG_DOCUMENT_KIND` — не модель (`.spw`, чертёж); `CAPABILITY_UNAVAILABLE` — раздела нет в стиле (с
+перечнем доступных разделов в причине), в стиле нет колонки нужного типа, `Update() = false`;
+`GEOMETRY_FAILED` — чтение назад не подтвердило строку; `REVISION_CONFLICT` — `expected_revision`
+разошёлся; `DOCUMENT_NOT_FOUND` — документа нет среди открытых. Объект, попавший в коллекцию при
+отказе, удаляется обратно, и отказ называет, удалось ли это (`partial_effects`).
+
+**Пределы.** Связь строки с компонентом (`ISpecificationBaseObjects.AddWithParam` +
+`IPropertyKeeper`) НЕ создаётся: точки входа в `IPropertyKeeper` в COM нет — граница документации.
+Перенос раздела (`SetSection` не сохраняется), правка и удаление строк — другие наряды. Запись строк
+`.spw` не входит. Приёмка — группа `mcp-smoke.py --specification-only`, строки `SPEC-02.*` матрицы.

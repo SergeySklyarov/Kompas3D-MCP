@@ -146,9 +146,8 @@ public partial class Api5Session
 
     /// <summary>One element of the list: a base object becomes a row, anything else is named by type.</summary>
     /// <remarks>INVARIANT: a non-base object is reported with its <c>ObjectType</c> from
-    /// <c>ksSpecificationObjectTypeEnum</c>. MEASURED: the former note said only «__ComObject: базовым
-    /// объектом он не является», which named the wrapper and hid that three of the seven objects were a
-    /// section name and the like — the class of "silently dropped row" a reader could not check.
+    /// <c>ksSpecificationObjectTypeEnum</c>, never by the name of the .NET wrapper: the wrapper name says
+    /// nothing about what was skipped, and a skipped object reads as a row silently lost.
     /// History: docs/decisions/bom.md#spec-read</remarks>
     private static void ClassifySpecificationObject(
         object? item, List<ISpecificationBaseObject> objects, List<string> notes)
@@ -175,7 +174,7 @@ public partial class Api5Session
 
     /// <summary>The documented name of an object type, in the language of the help page.</summary>
     /// <remarks>DOC: <c>ksspecificationobjecttypeenum.html</c> — the numbers and the names are the
-    /// vendor's. <c>null</c> is printed as "не прочитан", never as the zero value of the enum. The page
+    /// vendor's. <c>null</c> is printed as «не прочитан», never as the zero value of the enum. The page
     /// lists 8 «общее наименование», which the shipped <c>Kompas6Constants</c> (0..7) does not declare —
     /// the number is therefore named by its documented meaning, not by a member the build lacks.
     /// History: docs/decisions/bom.md#spec-read</remarks>

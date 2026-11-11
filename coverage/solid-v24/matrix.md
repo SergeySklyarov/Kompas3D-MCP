@@ -230,13 +230,13 @@
 
 ### профиль spec-ext-v1 — Документ-спецификация v24: строки .spw, прочитанные документированным маршрутом
 
-- **обязательных_режимов:** 1
-- **режимов_закрыто:** 1
+- **обязательных_режимов:** 2
+- **режимов_закрыто:** 2
 - **общих_зависимостей:** 0
 - **зависимостей_закрыто:** 0
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** SPEC_READ_SPW 1/1
+- **по_очередям:** SPEC_ADD_ROW 1/1; SPEC_READ_SPW 1/1
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -278,19 +278,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 394
-- **строк_полностью_закрыто:** 207
-- **строк_с_каким_либо_прогрессом:** 230
+- **строк_каталога:** 395
+- **строк_полностью_закрыто:** 208
+- **строк_с_каким_либо_прогрессом:** 231
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 161
-- **режимов_и_вариантов:** 237
-- **применимых_действий:** 3168
-- **действий_verified:** 1415
-- **покрытие_действий:** 44.7%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1415, 'not_applicable': 772, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 85, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 87, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 162
+- **режимов_и_вариантов:** 238
+- **применимых_действий:** 3173
+- **действий_verified:** 1420
+- **покрытие_действий:** 44.8%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1420, 'not_applicable': 777, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 86, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 88, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -668,6 +668,7 @@
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `SPEC-01.specdoc.read` | BOM | practical_required | SPEC_READ_SPW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-01.discovery, SPEC-01.schema, SPEC-01.open_path, SPEC-01.row_values, SPEC-01.second_road, SPEC-01.list_documents, SPEC-01.context_kind, SPEC-01.close_clean, SPEC-01.read_by_id, SPEC-01.save_as, SPEC-01.model_object_types, SPEC-01.negative_input, SPEC-01.negative_path, SPEC-01.negative_missing, SPEC-01.negative_kind, SPEC-01.reopen |
+| `SPEC-02.row.create` | BOM | practical_required | SPEC_ADD_ROW | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-02.discovery, SPEC-02.schema, SPEC-02.create_assembly, SPEC-02.read_by_other_tool, SPEC-02.save_reopen, SPEC-02.create_part, SPEC-02.negative_input, SPEC-02.negative_section, SPEC-02.negative_revision, SPEC-02.negative_kind |
 
 ### Общие зависимости профиля `spec-ext-v1`
 
@@ -1060,6 +1061,7 @@
 | `BOM-03.component.properties` | BOM | practical_required | BOM_PROPERTIES | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-03.discovery, BOM-03.schema, BOM-03.matches_probe, BOM-03.flags, BOM-03.address_same_name, BOM-03.address_delete, BOM-03.address_replace, BOM-03.save_reopen, BOM-03.negative_part, BOM-03.negative_ref |
 | `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
 | `SPEC-01.specdoc.read` | BOM | practical_required | SPEC_READ_SPW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-01.discovery, SPEC-01.schema, SPEC-01.open_path, SPEC-01.row_values, SPEC-01.second_road, SPEC-01.list_documents, SPEC-01.context_kind, SPEC-01.close_clean, SPEC-01.read_by_id, SPEC-01.save_as, SPEC-01.model_object_types, SPEC-01.negative_input, SPEC-01.negative_path, SPEC-01.negative_missing, SPEC-01.negative_kind, SPEC-01.reopen |
+| `SPEC-02.row.create` | BOM | practical_required | SPEC_ADD_ROW | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-02.discovery, SPEC-02.schema, SPEC-02.create_assembly, SPEC-02.read_by_other_tool, SPEC-02.save_reopen, SPEC-02.create_part, SPEC-02.negative_input, SPEC-02.negative_section, SPEC-02.negative_revision, SPEC-02.negative_kind |
 | `IGES.export` | IGES | practical_required | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | IGES.01.discover, IGES.02.block, IGES.03.more_entities, IGES.04.assembly, IGES.05.revision_conflict, IGES.06.extension_refusal, IGES.07.overwrite, IGES.08.answer_shape |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1898,6 +1900,13 @@
   - Открытие по path без application_id возможно только при ОДНОМ подключённом экземпляре: при двух сервер не выбирает (AMBIGUOUS_APPLICATION) и называет выход - kompas_open_document с application_id и чтение по document_id.
   - Название раздела берётся из стиля спецификации по номеру; если стиль раздела не называет, section = null, а номер раздел остаётся прочитанным и причина названа.
   - Колонка, которой нет в стиле, публикуется как null, а не как пустая строка: «в стиле нет колонки» и «колонка пуста» - разные ответы, и оба названы в notes.
+- `SPEC-02.row.create` — закрыт целиком
+  - Строка живёт в модели до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects самого ответа; переживание сохранения и переоткрытия проверяет приёмка (SPEC-02.save_reopen).
+  - Связь строки с компонентом не создаётся: ISpecificationBaseObjects.AddWithParam связывает строку с IPropertyKeeper, а точки входа в IPropertyKeeper в COM нет (граница документации).
+  - subsection_number, additional_section и block в контракт не вошли: маршрут (AddWithParam / ISpecificationObjectCreateParam) документирован, но постановкой не проверен.
+  - Удаление объекта, попавшего только в коллекцию (ветка «в стиле нет колонки»), не измерялось: отказ называет результат Delete(), каким он был.
+  - Позиция пишется только если задана; без неё нумерацию ставит документ, и прочитанная позиция - его ответ.
+  - Перенос раздела (SetSection не сохраняется) и правка/удаление строк - другие наряды блока spec-ext-v1.
 - `IGES.export` — закрыт целиком
   - Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.
   - Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.

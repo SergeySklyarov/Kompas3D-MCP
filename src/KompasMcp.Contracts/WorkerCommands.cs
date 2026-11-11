@@ -309,6 +309,12 @@ public static class WorkerCommands
     /// <c>IKompasDocument</c>). History: docs/decisions/bom.md#spec-read-spw</remarks>
     public const string GetSpecificationDocument = "bom.get_specification_document";
 
+    /// <summary>Creation of one row of a MODEL specification — the first write of the block.</summary>
+    /// <remarks>DOC: <c>ispecificationbaseobjects_add.html</c> (the object enters the collection only),
+    /// <c>ispecificationobject_update.html</c> (this is what creates it in the document).
+    /// History: docs/decisions/bom.md#spec-add-row</remarks>
+    public const string AddSpecificationRow = "bom.specification_add_row";
+
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
     // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common

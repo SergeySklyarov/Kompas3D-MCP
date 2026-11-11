@@ -63184,6 +63184,7 @@ def events_checks(client, rep, app_id, workdir):
                if str(info.get("image", "")).lower().endswith("kompasmcp.worker.exe")]
     row6 = "FAIL"
     detail6 = f"процесс Worker не найден: процессов в снимке {len(snapshot)}"
+    app2 = None
     if workers:
         for pid in workers:
             subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
@@ -63221,6 +63222,16 @@ def events_checks(client, rep, app_id, workdir):
             "после убитого Worker старые объекты не отвечают, а переоткрытый документ снова "
             "наблюдается",
             row6, detail6)
+
+    # INVARIANT: the session this row had to bring up is closed by the row itself, not left to the
+    # framework, which still holds the id the killed Worker knew.
+    # MEASURED: after the restart the framework's disconnect names the dead id and fails, so this
+    # instance stayed registered and the group that followed refused the open-by-path route with
+    # AMBIGUOUS_APPLICATION while two sessions were alive.
+    if app2:
+        client.tool("kompas_disconnect", {
+            "application_id": app2, "close_owned_application": True,
+            "operation_id": str(uuid.uuid4())}, timeout=240)
 
 
 # ── ASM-09 / ASM-10: массивы КОМПОНЕНТОВ сборки ───────────────────────────────────────────────────

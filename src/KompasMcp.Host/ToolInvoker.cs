@@ -1376,6 +1376,12 @@ public sealed class ToolInvoker : IAsyncDisposable
         var applicationId = ReadString(arguments, "application_id") ?? ReadString(result, "application_id");
         var documentId = ReadString(arguments, "document_id")
             ?? ReadString(result, "document_id")
+            // kompas_get_specification_document nests the document it read: the id the client needs to
+            // close a file this call opened lives inside `document`, not at the root of the result.
+            // History: docs/decisions/bom.md#spec-read-spw
+            ?? (tool.WorkerCommand == WorkerCommands.GetSpecificationDocument
+                ? ReadString((result as JsonObject)?["document"], "document_id")
+                : null)
             ?? (tool.WorkerCommand is WorkerCommands.CreateDocument or WorkerCommands.OpenDocument or WorkerCommands.ImportStep
                 ? ReadString(result, "id")
                 : null);

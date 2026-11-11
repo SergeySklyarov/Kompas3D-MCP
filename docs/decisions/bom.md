@@ -263,6 +263,12 @@
 `IKompasDocument3D` (`idocuments_open.html`, `ikompasdocument.html`,
 `ikompasdocument_specificationdescriptions.html`).
 
+- **Ответ называет `document.document_id` (наряд `CLIENT_FINDINGS_0_14_0`, 11.11.2026).** ИЗМЕРЕНО
+  клиентской приёмкой 0.14.0: ответ по `path` называл `path`, `kind` и `opened_by_tool`, но не id, и
+  закрыть открытый инструментом `.spw` можно было только перебором `kompas_list_documents`. Поле
+  аддитивное (MINOR): тем же id документ закрывает `kompas_close_document`, и конверт `document_id`
+  тоже его называет - id берётся из ответа, а не угадывается. Строка `SPEC-01.close_by_answer`
+  проверяет и поле, и закрытие по нему (закрытие подтверждается списком сеанса, а не кодом ответа).
 - **Открытие - документированным `IDocuments.Open(PathName, Visible, ReadOnly)`.** `ReadOnly` = TRUE:
   чтение не пишет файл. Тип подтверждается ответом документа (`DocumentType` →
   `ksDocumentSpecification` = 3, `documenttypeenum.html`), а не расширением: файл другого типа

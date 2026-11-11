@@ -112,10 +112,26 @@ public class SpecificationDocumentTests
     public void TheSpecificationKindTravelsAsAWord()
     {
         var json = System.Text.Json.JsonSerializer.Serialize(
-            new SpecificationDocumentDto(@"C:\models\spec.spw", DocumentKind.Specification, true),
+            new SpecificationDocumentDto(
+                "0123456789abcdef0123456789abcdef", @"C:\models\spec.spw", DocumentKind.Specification, true),
             KompJson.Options);
 
         Assert.Contains("\"kind\":\"specification\"", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>The answer names the document it read: a client that opened a <c>.spw</c> by path closes it
+    /// with THIS id, without searching <c>kompas_list_documents</c> for it.</summary>
+    /// <remarks>TEST: the serialized field, not the record property: a renamed JSON field would break the
+    /// client while the property still exists. History: docs/decisions/bom.md#spec-read-spw</remarks>
+    [Fact]
+    public void TheAnswerNamesTheDocumentIdSoTheClientCanCloseIt()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new SpecificationDocumentDto(
+                "0123456789abcdef0123456789abcdef", @"C:\models\spec.spw", DocumentKind.Specification, true),
+            KompJson.Options);
+
+        Assert.Contains("\"document_id\":\"0123456789abcdef0123456789abcdef\"", json, StringComparison.Ordinal);
     }
 
     private static ToolDefinition Tool(string name) =>

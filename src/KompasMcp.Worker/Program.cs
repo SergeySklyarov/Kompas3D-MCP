@@ -175,7 +175,33 @@ public static class Program
             }
             catch (KompasContractException ex)
             {
-                log.Write("error", "protocol violation", new { code = ex.Code, message = ex.Message });
+                // INVARIANT: a channel that ended INSIDE a frame is how an abruptly ended Host looks — a
+                // warning naming the stage and the byte count, not an error about a peer that speaks
+                // another protocol. Only a frame whose LENGTH is impossible is a real violation. The cause
+                // text is logged on both paths: the former record named neither.
+                // History: docs/decisions/contracts.md#channel-end-reason
+                var reason = ex.Details is { } details && details.TryGetValue("reason", out var value)
+                    ? value as string
+                    : null;
+                if (reason == IpcChannel.EndReason.FrameTruncated)
+                {
+                    log.Write("warn", "channel ended inside a frame; worker exiting", new
+                    {
+                        code = ex.Code,
+                        reason,
+                        message = ex.Message,
+                    });
+                }
+                else
+                {
+                    log.Write("error", "protocol violation", new
+                    {
+                        code = ex.Code,
+                        reason,
+                        message = ex.Message,
+                    });
+                }
+
                 yield break;
             }
 

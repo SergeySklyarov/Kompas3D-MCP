@@ -401,11 +401,11 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>Stop an instance this server launched without leaving it behind: rescue copy, the
     /// DOCUMENTED close-without-save for every document, then <c>Quit()</c>, and LAST the one PID.</summary>
-    /// <remarks>INVARIANT: the rescue copy is written BEFORE the close; the client's own file is never
-    /// the target. INVARIANT: the whole sequence fits <see cref="SessionEndBudget"/>, or the Host would
-    /// kill the Worker before it terminates its own instance's PID - that termination is the Worker's
-    /// job, so a killed Worker leaves the instance behind. The budget bounds the rescue loop and the
-    /// close alike; whatever it cuts short is NAMED, and a spent budget also skips the exit wait.
+    /// <remarks>INVARIANT: the rescue copy is written BEFORE the close; the client's own file is never the
+    /// target. INVARIANT: the documents saved and closed are those of EVERY entry bound to the ended
+    /// process, not only of the launched one. INVARIANT: the whole sequence fits
+    /// <see cref="SessionEndBudget"/>, or the Host would kill the Worker before it terminates its own
+    /// instance's PID; the budget bounds the rescue loop and the close alike, and what it cuts short is NAMED.
     /// History: docs/decisions/host.md#shutdown-no-orphans, #shutdown-many-docs</remarks>
     public OwnedShutdownReport ShutdownOwned(
         ApplicationEntry application, DocumentControlCopies? copies, SessionEndBudget? budget = null)
@@ -413,7 +413,17 @@ public sealed partial class Api5Session : IDisposable
         var clock = budget ?? new SessionEndBudget();
         var rescued = new List<OwnedShutdownRescue>();
         var problems = new List<string>();
-        var mine = _documents.Values.Where(d => d.ApplicationId == application.Id).ToArray();
+        // INVARIANT: the entry is not the unit here, the PROCESS is: an entry attached to this launched PID
+        // holds documents that the Quit() below ends as surely as this entry's own. MEASURED: rescuing by
+        // entry rescued only the launched entry's documents and let the attached entry's unsaved work die.
+        // History: docs/decisions/host.md#client-shutdown
+        var entries = SessionEndProcess.EndingWith(
+            application.ProcessId,
+            _applications.Values.Select(a => new SessionApplication(
+                a.Id, a.ProcessId, a.Ownership == ApplicationOwnership.Launched)));
+        var mine = _documents.Values
+            .Where(d => entries.Any(entry => string.Equals(entry.ApplicationId, d.ApplicationId, StringComparison.Ordinal)))
+            .ToArray();
         var skippedByBudget = 0;
 
         // (а) Rescue copy of every document that still carries unsaved changes, WHILE the budget allows.
@@ -526,8 +536,17 @@ public sealed partial class Api5Session : IDisposable
 
         var quitMs = quitClock.ElapsedMilliseconds;
 
-        ComApartment.Release(application.Application);
-        _applications.Remove(application.Id);
+        // Every entry of the ended process loses its COM object here, not just the one that was asked for:
+        // leaving the others registered would point them at a process that is gone, and their documents are
+        // already closed above. History: docs/decisions/host.md#client-shutdown
+        foreach (var entry in entries)
+        {
+            if (_applications.TryGetValue(entry.ApplicationId, out var ended))
+            {
+                ComApartment.Release(ended.Application);
+                _applications.Remove(entry.ApplicationId);
+            }
+        }
 
         return new OwnedShutdownReport(rescued, problems, quitIssued, exited, killed, processId,
             clock.TotalMs, skippedByBudget, closeSkippedByBudget, rescueMs, closeMs, quitMs);

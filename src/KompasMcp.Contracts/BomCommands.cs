@@ -114,10 +114,15 @@ public sealed record GetSpecificationResult(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>The document the rows came from and who opened it.</summary>
+/// <summary>The document the rows came from, its server identifier and who opened it.</summary>
+/// <param name="DocumentId">Identifier of the document the rows were read from: it addresses the same
+/// document in <c>kompas_close_document</c> and every other call that takes a document, whether this call
+/// opened the file or found it already open. MEASURED defect: the field was absent, so a client that opened
+/// a <c>.spw</c> by <c>path</c> had to find the id by listing every document of the session.</param>
 /// <param name="OpenedByTool">True only when THIS call opened the file; the closing then stays with the
 /// client, exactly as for every other open. A document that was already open answers false.</param>
 public sealed record SpecificationDocumentDto(
+    string DocumentId,
     string? Path,
     DocumentKind Kind,
     bool OpenedByTool);

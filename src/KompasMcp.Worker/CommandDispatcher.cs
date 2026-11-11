@@ -1999,21 +1999,40 @@ public sealed class CommandDispatcher
     public List<(string ApplicationId, OwnedShutdownReport Report)> ShutdownOwnedSessions()
     {
         var reports = new List<(string, OwnedShutdownReport)>();
-        foreach (var application in _session.Applications.ToArray())
+        var applications = _session.Applications
+            .Select(a => new SessionApplication(a.Id, a.ProcessId, a.Ownership == ApplicationOwnership.Launched))
+            .ToArray();
+
+        // INVARIANT: a LAUNCHED entry goes first — it quits the process, and every entry bound to that
+        // process ends with it. An attached entry that the loop reaches afterwards is already gone, and
+        // calling that a failed disconnect would report an ending that went exactly as intended.
+        // History: docs/decisions/host.md#client-shutdown
+        foreach (var application in SessionEndProcess.ShutdownOrder(applications))
         {
+            if (_session.Applications.All(registered => registered.Id != application.ApplicationId))
+            {
+                continue;
+            }
+
+            var ending = SessionEndProcess.EndingWith(application.ProcessId, applications)
+                .Select(entry => entry.ApplicationId)
+                .ToArray();
             try
             {
                 var report = _session.Disconnect(
-                    application.Id, closeOwnedApplication: application.Ownership == ApplicationOwnership.Launched, _controlCopies);
+                    application.ApplicationId, closeOwnedApplication: application.Launched, _controlCopies);
                 if (report is null)
                 {
                     continue;
                 }
 
-                reports.Add((application.Id, report));
+                reports.Add((application.ApplicationId, report));
                 _log.Write("info", "owned instance shutdown", new
                 {
-                    application = application.Id,
+                    application = application.ApplicationId,
+                    // Named because the report covers the PROCESS: the rescued documents may belong to
+                    // an entry this loop never reached on its own.
+                    applications_ended = ending,
                     process_id = report.ProcessId,
                     quit_issued = report.QuitIssued,
                     process_exited = report.ProcessExited,
@@ -2032,7 +2051,7 @@ public sealed class CommandDispatcher
                 {
                     _log.Write("warn", "owned instance still alive after shutdown", new
                     {
-                        application = application.Id,
+                        application = application.ApplicationId,
                         process_id = report.ProcessId,
                         killed_by_pid = report.KilledByPid,
                     });
@@ -2040,7 +2059,11 @@ public sealed class CommandDispatcher
             }
             catch (Exception ex)
             {
-                _log.Write("warn", "session shutdown failed", new { application = application.Id, type = ex.GetType().Name });
+                _log.Write("warn", "session shutdown failed", new
+                {
+                    application = application.ApplicationId,
+                    type = ex.GetType().Name,
+                });
             }
         }
 

@@ -132,7 +132,7 @@ public partial class Api5Session
         var rows = ReadSpecificationDocumentRows(document, notes, unverified);
 
         return new GetSpecificationDocumentResult(
-            new SpecificationDocumentDto(document.Path, document.Kind, openedByTool),
+            new SpecificationDocumentDto(document.Id, document.Path, document.Kind, openedByTool),
             rows,
             rows.Count,
             SpecificationDocumentRoute,

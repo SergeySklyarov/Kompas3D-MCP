@@ -53115,8 +53115,15 @@ def shutdown_checks(host, config, workdir, rep):
 
     ЧУЖИЕ ЭКЗЕМПЛЯРЫ НЕ ТРОГАЮТСЯ. Процессы завершаются только по PID, который вернул `launch`, и
     только для того, что завела ЭТА группа. Завершение по имени не применяется нигде.
+
+    ЧЕГО НЕ ВИДНО ИЗ «ПРОЦЕСС УШЁЛ». SD.11 строит постановку, в которой сеанс держит ДВЕ записи об
+    ОДНОМ процессе (`launch`, затем `attach` тем же PID), и требует спасательную копию документа
+    ПРИСОЕДИНЁННОЙ записи. Строка, которая проверяет только «KOMPAS завершён», пропустила бы потерю
+    несохранённой работы: приёмка 0.14.0 (`R3.session_end`) получила именно её — копий нет, документы
+    потеряны, процессов не осталось.
     """
     import hashlib as _hashlib
+    import glob as _glob
     import json as _json
     import os as _os
     import subprocess as _subprocess
@@ -53208,6 +53215,39 @@ def shutdown_checks(host, config, workdir, rep):
         if pid:
             started_kompas.append(pid)
         return app, pid, code
+
+    def attach_same_process(probe, pid):
+        """Присоединение к ТОМУ ЖЕ процессу, который поднял этот Хост.
+
+        ПОЧЕМУ НЕ `attach_any`. Строке SD.11 годится только СВОЙ PID: подставиться под чужой живой
+        экземпляр значило бы проверять чужой процесс, который `Quit()` нашего сеанса не завершает.
+        ИЗМЕРЕНО в прогоне `--all`: свой экземпляр бывает НЕ кандидатом ROT (когда живой чужой), поэтому
+        строка обязана назвать, что постановка не построена, а не подменять её чужим экземпляром.
+        """
+        attempts = 0
+        last_env, last_code = None, None
+        for candidate in (pid, None):
+            for _ in range(3):
+                attempts += 1
+                payload = {"mode": "attach", "make_visible": False}
+                if candidate is not None:
+                    payload["process_id"] = candidate
+                env, code = call(probe, "kompas_connect", payload, timeout=300)
+                app = (env or {}).get("application_id")
+                got = ((env or {}).get("result") or {}).get("process_id") or candidate
+                if app and got == pid:
+                    return app, got, None, None, attempts
+                if app:
+                    # Присоединились к ЧУЖОМУ процессу: это не наша постановка. Запись снимается,
+                    # чтобы чужой экземпляр не остался в сеансе лишним приложением.
+                    call(probe, "kompas_disconnect",
+                         {"application_id": app, "close_owned_application": False}, timeout=180)
+                last_env, last_code = env, code
+                _time.sleep(2)
+
+        err = (last_env or {}).get("error") or {}
+        return (None, None, last_code,
+                (err.get("details") if isinstance(err, dict) else None), attempts)
 
     def attach_any(probe, preferred_pid):
         """Присоединение к экземпляру, который поднял НЕ этот Хост.
@@ -53486,6 +53526,63 @@ def shutdown_checks(host, config, workdir, rep):
                 item.close()
             except Exception:
                 pass
+        force_stop(pid)
+
+    # ═══════════ SD.11: attach к СВОЕМУ процессу - конец связи спасает и его документы ═══════════
+    # ИЗМЕРЕНО клиентской приёмкой 0.14.0 (строка R3.session_end): сеанс поднял КОМПАС
+    # (`kompas_connect mode=launch`), затем присоединился к ТОМУ ЖЕ процессу (`mode=attach` тем же PID) —
+    # в сеансе стало ДВЕ записи об одном процессе. Несохранённые документы принадлежали присоединённой
+    # записи, а завершение спасало документы только записи launch: спасательных копий нет, документы
+    # потеряны. Строка строит ровно эту постановку в ОДНОМ Хосте и требует, чтобы копия документа
+    # ПРИСОЕДИНЁННОГО приложения была снята и открывалась, а процессов сеанса не осталось.
+    sd11_text = ("SD.11: launch + attach к тому же PID — конец связи спасает несохранённый документ "
+                 "ПРИСОЕДИНЁННОГО приложения и не оставляет процессов сеанса")
+    probe = open_host("sd11")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.11", sd11_text, "FAIL", "launch: %s" % code)
+        else:
+            att_app, att_pid, acode, adetails, attempts = attach_same_process(probe, pid)
+            if not att_app:
+                rep.add("SD.11", sd11_text, "FAIL",
+                        "постановка не построена: attach к СВОЕМУ процессу %s отказал %s после %d "
+                        "попыток; details=%s"
+                        % (pid, acode, attempts, _json.dumps(adetails, ensure_ascii=False)[:300]))
+            else:
+                client_path = _os.path.join(workdir, "sd-sd11-client.m3d")
+                doc, problem = build_saved_part(probe, att_app, client_path, "SD-sd11")
+                in_attached = context(probe, doc).get("application_id") == att_app if doc else False
+                if problem or not in_attached:
+                    rep.add("SD.11", sd11_text, "FAIL",
+                            "постановка в присоединённом приложении: %s (документ в нём: %s)"
+                            % (problem or "нет", in_attached))
+                else:
+                    before_rescue = newest_rescue()
+                    probe.p.stdin.close()
+                    gone = wait_gone(pid, 45)
+                    # Копия ищется ПО ИМЕНИ ДОКУМЕНТА: `ControlCopies.RescuePath` кладёт её как
+                    # `<document_id>-<время>.m3d`, поэтому «самый свежий файл каталога» не годится —
+                    # им может оказаться копия соседней строки, и потеря правок прошла бы за PASS.
+                    own_copies = sorted(_glob.glob(_os.path.join(rescue_dir, doc + "-*.m3d")))
+                    rescue = own_copies[-1] if own_copies else None
+                    new_copy = rescue is not None and rescue != before_rescue
+                    volume = None
+                    open_problem = None
+                    if new_copy:
+                        volume, open_problem = open_rescue_and_read_volume(rescue)
+                    ok = gone and new_copy and volume is not None
+                    rep.add("SD.11", sd11_text, "PASS" if ok else "FAIL",
+                            "владелец=%s присоединённый=%s (PID тот же=%s, попыток attach=%d); ушёл=%s "
+                            "копия документа=%s объём копии=%s причина=%s"
+                            % (app, att_app, att_pid == pid, attempts, gone, rescue, volume,
+                               open_problem))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
         force_stop(pid)
 
     # ═══════════ SD.09: много несохранённых документов ═══════════
@@ -58655,6 +58752,28 @@ def specification_checks(client, rep, app_id, workdir):
         shutil.copyfile(os.path.join(evidence, name), os.path.join(fixture_dir, name))
     if os.path.isfile(copy_path):
         os.remove(copy_path)
+
+    # ===== SPEC-01: документ, открытый инструментом, закрывается по id ИЗ ОТВЕТА =====
+    # ИЗМЕРЕНО клиентской приёмкой 0.14.0: ответ открытия по path называл path/kind/opened_by_tool, но
+    # НЕ document_id, поэтому закрыть открытый инструментом .spw можно было только перебором
+    # kompas_list_documents. Здесь проверяются ДВА разных утверждения: поле есть, и ИМ закрывается.
+    # Первое без второго пропустило бы поле, которым нельзя адресовать документ.
+    first, first_code = read(path=spw_path)
+    first_doc = first.get("document") or {}
+    answer_id = first_doc.get("document_id")
+    spec_answer_text = ("ответ открытия по path называет document.document_id, и этим id документ "
+                        "закрывается kompas_close_document: закрытие подтверждено списком сеанса, а не "
+                        "кодом ответа")
+    if first_code or not isinstance(answer_id, str) or not answer_id:
+        rep.add("SPEC-01.close_by_answer", spec_answer_text, "FAIL",
+                f"код={first_code} документ={first_doc}")
+    else:
+        closed_by_answer = close(answer_id, "refuse")
+        still_listed = [d for d in docs() if isinstance(d, dict) and d.get("id") == answer_id]
+        rep.add("SPEC-01.close_by_answer", spec_answer_text,
+                "PASS" if not closed_by_answer and not still_listed else "FAIL",
+                f"document_id={answer_id} код_close={closed_by_answer} "
+                f"остался_в_списке={still_listed}")
 
     # ===== SPEC-01: открытие по path и известная строка =====
     answer, code = read(path=spw_path)

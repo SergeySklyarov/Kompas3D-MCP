@@ -821,8 +821,9 @@ def step_metadata_export(client, app_id, path):
 # → 124 (SCENARIO_RUN: kompas_run_scenario) → 125 (DXF_FLAT_PART: kompas_export_flat_dxf)
 # → 130 (ASM_PATTERN_PATH: kompas_pattern_path)
 # → 131 (SPEC_READ_SPW: kompas_get_specification_document)
-# → 132 (SPEC_ADD_ROW: kompas_specification_add_row).
-EXPECTED_TOOL_COUNT = 132
+# → 132 (SPEC_ADD_ROW: kompas_specification_add_row)
+# → 133 (SPEC_EDIT_ROW: kompas_specification_edit_row).
+EXPECTED_TOOL_COUNT = 133
 
 def entry_of(client, name):
     """Запись инструмента в ФОРМЕ tools/list: у опубликованного она своя, у операции реестра — из
@@ -2391,7 +2392,7 @@ FLAGS = (
     ("--ops-only", False, "группа OPS: состояние операции, отмена и согласование"),
     ("--events-only", False, "группа EV: внешнее изменение документа по событиям модели"),
     ("--specification-only", False,
-     "группа SPEC: документ-спецификация .spw - открытие, чтение строк, вторая дорога, отказы"),
+     "группа SPEC: документ-спецификация .spw - открытие, чтение строк, вторая дорога, отказы; строка модели - создание и правка, сохранение и переоткрытие"),
     ("--r1-only", False, "группа R1: ребро жёсткости (SM-14)"),
     ("--update-only", False, "группа UN: сообщение о новом выпуске без сети"),
     # Опыты: повтор одной постановки и второй экземпляр. Своей группы не заводят.
@@ -58539,8 +58540,9 @@ def bom_checks(client, rep, app_id, workdir):
 
 
 def specification_checks(client, rep, app_id, workdir):
-    """SPEC-01/SPEC-02 - блок «спецификация»: чтение документа `.spw` по path и по document_id
-    (наряд SPEC_READ_SPW) и создание строки МОДЕЛИ (наряд SPEC_ADD_ROW, профиль `spec-ext-v1`).
+    """SPEC-01/SPEC-02/SPEC-03 - блок «спецификация»: чтение документа `.spw` по path и по document_id
+    (наряд SPEC_READ_SPW), создание строки МОДЕЛИ (наряд SPEC_ADD_ROW) и правка строки модели (наряд
+    SPEC_EDIT_ROW, профиль `spec-ext-v1`).
 
     ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Постановка - файл `.spw` прибора исследования с ОДНОЙ известной строкой
     (`SPC.401.001` / «Строка спецификации» / 7 в разделе 20 «Детали») и сборка `spec-asm.m3d` той же
@@ -58554,6 +58556,13 @@ def specification_checks(client, rep, app_id, workdir):
     сохранение и переоткрытие. Созданная у детали без описания спецификация по умолчанию НАЗЫВАЕТСЯ в
     notes, а не правит модель молча. Отказы: раздел 0 и пустые поля, несуществующий раздел (с перечнем
     доступных), устаревшая ревизия, неизвестный документ и `.spw` вместо модели.
+
+    SPEC-03. Правка строки - по одному полю и всеми сразу, на строке, созданной ЭТИМ прогоном, и на
+    строке, которая была в постановке до него (ссылку на вторую даёт чтение). Каждый раз значения сверяет
+    независимый читатель, а изменённое переживает сохранение и переоткрытие. Отказы: пустой набор
+    изменений и пустое значение, ссылка на другой документ, устаревшая ревизия, устаревшая ссылка (в том
+    числе после смены обозначения), несуществующий номер строки, `.spw` вместо модели и значение не того
+    типа, что ждёт колонка.
     """
     import os
 
@@ -59007,6 +59016,336 @@ def specification_checks(client, rep, app_id, workdir):
                 os.path.normcase(os.path.abspath(model_path)),
                 os.path.normcase(os.path.abspath(spw_path))):
             close(item.get("id"))
+
+    # ===== SPEC-03: правка строки МОДЕЛИ (наряд SPEC_EDIT_ROW) =====
+    # Строка не считается изменённой по ответу правки: её показывает независимый читатель
+    # kompas_get_specification, и она обязана пережить сохранение и переоткрытие. Правка проверяется на
+    # строке, СОЗДАННОЙ этим прогоном, и на строке, которая была в постановке до него; ссылку на вторую
+    # даёт чтение (unique_number строки + её marking + document_id).
+    edit_entry = entry_of(client, "kompas_specification_edit_row")
+    edit_schema = (edit_entry or {}).get("inputSchema") or {}
+    edit_props = set(edit_schema.get("properties") or {}) - {"timeout_ms"}
+    edit_required = set(edit_schema.get("required") or {})
+    ref_schema = (edit_schema.get("properties") or {}).get("row_ref") or {}
+    ref_props = set(ref_schema.get("properties") or {})
+    ref_required = set(ref_schema.get("required") or {})
+    rep.add("SPEC-03.discovery", "инструмент правки строки модели есть в реестре каталога",
+            "PASS" if edit_entry is not None else "FAIL", f"в реестре={len(registry)}")
+    rep.add("SPEC-03.schema",
+            "схема несёт ссылку row_ref {document_id, unique_number, marking} и четыре изменяемых поля; "
+            "обязательны только ссылка и служебные поля, поэтому отсутствие поля значит «не менять», а не "
+            "ноль",
+            "PASS" if (edit_props == {"document_id", "expected_revision", "row_ref", "marking", "name",
+                                      "quantity", "position", "operation_id"}
+                       and edit_required == {"document_id", "expected_revision", "row_ref", "operation_id"}
+                       and ref_props == {"document_id", "unique_number", "marking"}
+                       and ref_required == {"document_id", "unique_number", "marking"}) else "FAIL",
+            f"поля={sorted(edit_props)} обязательные={sorted(edit_required)} "
+            f"ссылка={sorted(ref_props)}/{sorted(ref_required)}")
+
+    edit_env, edit_open_code = call("kompas_open_document",
+                                    {"application_id": app_id, "path": model_path, "access": "edit"})
+    edit_model = doc_id(edit_env)
+    edit_context, edit_context_code = context_of(edit_model)
+    edit_state = {"revision": edit_context.get("revision")}
+
+    def reader_rows():
+        """The rows of the edit model as the INDEPENDENT reader shows them."""
+        return rows(specification_of(edit_model)[0])
+
+    def by_marking(answer_rows, marking):
+        return [r for r in answer_rows if str(r.get("marking") or "") == marking]
+
+    def same_row(row, expected):
+        """The reader's row carries exactly the expected values for the keys named."""
+        return isinstance(row, dict) and all(
+            str(row.get(name)) == str(value) for name, value in expected.items())
+
+    def ref_of(row):
+        return {"document_id": edit_model, "unique_number": row.get("unique_number"),
+                "marking": row.get("marking")}
+
+    def edit_row(fields, row_ref, revision=None):
+        payload = {"document_id": edit_model,
+                   "expected_revision": edit_state["revision"] if revision is None else revision,
+                   "row_ref": row_ref}
+        payload.update(fields)
+        env, code = call("kompas_specification_edit_row", payload)
+        answer = result(env)
+        if answer.get("revision"):
+            edit_state["revision"] = answer["revision"]
+        return answer, code, ((env or {}).get("error") or {})
+
+    def checks_of(answer):
+        return (answer.get("verification") or {}).get("checks") or []
+
+    def check_passed(answer, name):
+        return any(c.get("name") == name and c.get("passed") for c in checks_of(answer))
+
+    create_answer, create_code = call("kompas_specification_add_row",
+                                      {"document_id": edit_model,
+                                       "expected_revision": edit_state["revision"],
+                                       "section_number": 20, "marking": "SPC.501.001",
+                                       "name": "Строка правки", "quantity": "2", "position": 3})
+    created = result(create_answer)
+    if created.get("revision"):
+        edit_state["revision"] = created["revision"]
+    ref_a = created.get("row_ref") or {}
+    ref_a_before_edit = dict(ref_a)
+    rep.add("SPEC-03.prepare_row",
+            "постановка готова: строка создана инструментом создания, и её ссылка взята из его ответа",
+            "PASS" if (edit_model and not create_code and ref_a.get("unique_number") is not None
+                       and str(ref_a.get("marking") or "") == "SPC.501.001") else "FAIL",
+            f"код={create_code},{edit_open_code},{edit_context_code} ссылка={ref_a}")
+
+    # --- по одному полю: обозначение, наименование, количество, позиция ---
+    answer, code, error = edit_row({"marking": "SPC.501.002"}, ref_a)
+    ref_a = answer.get("row_ref") or ref_a
+    rep.add("SPEC-03.edit_marking",
+            "правка одного обозначения: читатель показывает строку под НОВЫМ обозначением, а "
+            "наименование, количество, позиция и раздел остались прежними; прежнего обозначения в "
+            "документе больше нет",
+            "PASS" if (not code and check_passed(answer, "marking_read_back")
+                       and len(by_marking(reader_rows(), "SPC.501.001")) == 0
+                       and len(by_marking(reader_rows(), "SPC.501.002")) == 1
+                       and same_row(by_marking(reader_rows(), "SPC.501.002")[0],
+                                    {"name": "Строка правки", "quantity": "2", "position": "3",
+                                     "section_number": 20})
+                       and same_row(answer.get("row") or {},
+                                    {"marking": "SPC.501.002", "name": "Строка правки", "quantity": "2",
+                                     "position": "3"})
+                       and str((answer.get("row_ref") or {}).get("marking") or "") == "SPC.501.002") else "FAIL",
+            f"код={code} row_ref={answer.get('row_ref')} строка={answer.get('row')} "
+            f"читатель={by_marking(reader_rows(), 'SPC.501.002')} ошибка={str(error.get('message'))[:160]!r}")
+
+    answer, code, error = edit_row({"name": "Строка правки 2"}, ref_a)
+    ref_a = answer.get("row_ref") or ref_a
+    rep.add("SPEC-03.edit_name",
+            "правка одного наименования: читатель показывает новое наименование, обозначение, количество, "
+            "позиция и раздел не изменились",
+            "PASS" if (not code and check_passed(answer, "name_read_back")
+                       and same_row(by_marking(reader_rows(), "SPC.501.002")[0] if by_marking(
+                           reader_rows(), "SPC.501.002") else {},
+                                    {"marking": "SPC.501.002", "name": "Строка правки 2", "quantity": "2",
+                                     "position": "3", "section_number": 20})) else "FAIL",
+            f"код={code} строка={answer.get('row')} читатель={by_marking(reader_rows(), 'SPC.501.002')} "
+            f"ошибка={str(error.get('message'))[:160]!r}")
+
+    answer, code, error = edit_row({"quantity": "5"}, ref_a)
+    ref_a = answer.get("row_ref") or ref_a
+    rep.add("SPEC-03.edit_quantity",
+            "правка одного количества: читатель показывает «5», остальные поля прежние — число сверяется "
+            "как число, а не как строка ответа",
+            "PASS" if (not code and check_passed(answer, "quantity_read_back")
+                       and same_row(by_marking(reader_rows(), "SPC.501.002")[0] if by_marking(
+                           reader_rows(), "SPC.501.002") else {},
+                                    {"marking": "SPC.501.002", "name": "Строка правки 2", "quantity": "5",
+                                     "position": "3", "section_number": 20})) else "FAIL",
+            f"код={code} строка={answer.get('row')} читатель={by_marking(reader_rows(), 'SPC.501.002')} "
+            f"ошибка={str(error.get('message'))[:160]!r}")
+
+    answer, code, error = edit_row({"position": 7}, ref_a)
+    ref_a = answer.get("row_ref") or ref_a
+    rep.add("SPEC-03.edit_position",
+            "правка одной позиции: читатель показывает «7», остальные поля прежние",
+            "PASS" if (not code and check_passed(answer, "position_read_back")
+                       and same_row(by_marking(reader_rows(), "SPC.501.002")[0] if by_marking(
+                           reader_rows(), "SPC.501.002") else {},
+                                    {"marking": "SPC.501.002", "name": "Строка правки 2", "quantity": "5",
+                                     "position": "7", "section_number": 20})) else "FAIL",
+            f"код={code} строка={answer.get('row')} читатель={by_marking(reader_rows(), 'SPC.501.002')} "
+            f"ошибка={str(error.get('message'))[:160]!r}")
+
+    # --- все четыре поля сразу ---
+    before_together = by_marking(reader_rows(), "SPC.501.002")
+    together_fields = {"marking": "SPC.501.010", "name": "Строка правки 3", "quantity": "11", "position": 9}
+    answer, code, error = edit_row(together_fields, ref_a)
+    ref_a = answer.get("row_ref") or ref_a
+    together_row = by_marking(reader_rows(), "SPC.501.010")
+    rep.add("SPEC-03.edit_together",
+            "правка всех четырёх полей одним вызовом: читатель показывает запрошенные значения, а ответ "
+            "называет структуру проверенной — обе дороги и сверка прошли",
+            "PASS" if (not code and len(together_row) == 1
+                       and (answer.get("verification") or {}).get("level") == "structure_checked"
+                       and all(check_passed(answer, field + "_read_back")
+                               for field in ("marking", "name", "quantity", "position"))
+                       and same_row(together_row[0],
+                                    {"marking": "SPC.501.010", "name": "Строка правки 3", "quantity": "11",
+                                     "position": "9", "section_number": 20})
+                       and same_row(answer.get("row") or {}, together_fields)) else "FAIL",
+            f"код={code} уровень={(answer.get('verification') or {}).get('level')} "
+            f"строка={answer.get('row')} читатель={together_row} ошибка={str(error.get('message'))[:160]!r}")
+
+    rep.add("SPEC-03.previous_values",
+            "ответ несёт ПРЕЖНИЕ значения строки: они равны тому, что читатель показывал до правки, а "
+            "изменённые поля ответа равны запросу — сверять есть с чем",
+            "PASS" if (len(before_together) == 1
+                       and same_row(answer.get("previous") or {},
+                                    {"marking": "SPC.501.002", "name": "Строка правки 2", "quantity": "5",
+                                     "position": "7", "section_number": 20})) else "FAIL",
+            f"было={before_together} previous={answer.get('previous')}")
+
+    # Раздел этой правкой не меняется и называется в проверках ответа: перенос раздела не входит.
+    rep.add("SPEC-03.untouched_checked",
+            "поля, которых вызов не называл (раздел и номер раздела), проверены ответом как НЕИЗМЕНЁННЫЕ, "
+            "и раздел строки остался «Детали»/20",
+            "PASS" if (check_passed(answer, "section_unchanged")
+                       and check_passed(answer, "section_number_unchanged")
+                       and len(together_row) == 1 and str(together_row[0].get("section") or "") == "Детали"
+                       and together_row[0].get("section_number") == 20) else "FAIL",
+            f"проверки={[c.get('name') for c in checks_of(answer)]} строка={together_row}")
+
+    # --- строка, которая была в постановке до прогона: ссылка взята из чтения ---
+    preexisting = by_marking(reader_rows(), "SPC.301.002")
+    ref_b = ref_of(preexisting[0]) if len(preexisting) == 1 else None
+    preexisting_before = dict(preexisting[0]) if len(preexisting) == 1 else {}
+    answer_b, code_b, error_b = edit_row({"name": "Пластина правки"}, ref_b) if ref_b else ({}, "no_row", {})
+    reader_b = by_marking(reader_rows(), "SPC.301.002")
+    rep.add("SPEC-03.preexisting_row",
+            "правится строка, которая была в постановке ДО прогона: ссылка собрана из чтения "
+            "(unique_number + marking + document_id), и читатель показывает изменённое наименование при "
+            "прежних обозначении, количестве и позиции",
+            "PASS" if (ref_b is not None and not code_b
+                       and len(reader_b) == 1
+                       and same_row(reader_b[0],
+                                    {"marking": "SPC.301.002", "name": "Пластина правки",
+                                     "quantity": preexisting_before.get("quantity"),
+                                     "position": preexisting_before.get("position"), "section_number": 20})
+                       and (answer_b.get("previous") or {}).get("name") == preexisting_before.get("name")) else "FAIL",
+            f"код={code_b} ссылка={ref_b} было={preexisting_before} стало={reader_b} "
+            f"ошибка={str(error_b.get('message'))[:160]!r}")
+
+    # ===== SPEC-03: отказы =====
+    _e, empty_env, _r = client.tool("kompas_specification_edit_row",
+                                    {"document_id": edit_model,
+                                     "expected_revision": edit_state["revision"],
+                                     "row_ref": ref_a, "operation_id": str(uuid.uuid4())})
+    empty_code = error_code(empty_env)
+    _e, blank_env, _r = client.tool("kompas_specification_edit_row",
+                                    {"document_id": edit_model,
+                                     "expected_revision": edit_state["revision"],
+                                     "row_ref": ref_a, "name": "  ",
+                                     "operation_id": str(uuid.uuid4())})
+    blank_code = error_code(blank_env)
+    rep.add("SPEC-03.negative_input",
+            "пустой набор изменений и пустое значение заданного текстового поля отвергаются "
+            "INVALID_ARGUMENT до журнала и до КОМПАС",
+            "PASS" if empty_code == "INVALID_ARGUMENT" and blank_code == "INVALID_ARGUMENT" else "FAIL",
+            f"пусто={empty_code} пустое_поле={blank_code}")
+
+    foreign = dict(ref_a)
+    foreign["document_id"] = "0" * 32
+    _answer, foreign_code, _error = edit_row({"marking": "SPC.501.999"}, foreign)
+    rep.add("SPEC-03.negative_foreign_ref",
+            "ссылка, выданная на ДРУГОЙ документ, отвергается INVALID_ARGUMENT до КОМПАС: чужую модель по "
+            "ней не правят",
+            "PASS" if foreign_code == "INVALID_ARGUMENT" else "FAIL", f"код={foreign_code}")
+
+    _answer, revision_code, _error = edit_row(
+        {"marking": "SPC.501.999"}, ref_a, revision=(edit_state["revision"] or 1) + 100)
+    after_revision = by_marking(reader_rows(), "SPC.501.010")
+    rep.add("SPEC-03.negative_revision",
+            "устаревшая ревизия отвергается REVISION_CONFLICT до COM, и строка после отказа прежняя",
+            "PASS" if (revision_code == "REVISION_CONFLICT" and len(after_revision) == 1
+                       and same_row(after_revision[0], {"marking": "SPC.501.010", "name": "Строка правки 3"})) else "FAIL",
+            f"код={revision_code} строка={after_revision}")
+
+    # Ссылка, выданная ДО правки обозначения: номер тот же, обозначение прежнее.
+    _answer, stale_code, stale_error = edit_row({"name": "Строка правки 4"}, ref_a_before_edit)
+    after_stale = by_marking(reader_rows(), "SPC.501.010")
+    rep.add("SPEC-03.negative_stale_reference",
+            "ссылка, выданная на прежнее состояние строки (обозначение сменилось прошлой правкой), "
+            "отвергается STALE_REFERENCE, и строка не меняется",
+            "PASS" if (stale_code == "STALE_REFERENCE" and len(after_stale) == 1
+                       and same_row(after_stale[0], {"marking": "SPC.501.010", "name": "Строка правки 3"})) else "FAIL",
+            f"код={stale_code} строка={after_stale} текст={str(stale_error.get('message'))[:160]!r}")
+
+    ghost = {"document_id": edit_model, "unique_number": 987654321, "marking": "SPC.000.000"}
+    _answer, ghost_code, _error = edit_row({"name": "Ничья строка"}, ghost)
+    rep.add("SPEC-03.negative_unknown_row",
+            "ссылка на несуществующий номер строки отвергается STALE_REFERENCE, а не создаёт и не читает "
+            "чужую строку",
+            "PASS" if ghost_code == "STALE_REFERENCE" else "FAIL", f"код={ghost_code}")
+
+    spw_kind, _spw_kind_code = call("kompas_get_specification_document", {"path": spw_path})
+    spw_kind_doc = id_of(spw_path)
+    spw_kind_context, _ = context_of(spw_kind_doc)
+    _e, kind_env, _r = client.tool("kompas_specification_edit_row",
+                                   {"document_id": spw_kind_doc,
+                                    "expected_revision": spw_kind_context.get("revision"),
+                                    "row_ref": {"document_id": spw_kind_doc, "unique_number": 1,
+                                                "marking": "SPC.401.001"},
+                                    "name": "Строка", "operation_id": str(uuid.uuid4())}) \
+        if spw_kind_doc else ({}, {}, None)
+    kind_code = error_code(kind_env)
+    _e, missing_env, _r = client.tool("kompas_specification_edit_row",
+                                      {"document_id": "0" * 32,
+                                       "expected_revision": 1,
+                                       "row_ref": {"document_id": "0" * 32, "unique_number": 1,
+                                                   "marking": "SPC.000.001"},
+                                       "name": "Строка", "operation_id": str(uuid.uuid4())})
+    missing_code = error_code(missing_env)
+    rep.add("SPEC-03.negative_kind",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
+            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы",
+            "PASS" if (missing_code == "DOCUMENT_NOT_FOUND" and kind_code == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"нет_документа={missing_code} .spw={kind_code}")
+    close(spw_kind_doc)
+
+    # ===== SPEC-03: сохранение и переоткрытие =====
+    _env, save_edit_code = call("kompas_save_document",
+                                {"document_id": edit_model, "expected_revision": edit_state["revision"]})
+    close(edit_model)
+    reopened_env, reopen_edit_code = call("kompas_open_document",
+                                          {"application_id": app_id, "path": model_path,
+                                           "access": "read_only"})
+    reopened = doc_id(reopened_env)
+    reopened_spec, reopened_spec_code = specification_of(reopened)
+    reopened_rows = rows(reopened_spec)
+    saved_new = by_marking(reopened_rows, "SPC.501.010")
+    saved_old = by_marking(reopened_rows, "SPC.301.002")
+    rep.add("SPEC-03.save_reopen",
+            "kompas_save_document пишет модель, а переоткрытая сборка показывает ПРАВЛЕНЫЕ значения обеих "
+            "строк: правка живёт в файле, а не только в сеансе, где её сделали",
+            "PASS" if (not save_edit_code and reopened and not reopened_spec_code
+                       and len(saved_new) == 1 and len(saved_old) == 1
+                       and same_row(saved_new[0],
+                                    {"marking": "SPC.501.010", "name": "Строка правки 3", "quantity": "11",
+                                     "position": "9", "section_number": 20})
+                       and same_row(saved_old[0], {"marking": "SPC.301.002", "name": "Пластина правки"})) else "FAIL",
+            f"save_код={save_edit_code} переоткрытие={reopen_edit_code},{reopened_spec_code} "
+            f"созданная={saved_new} постановки={saved_old}")
+    close(reopened)
+
+    # ===== SPEC-03: значение не того типа, что ждёт колонка =====
+    # Последним и на отдельно открытой модели: колонка «Количество» может оказаться текстовой, и тогда
+    # документ примет текст — честный ответ в этом случае равен прочитанному назад значению, а не отказу.
+    value_env, _ = call("kompas_open_document",
+                        {"application_id": app_id, "path": model_path, "access": "edit"})
+    value_model = doc_id(value_env)
+    value_context, _ = context_of(value_model)
+    value_rows = rows(specification_of(value_model)[0])
+    value_b = by_marking(value_rows, "SPC.301.002")
+    value_ref = ({"document_id": value_model, "unique_number": value_b[0].get("unique_number"),
+                  "marking": value_b[0].get("marking")} if len(value_b) == 1 else None)
+    quantity_before = value_b[0].get("quantity") if len(value_b) == 1 else None
+    _e, wrong_env, _r = client.tool("kompas_specification_edit_row",
+                                    {"document_id": value_model,
+                                     "expected_revision": value_context.get("revision"),
+                                     "row_ref": value_ref, "quantity": "не число",
+                                     "operation_id": str(uuid.uuid4())}) if value_ref else ({}, {}, None)
+    wrong_code = error_code(wrong_env)
+    value_after = by_marking(rows(specification_of(value_model)[0]), "SPC.301.002")
+    quantity_after = value_after[0].get("quantity") if len(value_after) == 1 else None
+    refused_wrong = wrong_code in ("INVALID_ARGUMENT", "GEOMETRY_FAILED", "CAPABILITY_UNAVAILABLE")
+    accepted_wrong = not wrong_code and quantity_after == "не число"
+    rep.add("SPEC-03.negative_value_type",
+            "значение не того типа, что ждёт колонка количества: отказ названным кодом до мутации, когда "
+            "колонка числовая, либо принятый документом текст, честно прочитанный назад; ложного успеха нет",
+            "PASS" if (value_model and value_ref
+                       and ((refused_wrong and quantity_after == quantity_before) or accepted_wrong)) else "FAIL",
+            f"код={wrong_code} было={quantity_before} стало={quantity_after}")
+    close(value_model)
 
 
 def dismantle_checks(client, rep, app_id, workdir):

@@ -240,6 +240,9 @@ public static class WorkerCommandTable
         // Creating a row writes the collection, the columns and Update(), then reads the row back through
         // both roads: one COM call per column written and per column read. History: docs/decisions/bom.md#spec-add-row
         Cad(WorkerCommands.AddSpecificationRow, WorkerAction.ModelMutation, 120_000);
+        // Editing a row opens it, writes one setter per field and closes it, then reads the row back through
+        // both roads. History: docs/decisions/bom.md#spec-edit-row
+        Cad(WorkerCommands.EditSpecificationRow, WorkerAction.ModelMutation, 120_000);
 
         // ---- assembly ----
         // Inserting a component reads a file from disk and rebuilds the document; the structure

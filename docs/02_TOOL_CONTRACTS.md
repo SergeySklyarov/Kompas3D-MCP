@@ -960,7 +960,8 @@ requires_*). Ничего не исполняет.
 
 **Ответ.** `document` (`path`, `kind: "specification"`, `opened_by_tool` — истина только если файл
 открыл ЭТОТ вызов), `rows` того же вида, что у `kompas_get_specification` (`section`,
-`section_number`, `position`, `marking`, `name`, `quantity`), `count`, `route`, `notes`,
+`section_number`, `position`, `marking`, `name`, `quantity`, `unique_number` — номер строки добавлен
+нарядом `SPEC_EDIT_ROW`, раздел 2.21), `count`, `route`, `notes`,
 `unverified_aspects`. Файл по `path` открывается документированным `IDocuments.Open` в режиме только
 для чтения и НЕ становится активным: `opened_by_tool=true` означает, что закрытие остаётся за
 клиентом. Уже открытый файл возвращает тот же `document_id` и `opened_by_tool=false`.
@@ -1030,3 +1031,61 @@ API7 (`Objects` → `Columns` → `ColumnItems`) и API5 (`ksGetSpcObject` → `
 `IPropertyKeeper`) НЕ создаётся: точки входа в `IPropertyKeeper` в COM нет — граница документации.
 Перенос раздела (`SetSection` не сохраняется), правка и удаление строк — другие наряды. Запись строк
 `.spw` не входит. Приёмка — группа `mcp-smoke.py --specification-only`, строки `SPEC-02.*` матрицы.
+
+## 2.21. Правка строки спецификации модели (наряд `SPEC_EDIT_ROW`, 11.11.2026)
+
+**Новый инструмент, третья запись (правка).** `kompas_specification_edit_row` (мутация: нужны
+`operation_id`, `document_id`, `expected_revision`) правит СУЩЕСТВУЮЩУЮ строку спецификации МОДЕЛИ.
+Вход: `row_ref {document_id, unique_number, marking}` — та же ссылка, что отдают
+`kompas_specification_add_row` и чтение, — и необязательные `marking`, `name`, `quantity` (строки),
+`position` (`int`, ≥ 0). Отсутствие поля значит «не менять», поэтому пустой набор изменений —
+`INVALID_ARGUMENT`: вызов без изменений ничего не доказывает.
+
+**Ссылка на существующую строку берётся из чтения.** Чтение строк публикует `unique_number` — номер,
+который документ присвоил строке (`ispecificationobject_uniquenumber.html`: «присваивается при
+создании»). Без него строку, созданную не этим сеансом, адресовать было бы нечем: обозначение не
+уникально, а других адресов у строки нет. Поле добавлено аддитивно к строкам
+`kompas_get_specification`, `kompas_get_specification_document` и к строкам ответов создания и правки.
+
+**Маршрут — API5, и это единственный маршрут, который сохраняется.** `ksDocument3D.GetSpecification()`
+→ `ksGetSpcObject(row_ref.unique_number)` → `ksGetSpcObjectNumber` (сверка указателя: чужую строку под
+этим номером не правим) → `ksSpcObjectEdit` → `ksSetSpcObjectColumnText(тип колонки, 1, 0)` для
+обозначения и наименования / `ksSpcCount(1, текст)` для количества / `ksSpcPosition` для позиции →
+`ksSpcObjectEnd` (`ksspecification_ksspcobjectedit.html`: «После вызова данного метода у объекта можно
+изменить атрибуты, геометрию, линии выноски, позицию, массу»; «Редактирование объекта завершится
+вызовом метода ksSpecification::ksSpcObjectEnd»). Правка через API7 (`ColumnItems.Value`, `Text.Str`)
+НЕ используется: измерено, что на существующей строке она отвечает `Update() = false` и в файл не
+попадает (раздел 2.19 `docs/decisions/bom.md#spec-ext`).
+
+**Проверка до и после.** До правки строка находится в списке описания и подтверждается указателем API5;
+её обозначение сверяется с `row_ref.marking` — расхождение (строку сменили прошлой правкой) даёт
+`STALE_REFERENCE`, и модель не трогается. Колонки нужных типов проверяются на самом объекте ДО
+`ksSpcObjectEdit`, а значение количества — по `ValueType` колонки. После `ksSpcObjectEnd` строка
+перечитывается ОБЕИМИ дорогами (API7 и API5) и сверяется с запросом, а поля, которых вызов не называл,
+обязаны совпасть с прежними; расхождение — `GEOMETRY_FAILED` со снимком.
+
+**Ответ.** `row_ref` (переизданный: обозначение могло смениться), `previous` (строка до правки),
+`row` (строка после), `route`, `verification` (уровень `structure_checked`, когда прошли все проверки
+перечитывания), `notes`, `unverified_aspects`; `expected_revision` следующего вызова приходит
+ревизией конверта. Файл этим вызовом НЕ пишется: сохранение делает `kompas_save_document`, и
+переживание правки проверяет приёмка.
+
+**Отказы.** `INVALID_ARGUMENT` до COM — пустой набор изменений, пустое значение заданного текстового
+поля, значение, которое не принимает `ValueType` колонки, `row_ref.document_id`, не равный
+`document_id`, отрицательная позиция; `DOCUMENT_NOT_FOUND`; `WRONG_DOCUMENT_KIND` — не модель (`.spw`,
+чертёж); `STALE_REFERENCE` — строки с таким номером нет, номер не подтверждён указателем, обозначение
+не совпало; `REVISION_CONFLICT`; `CAPABILITY_UNAVAILABLE` — `ksSpcObjectEdit` вернул 0 (документ не
+тронут) или в стиле нет колонки нужного типа; `GEOMETRY_FAILED` — чтение назад не подтвердило правку.
+Отказ сеттера или `ksSpcObjectEnd` посреди правки — тоже `CAPABILITY_UNAVAILABLE`, но с частичными
+эффектами: ответ перечитывает строку и называет, что в ней уже изменилось.
+
+**Пределы.** Перенос раздела не входит и не переносится: `Section` доступен только для чтения
+(«Переместить уже созданные объекты из одного раздела в другой нельзя», `ispecificationobject_section.html`),
+а `SetSection` меняет раздел в сессии и НЕ сохраняется (измерено). Масса (`ksSpcMassa`) и составные
+значения (`ksSpcChangeValue`) не входят — не измерены. Связь строки с компонентом не создаётся и не
+ищется (точки входа в `IPropertyKeeper` в COM нет), поэтому строку, которую КОМПАС ведёт от компонента,
+инструмент правит как обычную, а `notes` называет то, что документ сам говорит о её происхождении
+(`State` по `ispecificationobject_state.html`, `SyncronizeWithProperties` по
+`ispecificationbaseobject_syncronizewithproperties.html`), не называя компонента. Удаление строки —
+наряд `SPEC_DELETE_ROW`. Приёмка — группа `mcp-smoke.py --specification-only`, строки `SPEC-03.*`
+матрицы.

@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 162,
+   "operations": 163,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 238,
+   "modes_and_variants": 239,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8618,6 +8618,20 @@
       {
        "id": "SPEC-02.row.create",
        "name": "Создать строку спецификации модели: раздел, обозначение, наименование, количество, позиция",
+       "level": "mcp_verified"
+      }
+     ]
+    },
+    {
+     "id": "SPEC-03",
+     "name": "Правка строки спецификации модели",
+     "level": "mcp_verified",
+     "doc_source": "ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html, ispecificationobject_uniquenumber.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_section.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html, ksspecificationobjectstateenum.html",
+     "route": "API5, единственный маршрут правки, который сохраняется: ksDocument3D.GetSpecification() -> ksGetSpcObject(row_ref.unique_number) -> ksGetSpcObjectNumber (сверка указателя) -> ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) для обозначения и наименования / ksSpcCount(1, текст) для количества / ksSpcPosition для позиции -> ksSpcObjectEnd; до правки маркировка строки сверяется со ссылкой (расхождение - STALE_REFERENCE), после - строка перечитывается обеими дорогами (API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а не названные - с прежними значениями; расхождение - GEOMETRY_FAILED со снимком",
+     "modes": [
+      {
+       "id": "SPEC-03.row.edit",
+       "name": "Править строку спецификации модели: обозначение, наименование, количество, позиция",
        "level": "mcp_verified"
       }
      ]

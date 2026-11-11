@@ -561,7 +561,9 @@ public static class ToolCatalog
             // History: docs/decisions/bom.md#spec-read
             ReadOnly("kompas_get_specification", "Спецификация модели",
                 "Объекты родной спецификации КОМПАС в открытой модели: {section, section_number, position, "
-                + "marking, name, quantity} — то, что занёс конструктор. Ничего не считает и с деревом "
+                + "marking, name, quantity, unique_number} — то, что занёс конструктор. unique_number — "
+                + "номер, который документ присвоил строке: вместе с document_id и marking он и есть "
+                + "row_ref, которым строка адресуется правкой. Ничего не считает и с деревом "
                 + "сборки не смешивается: kompas_get_bom строит BOM по экземплярам, этот инструмент "
                 + "показывает объекты спецификации, и расхождение между ними — нормальный ответ. "
                 + "Список читается ISpecificationDescription.Objects (порядок — визуальный), тексты и "
@@ -583,7 +585,8 @@ public static class ToolCatalog
             // History: docs/decisions/bom.md#spec-read-spw
             ReadOnly("kompas_get_specification_document", "Строки документа-спецификации (.spw)",
                 "Объекты родной спецификации ДОКУМЕНТА .spw: {section, section_number, position, marking, "
-                + "name, quantity} — тот же вид строк, что у kompas_get_specification, но прочитанный у "
+                + "name, quantity, unique_number} — тот же вид строк, что у kompas_get_specification, но "
+                + "прочитанный у "
                 + "самого документа-спецификации. Адресация — РОВНО ОДНО из path (абсолютный путь к .spw, "
                 + "политика путей чтения) и document_id уже открытого документа: оба поля сразу или ни "
                 + "одного — INVALID_ARGUMENT до обращения к КОМПАС. Маршрут чтения — API7: IDocuments.Open → "
@@ -651,6 +654,56 @@ public static class ToolCatalog
                     ("position", Sch.Nullable(Sch.Int(
                         "Позиция строки. null — позицию ставит документ (нумерация раздела).", 0)))),
                 WorkerCommands.AddSpecificationRow,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            // SPEC-03: the EDIT of a model row. API5 is the only road whose write survives the file, and the
+            // answer is decided by reading the row back through both roads after ksSpcObjectEnd.
+            // History: docs/decisions/bom.md#spec-edit-row
+            Mutation("kompas_specification_edit_row", "Изменить строку спецификации модели",
+                "Правит УЖЕ СУЩЕСТВУЮЩУЮ строку спецификации модели (детали или сборки) и подтверждает "
+                + "правку перечитыванием. Строка адресуется row_ref {document_id, unique_number, marking} — "
+                + "той же ссылкой, что отдают kompas_specification_add_row и чтение: строки с таким "
+                + "unique_number нет или её обозначение не равно row_ref.marking — STALE_REFERENCE, и "
+                + "модель не трогается. Меняются только названные поля: marking, name, quantity (тексты) и "
+                + "position (целое ≥ 0); поле, которого нет во входе, остаётся прежним, а изменение "
+                + "НЕназванного поля — GEOMETRY_FAILED со снимком. Маршрут — API5, единственный, который "
+                + "сохраняется: ksGetSpcObject(unique_number) → сверка ksGetSpcObjectNumber → "
+                + "ksSpcObjectEdit → ksSetSpcObjectColumnText по ТИПУ колонки / ksSpcCount / ksSpcPosition → "
+                + "ksSpcObjectEnd. Правка через API7 (ColumnItems.Value, Text.Str) НЕ используется: "
+                + "измерено, что на существующей строке она отвечает Update() = false и в файл не попадает. "
+                + "Успех — не возврат сеттера: после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами "
+                + "(API7 Objects → Columns → ColumnItems и API5 ksGetSpcObjectColumnText + "
+                + "ksGetSpcSectionName) и сверяется с запросом. Ответ: новый row_ref (обозначение могло "
+                + "смениться), прежние и прочитанные значения строки, route, verification, notes, "
+                + "unverified_aspects; файл этим вызовом НЕ пишется — сохранение делает "
+                + "kompas_save_document. Отказы: INVALID_ARGUMENT (пустой набор изменений, пустое значение "
+                + "заданного текстового поля, значение не того типа, что ждёт колонка, row_ref.document_id не "
+                + "равен document_id, отрицательная позиция), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (не "
+                + "модель: .spw, чертёж), STALE_REFERENCE (строки нет, её номер не подтверждён указателем, "
+                + "обозначение не совпало — модель не тронута), REVISION_CONFLICT, CAPABILITY_UNAVAILABLE "
+                + "(ksSpcObjectEdit вернул 0; в стиле нет колонки нужного типа), GEOMETRY_FAILED (чтение "
+                + "назад не подтвердило правку). Отказ посреди правки называет, что уже изменилось, со "
+                + "снимком. ПРЕДЕЛ: перенос раздела (SetSection не сохраняется), запись строк .spw, масса "
+                + "(ksSpcMassa) и составные значения (ksSpcChangeValue) не входят; связь строки с "
+                + "компонентом не создаётся и не ищется — документированной точки входа в IPropertyKeeper в "
+                + "COM нет, поэтому строку, которую КОМПАС ведёт от компонента, инструмент правит как "
+                + "обычную, а notes называет то, что документ сам говорит о её происхождении (State, "
+                + "SyncronizeWithProperties).",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("row_ref", SpecificationRowRefSchema()),
+                    ("marking", Sch.Nullable(Sch.Str(
+                        "Новое обозначение строки. Не задано — обозначение не меняется."))),
+                    ("name", Sch.Nullable(Sch.Str(
+                        "Новое наименование строки. Не задано — наименование не меняется."))),
+                    ("quantity", Sch.Nullable(Sch.Str(
+                        "Новое количество как текст: колонку «Количество» документ читает текстом, а элемент "
+                        + "колонки приводит значение к своему типу. Не задано — количество не меняется."))),
+                    ("position", Sch.Nullable(Sch.Int(
+                        "Новая позиция строки. Не задана — позиция не меняется.", 0)))),
+                WorkerCommands.EditSpecificationRow,
                 requiresDocument: true,
                 requiresRevision: true),
 
@@ -4861,6 +4914,24 @@ public static class ToolCatalog
             new ToolBehaviour(ReadOnly: false, Destructive: true, RequiresOperationId: requiresOperationId, RequiresDocument: requiresDocument, RequiresExpectedRevision: requiresRevision),
             command);
     }
+
+    /// <summary>The row reference a specification edit addresses, in the shape the creation publishes it.</summary>
+    /// <remarks>INVARIANT: all three members are demanded — the number finds the row and the marking proves the
+    /// reference is not stale, so a reference without a marking could not be checked against the document.
+    /// History: docs/decisions/bom.md#spec-edit-row</remarks>
+    private static JsonObject SpecificationRowRefSchema() =>
+        Sch.Obj(
+            "Ссылка на строку спецификации",
+            new[] { "document_id", "unique_number", "marking" },
+            Sch.Props(
+                ("document_id", Sch.Ref("#/$defs/document_id")),
+                ("unique_number", Sch.Num(
+                    "Номер строки из row_ref ответа kompas_specification_add_row или из чтения "
+                    + "спецификации: по нему строка и находится.",
+                    exclusiveMin: true, exclusiveMinValue: 0d)),
+                ("marking", Sch.Str(
+                    "Обозначение строки на момент выдачи ссылки. Ссылка сверяется с документом по нему: "
+                    + "другое обозначение — STALE_REFERENCE, а не правка чужой строки."))));
 
     /// <summary>A session-control tool: handled by the Host itself, not the Worker.</summary>
     /// <remarks>A separate factory: these tools write no operation journal and must answer when there

@@ -337,6 +337,33 @@ public sealed class ToolInvoker : IAsyncDisposable
             yield break;
         }
 
+        if (tool.Name == "kompas_specification_edit_row")
+        {
+            // The edit rule is applied here too, not only in the Worker: an empty change set, a blank value in
+            // a field that IS given, and a reference to another document must be refused BEFORE the journal
+            // and BEFORE COM. The Worker repeats the SAME pure rule.
+            // History: docs/decisions/bom.md#spec-edit-row
+            var rowRef = arguments["row_ref"] as JsonObject;
+            var refused = SpecificationRowEditInput.Validate(
+                ReadString(arguments, "document_id"),
+                rowRef is null
+                    ? null
+                    : new SpecificationRowRefValues(
+                        ReadString(rowRef, "document_id"),
+                        ReadDouble(rowRef, "unique_number"),
+                        ReadString(rowRef, "marking")),
+                ReadString(arguments, "marking"),
+                ReadString(arguments, "name"),
+                ReadString(arguments, "quantity"),
+                ReadLong(arguments, "position") is { } position ? (int)position : null);
+            if (refused is not null)
+            {
+                yield return new SchemaViolation("/" + refused.Field, "value", refused.Message);
+            }
+
+            yield break;
+        }
+
         if (tool.Name == "kompas_get_specification_document")
         {
             // "path OR document_id" cannot be expressed without oneOf, which not every client evaluates;

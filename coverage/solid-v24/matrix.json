@@ -16476,6 +16476,72 @@
       ]
     },
     {
+      "operation_id": "SPEC-03.row.edit",
+      "context": "specification.model",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-ext-v1",
+      "queue": "SPEC_EDIT_ROW",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261110-spec-ext-7d463a0/",
+        "docs/decisions/bom.md#spec-edit-row"
+      ],
+      "parameters_schema": "schemas/kompas_specification_edit_row.json",
+      "adapter_route": "kompas_specification_edit_row: строка находится по row_ref.unique_number в ISpecificationDescription.Objects и подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя); до правки сверяется маркировка (расхождение - STALE_REFERENCE, модель не тронута), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / ksSpcPosition -> ksSpcObjectEnd (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html); после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами (API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а НЕназванные - с прежним значением; расхождение - GEOMETRY_FAILED со снимком. Правка через API7 не используется: измерено, что на существующей строке ColumnItems.Value и Text.Str дают Update() = false и в файл не попадают",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "создание строки - наряд SPEC_ADD_ROW: этот инструмент правит существующую строку",
+        "rebuild": "правка строки не перестраивает модель: строка - объект спецификации, а не признак дерева",
+        "suppress_restore": "у правки строки нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами и сохранением с переоткрытием, а не измерением"
+      },
+      "tests": [
+        "SPEC-03.discovery",
+        "SPEC-03.schema",
+        "SPEC-03.prepare_row",
+        "SPEC-03.edit_marking",
+        "SPEC-03.edit_name",
+        "SPEC-03.edit_quantity",
+        "SPEC-03.edit_position",
+        "SPEC-03.edit_together",
+        "SPEC-03.previous_values",
+        "SPEC-03.untouched_checked",
+        "SPEC-03.preexisting_row",
+        "SPEC-03.negative_input",
+        "SPEC-03.negative_foreign_ref",
+        "SPEC-03.negative_revision",
+        "SPEC-03.negative_stale_reference",
+        "SPEC-03.negative_unknown_row",
+        "SPEC-03.negative_kind",
+        "SPEC-03.save_reopen",
+        "SPEC-03.negative_value_type"
+      ],
+      "limitations": [
+        "Правка живёт в модели до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects самого ответа; переживание сохранения и переоткрытия проверяет приёмка (SPEC-03.save_reopen).",
+        "Перенос раздела не входит и не переносится: ISpecificationObject.Section доступен только для чтения («Переместить уже созданные объекты из одного раздела в другой нельзя»), а SetSection меняет раздел в сессии и НЕ сохраняется (измерено).",
+        "Связь строки с компонентом не создаётся и не ищется: документированной точки входа в IPropertyKeeper в COM нет. Строка, которую КОМПАС ведёт от компонента, правится как обычная; ответ называет то, что документ сам говорит о её происхождении (State, SyncronizeWithProperties), но компонента не называет.",
+        "subsection_number, additional_section и block в контракт не вошли: маршрут (AddWithParam / ISpecificationObjectCreateParam) документирован, но постановкой не проверен.",
+        "Масса (ksSpcMassa) и составные значения (ksSpcChangeValue) не входят: не измерены.",
+        "Строка адресуется row_ref, а его unique_number публикует чтение (kompas_get_specification) или ответ создания: правка не ищет строку по обозначению, потому что обозначение не уникально.",
+        "Удаление строки - наряд SPEC_DELETE_ROW; запись строк .spw в блок не входит."
+      ]
+    },
+    {
       "operation_id": "SM-24.move_faces",
       "kind": "profile_mode",
       "context": "part.single_body",

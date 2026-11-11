@@ -230,13 +230,13 @@
 
 ### профиль spec-ext-v1 — Документ-спецификация v24: строки .spw, прочитанные документированным маршрутом
 
-- **обязательных_режимов:** 2
-- **режимов_закрыто:** 2
+- **обязательных_режимов:** 3
+- **режимов_закрыто:** 3
 - **общих_зависимостей:** 0
 - **зависимостей_закрыто:** 0
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** SPEC_ADD_ROW 1/1; SPEC_READ_SPW 1/1
+- **по_очередям:** SPEC_ADD_ROW 1/1; SPEC_EDIT_ROW 1/1; SPEC_READ_SPW 1/1
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -278,19 +278,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 395
-- **строк_полностью_закрыто:** 208
-- **строк_с_каким_либо_прогрессом:** 231
+- **строк_каталога:** 396
+- **строк_полностью_закрыто:** 209
+- **строк_с_каким_либо_прогрессом:** 232
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 162
-- **режимов_и_вариантов:** 238
-- **применимых_действий:** 3173
-- **действий_verified:** 1420
+- **операций:** 163
+- **режимов_и_вариантов:** 239
+- **применимых_действий:** 3178
+- **действий_verified:** 1425
 - **покрытие_действий:** 44.8%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1420, 'not_applicable': 777, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 86, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 88, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1425, 'not_applicable': 782, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 87, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 89, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -669,6 +669,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `SPEC-01.specdoc.read` | BOM | practical_required | SPEC_READ_SPW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-01.discovery, SPEC-01.schema, SPEC-01.open_path, SPEC-01.row_values, SPEC-01.second_road, SPEC-01.list_documents, SPEC-01.context_kind, SPEC-01.close_clean, SPEC-01.read_by_id, SPEC-01.save_as, SPEC-01.model_object_types, SPEC-01.negative_input, SPEC-01.negative_path, SPEC-01.negative_missing, SPEC-01.negative_kind, SPEC-01.reopen |
 | `SPEC-02.row.create` | BOM | practical_required | SPEC_ADD_ROW | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-02.discovery, SPEC-02.schema, SPEC-02.create_assembly, SPEC-02.read_by_other_tool, SPEC-02.save_reopen, SPEC-02.create_part, SPEC-02.negative_input, SPEC-02.negative_section, SPEC-02.negative_revision, SPEC-02.negative_kind |
+| `SPEC-03.row.edit` | BOM | practical_required | SPEC_EDIT_ROW | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-03.discovery, SPEC-03.schema, SPEC-03.prepare_row, SPEC-03.edit_marking, SPEC-03.edit_name, SPEC-03.edit_quantity, SPEC-03.edit_position, SPEC-03.edit_together, SPEC-03.previous_values, SPEC-03.untouched_checked, SPEC-03.preexisting_row, SPEC-03.negative_input, SPEC-03.negative_foreign_ref, SPEC-03.negative_revision, SPEC-03.negative_stale_reference, SPEC-03.negative_unknown_row, SPEC-03.negative_kind, SPEC-03.save_reopen, SPEC-03.negative_value_type |
 
 ### Общие зависимости профиля `spec-ext-v1`
 
@@ -1062,6 +1063,7 @@
 | `BOM-04.specification.read` | BOM | practical_required | BOM_SPEC_READ | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | BOM-04.discovery, BOM-04.schema, BOM-04.rows, BOM-04.matches_probe, BOM-04.section_read, BOM-04.not_mixed_with_bom, BOM-04.empty, BOM-04.negative_unknown_document |
 | `SPEC-01.specdoc.read` | BOM | practical_required | SPEC_READ_SPW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-01.discovery, SPEC-01.schema, SPEC-01.open_path, SPEC-01.row_values, SPEC-01.second_road, SPEC-01.list_documents, SPEC-01.context_kind, SPEC-01.close_clean, SPEC-01.read_by_id, SPEC-01.save_as, SPEC-01.model_object_types, SPEC-01.negative_input, SPEC-01.negative_path, SPEC-01.negative_missing, SPEC-01.negative_kind, SPEC-01.reopen |
 | `SPEC-02.row.create` | BOM | practical_required | SPEC_ADD_ROW | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-02.discovery, SPEC-02.schema, SPEC-02.create_assembly, SPEC-02.read_by_other_tool, SPEC-02.save_reopen, SPEC-02.create_part, SPEC-02.negative_input, SPEC-02.negative_section, SPEC-02.negative_revision, SPEC-02.negative_kind |
+| `SPEC-03.row.edit` | BOM | practical_required | SPEC_EDIT_ROW | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-03.discovery, SPEC-03.schema, SPEC-03.prepare_row, SPEC-03.edit_marking, SPEC-03.edit_name, SPEC-03.edit_quantity, SPEC-03.edit_position, SPEC-03.edit_together, SPEC-03.previous_values, SPEC-03.untouched_checked, SPEC-03.preexisting_row, SPEC-03.negative_input, SPEC-03.negative_foreign_ref, SPEC-03.negative_revision, SPEC-03.negative_stale_reference, SPEC-03.negative_unknown_row, SPEC-03.negative_kind, SPEC-03.save_reopen, SPEC-03.negative_value_type |
 | `IGES.export` | IGES | practical_required | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | IGES.01.discover, IGES.02.block, IGES.03.more_entities, IGES.04.assembly, IGES.05.revision_conflict, IGES.06.extension_refusal, IGES.07.overwrite, IGES.08.answer_shape |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1907,6 +1909,14 @@
   - Удаление объекта, попавшего только в коллекцию (ветка «в стиле нет колонки»), не измерялось: отказ называет результат Delete(), каким он был.
   - Позиция пишется только если задана; без неё нумерацию ставит документ, и прочитанная позиция - его ответ.
   - Перенос раздела (SetSection не сохраняется) и правка/удаление строк - другие наряды блока spec-ext-v1.
+- `SPEC-03.row.edit` — закрыт целиком
+  - Правка живёт в модели до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects самого ответа; переживание сохранения и переоткрытия проверяет приёмка (SPEC-03.save_reopen).
+  - Перенос раздела не входит и не переносится: ISpecificationObject.Section доступен только для чтения («Переместить уже созданные объекты из одного раздела в другой нельзя»), а SetSection меняет раздел в сессии и НЕ сохраняется (измерено).
+  - Связь строки с компонентом не создаётся и не ищется: документированной точки входа в IPropertyKeeper в COM нет. Строка, которую КОМПАС ведёт от компонента, правится как обычная; ответ называет то, что документ сам говорит о её происхождении (State, SyncronizeWithProperties), но компонента не называет.
+  - subsection_number, additional_section и block в контракт не вошли: маршрут (AddWithParam / ISpecificationObjectCreateParam) документирован, но постановкой не проверен.
+  - Масса (ksSpcMassa) и составные значения (ksSpcChangeValue) не входят: не измерены.
+  - Строка адресуется row_ref, а его unique_number публикует чтение (kompas_get_specification) или ответ создания: правка не ищет строку по обозначению, потому что обозначение не уникально.
+  - Удаление строки - наряд SPEC_DELETE_ROW; запись строк .spw в блок не входит.
 - `IGES.export` — закрыт целиком
   - Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.
   - Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.

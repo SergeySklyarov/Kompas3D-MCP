@@ -254,7 +254,8 @@ public partial class Api5Session
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnPosition, "position", notes),
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnMark, "marking", notes),
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnName, "name", notes),
-                Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnCount, "quantity", notes));
+                Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnCount, "quantity", notes),
+                Double(() => item.UniqueNumber));
             rows.Add(row);
 
             if (specification5 is not null)

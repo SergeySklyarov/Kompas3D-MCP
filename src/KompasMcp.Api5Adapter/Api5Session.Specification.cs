@@ -263,7 +263,8 @@ public partial class Api5Session
             Column(specification, pointer.Value, ksSpecificationColumnTypeEnum.ksSColumnPosition),
             Column(specification, pointer.Value, ksSpecificationColumnTypeEnum.ksSColumnMark),
             Column(specification, pointer.Value, ksSpecificationColumnTypeEnum.ksSColumnName),
-            Column(specification, pointer.Value, ksSpecificationColumnTypeEnum.ksSColumnCount));
+            Column(specification, pointer.Value, ksSpecificationColumnTypeEnum.ksSColumnCount),
+            unique.Value);
     }
 
     /// <summary>The text of one column, named by its documented TYPE.</summary>

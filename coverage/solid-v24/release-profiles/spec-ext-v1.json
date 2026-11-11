@@ -13,12 +13,18 @@
         "revision": "1.1",
         "date": "11.11.2026",
         "change": "наряд SPEC_ADD_ROW: создание строки МОДЕЛИ через BaseObjects.Add + Update с перечитыванием обеими дорогами (docs/decisions/bom.md#spec-add-row); строка SPEC-02.row.create, инструмент kompas_specification_add_row"
+      },
+      {
+        "revision": "1.2",
+        "date": "11.11.2026",
+        "change": "наряд SPEC_EDIT_ROW: правка строки МОДЕЛИ маршрутом API5 ksSpcObjectEdit...ksSpcObjectEnd с перечитыванием обеими дорогами и публикацией unique_number строки в чтении (docs/decisions/bom.md#spec-edit-row); строка SPEC-03.row.edit, инструмент kompas_specification_edit_row"
       }
     ],
     "target_build": "24.0.0.2799",
     "queue": {
       "SPEC_READ_SPW": "Первый наряд блока spec-ext-v1: чтение документа-спецификации .spw",
-      "SPEC_ADD_ROW": "Второй наряд блока spec-ext-v1: создание строки спецификации модели"
+      "SPEC_ADD_ROW": "Второй наряд блока spec-ext-v1: создание строки спецификации модели",
+      "SPEC_EDIT_ROW": "Третий наряд блока spec-ext-v1: правка строки спецификации модели"
     }
   },
   "modes": [
@@ -53,6 +59,22 @@
         "geometry_validation"
       ],
       "gap": "Создание - API7: SpecificationDescriptions.Active (если описания нет, документированный Add(\"\", 0, \"\") создаёт описание по умолчанию, и это названо) -> ISpecificationDescription.BaseObjects.Add(section, 0) добавляет объект только в КОЛЛЕКЦИЮ (ispecificationbaseobjects_add.html) -> значения в колонки по ТИПУ (ksSColumnMark/ksSColumnName/ksSColumnCount/ksSColumnPosition) через ISpecificationColumnItem.Value по ValueType -> ISpecificationObject.Update() создаёт строку в документе (ispecificationobject_update.html). Раздел проверяется по стилю ДО Add (номер раздела принадлежит стилю), ноль отвергается дословной формулировкой справки, неизвестный раздел - с перечнем доступных. Успех подтверждается перечитыванием: описание берётся у документа заново, строка находится по UniqueNumber (или по запрошенным значениям при одном совпадении), затем читаются API7 (Objects -> Columns -> ColumnItems) и API5 (ksGetSpcObject -> ksGetSpcObjectNumber -> сверка указателя -> ksGetSpcObjectColumnText + ksGetSpcSectionName); расхождение - GEOMETRY_FAILED со снимком. Число сравнивается как число, текст - как текст. Ответ - row_ref {document_id, unique_number, marking}, прочитанная строка, verification, unverified_aspects (файл этим вызовом не пишется)."
+    },
+    {
+      "ref": "SPEC-03.row.edit",
+      "title": "Правка строки спецификации модели: API5 ksSpcObjectEdit...ksSpcObjectEnd, перечитывание обеими дорогами, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_EDIT_ROW",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "edit",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Правка - API5, единственный маршрут, который сохраняется (измерено: API7 ColumnItems.Value и Text.Str на существующей строке дают Update() = false и в файл не попадают): строка находится по row_ref.unique_number в ISpecificationDescription.Objects, подтверждается ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя), её маркировка сверяется со ссылкой ДО правки (расхождение - STALE_REFERENCE, модель не тронута), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1, текст) / ksSpcPosition -> ksSpcObjectEnd. Меняются только названные поля (marking, name, quantity, position); поле, которого нет во входе, не трогается, а изменение НЕназванного поля - GEOMETRY_FAILED со снимком. После ksSpcObjectEnd строка перечитывается обеими дорогами, и успех - это прочитанные значения, а не возврат сеттера. Отказ посреди правки называет, что уже изменилось, со снимком; ksSpcObjectEdit = 0 - CAPABILITY_UNAVAILABLE до мутации. row_ref выдаётся созданием или чтением (unique_number строки публикуется kompas_get_specification). Сохранение строки и её переживание переоткрытия проверяет приёмка (SPEC-03.save_reopen)."
     }
   ],
   "common_dependencies": [],

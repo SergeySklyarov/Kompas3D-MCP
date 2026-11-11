@@ -20,6 +20,11 @@ public static class SpecificationFieldPages
 
     public const string Quantity = "ksspecification_ksgetspcobjectcolumntext.html";
 
+    /// <summary>The number the document gave the row — the address a write tool takes back.</summary>
+    /// <remarks>DOC: <c>ispecificationobject_uniquenumber.html</c> — «присваивается при создании».
+    /// History: docs/decisions/bom.md#spec-edit-row</remarks>
+    public const string UniqueNumber = "ispecificationobject_uniquenumber.html";
+
     /// <summary>The table in the order the contract publishes the fields.</summary>
     public static IReadOnlyList<(string Field, string Page)> All { get; } =
     [
@@ -29,6 +34,7 @@ public static class SpecificationFieldPages
         ("marking", Marking),
         ("name", Name),
         ("quantity", Quantity),
+        ("unique_number", UniqueNumber),
     ];
 }
 

@@ -92,14 +92,17 @@ public sealed record GetSpecificationDocumentCommand
 /// <remarks>INVARIANT: every field rests on its own documented read call; a field without one does not
 /// enter the contract. <c>section_number</c> is the number the object sits in, <c>section</c> is the name
 /// the document gives for it — both are read, neither is derived from the other.
-/// History: docs/decisions/bom.md#spec-read</remarks>
+/// INVARIANT: <c>unique_number</c> is the number the DOCUMENT assigned («присваивается при создании»), and
+/// the address a write tool takes back: a row that was not created by this session is addressable only
+/// because the row publishes it. History: docs/decisions/bom.md#spec-edit-row</remarks>
 public sealed record SpecificationLineDto(
     string? Section,
     int? SectionNumber,
     string? Position,
     string? Marking,
     string? Name,
-    string? Quantity);
+    string? Quantity,
+    double? UniqueNumber = null);
 
 /// <summary>The specification rows, their number, the route and the notes.</summary>
 /// <remarks>INVARIANT: <c>count</c> is the number of rows in the answer, so a caller reads one number
@@ -172,6 +175,48 @@ public sealed record SpecificationRowRefDto(string DocumentId, double UniqueNumb
 /// History: docs/decisions/bom.md#spec-add-row</remarks>
 public sealed record AddSpecificationRowResult(
     SpecificationRowRefDto RowRef,
+    SpecificationLineDto Row,
+    string Route,
+    VerificationDto Verification,
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string> UnverifiedAspects);
+
+/// <summary>Edit one row of a MODEL specification — block <c>SPEC_EDIT_ROW</c>.</summary>
+/// <remarks>ROUTE: API5 only — the documented road whose write SURVIVES the file: <c>ksSpcObjectEdit</c> →
+/// <c>ksSetSpcObjectColumnText</c>/<c>ksSpcCount</c>/<c>ksSpcPosition</c> → <c>ksSpcObjectEnd</c>
+/// (<c>ksspecification_ksspcobjectedit.html</c>). The API7 column write answers <c>Update() = false</c> on an
+/// existing row (measured), so it is not a write road here.
+/// INVARIANT: the row is addressed by the reference the creation and the read publish; a row that is gone,
+/// or whose marking no longer matches it, is <c>STALE_REFERENCE</c> with the model untouched.
+/// History: docs/decisions/bom.md#spec-edit-row</remarks>
+public sealed record EditSpecificationRowCommand
+{
+    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Row reference issued by <c>kompas_specification_add_row</c> or the read, of THIS document.</summary>
+    public required SpecificationRowRefDto RowRef { get; init; }
+
+    public string? Marking { get; init; }
+
+    public string? Name { get; init; }
+
+    public string? Quantity { get; init; }
+
+    /// <summary>Row position; null leaves the position as it is.</summary>
+    public int? Position { get; init; }
+}
+
+/// <summary>The row after the edit, the row as it was before it, and what stays unverified.</summary>
+/// <remarks>INVARIANT: <c>Row</c> is what the DOCUMENT answered through both roads after
+/// <c>ksSpcObjectEnd</c>, and <c>Previous</c> is what it answered before the first setter; a field the
+/// document did not give stays null in both. The reference is reissued because the marking may have changed.
+/// History: docs/decisions/bom.md#spec-edit-row</remarks>
+public sealed record EditSpecificationRowResult(
+    SpecificationRowRefDto RowRef,
+    SpecificationLineDto Previous,
     SpecificationLineDto Row,
     string Route,
     VerificationDto Verification,

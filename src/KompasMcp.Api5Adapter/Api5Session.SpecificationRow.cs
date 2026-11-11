@@ -41,7 +41,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = refused.Field });
         }
 
-        var document = RequireModelForRowWrite(command.DocumentId);
+        var document = RequireModelForRowWrite(command.DocumentId, "создаёт");
         var notes = new List<string>();
         var checks = new List<NamedCheck>();
         var descriptionCreated = false;
@@ -122,10 +122,12 @@ public partial class Api5Session
     }
 
     /// <summary>A model document: a specification belongs to an assembly or a part, not to a <c>.spw</c>.</summary>
+    /// <param name="operation">The verb of the call («создаёт», «правит») — the refusal has to name what was
+    /// refused, and two tools writing rows must not answer with one another's sentence.</param>
     /// <remarks>LIMIT: a drawing is refused too — its specification description is a different level and is
     /// not in this contract. The refusal is <c>WRONG_DOCUMENT_KIND</c>: the same code the read tool answers,
     /// so two calls on one wrong document do not speak two vocabularies.</remarks>
-    private DocumentEntry RequireModelForRowWrite(string documentId)
+    private DocumentEntry RequireModelForRowWrite(string documentId, string operation)
     {
         var document = RequireDocument(documentId);
         if (document.Kind is DocumentKind.Assembly or DocumentKind.Part)
@@ -135,7 +137,7 @@ public partial class Api5Session
 
         throw new KompasContractException(
             ErrorCodes.WrongDocumentKind,
-            $"Документ «{documentId}» имеет тип {document.Kind}: строку спецификации создаёт только "
+            $"Документ «{documentId}» имеет тип {document.Kind}: строку спецификации {operation} только "
             + "документ-модель (сборка или деталь). У документа-спецификации .spw свои строки, и этот "
             + "инструмент их не пишет.",
             RetryPolicy.Never,

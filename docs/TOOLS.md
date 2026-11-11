@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 132.
+Всего инструментов: 133.
 
 | Инструмент | Путь вызова | Назначение | Что делает |
 |---|---|---|---|
@@ -35,9 +35,10 @@
 | `kompas_get_bom` | run | Сводка BOM по сборке | Сводка состава сборки: строки {file, name, marking, material, instances} и итоги {instances, unique_files, skipped}. |
 | `kompas_export_bom` | run | Выгрузить BOM в файл | Пишет те же строки, что kompas_get_bom, в файл: формат выбирается расширением - .csv или .json (иное расширение отвергается). |
 | `kompas_get_component_properties` | run | Свойства компонента | Свойства одного экземпляра сборки: {file, name, marking, material, hidden, excluded, standard, multi_body}. |
-| `kompas_get_specification` | run | Спецификация модели | Объекты родной спецификации КОМПАС в открытой модели: {section, section_number, position, marking, name, quantity} - то, что занёс конструктор. |
-| `kompas_get_specification_document` | run | Строки документа-спецификации (.spw) | Объекты родной спецификации ДОКУМЕНТА .spw: {section, section_number, position, marking, name, quantity} - тот же вид строк, что у kompas_get_specification, но прочитанный у самого документа-спецификации. |
+| `kompas_get_specification` | run | Спецификация модели | Объекты родной спецификации КОМПАС в открытой модели: {section, section_number, position, marking, name, quantity, unique_number} - то, что занёс конструктор. unique_number - номер, который документ присвоил строке: вместе с document_id и… |
+| `kompas_get_specification_document` | run | Строки документа-спецификации (.spw) | Объекты родной спецификации ДОКУМЕНТА .spw: {section, section_number, position, marking, name, quantity, unique_number} - тот же вид строк, что у kompas_get_specification, но прочитанный у самого документа-спецификации. |
 | `kompas_specification_add_row` | run | Создать строку спецификации модели | Создаёт СТРОКУ спецификации модели (детали или сборки) и подтверждает её обратным чтением. |
+| `kompas_specification_edit_row` | run | Изменить строку спецификации модели | Правит УЖЕ СУЩЕСТВУЮЩУЮ строку спецификации модели (детали или сборки) и подтверждает правку перечитыванием. |
 | `kompas_list_components` | run | Компоненты сборки | Структура сборки: экземпляры компонентов с именами/марками, признаком «деталь/сборка», кратностью, состоянием фиксации/загрузки, числом тел и граней и ссылкой на экземпляр. |
 | `kompas_insert_component` | run | Вставить компонент | Вставляет компонент из файла-источника в сборку документированным IPart7.Parts → IParts7.AddFromFile. |
 | `kompas_set_component_placement` | run | Задать размещение компонента | Задаёт размещение компонента жёстким преобразованием (начало и две оси) и перечитывает его. |

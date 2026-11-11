@@ -17,12 +17,13 @@
 подтверждено измерением.
 
 > *English summary.* An MCP server that lets an AI agent drive a real, licensed KOMPAS-3D v24 (x64):
-> parts, sketches, features, assemblies and mates, a bill of materials with CSV/JSON export, component
-> properties and native specification reading, drawings, sheet metal, direct face editing (move,
-> delete, restore), stiffening ribs, counterbored, countersunk, spherical-bottom and conical holes,
-> STEP/DXF/IGES export. Every mutating call reports a measured verification level, is journaled for
-> safe retries and is confined to configured disk roots. No arbitrary code execution. Dual-licensed
-> MIT / Apache-2.0. Documentation is in Russian.
+> parts, sketches, features, assemblies and mates (including component patterns and nested components),
+> a bill of materials with CSV/JSON export, component properties, native model specification rows
+> (create, edit, delete) and specification documents (`.spw`, read), drawings, sheet metal, direct face
+> editing (move, delete, restore), stiffening ribs, counterbored, countersunk, spherical-bottom and
+> conical holes, STEP/DXF/IGES export. Every mutating call reports a measured verification level, is
+> journaled for safe retries and is confined to configured disk roots. No arbitrary code execution.
+> Dual-licensed MIT / Apache-2.0. Documentation is in Russian.
 
 ## Быстрая установка
 
@@ -81,10 +82,12 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
 - **Рёбра жёсткости и отверстия.** Ребро по разомкнутой цепочке эскиза с односторонней или
   симметричной толщиной и уклоном; отверстия с цековкой, зенковкой, сферическим дном, конусом
   насквозь и выточкой с зенковкой.
-- **Сборки.** Вставка, замена и размещение компонентов, сопряжения, разнесённый вид, сечения,
-  проверка пересечений и зазоров.
-- **Состав изделия (BOM) и спецификация.** Сводная ведомость сборки с деревом и количествами, её
-  выгрузка в CSV и JSON, свойства компонента по ссылке и чтение родной спецификации модели.
+- **Сборки.** Вставка, замена и размещение компонентов, включая компонент внутри подсборки;
+  массивы компонентов по сетке, окружности и кривой; сопряжения, включая «симметрию» и «зависимое
+  положение»; разнесённый вид, сечения, проверка пересечений и зазоров.
+- **Состав изделия (BOM) и спецификации.** Сводная ведомость сборки с деревом и количествами, её
+  выгрузка в CSV и JSON, свойства компонента по ссылке; чтение родной спецификации модели и
+  документа-спецификации `.spw`, создание, правка и удаление строки спецификации модели.
 - **Листовой металл.** Листовое тело, сгибы, отверстия и вырезы, развёртка и её выгрузка в DXF.
 - **Чертежи.** Ассоциативные виды, разрезы, размеры, основная надпись, технические требования,
   экспорт в DXF/DWG.
@@ -101,9 +104,9 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
 
 Чего пока нет и что в работе: [состояние и планы](docs/project-status.md).
 
-Текущий выпуск - **0.13.0**: 129 операций, 14 прямых инструментов, 21 профиль приёмки, режимов
-**134/134** и зависимостей **82/82**, открытых нет. Заметки выпуска:
-[distribution/v0.13.0.md](docs/distribution/v0.13.0.md).
+Текущий выпуск - **0.14.0**: 134 операции, 14 прямых инструментов, 22 профиля приёмки, режимов
+**138/138** и зависимостей **82/82**, открытых нет. Заметки выпуска:
+[distribution/v0.14.0.md](docs/distribution/v0.14.0.md).
 
 ## Почему ему можно доверять
 

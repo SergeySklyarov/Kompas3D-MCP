@@ -24,6 +24,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль assembly-ext-v1 — Расширение сборок v24: массивы компонентов, вложенный компонент, симметрия и зависимое положение
+
+- **обязательных_режимов:** 7
+- **режимов_закрыто:** 7
+- **общих_зависимостей:** 0
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** ASM_EXT 7/7
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль assembly-interference-minimal-v1 — Пересечения и зазоры между компонентами сборки v24
 
 - **обязательных_режимов:** 4
@@ -315,6 +327,23 @@
 | `dep.assembly.component_address` | да | discover, read, negative_tests | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit, ASM.04.discover, ASM.04.geometry_validation, ASM.05.discover, ASM.07.geometry_validation, ASM.03.save_reopen |
 | `dep.assembly.revisions` | да | edit, read, negative_tests | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` | да | create, read, negative_tests | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `assembly-ext-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `ASM-09.component_pattern.grid` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.09.discover, ASM.09.create, ASM.09.create_2x2, ASM.09.read, ASM.09.edit, ASM.09.rebuild, ASM.09.save_reopen, ASM.09.delete_dependencies, ASM.09.negative_tests, ASM.09.geometry_validation |
+| `ASM-10.component_pattern.circular` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.10.discover, ASM.10.create, ASM.10.read, ASM.10.edit, ASM.10.rebuild, ASM.10.save_reopen, ASM.10.delete_dependencies, ASM.10.negative_tests, ASM.10.geometry_validation |
+| `ASM-11.nested.placement_set` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.11.discover, ASM.11.edit, ASM.11.geometry_validation, ASM.11.save_reopen, ASM.11.negative_tests, ASM.11.stale_address, ASM.11.foreign_document, ASM.11.api5_only_refusal |
+| `ASM-12.nested.source_replace` | ASM | practical_required | ASM_EXT | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.12.discover, ASM.12.edit, ASM.12.read, ASM.12.save_reopen, ASM.12.negative_tests |
+| `ASM-13.component_pattern.path` | ASM | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | ASM.13.discover, ASM.13.component_frame, ASM.13.create, ASM.13.read, ASM.13.rebuild, ASM.13.save_reopen, ASM.13.full_length, ASM.13.delete_dependencies, ASM.13.negative_tests, ASM.13.geometry_validation |
+| `MATE-08.mate.create_symmetric` | MATE | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | MATE.08.discover, MATE.08.create, MATE.08.geometry_validation, MATE.08.read, MATE.08.rebuild, MATE.08.save_reopen, MATE.08.negative_tests, MATE.08.delete_dependencies |
+| `MATE-09.mate.create_dependent` | MATE | practical_required | ASM_EXT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | MATE.09.discover, MATE.09.create, MATE.09.geometry_validation, MATE.09.read, MATE.09.rebuild, MATE.09.save_reopen, MATE.09.negative_tests, MATE.09.delete_dependencies |
+
+### Общие зависимости профиля `assembly-ext-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
 
 ## Метрика 1 — обязательные режимы профиля `assembly-interference-minimal-v1`
 

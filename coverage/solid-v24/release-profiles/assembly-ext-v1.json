@@ -1,0 +1,192 @@
+{
+  "meta": {
+    "profile_id": "assembly-ext-v1",
+    "title": "Расширение сборок v24: массивы компонентов, вложенный компонент, симметрия и зависимое положение",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "11.11.2026",
+        "change": "профиль заведён нарядом RELEASE_0_14_0 по решению техлида 10.11.2026 (поправка плана девяносто вторая): семь строк очереди ASM_EXT - массивы компонентов по сетке, по концентрической сетке и по кривой (ASM-09, ASM-10, ASM-13), размещение и замена источника вложенного компонента (ASM-11, ASM-12), сопряжения симметрии и зависимого положения (MATE-08, MATE-09). Файла профиля при приёмке нарядов блока не было, и объём выпуска считался без этих строк"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "ASM_PATTERN_COMPONENTS": "Первый наряд блока assembly-ext-v1: массивы компонентов по сетке и по концентрической сетке",
+      "MATE_SYMMETRIC_DEPENDENT": "Второй наряд блока assembly-ext-v1: сопряжения симметрии и зависимого положения",
+      "ASM_NESTED_COMPONENTS": "Третий наряд блока assembly-ext-v1: размещение и замена источника вложенного компонента",
+      "ASM_PATTERN_PATH": "Четвёртый, последний наряд блока assembly-ext-v1: массив компонентов по кривой"
+    }
+  },
+  "modes": [
+    {
+      "ref": "ASM-09.component_pattern.grid",
+      "title": "Массив компонентов сборки по сетке",
+      "family": "ASM",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "API7 IModelContainer.FeaturePatterns.Add(o3d_meshPartArray) -> QI(ILinearPattern) -> IsSuitableObject + AddInitialObjects, оси, шаг и число по двум направлениям -> Update() -> RebuildModel + RebuildDocument (docs/decisions/assembly-ext.md#component-arrays-implemented). Успех подтверждает СРАВНЕНИЕ: состав IPart7.Parts вырос на count1*count2-1, GetExemplarsCounts равны запрошенным, начала совпали с узлами сетки ±0.01 мм там, где ожидаемый набор узлов выводится из запроса. Источник - компонент ВЕРХНЕГО уровня; удаление отдельного экземпляра и вложенный источник в профиль не входят.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "ASM-10.component_pattern.circular",
+      "title": "Массив компонентов сборки по концентрической сетке",
+      "family": "ASM",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "API7 FeaturePatterns.Add(o3d_circPartArray) -> QI(ICircularPattern) -> IsSuitableObject + AddInitialObjects, ось, шаг и число по двум направлениям -> Update() -> RebuildModel + RebuildDocument (docs/decisions/assembly-ext.md#component-arrays-implemented). Успех - СРАВНЕНИЕ: число компонентов выросло на count1*count2-1, GetExemplarsCounts равны запрошенным, угол между соседними экземплярами равен шагу ±0.01°. Ожидаемый набор начал выводится для ОДНОГО радиального слоя (count1=1); иначе сверка снимается в unverified_aspects.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "ASM-11.nested.placement_set",
+      "title": "Размещение компонента внутри подсборки",
+      "family": "ASM",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Адрес - путь индексов IPart7.Parts от верхней сборки; запись - IPart7.Placement -> IPlacement3D.InitByMatrix3D -> IPart7.UpdatePlacement(false) -> RebuildModel каждого родителя -> RebuildDocument (docs/decisions/assembly-ext.md#nested-implemented). Перечитанная ЛОКАЛЬНАЯ матрица (координаты родителя, а не документа) сверяется с записанной ±0.01 мм: UpdatePlacement отвечает false на применённой записи, поэтому успех называет только перечитывание. Удаление, BOM, пересечения, разнесение и массивы адресуют верхний уровень; вложенный компонент отвергается CAPABILITY_UNAVAILABLE с причиной.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "ASM-12.nested.source_replace",
+      "title": "Замена файла-источника компонента внутри подсборки",
+      "family": "ASM",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "edit",
+        "rebuild",
+        "save_reopen",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Замена - IPart7.FileName (put) + IModelObject.Update по тому же адресу пути индексов (docs/decisions/assembly-ext.md#nested-implemented). Успех - перечитанный источник (IPart7.FileName) и сохранённое ЛОКАЛЬНОЕ размещение (IPart7.Placement.GetMatrix3D); ответ называет записанные файлы (saved_subassembly_files), потому что сохранение верхней сборки записывает и подсборку. IPart7.Reference переживает замену: взятая ссылка остаётся годной.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "ASM-13.component_pattern.path",
+      "title": "Массив компонентов сборки по кривой",
+      "family": "ASM",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "rebuild",
+        "save_reopen",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "Массив - IPathPattern (FeaturePatterns.Add(o3d_curvePartArray)) по РЕБРУ компонента: эскиз и EntityCollection(o3d_curveElement) ядро принимает молча, но Curves читается null и массив не строится, поэтому траектория только ребро (docs/decisions/assembly-ext.md#path-pattern). Успех - число компонентов выросло на источник*(count-1), GetExemplarsCounts равны, а смещения начал от источника равны k*шаг вдоль ребра ±0.01 мм (начала не лежат на самой кривой). Правка параметров существующего массива по кривой не входит: PatternEditDto не несёт Count/ByStep/Step.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "MATE-08.mate.create_symmetric",
+      "title": "Сопряжение симметрии двух компонентов",
+      "family": "MATE",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "rebuild",
+        "save_reopen",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "kompas_create_mate с mc_Symmetric: успех подтверждается ГЕОМЕТРИЕЙ прочитанного положения пары после создания (в измеренной постановке o1 + o2 = -20), а не ответом вызова (docs/decisions/assembly-ext.md#mate-types-implemented). Удаление - DeleteObject с перечислением зависимых сопряжений; подавление сопряжений в профиль не входит.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    },
+    {
+      "ref": "MATE-09.mate.create_dependent",
+      "title": "Зависимое положение второго компонента от первого",
+      "family": "MATE",
+      "queue": "ASM_EXT",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "rebuild",
+        "save_reopen",
+        "delete_dependencies",
+        "negative_tests",
+        "geometry_validation"
+      ],
+      "gap": "kompas_create_mate с mc_Dependent: сдвиг одного компонента повторяется вторым (в измеренной постановке приращение 50 повторяется как 50), и это читается по геометрии, а не берётся из ответа (docs/decisions/assembly-ext.md#mate-types-implemented). Удаление - DeleteObject с перечислением зависимых сопряжений; подавление сопряжений в профиль не входит.",
+      "depends_on": [
+        "dep.assembly.document_lifecycle",
+        "dep.assembly.component_address",
+        "dep.assembly.revisions"
+      ]
+    }
+  ],
+  "common_dependencies": []
+}

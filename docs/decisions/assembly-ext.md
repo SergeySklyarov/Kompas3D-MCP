@@ -431,3 +431,30 @@ History: `ASM_NESTED_COMPONENTS_REPORT_20261110.md` - прогон приёмк�
 
 History: `ASM_PATTERN_PATH_REPORT_20261110.md` - прогон приёмки наряда;
 `scripts/probes/assembly-ext/AssemblyExtProbe.Path.cs` - измерения маршрута, вида траектории и режимов.
+
+## <a id="fixed-component-refusal"></a>Зафиксированный компонент: отказ ДО записи с причиной (наряд `CLIENT_FINDINGS_0_14_0_B`)
+
+**Что было (часть 2 приёмки 0.14.0, `R1.nested_placement`, находка 3).** `kompas_set_component_placement`
+по вложенной ссылке на компонент, вставленный с `fixed=true` (умолчание `kompas_insert_component`),
+отвечал `VERIFICATION_FAILED` с `partial_effects=true` и БЕЗ причины: матрица перечитывалась
+неизменённой. С `fixed=false` тот же вызов проходил.
+
+**Что измерено.** Прибор `scripts/probe-client-findings-0-14-0-b.py` (раздел B) на поставке 0.14.0:
+вложенный компонент с `fixed=true` (`kompas_list_components` отдаёт `fixed: true`) - отказ
+`VERIFICATION_FAILED`, `origin=(15,0,0)` против перечитанного `(0,0,0)`, в тексте и `details`
+фиксации нет; тот же сценарий с `fixed=false` - запись применена. Причина - СОБСТВЕННАЯ фиксация
+компонента, а не подсборки.
+
+**Что документировано.** `kspart_fixedcomponent.html` - `fixedComponent` (BOOL), «Состояние фиксации
+компонента», читается и записывается, и там же прямо: «Если компонент зафиксирован, то нельзя изменить его
+местоположение». `ipart7_fixed.html` - `IPart7.Fixed` (BOOL), «компонент зафиксирован» / «не
+зафиксирован», «вступает в силу после вызова метода IModelObject::Update».
+
+**Что решено.** Фиксация читается ДО записи: у верхнего компонента `ksPart.fixedComponent`, у вложенного
+`IPart7.Fixed`. Зафиксирован - отказ `CAPABILITY_UNAVAILABLE` с `details.cause=component_fixed` и
+выходом (вставить с `fixed=false` либо снять фиксацию и повторить). Модель при таком отказе не меняется:
+частичного эффекта нет, потому что записи не было. Фиксация ПОДСБОРКИ (уровень выше цели) запретом не
+считается - справка говорит о самом компоненте; её состояние читается и попадает в `details` отказа
+(`fixed_ancestor`, `fixed_ancestor_level`) как ВОЗМОЖНАЯ причина, отдельно не доказанная.
+
+**Строки приёмки.** Группа `asm_nested`: `ASM.11.fixed_component` (отказ с причиной); положительный контроль без фиксации - `ASM.11.edit`, `ASM.11.geometry_validation`.

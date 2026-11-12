@@ -106,10 +106,14 @@ public sealed record ListDrawingViewsResult(
     IReadOnlyList<string> Notes);
 
 /// <summary>Result of creating standard views: re-read from the drawing, not a retelling of the request.</summary>
+/// <remarks>INVARIANT: <see cref="TitleBlockChanges"/> names every title-block cell the kernel refilled while
+/// building the associative views (MEASURED: the name cell arrives from the source model), so a client never
+/// finds its stamp changed without a word. History: docs/decisions/drawings.md#stamp-cells-name</remarks>
 public sealed record CreateDrawingViewsResult(
     IReadOnlyList<DrawingViewRowDto> Views,
     int CreatedCount,
-    VerificationDto Verification);
+    VerificationDto Verification,
+    IReadOnlyList<TitleBlockCellChangeDto>? TitleBlockChanges = null);
 
 /// <summary>Change an EXISTING view through the documented writable properties.</summary>
 /// <remarks>DOC: <c>iview_scale.html</c> — <c>Scale</c> is read/write and «вступает в силу после вызова
@@ -228,6 +232,14 @@ public sealed record TitleBlockCellDto(
     string? Requested,
     string? ReadBack,
     bool Matched);
+
+/// <summary>One title-block cell an operation refilled on its own, with the value it held before.</summary>
+/// <remarks>DOC: <c>istamp_text.html</c> — <c>IStamp.Text(Id)</c> is read-only, so taking the snapshot
+/// changes nothing; <c>istamp_getnextcolumnid.html</c> — <c>GetNextColumnId(Id)</c> gives the next NON-EMPTY
+/// cell id, which is how the cells are walked. INVARIANT: a cell the document changed is named with its
+/// value BEFORE the operation — a silent change of the title block is the defect this field exists for.
+/// History: docs/decisions/drawings.md#stamp-cells-name</remarks>
+public sealed record TitleBlockCellChangeDto(string CellId, string? Before, string? After);
 
 /// <summary>Result of filling the title block: cells re-read, not echoed.</summary>
 public sealed record SetTitleBlockResult(
@@ -412,12 +424,17 @@ public sealed record RebuildDrawingViewsCommand
 }
 
 /// <summary>Result of a drawing rebuild: the documented return value plus the view re-read afterwards.</summary>
+/// <remarks>INVARIANT: <see cref="TitleBlockChanges"/> names every title-block cell the rebuild refilled or
+/// cleared, with the value it held BEFORE — MEASURED: <c>RebuildDocument</c> refills the name cell from the
+/// source model's <c>ksPart.name</c> and clears the designation cell when the model has no
+/// <c>ksPart.marking</c>. History: docs/decisions/drawings.md#stamp-cells-name</remarks>
 public sealed record RebuildDrawingViewsResult(
     bool RebuildReturned,
     DrawingViewRowDto ViewBefore,
     DrawingViewRowDto ViewAfter,
     string Route,
-    VerificationDto Verification);
+    VerificationDto Verification,
+    IReadOnlyList<TitleBlockCellChangeDto>? TitleBlockChanges = null);
 
 /// <summary>Create an associative SECTION view of an existing associative view's model.</summary>
 /// <remarks>DOC: the trace is a cut line of the base view (<c>isymbols2dcontainer_cutlines.html</c>,

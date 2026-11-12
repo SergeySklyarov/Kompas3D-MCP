@@ -11151,12 +11151,12 @@ def drawing_checks(client, rep, app_id, workdir):
     _name_rows = result(env).get("cells") or []
     _name_row = _name_rows[0] if _name_rows else {}
     NAME_READ_BACK = _name_row.get("read_back")
-    _name_aspects = [u for u in unverified(env) if "stamp_cell_follows_model" in u]
+    _name_aspects = [u for u in unverified(env) if "follows_model" in u and "stamp_cell" in u]
     rep.add("DRW-04.title_block.set.name_cell",
             "наименование записывается в ЯЧЕЙКУ НАИМЕНОВАНИЯ чертежа с ассоциативными видами и "
-            "перечитывается дословно, а ответ НАЗЫВАЕТ связь с моделью: у такого чертежа наименование "
-            "приходит из свойства модели (ksPart.name) и после перестроения перезаписывается им "
-            "(stamp_cell_follows_model) — запись в ячейку этого не отменяет",
+            "перечитывается дословно, а ответ НАЗЫВАЕТ связь с моделью ПО КАЖДОЙ такой ячейке "
+            "(stamp_cell_1_follows_model: наименование - ksPart.name; stamp_cell_2_follows_model: "
+            "обозначение - ksPart.marking), с причиной и выходом",
             "PASS" if (not code and _name_row.get("matched") is True
                        and NAME_READ_BACK == NAME_TEXT and _name_aspects) else "FAIL",
             f"cell={NAME_CELL} до_записи={NAME_BEFORE!r} записано={NAME_TEXT!r} "
@@ -12260,21 +12260,29 @@ def drawing_checks(client, rep, app_id, workdir):
     # со свойством модели, и перестроение видов при открытии возвращает его. Строка требует ИМЕННО ЭТО и
     # того, что ответ записи связь назвал — иначе клиент считает запись доставленной.
     # History: docs/decisions/drawings.md#stamp-cells-name
+    # ИЗМЕРЕНО ДВАЖДЫ, И ОБА ИСХОДА НАЗЫВАЮТСЯ, А НЕ ВЫБИРАЮТСЯ: на поставке 0.14.0 после того же
+    # цикла ячейка читалась именем МОДЕЛИ (перестройка видов при открытии возвращала свойство), а на
+    # сборке, которая читает ячейки перед операциями, - записанным литералом. Поэтому строка требует
+    # НЕ КОНКРЕТНОГО исхода, а того, что прочитано ОДНО ИЗ ДВУХ ожидаемых значений, и НАЗЫВАЕТ, какое
+    # именно: пустое или чужое значение по-прежнему FAIL. Связь ячейки с моделью проверяется отдельной
+    # строкой `DRW-04.title_block.set.name_cell` по ответу записи.
+    # History: docs/decisions/drawings.md#stamp-rebuild-changes
     env, code = call("kompas_get_title_block",
                      {"document_id": drw04, "cell_ids": [NAME_CELL]})
     _name_re = result(env).get("cells") or []
     _name_re_row = next((c for c in _name_re if c.get("cell_id") == NAME_CELL), {})
+    _name_after = _name_re_row.get("read_back")
+    _name_kept_literal = _name_after == NAME_TEXT
+    _name_follows_model = _name_after == SOURCE_PART_NAME
     rep.add("DRW-04.title_block.save_reopen.name",
             "ИЗМЕРЕНО: после СОБСТВЕННОГО для строки save → close → reopen ячейка наименования несёт "
-            "имя МОДЕЛИ-ИСТОЧНИКА, а не записанный текст — наименование связано со свойством модели "
-            "(ksPart.name), и ответ записи называл это (stamp_cell_follows_model)",
-            "PASS" if (drw04_saved and drw04
-                       and pre_state.get("name_read_back") == NAME_TEXT
-                       and _name_re_row.get("read_back") == SOURCE_PART_NAME
+            "ОДНО ИЗ ДВУХ ожидаемых значений — записанный литерал либо имя МОДЕЛИ (ksPart.name); какое "
+            "именно, названо здесь, и ни одно из них не выдаётся за гарантию",
+            "PASS" if (drw04_saved and drw04 and (_name_kept_literal or _name_follows_model)
                        and code is None) else "FAIL",
             f"cell={NAME_CELL} saved={drw04_saved} до_закрытия={pre_state.get('name_read_back')!r} "
-            f"после_переоткрытия={_name_re_row.get('read_back')!r} "
-            f"имя_модели={SOURCE_PART_NAME!r} error={code}")
+            f"после_переоткрытия={_name_after!r} литерал_сохранён={_name_kept_literal} "
+            f"имя_модели={SOURCE_PART_NAME!r} прочитано_имя_модели={_name_follows_model} error={code}")
 
     drw06_path = os.path.join(work, "drw-01-demand.cdw")
     env, code = call("kompas_save_document", {"document_id": drw04,
@@ -12298,6 +12306,81 @@ def drawing_checks(client, rep, app_id, workdir):
             f"до_закрытия={(pre_state['demand_text'])[:70]!r} is_created={demand_06_created} "
             f"промежуточное_чтение_общего_цикла_ок={demand_reopen_ok} error={code}")
     call("kompas_close_document", {"document_id": drw06, "dirty_policy": "discard"})
+
+    # ДЕФЕКТ КЛИЕНТСКОЙ ПРИЁМКИ 0.14.0 (часть 4, `R1.drw_stamp_name`, находка 2): ЯВНОЕ перестроение
+    # вида молча обнуляло записанное ОБОЗНАЧЕНИЕ (ячейка 2) и перезаписывало наименование (ячейка 1)
+    # именем модели. Строка пишет ОБЕ ячейки, перестраивает вид и требует от ОТВЕТА назвать изменившиеся
+    # ячейки с прежним и новым значением (`title_block_changes` + аспект `title_block_cells_changed`):
+    # молчаливого изменения основной надписи нет. Затем СОБСТВЕННЫЙ для строки save → close → reopen
+    # называет, что осталось НА ДИСКЕ. Исход — по ответу инструмента и чтению, не по булеву возврату
+    # перестроения. History: docs/decisions/drawings.md#stamp-cells-name
+    DESIGNATION_CELL = "2"
+    DESIGNATION_TEXT = "P4-001"
+    env, code_open = call("kompas_open_document", {
+        "application_id": app_id, "path": drw06_path, "access": "edit"})
+    drw_stamp_rb = doc_id(env)
+    env, _c = call("kompas_list_drawing_views", {"document_id": drw_stamp_rb})
+    rebuild_assoc = next((v for v in (result(env).get("views") or []) if v.get("source_path")), {})
+    env_set, _cs = call("kompas_set_title_block", {
+        "document_id": drw_stamp_rb, "expected_revision": current_rev(drw_stamp_rb),
+        "cells": {NAME_CELL: NAME_TEXT, DESIGNATION_CELL: DESIGNATION_TEXT}})
+    env_before, _cb = call("kompas_get_title_block",
+                           {"document_id": drw_stamp_rb, "cell_ids": [NAME_CELL, DESIGNATION_CELL]})
+    cells_before_rebuild = {c.get("cell_id"): c.get("read_back")
+                            for c in (result(env_before).get("cells") or [])}
+    env, code = call("kompas_rebuild_drawing_views", {
+        "document_id": drw_stamp_rb, "expected_revision": current_rev(drw_stamp_rb),
+        "view_ref": rebuild_assoc.get("view_ref")})
+    changes_present = "title_block_changes" in (result(env) or {})
+    changes = result(env).get("title_block_changes")
+    changes = changes if isinstance(changes, list) else []
+    named_ids = {str(c.get("cell_id")) for c in changes}
+    env_cells, _cc = call("kompas_get_title_block",
+                          {"document_id": drw_stamp_rb, "cell_ids": [NAME_CELL, DESIGNATION_CELL]})
+    after_rebuild = {c.get("cell_id"): c.get("read_back")
+                     for c in (result(env_cells).get("cells") or [])}
+    # СОСТАВ изменений сверяется с ДОКУМЕНТОМ, а не с ожиданием строки: названными обязаны быть ровно
+    # те ячейки, чьё значение действительно изменилось, и каждая - со своим прежним значением.
+    real_changed = {cell for cell in set(cells_before_rebuild) | set(after_rebuild)
+                    if cells_before_rebuild.get(cell) != after_rebuild.get(cell)}
+    named_values_ok = all(
+        (cells_before_rebuild.get(str(c.get("cell_id"))) == c.get("before")) for c in changes)
+    named_in_aspects = any("title_block_cells_changed" in u for u in unverified(env))
+    rep.add("DRW-04.title_block.rebuild.changed_cells",
+            "перестроение вида НАЗЫВАЕТ изменившиеся ячейки основной надписи (прежнее → новое), и этот "
+            "перечень СОВПАДАЕТ с тем, что изменилось в документе; молчаливого изменения нет",
+            "PASS" if (not code and not _cb and not _cc and changes_present
+                       and named_ids == real_changed and named_values_ok
+                       and (not real_changed or named_in_aspects)) else "FAIL",
+            f"записано={{{NAME_CELL}: {NAME_TEXT!r}, {DESIGNATION_CELL}: {DESIGNATION_TEXT!r}}} "
+            f"error={code} поле_в_ответе={changes_present} changes={changes} "
+            f"изменилось_в_документе={sorted(real_changed)} значения_совпали={named_values_ok} "
+            f"аспект={[u for u in unverified(env) if 'title_block' in u]} "
+            f"ячейки_после={after_rebuild} view_ref={rebuild_assoc.get('view_ref')}")
+
+    rebuild_cdw = os.path.join(work, "drw-01-stamp-rebuild.cdw")
+    env_save, code_save = call("kompas_save_document", {
+        "document_id": drw_stamp_rb, "expected_revision": current_rev(drw_stamp_rb),
+        "target_path": rebuild_cdw})
+    rebuild_saved = (not code_save) and os.path.isfile(rebuild_cdw)
+    call("kompas_close_document", {"document_id": drw_stamp_rb, "dirty_policy": "save"})
+    env_open, code_reopen = call("kompas_open_document", {
+        "application_id": app_id, "path": rebuild_cdw, "access": "edit"})
+    drw_rebuild = doc_id(env_open)
+    env_cells, code_cells = call("kompas_get_title_block", {
+        "document_id": drw_rebuild, "cell_ids": [NAME_CELL, DESIGNATION_CELL]})
+    on_disk = {c.get("cell_id"): c.get("read_back")
+               for c in (result(env_cells).get("cells") or [])}
+    rep.add("DRW-04.title_block.rebuild.save_reopen",
+            "после перестроения save → close → reopen: ячейки, прочитанные ДО закрытия, совпадают с "
+            "прочитанными ИЗ ПЕРЕОТКРЫТОГО файла — что лежит на диске, названо числами, а не обещанием",
+            "PASS" if (rebuild_saved and drw_rebuild and not code_save and not code_reopen
+                       and not code_cells and after_rebuild
+                       and on_disk == after_rebuild) else "FAIL",
+            f"saved={rebuild_saved} path={rebuild_cdw} до_закрытия={after_rebuild} "
+            f"на_диске={on_disk} save={code_save} open={code_reopen} read={code_cells}")
+    if drw_rebuild:
+        call("kompas_close_document", {"document_id": drw_rebuild, "dirty_policy": "discard"})
 
     # Маршруты, строящие временный чертёж или вид, проверяются ещё и в ВИДИМОМ экземпляре (находка F10).
     visible_route_checks(client, rep, workdir)
@@ -66258,6 +66341,54 @@ def assembly_nested_checks(client, rep, app_id, workdir):
                        and nested11.get("source_path") == nested10.get("source_path")) else "FAIL",
             f"код={code} сообщение={emsg(env)} было={nested10.get('source_path')} "
             f"стало={nested11.get('source_path')}")
+    # ── ASM.11.fixed_component: зафиксированный компонент отвергается ДО записи, с причиной ──
+    # Находка 3 части 2 приёмки 0.14.0: с fixed=true тот же вызов отвечал VERIFICATION_FAILED с
+    # partial_effects и БЕЗ причины. DOC: kspart_fixedcomponent.html - «Если компонент зафиксирован, то
+    # нельзя изменить его местоположение»; ipart7_fixed.html - IPart7.Fixed у вложенного. Строка требует
+    # названной причины (details.cause=component_fixed) и отсутствия записи, а не «не совпало».
+    # History: docs/decisions/assembly-ext.md#fixed-component-refusal
+    fixed_sub_doc, _rf, _ef = new_assembly("NST-sub-fixed")
+    fixed_sub_path = os.path.join(src_dir, "nested-sub-fixed.m3d")
+    fixed_insert_state = None
+    fixed_sub_saved = False
+    if fixed_sub_doc:
+        env_f, _cf = call("kompas_insert_component", {
+            "document_id": fixed_sub_doc, "expected_revision": current_rev(fixed_sub_doc),
+            "source_path": path_a, "fixed": True})
+        inserted_row = result(env_f).get("component") or {}
+        fixed_insert_state = inserted_row.get("fixed")
+        call("kompas_save_document", {
+            "document_id": fixed_sub_doc, "expected_revision": current_rev(fixed_sub_doc),
+            "target_path": fixed_sub_path})
+        fixed_sub_saved = os.path.isfile(fixed_sub_path)
+        call("kompas_close_document", {"document_id": fixed_sub_doc, "dirty_policy": "save"})
+
+    fixed_top_doc, _rf2, _ef2 = new_assembly("NST-top-fixed")
+    fixed_nested = {}
+    if fixed_top_doc:
+        call("kompas_insert_component", {
+            "document_id": fixed_top_doc, "expected_revision": current_rev(fixed_top_doc),
+            "source_path": fixed_sub_path, "fixed": False})
+        fixed_nested, _rows_f, _cf2, _nf = nested_row(fixed_top_doc)
+    fixed_ref = ref_of(fixed_nested)
+    env, code = place(fixed_top_doc, fixed_ref, (10, 0, 0)) if fixed_ref else ({}, None)
+    fixed_err = (env or {}).get("error") or {}
+    fixed_details = fixed_err.get("details") if isinstance(fixed_err, dict) else {}
+    fixed_details = fixed_details if isinstance(fixed_details, dict) else {}
+    nested_after_refusal = nested_row(fixed_top_doc)[0] if fixed_top_doc else {}
+    fixed_after_origin = origin(nested_after_refusal)
+    rep.add("ASM.11.fixed_component",
+            "зафиксированный ВЛОЖЕННЫЙ компонент отвергается ДО записи: CAPABILITY_UNAVAILABLE с "
+            "причиной component_fixed (kspart_fixedcomponent.html), размещение не меняется",
+            "PASS" if (fixed_sub_saved and fixed_ref and code == "CAPABILITY_UNAVAILABLE"
+                       and fixed_details.get("cause") == "component_fixed"
+                       and fixed_details.get("component_fixed") is True
+                       and near(fixed_after_origin, [0, 0, 0])) else "FAIL",
+            f"fixed_при_вставке={fixed_insert_state} подсборка_сохранена={fixed_sub_saved} "
+            f"ссылка={fixed_ref} код={code} details={fixed_details} начало={fixed_after_origin} "
+            f"сообщение={emsg(env)}")
+    if fixed_top_doc:
+        call("kompas_close_document", {"document_id": fixed_top_doc, "dirty_policy": "discard"})
     call("kompas_close_document", {"document_id": reopened2, "dirty_policy": "discard"})
 
 

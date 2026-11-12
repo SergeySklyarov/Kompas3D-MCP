@@ -772,6 +772,30 @@ public partial class Api5Session
         var part5 = ComponentPart5(document, payload, out var lookupNote);
         var matrix = MatrixOf(command.Transform);
 
+        // A FIXED COMPONENT CANNOT BE MOVED — documented, not guessed: kspart_fixedcomponent.html «Если
+        // компонент зафиксирован, то нельзя изменить его местоположение». The write is refused BEFORE it
+        // happens, so the caller gets the cause and the model is left untouched; the previous route wrote,
+        // re-read, found a mismatch and could only say VERIFICATION_FAILED with a partial effect.
+        // History: docs/decisions/assembly-ext.md#fixed-component-refusal
+        var fixedComponent = Bool(() => part5.fixedComponent);
+        if (fixedComponent == true)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Компонент зафиксирован (fixedComponent=true), а справка v24 говорит прямо: «Если компонент "
+                + "зафиксирован, то нельзя изменить его местоположение» (kspart_fixedcomponent.html). "
+                + "Запись не выполнялась, модель не изменена. Выход: вставьте компонент с fixed=false "
+                + "(kompas_insert_component) либо снимите фиксацию (fixedComponent=false и Update), затем "
+                + "повторите.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_fixed"] = true,
+                    ["cause"] = "component_fixed",
+                });
+        }
+
         // AN UNREAD MATRIX IS NOT A ZERO MATRIX: substituting `Array.Empty<double>()` would report a
         // "zero placement" where the placement simply was not read (the same class as fix C).
         var beforeMatrix = ReadPlacementMatrix(part5);
@@ -868,6 +892,33 @@ public partial class Api5Session
             out var unconfirmedAddress);
         var beforeMatrix = NestedPlacementMatrix(node);
 
+        // The same documented rule as the API5 route: kspart_fixedcomponent.html «Если компонент
+        // зафиксирован, то нельзя изменить его местоположение». IPart7.Fixed is the component's own state,
+        // so the refusal names IT, not an ancestor: a fixed PARENT does not forbid moving a child, and the
+        // ancestor state is reported only as a possible cause after a mismatch.
+        // History: docs/decisions/assembly-ext.md#fixed-component-refusal
+        var fixedSelf = NestedFixed(node);
+        if (fixedSelf == true)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Вложенный компонент зафиксирован (IPart7.Fixed=true), а справка v24 говорит прямо: «Если "
+                + "компонент зафиксирован, то нельзя изменить его местоположение» (kspart_fixedcomponent.html, "
+                + "то же состояние читается IPart7.Fixed, ipart7_fixed.html). Запись не выполнялась, модель "
+                + "не изменена. Выход: вставьте компонент с fixed=false (kompas_insert_component) либо "
+                + "снимите фиксацию (IPart7.Fixed=false и IModelObject.Update), затем повторите.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["component_path"] = DescribePath(path),
+                    ["component_fixed"] = true,
+                    ["cause"] = "component_fixed",
+                });
+        }
+
+        var fixedAncestor = FirstFixedAncestor(chain, out var fixedAncestorLevel);
+
         try
         {
             if (node.Placement is not { } placement || !placement.InitByMatrix3D(ToVariant(matrix)))
@@ -913,11 +964,15 @@ public partial class Api5Session
 
         if (!matched)
         {
+            var ancestorNote = fixedAncestor == true
+                ? $" Подсборка на уровне {fixedAncestorLevel} от верха зафиксирована (IPart7.Fixed=true): "
+                  + "это возможная причина, отдельно не доказанная."
+                : string.Empty;
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 "Размещение вложенного компонента записано, но ПЕРЕЧИТАННАЯ локальная матрица не " +
                 $"совпала с запрошенной: запрос «{Describe(matrix)}», перечитано «{Describe(afterMatrix)}». " +
-                "Успехом это не считается: модель изменена, размещение не подтверждено.",
+                "Успехом это не считается: модель изменена, размещение не подтверждено." + ancestorNote,
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true,
                 details: new Dictionary<string, object?>
@@ -927,6 +982,9 @@ public partial class Api5Session
                     ["placement_before"] = beforeMatrix,
                     ["placement_after"] = afterMatrix,
                     ["placement_requested"] = matrix,
+                    ["component_fixed"] = fixedSelf,
+                    ["fixed_ancestor"] = fixedAncestor,
+                    ["fixed_ancestor_level"] = fixedAncestorLevel,
                     ["failure_snapshot"] = new Dictionary<string, object?>
                     {
                         ["route"] = "api7:IPart7.Placement→InitByMatrix3D→UpdatePlacement",
@@ -935,6 +993,9 @@ public partial class Api5Session
                         ["placement_after"] = afterMatrix,
                         ["update_placement_called"] = true,
                         ["revision_bumped"] = true,
+                        ["component_fixed"] = fixedSelf,
+                        ["fixed_ancestor"] = fixedAncestor,
+                        ["fixed_ancestor_level"] = fixedAncestorLevel,
                     },
                 });
         }
@@ -1853,6 +1914,43 @@ public partial class Api5Session
         {
             return null;
         }
+    }
+
+    /// <summary>A nested component's own fixation state (<c>IPart7.Fixed</c>), or null when it does not
+    /// answer. <c>true</c> means «компонент зафиксирован» and, per the same documented property of the API5
+    /// part, its location cannot be changed.</summary>
+    /// <remarks>DOC: <c>ipart7_fixed.html</c> — <c>Fixed</c> is a BOOL, «компонент зафиксирован» /
+    /// «не зафиксирован»; <c>kspart_fixedcomponent.html</c> — «Если компонент зафиксирован, то нельзя
+    /// изменить его местоположение». History: docs/decisions/assembly-ext.md#fixed-component-refusal</remarks>
+    private static bool? NestedFixed(IPart7 part)
+    {
+        try
+        {
+            return part.Fixed;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether an ANCESTOR of the target is fixed, and its level counted from the top assembly
+    /// (the last entry of the chain is the component itself and is skipped).</summary>
+    private static bool? FirstFixedAncestor(List<IPart7> chain, out int level)
+    {
+        level = 0;
+        for (var index = 0; index < chain.Count - 1; index++)
+        {
+            if (NestedFixed(chain[index]) != true)
+            {
+                continue;
+            }
+
+            level = index;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>A component's LOCAL placement: <c>IPart7.Placement</c> →

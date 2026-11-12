@@ -3992,6 +3992,12 @@ ProcessTypeEnum)` → BOOL (`…insertcomponentfromfile.html`) - адреса с
   отсутствует. Поэтому номера задаёт вызывающий (`cells = {"<номер>": "<значение>"}`), а сервер
   ПЕРЕЧИТЫВАЕТ каждую ячейку после `Update()`; несовпадение попадает в `unverified_aspects`. Ключ, не
   являющийся числом, отвергается `INVALID_ARGUMENT` (`Text(Id)` принимает `Int32`).
+  **ИЗМЕРЕНО 12.11.2026 (наряд `CLIENT_FINDINGS_0_14_0_B`):** `GetNextColumnId(0)` на ЗАПОЛНЕННОМ
+  штампе не вернул ни одной следующей ячейки, поэтому обход ячеек им не строится — читаются номера
+  `0..63` документированным `Text(Id).Str`; ячейки 1 и 2 на измеренной раскладке заполняются
+  свойствами модели `ksPart.name` и `ksPart.marking` (`kspart_marking.html` — «Обозначение
+  компонента», читается и записывается), и при перестроении/переоткрытии уже построенного чертежа
+  ядро перезаписывает их из модели (обозначение при пустом свойстве обнуляется).
 - **Экспорт (API7).** `IApplication.get_Converter(Type.Missing)` → `IConverter.GetFilter(docType, saveAs,
   out command)` → `IConverter.Convert(InputFile, Outfile, Command, ShowParam)`. `FORMAT_DXF=1`,
   `FORMAT_DWG=2`. **PDF в справке SDK НЕ описан как программный маршрут** и отвергается

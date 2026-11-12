@@ -4532,6 +4532,15 @@ public sealed partial class Api5Session
             if (command.Properties.Contains(MeasurableProperty.Bbox))
             {
                 bbox = ReadBodyBox(body);
+                // The same rule as kompas_get_context: the box comes from GetGabarit, which is CONSERVATIVE
+                // for trimmed analytic surfaces, so the number must not pass for the exact envelope.
+                // MEASURED: a body reported 23,0000 mm against a 22,98238 mm mesh. The fact belongs to the
+                // answer, not to a comment. History: docs/decisions/geometry.md#measure-bbox-conservative
+                unverified.Add(
+                    "bbox_conservative — габарит читается ksBody.GetGabarit, который у обрезанных "
+                    + "аналитических поверхностей может быть больше точной оболочки (измерено: тело "
+                    + "23,0000 мм против сетки 22,98238 мм); поле зовётся габаритом метода, а не "
+                    + "оболочкой модели");
             }
 
             if (command.Properties.Contains(MeasurableProperty.Volume))

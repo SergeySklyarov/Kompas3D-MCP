@@ -147,6 +147,10 @@ public sealed partial class Api5Session
 
         var before = ReadViewRefs(views);
 
+        // The stamp is read BEFORE the call: building an associative view refills the cells that follow the
+        // model, and an unannounced change of the title block is the defect this snapshot exists for.
+        var stampBefore = TryReadStampCells(document, null, out var stampNoteBefore);
+
         var scale = command.Scale ?? DefaultScale;
         var dx = command.DX ?? DefaultViewGapMm;
         var dy = command.DY ?? DefaultViewGapMm;
@@ -221,12 +225,16 @@ public sealed partial class Api5Session
 
         unverified.AddRange(placement.Notes);
 
+        var stampAfter = TryReadStampCells(document, stampBefore?.Keys, out var stampNoteAfter);
+        var stampChanges = StampChanges(stampBefore, stampAfter, stampNoteBefore ?? stampNoteAfter, unverified);
+
         var verification = new VerificationDto(
             created.Count > 0 ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
             checks,
             unverified);
 
-        return new CreateDrawingViewsResult(rows, created.Count, verification);
+        return new CreateDrawingViewsResult(rows, created.Count, verification,
+            stampChanges is null ? null : ToStampChangeDtos(stampChanges));
     }
 
     /// <summary>Change an EXISTING view's scale and/or anchor through the documented writable properties.</summary>
@@ -422,6 +430,7 @@ public sealed partial class Api5Session
         try
         {
             var before = ReadViewRow(document, view);
+            var stampBefore = TryReadStampCells(document, null, out var stampNoteBefore);
 
             if (drawing7 is not IKompasDocument2D1 document2d)
             {
@@ -479,6 +488,11 @@ public sealed partial class Api5Session
                 unverified.Add("rebuild_returned_false — документированный маршрут вернул FALSE");
             }
 
+            // The stamp is re-read from a FRESH sheet read: the rebuild may refill the cells that follow the
+            // model, and a silent change of the title block is exactly what the client lost before.
+            var stampAfter = TryReadStampCells(document, stampBefore?.Keys, out var stampNoteAfter);
+            var stampChanges = StampChanges(stampBefore, stampAfter, stampNoteBefore ?? stampNoteAfter, unverified);
+
             var verification = new VerificationDto(
                 rebuilt && after is not null ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
                 checks,
@@ -488,7 +502,8 @@ public sealed partial class Api5Session
                         + "(IDrawingDocument.RebuildViews НЕ объявлен в interop — измерено)";
             return new RebuildDrawingViewsResult(
                 rebuilt, before, after ?? before, route + (rereadNote is null ? "" : "; " + rereadNote),
-                verification);
+                verification,
+                stampChanges is null ? null : ToStampChangeDtos(stampChanges));
         }
         finally
         {
@@ -1174,19 +1189,46 @@ public sealed partial class Api5Session
             "stamp_cell_ids_not_documented — соответствие «наименование/обозначение/материал» номерам "
             + "ячеек справка не документирует; сервер принимает номера от клиента и только перечитывает");
 
-        // INVARIANT: on a drawing with an associative view the NAME cell is refilled from the SOURCE
-        // MODEL's property on rebuild (measured: the cell read the part name after save → reopen, not the
-        // written text), so an immediate re-read of the same property cannot promise durability. The way
-        // out is named: set the model's name (kompas_create_document(kind=part, name=…)) or write the cell
-        // again after the rebuild. History: docs/decisions/drawings.md#stamp-cells-name
+        // INVARIANT: on a drawing with an associative view the cells that follow the MODEL are refilled by a
+        // rebuild (MEASURED: cell 1 read the part name and cell 2 was cleared), so a re-read straight after
+        // Update() cannot promise durability. The link is named PER CELL, with the way out.
+        // History: docs/decisions/drawings.md#stamp-cells-name
         if (HasAssociationViews(document))
         {
-            unverified.Add(
-                "stamp_cell_follows_model — у чертежа с ассоциативными видами наименование в основной "
-                + "надписи приходит из свойства МОДЕЛИ (ksPart.name) и после перестроения/переоткрытия "
-                + "перезаписывается им; перечитывание сразу после Update() этого не обнаруживает. "
-                + "Выход: задайте имя модели при её создании (kompas_create_document, kind=part, name) "
-                + "либо заполните ячейку заново после переоткрытия");
+            var named = new List<string>();
+            foreach (var row in readBack)
+            {
+                if (!int.TryParse(row.CellId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+                {
+                    continue;
+                }
+
+                var property = TitleBlockCells.ModelPropertyOf(id);
+                if (property is null)
+                {
+                    continue;
+                }
+
+                named.Add(row.CellId);
+                unverified.Add(
+                    $"stamp_cell_{row.CellId}_follows_model — ячейка {row.CellId} на измеренной раскладке "
+                    + $"основной надписи связана со СВОЙСТВОМ МОДЕЛИ {property}: при перестроении видов "
+                    + "ядро перезаписывает её из модели (обозначение при пустом свойстве модели "
+                    + "обнуляется), и записанный литерал в ней не держится. Справка v24 этого "
+                    + "соответствия номеров не документирует. Выход: задать свойство модели при её "
+                    + "создании (kompas_create_document, kind=part, name и marking) либо заполнить ячейку "
+                    + "заново после перестроения");
+            }
+
+            if (named.Count == 0)
+            {
+                unverified.Add(
+                    "stamp_cell_follows_model — у чертежа с ассоциативными видами ячейки основной надписи "
+                    + "заполняются из свойств МОДЕЛИ (на измеренной раскладке: 1 - ksPart.name, 2 - "
+                    + "ksPart.marking) и перезаписываются при перестроении; перечитывание сразу после "
+                    + "Update() этого не обнаруживает. Выход: задать свойства модели при её создании либо "
+                    + "заполнить ячейки заново после перестроения");
+            }
         }
 
         var verification = new VerificationDto(
@@ -2555,6 +2597,141 @@ public sealed partial class Api5Session
                 "Лист не отдал основную надпись (IStamp = null).",
                 RetryPolicy.Never);
     }
+
+    /// <summary>The stamp of the drawing's first sheet, or null when the sheet does not expose one.</summary>
+    private IStamp? TryStamp(DocumentEntry document)
+    {
+        try
+        {
+            return RequireStamp(document);
+        }
+        catch (KompasContractException)
+        {
+            // A drawing without a readable stamp is not a failed operation here: the caller reads the stamp
+            // only to report what changed, and its absence is named instead of raised.
+            return null;
+        }
+    }
+
+    /// <summary>Every non-empty title-block cell of the drawing, read WITHOUT writing anything.</summary>
+    /// <remarks>DOC: <c>istamp_text.html</c> — <c>IStamp.Text(Id)</c> is a read-only property returning the
+    /// cell's <c>IText</c>; nothing here writes or calls <c>Update()</c>. LIMIT: the help does NOT document the
+    /// numeric cell ids, so cells are read over a bounded id range plus the ids that were non-empty BEFORE the
+    /// operation — a cell the operation CLEARED keeps its value only through that second list. MEASURED:
+    /// <c>IStamp.GetNextColumnId(0)</c> did not walk a populated stamp, so the ids come from the range.
+    /// History: docs/decisions/drawings.md#stamp-rebuild-changes</remarks>
+    private IReadOnlyDictionary<int, string?>? TryReadStampCells(
+        DocumentEntry document, IEnumerable<int>? alsoRead, out string? note)
+    {
+        note = null;
+        IStamp? stamp = null;
+        try
+        {
+            stamp = TryStamp(document);
+            if (stamp is null)
+            {
+                note = "stamp_not_read — лист не отдал основную надпись, ячейки не прочитаны";
+                return null;
+            }
+
+            return ReadStampCells(stamp, alsoRead);
+        }
+        catch (COMException)
+        {
+            note = "stamp_not_read — чтение основной надписи прервалось исключением COM";
+            return null;
+        }
+    }
+
+    private static IReadOnlyDictionary<int, string?> ReadStampCells(
+        IStamp stamp, IEnumerable<int>? alsoRead)
+    {
+        var values = new Dictionary<int, string?>();
+        for (var id = 0; id < StampCellScanLimit; id++)
+        {
+            var text = ReadStampCellText(stamp, id);
+            if (text is not null)
+            {
+                values[id] = text;
+            }
+        }
+
+        if (alsoRead is not null)
+        {
+            foreach (var extra in alsoRead)
+            {
+                if (!values.ContainsKey(extra))
+                {
+                    values[extra] = ReadStampCellText(stamp, extra);
+                }
+            }
+        }
+
+        return values;
+    }
+
+    /// <summary>Upper bound of the id scan. DOC: the numeric ids are not documented; MEASURED on the GOST
+    /// layout the filled cells sit far below this bound (name, designation and scale are within 0..12), and
+    /// a stamp with more cells than the bound would report only the cells inside it.</summary>
+    private const int StampCellScanLimit = 64;
+
+    private static string? ReadStampCellText(IStamp stamp, int id)
+    {
+        IText? cell = null;
+        try
+        {
+            cell = stamp.get_Text(id) as IText;
+            return cell?.Str;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        finally
+        {
+            ComApartment.Release(cell);
+        }
+    }
+
+    /// <summary>The cells an operation changed, or null when the stamp could not be read around it.</summary>
+    private static IReadOnlyList<TitleBlockCellChange>? StampChanges(
+        IReadOnlyDictionary<int, string?>? before, IReadOnlyDictionary<int, string?>? after,
+        string? readNote, List<string> unverified)
+    {
+        if (before is null || after is null)
+        {
+            if (readNote is not null)
+            {
+                unverified.Add(readNote);
+            }
+
+            return null;
+        }
+
+        var changes = TitleBlockCells.Changed(before, after);
+        if (changes.Count > 0)
+        {
+            // Named, not refused: the refill is the kernel's own associative behaviour, and the caller needs
+            // the old values to restore what it wrote — a silent change here is the defect.
+            unverified.Add(
+                "title_block_cells_changed — операция перезаписала основную надпись: "
+                + string.Join("; ", changes.Select(c =>
+                    $"ячейка {c.CellId} «{c.Before ?? "не прочитана"}» → «{c.After ?? "не прочитана"}»"))
+                + ". Связанные ячейки ядро заполняет из СВОЙСТВ МОДЕЛИ (на измеренной раскладке: 1 - "
+                + "ksPart.name, 2 - ksPart.marking), поэтому записанный литерал в них не держится. "
+                + "Выход: задать свойства модели при её создании (kompas_create_document, kind=part, "
+                + "name/marking) либо заполнить ячейки заново после перестроения (kompas_set_title_block)");
+        }
+
+        return changes;
+    }
+
+    private static IReadOnlyList<TitleBlockCellChangeDto> ToStampChangeDtos(
+        IReadOnlyList<TitleBlockCellChange> changes) =>
+        changes
+            .Select(c => new TitleBlockCellChangeDto(
+                c.CellId.ToString(CultureInfo.InvariantCulture), c.Before, c.After))
+            .ToList();
 
     /// <summary>Whether the drawing carries at least one ASSOCIATIVE view (a projection of a model file);
     /// such a drawing may refill the stamp's name cell from the model, which an immediate re-read cannot

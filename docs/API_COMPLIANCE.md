@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-11T18:49:20+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-12T18:57:59+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 177, маршрутов 816.
-- Измеряемая сборка: `release_build`, коммит `9f49858`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `16296b59e23a35d2188fbc8afae1c1275df5f0bca9cfa1a1dd6833885e2ce67d`.
+- Измеряемая сборка: `release_build`, коммит `ed50f49`, дерево чистое; `KompasMcp.Host.dll` sha256 `e800eee292e56a64cc908651b9545ccdc74fef4eabb2d853f312954f4d87112a`.
 
 ## 2. Сверка полноты
 
@@ -37,9 +37,9 @@
 | rows_action_without_dedicated_row | 29 |
 | rows_actions_without_required_calls | 36 |
 | rows_status_lowered_by_unsupported_actions | 36 |
-| acceptance_rows | 2308 |
-| acceptance_calls_journal | 20497 |
-| acceptance_rows_with_call_window | 2308 |
+| acceptance_rows | 2319 |
+| acceptance_calls_journal | 20542 |
+| acceptance_rows_with_call_window | 2319 |
 | required_of_mismatches_matrix_vs_profile | 16 |
 | dependency_verdict_control_proved | None |
 
@@ -1434,8 +1434,8 @@ COM-маршрутов по сборкам: {'api7': 533, 'api5': 283, 'adapter-
 | `IKompasDocument.PathName` | api7 | property | `prop String PathName` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
 | `IKompasDocument.DocumentType` | api7 | property | `prop DocumentTypeEnum DocumentType` | 2 | Подтверждено | перечень интерфейса |
-| `IViews.Count` | api7 | property | `prop Int32 Count` | 10 | Подтверждено | перечень интерфейса |
-| `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 7 | Подтверждено | перечень интерфейса |
+| `IViews.Count` | api7 | property | `prop Int32 Count` | 11 | Подтверждено | перечень интерфейса |
+| `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 8 | Подтверждено | перечень интерфейса |
 | `IView.Reference` | api7 | property | `prop Int32 Reference` | 3 | Подтверждено | перечень интерфейса |
 | `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 6 | Подтверждено | перечень интерфейса |
 | `IView.Number` | api7 | property | `prop Int32 Number` | 7 | Подтверждено | перечень интерфейса |

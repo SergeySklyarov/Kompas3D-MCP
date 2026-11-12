@@ -180,12 +180,23 @@ public sealed record DimensionRowDto
     public required string Kind { get; init; }
 
     /// <summary>Value read back from the dimension object: linear — the distance between the attachment
-    /// points; radial/diametral — the radius.</summary>
+    /// points; radial/diametral — the radius. This is the measured GEOMETRY, never the number the drawing
+    /// shows: for a diametral dimension that number is the diameter (see <see cref="NominalMm"/>).</summary>
     public double? ValueMm { get; init; }
 
-    /// <summary>Colour of the dimension line, if read.</summary>
+    /// <summary>The number the dimension SHOWS, mm: the diameter for a diametral one, the radius for a radial
+    /// one. Read from the caption (<c>IDimensionText.NominalText</c> → <c>ITextLine.Str</c>) when the server
+    /// wrote it, and the documented 2×radius / radius otherwise. Null when it was not read.
+    /// History: docs/decisions/drawings.md#drawing-dimensions-scale</summary>
+    public double? NominalMm { get; init; }
+
+    /// <summary>First attachment point: <c>X1,Y1</c> for a linear dimension, the centre <c>Xc,Yc</c>
+    /// otherwise.</summary>
     public IReadOnlyList<double>? Point1 { get; init; }
 
+    /// <summary>Second attachment point: <c>X2,Y2</c> for a linear dimension; the shelf point
+    /// (<c>ShelfX,ShelfY</c>) of a radial one; null for a diametral one, whose documented members have no
+    /// shelf at all. History: docs/decisions/drawings.md#dimensions</summary>
     public IReadOnlyList<double>? Point2 { get; init; }
 
     /// <summary>Whether the dimension reports itself valid (<c>Valid</c>).</summary>

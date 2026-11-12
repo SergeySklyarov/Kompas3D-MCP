@@ -54,18 +54,23 @@ public static class DemandBlockPlacement
             frameLeft, frameRight, frameBottom, frameTop, what);
     }
 
-    /// <summary>The four numbers that move the block into the free area's top-left corner, keeping the
-    /// block's own size.</summary>
-    public static double[] MoveToTopLeft(IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
+    /// <summary>The four numbers that put the block ABOVE the title block: the free area's bottom-left
+    /// corner, with the block's own size clamped to the free area (the text is drawn at the block's
+    /// bottom, so the bottom edge is what must sit above the stamp).</summary>
+    /// <remarks>MEASURED: the kernel's auto-placed block can be reported with the FULL height of the frame
+    /// (y[21..278] on free y[60..278]) while its two lines are drawn at its bottom edge — that is the
+    /// customer's block lying over the stamp. Clamping the height to the free area puts the text back inside.
+    /// History: docs/decisions/drawings.md#technical-demand-refusal</remarks>
+    public static double[] FitAboveStamp(IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
     {
         var (blockLeft, blockRight) = Span(gabarits[0], gabarits[2]);
         var (blockBottom, blockTop) = Span(gabarits[1], gabarits[3]);
-        var (frameLeft, _) = Span(frames[0], frames[2]);
-        var (_, frameTop) = Span(frames[1], frames[3]);
+        var (frameLeft, frameRight) = Span(frames[0], frames[2]);
+        var (frameBottom, frameTop) = Span(frames[1], frames[3]);
 
-        var width = blockRight - blockLeft;
-        var height = blockTop - blockBottom;
-        return new[] { frameLeft, frameTop - height, frameLeft + width, frameTop };
+        var width = Math.Min(blockRight - blockLeft, frameRight - frameLeft);
+        var height = Math.Min(blockTop - blockBottom, frameTop - frameBottom);
+        return new[] { frameLeft, frameBottom, frameLeft + width, frameBottom + height };
     }
 
     private static (double Low, double High) Span(double first, double second) =>

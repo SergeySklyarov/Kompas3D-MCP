@@ -58,12 +58,22 @@ public class DemandBlockPlacementTests
         Assert.Contains("лист x[20.0..205.0] y[60.0..278.0]", text, StringComparison.Ordinal);
     }
 
-    /// <summary>The measured move: a 175 x 257 block lands at x[20..195] y[21..278], keeping its size.</summary>
+    /// <summary>The measured failure: a 175 x 257 block on free y[60..278] is clamped to the free height and
+    /// anchored at its bottom edge, so the text sits above the stamp instead of over it.</summary>
     [Fact]
-    public void MoveToTopLeft_PutsTheBlockInTheCornerKeepingItsSize()
+    public void FitAboveStamp_ClampsTheBlockToTheFreeAreaAndSitsItOnTheBottomEdge()
     {
-        var moved = DemandBlockPlacement.MoveToTopLeft(new[] { -180d, 20d, -5d, 277d }, Frames);
+        var fitted = DemandBlockPlacement.FitAboveStamp(new[] { 20d, 21d, 195d, 278d }, Frames);
 
-        Assert.Equal(new[] { 20d, 21d, 195d, 278d }, moved);
+        Assert.Equal(new[] { 20d, 60d, 195d, 278d }, fitted);
+    }
+
+    /// <summary>A block that already fits keeps its size and only moves.</summary>
+    [Fact]
+    public void FitAboveStamp_KeepsABlockThatFits()
+    {
+        var fitted = DemandBlockPlacement.FitAboveStamp(new[] { -180d, 100d, -5d, 125d }, Frames);
+
+        Assert.Equal(new[] { 20d, 60d, 195d, 85d }, fitted);
     }
 }

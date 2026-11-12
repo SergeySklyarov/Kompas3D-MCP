@@ -874,6 +874,30 @@ public sealed partial class Api5Session
                 var nominal = ViewDimensionScale.Nominal(modelRadius, isRadial);
                 var writeNominal = ViewDimensionScale.NominalMustBeWritten(scale);
 
+                // INVARIANT: `position` is applied only where the help documents a member for it —
+                // IRadialDimension.ShelfX/ShelfY (and ILineDimension.X3/Y3). IDiametralDimension documents
+                // Radius, Xc, Yc, Angle and BaseObject and NO shelf, so a requested position is REFUSED by
+                // name: dropping it silently put two diameters on one centre and the answer said `valid`.
+                // DOC: iradialdimension_props.html, idiametraldimension_props.html, ilinedimension_props.html
+                if (!isRadial && position is { Count: >= 2 })
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.InvalidArgument,
+                        "Диаметральный размер не принимает position: справка v24 документирует у "
+                        + "IDiametralDimension только Radius, Xc, Yc, Angle и BaseObject, а полки (как "
+                        + "IRadialDimension.ShelfX/ShelfY) у него нет — ядро размещает надпись само, и два "
+                        + "диаметра с разными position лягут в один центр. Выход: не задавайте position для "
+                        + "diametral либо ставьте radial с position — у радиального полка документирована.",
+                        RetryPolicy.Never,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["dimension_type"] = kind,
+                            ["position"] = new[] { position[0], position[1] },
+                            ["documented_members"] = new[] { "Radius", "Xc", "Yc", "Angle", "BaseObject" },
+                            ["suggested"] = "radial с position (IRadialDimension.ShelfX/ShelfY)",
+                        });
+                }
+
                 double centreX = p1[0];
                 double centreY = p1[1];
 
@@ -961,8 +985,13 @@ public sealed partial class Api5Session
                         payload: null, persistentFeatureId: null).Id,
                     Kind = label,
                     ValueMm = value,
+                    // The number the drawing SHOWS: read from the caption when the server wrote it, and the
+                    // documented 2×radius / radius otherwise. ValueMm stays the measured GEOMETRY (a radius).
+                    NominalMm = readNumber ?? nominal,
                     Point1 = new[] { centreX, centreY },
-                    Point2 = position is { Count: >= 2 } ? new[] { position[0], position[1] } : null,
+                    // The shelf point of a radial dimension; a diametral has no documented shelf (position is
+                    // refused above), so it reports none rather than passing the request off as a point.
+                    Point2 = isRadial && position is { Count: >= 2 } ? new[] { position[0], position[1] } : null,
                     Valid = updated,
                 };
                 BumpRevision(document, "drawing.add_dimension");
@@ -1114,22 +1143,51 @@ public sealed partial class Api5Session
             // round-trips on a drawing created through the API7 route (IDocuments.Add) and does NOT on one
             // created through API5 ksCreateDocument — there the SAME property reads back the cell's
             // default. So a mismatch is a property of the CREATION ROUTE; the internal cause is not
-            // established. CreateDrawingDocument now prefers the API7 route precisely so this write can
-            // round-trip; a mismatch on a drawing that still lacks that route stays a mismatch and is named,
-            // never reported as delivered.
+            // established.
+            // INVARIANT: a cell whose write did not read back is a FAILED operation, not a success with a
+            // note: the client would build a drawing whose title block says something else.
             // History: docs/decisions/drawings.md#stamp-cells
-            unverified.Add(
-                "stamp_write_not_confirmed — перечитанное значение не совпало с записанным: на чертеже, "
-                + "созданном маршрутом API5 ksCreateDocument, присвоение IText.Str ячейке ОСНОВНОЙ НАДПИСИ "
-                + "не меняет то, что возвращает ТО ЖЕ свойство (ячейка читается своим значением по "
-                + "умолчанию). Измерено: на чертеже, созданном маршрутом API7 Documents.Add, та же запись "
-                + "перечитывается. Внутренняя причина различия не установлена — маршрут записи штампа "
-                + "перечитыванием на этом документе НЕ подтверждается и за доставленную не выдаётся");
+            var mismatched = readBack
+                .Where(row => !row.Matched)
+                .Select(row => $"ячейка {row.CellId}: записано «{row.Requested}», прочитано "
+                               + $"«{row.ReadBack ?? "не прочитано"}»")
+                .ToList();
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Основная надпись записана не полностью: " + string.Join("; ", mismatched)
+                + ". Записавшиеся ячейки остались в документе (частичный эффект). Выход: прочитайте "
+                + "раскладку kompas_get_title_block — у части ячеек текст задаётся выражением-параметром "
+                + "(например, масштаб ссылкой на вид), и литерал его не заменяет; заполняйте ячейки, "
+                + "которые документ принимает.",
+                RetryPolicy.SameOperationId,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["document_id"] = document.Id,
+                    ["cells_requested"] = readBack.Count,
+                    ["cells_matched"] = matched,
+                    ["mismatched"] = mismatched,
+                });
         }
 
         unverified.Add(
             "stamp_cell_ids_not_documented — соответствие «наименование/обозначение/материал» номерам "
             + "ячеек справка не документирует; сервер принимает номера от клиента и только перечитывает");
+
+        // INVARIANT: on a drawing with an associative view the NAME cell is refilled from the SOURCE
+        // MODEL's property on rebuild (measured: the cell read the part name after save → reopen, not the
+        // written text), so an immediate re-read of the same property cannot promise durability. The way
+        // out is named: set the model's name (kompas_create_document(kind=part, name=…)) or write the cell
+        // again after the rebuild. History: docs/decisions/drawings.md#stamp-cells-name
+        if (HasAssociationViews(document))
+        {
+            unverified.Add(
+                "stamp_cell_follows_model — у чертежа с ассоциативными видами наименование в основной "
+                + "надписи приходит из свойства МОДЕЛИ (ksPart.name) и после перестроения/переоткрытия "
+                + "перезаписывается им; перечитывание сразу после Update() этого не обнаруживает. "
+                + "Выход: задайте имя модели при её создании (kompas_create_document, kind=part, name) "
+                + "либо заполните ячейку заново после переоткрытия");
+        }
 
         var verification = new VerificationDto(
             matched == readBack.Count && matched > 0
@@ -1199,9 +1257,10 @@ public sealed partial class Api5Session
         // not relocate a block that already sits outside, so the documented WRITABLE BlocksGabarits is
         // used for that case and the outcome is read back again.
         var placement = ReadDemandPlacement(document, demand);
+        var movedExplicitly = false;
         if (placement is { WithinSheet: false, Gabarits: { Count: 4 } gabarits, Frames: { Count: 4 } frames })
         {
-            TryMoveDemandInsideSheet(demand, gabarits, frames);
+            movedExplicitly = TryMoveDemandInsideSheet(demand, gabarits, frames);
             placement = ReadDemandPlacement(document, demand);
         }
 
@@ -1223,42 +1282,104 @@ public sealed partial class Api5Session
             ComApartment.Release(verifyText);
         }
 
-        var matched = readBack is not null && readBack == command.Text;
+        var expectCreated = DemandText.ExpectCreated(command.Text);
+        var textMatched = DemandText.Matches(command.Text, readBack);
+        var wrapOnly = DemandText.FormattingOnly(command.Text, readBack);
         var checks = new List<NamedCheck>
         {
-            new("text_read_back", matched, matched ? "совпало" : (readBack is null ? "не прочитано" : "расхождение"), "совпало"),
-            new("is_created", isCreated == true, isCreated?.ToString() ?? "null", "true"),
+            // INVARIANT: the wrap the kernel adds is a LAYOUT difference, not a lost text: the comparison
+            // normalises whitespace and the wrap is named in the observed value.
+            // History: docs/decisions/drawings.md#technical-demand-text
+            new("text_read_back", textMatched,
+                wrapOnly ? "совпало (ядро перенесло строку)"
+                    : textMatched ? "совпало" : (readBack is null ? "не прочитано" : "расхождение"),
+                "совпало"),
+            // An empty text asks for a hidden block: IsCreated=false is then the state it requested.
+            new("is_created", isCreated == expectCreated,
+                isCreated?.ToString() ?? "null", expectCreated ? "true" : "false"),
         };
-        if (placement.AutoPlacement is not null)
+        // INVARIANT: placement is a requirement only for a block that is supposed to BE displayed. An empty
+        // text hides the block, and a hidden block cannot cover the title block: MEASURED, a hidden block
+        // reports no four numbers at all, so demanding a placement there would refuse a correct call.
+        if (expectCreated && placement.AutoPlacement is not null && !movedExplicitly)
         {
             checks.Add(new("demand_auto_placement", placement.AutoPlacement == true,
                 placement.AutoPlacement.ToString(), "true"));
         }
-        if (placement.WithinSheet is not null)
+        if (expectCreated && placement.WithinSheet is not null)
         {
             checks.Add(new("demand_within_sheet", placement.WithinSheet == true,
                 placement.Observed ?? "не прочитано", "в пределах листа"));
         }
 
         var unverified = new List<string>();
-        if (placement.WithinSheet is null)
+        if (expectCreated && placement.WithinSheet is null)
         {
             unverified.Add(
                 "demand_placement_not_checked — размещение блока не подтверждено чтением границ: "
                 + (placement.Reason ?? "члены размещения не отдали значений"));
         }
-        else if (placement.WithinSheet == false)
+        else if (expectCreated && placement.WithinSheet == false)
         {
             unverified.Add("demand_outside_sheet — блок технических требований выходит за пределы "
                 + "листа: " + placement.Observed);
         }
-        if (!matched)
+        if (!textMatched)
         {
             unverified.Add("demand_text_not_matched — перечитанный текст расходится с записанным");
         }
 
+        // INVARIANT: a block whose position is NOT confirmed inside the sheet's free area is a FAILED
+        // operation: it is drawn over the title block, and `succeeded` would call that a delivered drawing.
+        // The text is already in the document, so the refusal names that partial effect and the way out.
+        // A TEXT that came back different is NOT this refusal: MEASURED, the kernel substitutes its own
+        // markup (`;`, `$`, `&`) and wraps long lines, so the difference is named in the check and in
+        // `unverified_aspects`, and only a real loss is judged by the placement rule.
+        // History: docs/decisions/drawings.md#technical-demand-refusal
+        var failures = new List<string>();
+        if (isCreated != expectCreated)
+        {
+            failures.Add(expectCreated
+                ? "блок технических требований не отображается (IsCreated не true)"
+                : "пустой текст не скрыл блок (IsCreated не false)");
+        }
+
+        if (expectCreated && placement.WithinSheet is not true)
+        {
+            failures.Add(placement.WithinSheet is null
+                ? "размещение не подтверждено: " + (placement.Reason ?? "члены размещения не отдали значений")
+                : "блок выходит за пределы свободного места листа: " + placement.Observed);
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Технические требования записаны, но результат не подтверждён: "
+                + string.Join("; ", failures) + ". Текст и блок остались в документе (частичный эффект). "
+                + "Выход: сократите текст до высоты свободного места листа либо разбейте его на несколько "
+                + "блоков; размещение блока проверяйте kompas_get_technical_demand.",
+                RetryPolicy.SameOperationId,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["document_id"] = document.Id,
+                    ["text_written"] = true,
+                    ["text_read_back"] = readBack,
+                    ["is_created"] = isCreated,
+                    ["expected_is_created"] = expectCreated,
+                    ["demand_within_sheet"] = placement.WithinSheet,
+                    ["block"] = placement.Observed,
+                    ["auto_placement"] = placement.AutoPlacement,
+                    ["explicit_placement_written"] = movedExplicitly,
+                    ["failures"] = failures,
+                });
+        }
+
         var verification = new VerificationDto(
-            matched && isCreated == true ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
+            textMatched && isCreated == expectCreated
+                ? VerificationLevel.StructureChecked
+                : VerificationLevel.CallReturned,
             checks,
             unverified);
         return new SetTechnicalDemandResult(readBack, isCreated, verification);
@@ -2435,6 +2556,41 @@ public sealed partial class Api5Session
                 RetryPolicy.Never);
     }
 
+    /// <summary>Whether the drawing carries at least one ASSOCIATIVE view (a projection of a model file);
+    /// such a drawing may refill the stamp's name cell from the model, which an immediate re-read cannot
+    /// show. Unreadable views count as "yes": the conservative answer names the limit.</summary>
+    private bool HasAssociationViews(DocumentEntry document)
+    {
+        var views = Api7Views.Of(RequireDrawing7(document));
+        if (views is null)
+        {
+            return true;
+        }
+
+        for (var i = 0; i < views.Count; i++)
+        {
+            IView? view = null;
+            try
+            {
+                view = views.get_View(i);
+                if (view is IAssociationView)
+                {
+                    return true;
+                }
+            }
+            catch (COMException)
+            {
+                return true;
+            }
+            finally
+            {
+                ComApartment.Release(view);
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Obtain the drawing's technical-requirements block
     /// (<c>idrawingdocument_technicaldemand.html</c>).</summary>
     private ITechnicalDemand RequireTechnicalDemand(DocumentEntry document)
@@ -2490,24 +2646,27 @@ public sealed partial class Api5Session
         return new DemandPlacement(autoPlacement, within, observed, null, gabarits, frames);
     }
 
-    /// <summary>Move the block to the free area's top-left corner through the WRITABLE
-    /// <c>BlocksGabarits</c>, keeping the block's own size.</summary>
+    /// <summary>Move the block ABOVE the stamp through the WRITABLE <c>BlocksGabarits</c>, keeping the
+    /// block's size clamped to the free area; true when the write was not refused.</summary>
     /// <remarks>MEASURED: the auto-placement flag alone does NOT relocate a block that already sits
     /// outside the sheet, so the documented write of <c>BlocksGabarits</c> is what actually sets the
     /// placement; its four numbers are the two corner pairs in sheet mm ({0,2} = X, {1,3} = Y, measured
-    /// on a fresh drawing). A refused write is not fatal: the caller re-reads and names the result.
+    /// on a fresh drawing). MEASURED: an explicit gabarits write turns <c>AutoPlacement</c> off — the two
+    /// are mutually exclusive, so the flag is not a verdict after this call.
     /// History: docs/decisions/drawings.md#technical-demand-placement</remarks>
-    private void TryMoveDemandInsideSheet(
+    private bool TryMoveDemandInsideSheet(
         ITechnicalDemand demand, IReadOnlyList<double> gabarits, IReadOnlyList<double> frames)
     {
         try
         {
-            demand.BlocksGabarits = DemandBlockPlacement.MoveToTopLeft(gabarits, frames);
+            demand.BlocksGabarits = DemandBlockPlacement.FitAboveStamp(gabarits, frames);
             demand.Update();
+            return true;
         }
         catch (COMException)
         {
-            // Named by the re-read below: the write is a parameter, not the verdict.
+            // Named by the re-read in the caller: the write is a parameter, not the verdict.
+            return false;
         }
     }
 

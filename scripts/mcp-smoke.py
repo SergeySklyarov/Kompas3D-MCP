@@ -9702,7 +9702,7 @@ def section_checks(client, rep, app_id, workdir):
             env, state["steps"]["diametral"] = call("kompas_add_dimension", {
                 "document_id": dims_doc, "expected_revision": dims_rev,
                 "view_ref": state["section"], "dimension_type": "diametral",
-                "point1": [30.0, 0.0, 0.0], "value_mm": 12.0, "position": [30.0, -15.0, 0.0]})
+                "point1": [30.0, 0.0, 0.0], "value_mm": 12.0})
             env, _c = call("kompas_list_dimensions", {
                 "document_id": dims_doc, "view_ref": state["section"]})
             rows = result(env).get("dimensions") or []
@@ -10632,6 +10632,9 @@ def drawing_checks(client, rep, app_id, workdir):
     HOLE_DIAMETER_MM = HOLE_RADIUS_MM * 2.0
     LENGTH_MM = RECT_W_MM                    # линейный эталон: ширина прямоугольника
     TOL_MM = 0.01                            # допуск длин: класс length_mm профиля (0.01 мм / 1e-6)
+    # Имя детали-источника задаёт прибор — оно же приходит в ячейку наименования штампа после
+    # переоткрытия (наименование связано со свойством модели, см. DRW-04.title_block.save_reopen.name).
+    SOURCE_PART_NAME = "DRW-src"
     SOURCE_VOLUME_MM3 = ((RECT_W_MM * RECT_H_MM) - (math.pi * HOLE_RADIUS_MM ** 2)) * DEPTH_MM
 
     work = os.path.join(workdir, "drawings")
@@ -10681,7 +10684,7 @@ def drawing_checks(client, rep, app_id, workdir):
         {"kind": "rectangle", "start_mm": [-40, -30], "width_mm": RECT_W_MM, "height_mm": RECT_H_MM},
         {"kind": "circle", "center_mm": [0, 0], "radius_mm": HOLE_RADIUS_MM},
     ]
-    src, _src_doc, src_err = build_part("DRW-src", model_path, src_entities, DEPTH_MM)
+    src, _src_doc, src_err = build_part(SOURCE_PART_NAME, model_path, src_entities, DEPTH_MM)
     rep.add("DRW.SRC", "деталь-источник сохранена на диск (файл для проекции)",
             "PASS" if src else "FAIL", f"path={src} error={src_err}")
     if not src:
@@ -10869,28 +10872,51 @@ def drawing_checks(client, rep, app_id, workdir):
                 f"ref={dimr.get('dimension_ref')} value={dimr.get('value_mm')} "
                 f"эталон_радиуса={HOLE_RADIUS_MM} допуск={TOL_MM} valid={dimr.get('valid')} error={code}")
 
-        # Диаметральный: тот же центр. ВАЖНО: у диаметрального размера поле размера — ЭТО РАДИУС
-        # (контракт `DimensionRowDto.ValueMm`: «linear — distance; radial/diametral — the radius»;
-        # `diametral.Radius = radius`). Поэтому сверка идёт с РАДИУСОМ отверстия 12.5, а не с его
-        # диаметром 25.0: сверка с 25.0 была бы сравнением с чужой величиной. Как и у радиального,
-        # номинал задаёт вызывающий — доказана верность перечитывания, не измерение.
+        # Диаметральный: тот же центр. ДВА ЧИСЛА РАЗЛИЧЕНЫ (дефект клиента 11.11.2026): value_mm — это
+        # измеренная ГЕОМЕТРИЯ (радиус 12.5, контракт `DimensionRowDto.ValueMm`), а nominal_mm — число,
+        # которое ЧЕРТЁЖ показывает (диаметр 25.0). Раньше nominal не возвращался вовсе, и клиент,
+        # прочитавший 12.5 при диаметре 23, не мог отличить радиус от диаметра. position у
+        # диаметрального НЕ принимается: у IDiametralDimension нет документированной полки.
         env, code = call("kompas_add_dimension", {
             "document_id": drw, "expected_revision": current_rev(drw),
             "view_ref": view_ref, "dimension_type": "diametral",
-            "point1": [0.0, 0.0, 0.0], "position": [45.0, 45.0, 0.0],
+            "point1": [0.0, 0.0, 0.0],
             "value_mm": HOLE_RADIUS_MM})
         dimd = result(env).get("dimension") or {}
         dims["diametral"] = dimd
         rep.add("DRW-03.dimension.add.create.diametral",
-                "диаметральный размер ставится; поле размера — РАДИУС, перечитан и сверен с радиусом "
-                "отверстия (диаметр 25.0 = 2 × 12.5; номинал задан вызывающим)",
+                "диаметральный размер ставится; ответ называет ОБА числа: value_mm — радиус 12.5 "
+                "(геометрия), nominal_mm — диаметр 25.0 (число на чертеже)",
                 "PASS" if (not code and dimd.get("dimension_ref")
                            and dimd.get("kind") == "diametral"
                            and close_enough(dimd.get("value_mm"), HOLE_RADIUS_MM, TOL_MM)
+                           and close_enough(dimd.get("nominal_mm"), HOLE_DIAMETER_MM, TOL_MM)
                            and dimd.get("valid") is True) else "FAIL",
-                f"ref={dimd.get('dimension_ref')} value(радиус)={dimd.get('value_mm')} "
-                f"эталон_радиуса={HOLE_RADIUS_MM} (диаметр={HOLE_DIAMETER_MM}) допуск={TOL_MM} "
-                f"valid={dimd.get('valid')} error={code}")
+                f"ref={dimd.get('dimension_ref')} value(геометрия)={dimd.get('value_mm')} "
+                f"nominal(число на чертеже)={dimd.get('nominal_mm')} "
+                f"эталон_радиуса={HOLE_RADIUS_MM} эталон_диаметра={HOLE_DIAMETER_MM} "
+                f"допуск={TOL_MM} valid={dimd.get('valid')} error={code}")
+
+        # ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ (дефект клиента): position у диаметрального размера отвергается
+        # НАЗВАННЫМ кодом ДО записи, потому что у IDiametralDimension нет документированного члена полки:
+        # справка перечисляет Radius, Xc, Yc, Angle, BaseObject. Раньше position молча терялся, и два
+        # диаметра ложились в один центр, а ответ говорил valid=true.
+        env, code_pos = call("kompas_add_dimension", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": view_ref, "dimension_type": "diametral",
+            "point1": [0.0, 0.0, 0.0], "position": [26.0, 16.0, 0.0],
+            "value_mm": HOLE_RADIUS_MM})
+        pos_details = detail_of(env) or {}
+        pos_rows = (result(call("kompas_list_dimensions",
+                                {"document_id": drw, "view_ref": view_ref})[0]).get("dimensions") or [])
+        rep.add("DRW-03.dimension.position.diametral_refused",
+                "position у диаметрального размера отвергается INVALID_ARGUMENT с документированной "
+                "причиной (у IDiametralDimension нет полки) ДО мутации: размер не добавлен",
+                "PASS" if (code_pos == "INVALID_ARGUMENT"
+                           and pos_details.get("dimension_type") == "diametral"
+                           and len([r for r in pos_rows if r.get("kind") == "diametral"]) == 1) else "FAIL",
+                f"error={code_pos} details={pos_details} "
+                f"диаметральных_после_отказа={len([r for r in pos_rows if r.get('kind') == 'diametral'])}")
 
         rep.add("DRW-03.dimension.add.read.associativity_named",
                 "ассоциативность размера к модели НАЗВАНА непроверенной, а не заявлена",
@@ -11033,8 +11059,7 @@ def drawing_checks(client, rep, app_id, workdir):
             env, code_readd = call("kompas_add_dimension", {
                 "document_id": drw, "expected_revision": current_rev(drw),
                 "view_ref": plain_after.get("view_ref"), "dimension_type": "diametral",
-                "point1": [0.0, 0.0, 0.0], "value_mm": HOLE_RADIUS_MM,
-                "position": [20.0, -20.0, 0.0]})
+                "point1": [0.0, 0.0, 0.0], "value_mm": HOLE_RADIUS_MM})
             # Число читается ТИПИЗИРОВАННЫМ маршрутом чтения, а не из эха установщика: DTO постановки
             # несёт геометрию, а показанное число читается `kompas_list_dimensions`.
             _env, _code = call("kompas_list_dimensions",
@@ -11074,10 +11099,13 @@ def drawing_checks(client, rep, app_id, workdir):
     nonempty_cell = next((c for c in probe_cells if (c.get("read_back") or "") != ""), None)
     STAMP_CELL = (empty_cell or nonempty_cell or {}).get("cell_id") or "1"
     STAMP_DEFAULT = (empty_cell or nonempty_cell or {}).get("read_back") or ""
-    # Ячейка РАСКЛАДКИ с непустым содержимым — отдельная от ячейки ЗАПИСИ. На пустой ячейке запись
-    # различается, но сохранность при переоткрытии на ней доказывать нечем ('' == '' неотличимо от
-    # потери). Поэтому сохранность содержимого проверяется на КОНТЕНТНОЙ ячейке, а не на пустой.
-    STAMP_LAYOUT_CELL = (nonempty_cell or {}).get("cell_id")
+    # СОХРАННОСТЬ ПРОВЕРЯЕТСЯ НА ТОЙ ЖЕ ЯЧЕЙКЕ, В КОТОРУЮ ПИСАЛИ. Ячейка с непустым содержимым по
+    # умолчанию — это ячейка НАИМЕНОВАНИЯ (id=1), а её значение связано со свойством модели и после
+    # переоткрытия перезаписывается; сравнивать на ней «что было — то и осталось» нельзя (измерено:
+    # DRW-04.title_block.save_reopen.name). На пустой ячейке потеря различима: записано STAMP_TEXT,
+    # прочитано '' — это не совпадение.
+    # History: docs/decisions/drawings.md#stamp-cells-name
+    STAMP_LAYOUT_CELL = STAMP_CELL
     # Запрошенный текст ОБЯЗАН отличаться от значения по умолчанию измеряемой ячейки — иначе запись
     # и её отсутствие неразличимы по построению (это и было дефектом прежней редакции).
     STAMP_TEXT = "KompasMCP" if STAMP_DEFAULT != "KompasMCP" else "KompasMCP-2"
@@ -11104,6 +11132,36 @@ def drawing_checks(client, rep, app_id, workdir):
     rep.add("DRW-04.title_block.set.negative_tests",
             "нечисловой ключ ячейки отвергается INVALID_ARGUMENT (Text(Id) принимает Int32)",
             "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
+
+    # ДЕФЕКТ КЛИЕНТА (ячейка наименования, 11.11.2026): на чертеже с ассоциативными видами ячейка 1
+    # читается ЗНАЧЕНИЕМ ЯДРА «Деталь», и клиент принял это за потерянную запись («cells_written=false»).
+    # ИЗМЕРЕНО 12.11.2026: запись в эту ячейку ПЕРЕЧИТЫВАЕТСЯ и переживает save → close → reopen;
+    # «Деталь» — значение, которое ядро кладёт в наименование само, а не следствие записи.
+    # Строка пишет наименование в САМУ эту ячейку и требует совпадения — сохранность проверяется после
+    # переоткрытия отдельной строкой `DRW-04.title_block.save_reopen.name`.
+    # History: docs/decisions/drawings.md#stamp-cells
+    NAME_CELL = "1"
+    NAME_TEXT = "Сердечник дросселя"
+    env, _c = call("kompas_get_title_block", {"document_id": drw, "cell_ids": [NAME_CELL]})
+    _name_cells = result(env).get("cells") or []
+    NAME_BEFORE = (_name_cells[0].get("read_back") if _name_cells else None)
+    env, code = call("kompas_set_title_block", {
+        "document_id": drw, "expected_revision": current_rev(drw),
+        "cells": {NAME_CELL: NAME_TEXT}})
+    _name_rows = result(env).get("cells") or []
+    _name_row = _name_rows[0] if _name_rows else {}
+    NAME_READ_BACK = _name_row.get("read_back")
+    _name_aspects = [u for u in unverified(env) if "stamp_cell_follows_model" in u]
+    rep.add("DRW-04.title_block.set.name_cell",
+            "наименование записывается в ЯЧЕЙКУ НАИМЕНОВАНИЯ чертежа с ассоциативными видами и "
+            "перечитывается дословно, а ответ НАЗЫВАЕТ связь с моделью: у такого чертежа наименование "
+            "приходит из свойства модели (ksPart.name) и после перестроения перезаписывается им "
+            "(stamp_cell_follows_model) — запись в ячейку этого не отменяет",
+            "PASS" if (not code and _name_row.get("matched") is True
+                       and NAME_READ_BACK == NAME_TEXT and _name_aspects) else "FAIL",
+            f"cell={NAME_CELL} до_записи={NAME_BEFORE!r} записано={NAME_TEXT!r} "
+            f"прочитано={NAME_READ_BACK!r} matched={_name_row.get('matched')} "
+            f"связь_с_моделью_названа={bool(_name_aspects)} level={level(env)} error={code}")
 
     # ========= DRW-06: технические требования =========
     # ИЗМЕРЕНО: ядро ПЕРЕНОСИТ длинные строки, поэтому перечитанный текст сравнивается с записанным
@@ -11136,18 +11194,83 @@ def drawing_checks(client, rep, app_id, workdir):
     _outside_named = any("demand_outside_sheet" in u for u in _unver)
     _unchecked = any("demand_placement_not_checked" in u for u in _unver)
     rep.add("DRW-06.technical_demand.placement",
-            "размещение блока техтребований ПРОВЕРЯЕТСЯ ЧТЕНИЕМ габаритов блока и свободного места "
-            "листа: проверка demand_within_sheet называет числа, выход за пределы листа назван явно "
-            "(demand_outside_sheet), а demand_placement_not_checked уходит из unverified_aspects "
-            "только по такому подтверждению",
+            "размещение блока техтребований ПОДТВЕРЖДЕНО чтением габаритов блока и свободного места "
+            "листа: у удачного вызова проверка demand_within_sheet прошла и называет числа, а "
+            "demand_outside_sheet / demand_placement_not_checked в ответе отсутствуют (вне свободного "
+            "места — отказ, см. строку DRW-06.technical_demand.overflow_refused)",
             "PASS" if (not code and "demand_within_sheet" in _checks and not _unchecked
-                       and (_within.get("passed") is True or _outside_named)) else "FAIL",
+                       and not _outside_named and _within.get("passed") is True) else "FAIL",
             f"within_sheet={_within.get('observed')!r} passed={_within.get('passed')} "
             f"auto_placement={(_checks.get('demand_auto_placement') or {}).get('passed')} "
             f"unverified={_unver}")
+    # ПЕРЕНОС СТРОКИ — ФОРМАТИРОВАНИЕ, А НЕ ПОТЕРЯ (дефект клиента 4): ядро переносит длинную строку, и
+    # байтовое сравнение объявляло текст потерянным (text_read_back=false при сохранённом смысле).
+    # Строка требует: перечитанный текст ДОСЛОВНО НЕ равен записанному (перенос произошёл), при этом
+    # проверка text_read_back прошла, а demand_text_not_matched в unverified_aspects отсутствует.
+    WRAPPED_TEXT = ("1. Неуказанные предельные отклонения размеров по ГОСТ 30893.1; острые кромки "
+                    "притупить по всему контуру детали без заусенцев.")
+    env_wrap, code_wrap = call("kompas_set_technical_demand", {
+        "document_id": drw, "expected_revision": current_rev(drw), "text": WRAPPED_TEXT})
+    _wrap_res = result(env_wrap) or {}
+    _wrap_ver = _wrap_res.get("verification") or {}
+    _wrap_checks = {c.get("name"): c for c in (_wrap_ver.get("checks") or [])}
+    _wrap_read = _wrap_res.get("read_back")
+    rep.add("DRW-06.technical_demand.wrap_is_formatting",
+            "перенос строки, добавленный ядром, — ФОРМАТИРОВАНИЕ, а не потеря текста: перечитанное "
+            "дословно не совпадает с записанным, но проверка text_read_back проходит по "
+            "нормализованным пробелам и demand_text_not_matched не выставляется",
+            "PASS" if (not code_wrap and isinstance(_wrap_read, str)
+                       and _wrap_read != WRAPPED_TEXT
+                       and norm_demand(_wrap_read) == norm_demand(WRAPPED_TEXT)
+                       and (_wrap_checks.get("text_read_back") or {}).get("passed") is True
+                       and not any("demand_text_not_matched" in u
+                                   for u in (_wrap_ver.get("unverified_aspects") or []))) else "FAIL",
+            f"read_back={(_wrap_read or '')[:90]!r} записано={WRAPPED_TEXT[:90]!r} "
+            f"дословно_совпало={_wrap_read == WRAPPED_TEXT} "
+            f"text_read_back={(_wrap_checks.get('text_read_back') or {}).get('passed')} "
+            f"уровень={_wrap_ver.get('level')} error={code_wrap}")
+
+    # БЛОК, КОТОРЫЙ НЕ ВЛЕЗАЕТ, — ОТКАЗ С ЧАСТИЧНЫМ ЭФФЕКТОМ, А НЕ succeeded (дефект клиента 3):
+    # восемнадцать строк в свободное место A4 не помещаются, и блок ложится поверх штампа и за рамку.
+    # Строка требует VERIFICATION_FAILED, partial_effects=true, названную проверку в details и
+    # ДОКАЗАННЫЙ частичный эффект: текст реально лежит в документе.
+    OVERFLOW_TEXT = "\n".join(
+        f"{i}. " + ("Неуказанные предельные отклонения размеров по ГОСТ 30893.1; острые кромки "
+                    "притупить." if i == 1 else
+                    ("Покрытие: Хим.Окс.прм.; материал сталь 20 ГОСТ 1050-2013." if i == 2 else
+                     f"Техническое требование номер {i} к детали сердечника дросселя."))
+        for i in range(1, 19))
+    env_of, code_of = call("kompas_set_technical_demand", {
+        "document_id": drw, "expected_revision": current_rev(drw), "text": OVERFLOW_TEXT})
+    _of_err = ((env_of or {}).get("error") or {}) if isinstance((env_of or {}).get("error"), dict) else {}
+    _of_details = _of_err.get("details") if isinstance(_of_err.get("details"), dict) else {}
+    env_of_read, _c_of = call("kompas_get_technical_demand", {"document_id": drw})
+    _of_kept = result(env_of_read).get("text")
+    rep.add("DRW-06.technical_demand.overflow_refused",
+            "блок, который не помещается в свободное место листа, — ОТКАЗ VERIFICATION_FAILED с "
+            "partial_effects=true и названной недостигнутой проверкой размещения, а НЕ succeeded при "
+            "наложении на штамп; частичный эффект доказан: текст остался в документе",
+            "PASS" if (code_of == "VERIFICATION_FAILED"
+                       and _of_err.get("partial_effects") is True
+                       and (_of_details.get("demand_within_sheet") is not True)
+                       and isinstance(_of_details.get("failures"), list)
+                       and _of_details.get("failures")
+                       and norm_demand(_of_kept) == norm_demand(OVERFLOW_TEXT)) else "FAIL",
+            f"error={code_of} partial_effects={_of_err.get('partial_effects')} "
+            f"within_sheet={_of_details.get('demand_within_sheet')!r} "
+            f"block={_of_details.get('block')!r} failures={_of_details.get('failures')} "
+            f"текст_в_документе={norm_demand(_of_kept) == norm_demand(OVERFLOW_TEXT)}")
+
     env, code = call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": ""})
-    empty_demand_ok = (not code and result(env).get("read_back") == "")
+    _empty_res = result(env) or {}
+    _empty_ver = _empty_res.get("verification") or {}
+    _empty_checks = {c.get("name"): c for c in (_empty_ver.get("checks") or [])}
+    # ПУСТОЙ ТЕКСТ ПРОСИТ СКРЫТЫЙ БЛОК (дефект клиента 5): is_created=false здесь — исполненное
+    # требование, а не проваленная проверка. Прежняя редакция ждала true и понижала уровень проверки.
+    empty_demand_ok = (not code and _empty_res.get("read_back") == ""
+                       and _empty_res.get("is_created") is False
+                       and (_empty_checks.get("is_created") or {}).get("passed") is True)
     # A REFUSED call of the SAME tool: a nonexistent document must answer with a NAMED code instead
     # of "an empty text". The refusal leaves the document untouched - the demand text stays as it was,
     # and that is compared by a read.
@@ -11371,6 +11494,8 @@ def drawing_checks(client, rep, app_id, workdir):
         "stamp_cell": STAMP_LAYOUT_CELL or STAMP_CELL,
         "stamp_text": STAMP_TEXT,
         "demand_text": DEMAND_TEXT,
+        "name_cell": NAME_CELL,
+        "name_text": NAME_TEXT,
     }
     # СНИМОК РАЗМЕРОВ ДО ЗАКРЫТИЯ — ТИПИЗИРОВАННЫМ МАРШРУТОМ ЧТЕНИЯ (kompas_list_dimensions), а НЕ
     # пересказом ответа `kompas_add_dimension`: сохранность доказывается сравнением ПРОЧИТАННОГО до
@@ -11452,12 +11577,19 @@ def drawing_checks(client, rep, app_id, workdir):
     # уже негоден, сохранность недоказуема в принципе, и строка это НАЗЫВАЕТ, а не выставляет PASS.
     pre_snapshot_ok = (not _pre_snap["problems"]) and _pre_snap["count"] == 3
     # ЯЧЕЙКА ШТАМПА ЧИТАЕТСЯ ДО ЗАКРЫТИЯ МАРШРУТОМ ТОЛЬКО ДЛЯ ЧТЕНИЯ: доказательство сохранности — «что
-    # было — то и осталось», а НЕ «достигли ли мы желаемого текста». Сравнение идёт по КОНТЕНТНОЙ ячейке
-    # (непустой `STAMP_LAYOUT_CELL`), потому что на пустой ячейке '' == '' неотличимо от потери.
+    # было — то и осталось», а НЕ «достигли ли мы желаемого текста». Сравнение идёт по ЯЧЕЙКЕ ЗАПИСИ:
+    # в неё записан STAMP_TEXT, поэтому потеря различима (записано ≠ ''), а связанная с моделью ячейка
+    # наименования сюда не попадает — её поведение у своего наряда (`DRW-04.title_block.save_reopen.name`).
     env, _code = call("kompas_get_title_block",
                       {"document_id": drw, "cell_ids": [STAMP_LAYOUT_CELL or STAMP_CELL]})
     _pre_cells = result(env).get("cells") or []
     pre_state["stamp_read_back"] = (_pre_cells[0].get("read_back") if _pre_cells else None)
+    # Наименование снимается тем же маршрутом ТОЛЬКО ДЛЯ ЧТЕНИЯ: сравнение после переоткрытия
+    # показывает, пережила ли запись сохранение (дефект клиента 1).
+    env, _code = call("kompas_get_title_block",
+                      {"document_id": drw, "cell_ids": [NAME_CELL]})
+    _pre_name = result(env).get("cells") or []
+    pre_state["name_read_back"] = (_pre_name[0].get("read_back") if _pre_name else None)
     # СНИМОК ВИДОВ ОБНОВЛЯЕТСЯ ПЕРЕД СОХРАНЕНИЕМ: после снимка шли ещё мутации (размеры, штамп,
     # техтребования) и сдвиг вида в строке ревизий, поэтому `views_after` успел отстать —
     # сравнение с ним объявило бы расхождением СОБСТВЕННУЮ правку прибора, а не потерю при
@@ -12081,18 +12213,32 @@ def drawing_checks(client, rep, app_id, workdir):
     # reading route. Otherwise the row's window carries neither `kompas_save_document` nor
     # `kompas_open_document`, and "survives a reopen" is confirmed by a read without the reopen.
     drw04_path = os.path.join(work, "drw-01-stamp.cdw")
-    env, code = call("kompas_save_document", {"document_id": drw2,
-                                              "expected_revision": current_rev(drw2),
-                                              "target_path": drw04_path})
+    env_save, code = call("kompas_save_document", {"document_id": drw2,
+                                                   "expected_revision": current_rev(drw2),
+                                                   "target_path": drw04_path})
     drw04_saved = (not code) and os.path.isfile(drw04_path)
+    saved_dirty = ((result(env_save).get("context") or {}).get("dirty"))
     call("kompas_close_document", {"document_id": drw2, "dirty_policy": "save"})
-    env, code = call("kompas_open_document", {"application_id": app_id, "path": drw04_path,
-                                              "access": "edit"})
-    drw04 = doc_id(env)
+    env_open, code = call("kompas_open_document", {"application_id": app_id, "path": drw04_path,
+                                                   "access": "edit"})
+    drw04 = doc_id(env_open)
+    reopen_dirty = result(env_open).get("dirty")
     env, code = call("kompas_get_title_block",
                      {"document_id": drw04, "cell_ids": [_rcell]})
     cells_04 = result(env).get("cells") or []
     cell_04 = next((c for c in cells_04 if c.get("cell_id") == _rcell), {})
+    # ДЕФЕКТ КЛИЕНТА (dirty после сохранения, 11.11.2026): ответ сохранения нёс context.dirty=true при
+    # готовом файле и SHA-256. ПРИЧИНА, измеренная 12.11.2026: у 2D-документа нет маршрута отпечатка
+    # состояния, а «отпечаток не прочитан» считался состоянием «неизвестно», то есть «изменён» — поэтому
+    # ЛЮБОЙ чертёж, включая только что открытый файл, отвечал dirty=true. Строка требует dirty=false и у
+    # сохранения, и у ПЕРЕОТКРЫТОГО файла.
+    # History: docs/decisions/drawings.md#save-dirty-2d
+    rep.add("dep.drawing.document_lifecycle.dirty_after_save",
+            "сохранение чертежа отвечает dirty=false, а ПЕРЕОТКРЫТЫЙ с диска чертёж — тоже dirty=false "
+            "(у 2D-документа отпечатка состояния нет, и это названо, а не выдано за «изменён»)",
+            "PASS" if (drw04_saved and saved_dirty is False and reopen_dirty is False) else "FAIL",
+            f"saved={drw04_saved} dirty_после_сохранения={saved_dirty} "
+            f"dirty_у_переоткрытого={reopen_dirty} path={drw04_path}")
     rep.add("DRW-04.title_block.set.save_reopen",
             "ячейка штампа переживает СОБСТВЕННЫЙ для строки save → close → reopen: значение, "
             "прочитанное ДО закрытия, совпадает с прочитанным ПОСЛЕ переоткрытия маршрутом только для "
@@ -12105,6 +12251,30 @@ def drawing_checks(client, rep, app_id, workdir):
             f"cell={_rcell} saved={drw04_saved} read_back_переоткрыт={cell_04.get('read_back')!r} "
             f"до_закрытия_прочитано={pre_state.get('stamp_read_back')!r} "
             f"промежуточное_чтение_общего_цикла_ок={stamp_reopen_ok} error={code}")
+
+    # НАИМЕНОВАНИЕ (дефект клиента 1) в СВОЁМ цикле сохранения: запись, прочитанная до закрытия,
+    # сравнивается с прочитанной из ПЕРЕОТКРЫТОГО файла — маршрутом только для чтения.
+    # НАИМЕНОВАНИЕ (дефект клиента 1) в СВОЁМ цикле сохранения. ИЗМЕРЕНО: запись в ячейку
+    # перечитывается дословно, но после save → close → reopen ячейка несёт имя МОДЕЛИ-ИСТОЧНИКА
+    # («DRW-src», имя задано прибором при создании детали), а не записанный текст: наименование связано
+    # со свойством модели, и перестроение видов при открытии возвращает его. Строка требует ИМЕННО ЭТО и
+    # того, что ответ записи связь назвал — иначе клиент считает запись доставленной.
+    # History: docs/decisions/drawings.md#stamp-cells-name
+    env, code = call("kompas_get_title_block",
+                     {"document_id": drw04, "cell_ids": [NAME_CELL]})
+    _name_re = result(env).get("cells") or []
+    _name_re_row = next((c for c in _name_re if c.get("cell_id") == NAME_CELL), {})
+    rep.add("DRW-04.title_block.save_reopen.name",
+            "ИЗМЕРЕНО: после СОБСТВЕННОГО для строки save → close → reopen ячейка наименования несёт "
+            "имя МОДЕЛИ-ИСТОЧНИКА, а не записанный текст — наименование связано со свойством модели "
+            "(ksPart.name), и ответ записи называл это (stamp_cell_follows_model)",
+            "PASS" if (drw04_saved and drw04
+                       and pre_state.get("name_read_back") == NAME_TEXT
+                       and _name_re_row.get("read_back") == SOURCE_PART_NAME
+                       and code is None) else "FAIL",
+            f"cell={NAME_CELL} saved={drw04_saved} до_закрытия={pre_state.get('name_read_back')!r} "
+            f"после_переоткрытия={_name_re_row.get('read_back')!r} "
+            f"имя_модели={SOURCE_PART_NAME!r} error={code}")
 
     drw06_path = os.path.join(work, "drw-01-demand.cdw")
     env, code = call("kompas_save_document", {"document_id": drw04,

@@ -1508,7 +1508,14 @@ public sealed partial class Api5Session : IDisposable
         var observed = ComputeFingerprint(document);
         if (observed == DocumentSaveTracking.UnreadableFingerprint)
         {
-            return DocumentSaveTracking.AfterUnreadableObservation();
+            // INVARIANT: a document that has no 3D model has no fingerprint ROUTE at all (its body counter
+            // answers "not applicable", not "read failed"), so "unreadable" here is a property of the TYPE.
+            // Reporting it as unknown made every drawing dirty at once, including a file just reopened from
+            // disk. LIMIT: such a document's own UI edits are then NOT noticed; its save state decides.
+            // History: docs/decisions/drawings.md#save-dirty-2d
+            return document.Document is null
+                ? document.SaveState
+                : DocumentSaveTracking.AfterUnreadableObservation();
         }
 
         if (document.Fingerprint is not null && observed != document.Fingerprint)

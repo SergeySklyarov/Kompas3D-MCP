@@ -20943,6 +20943,7 @@ def main():
         return 2
 
     worker_used = os.environ.get("KOMPAS_MCP_WORKER_PATH") or os.path.join(os.path.dirname(host), "KompasMcp.Worker.exe")
+    EV_PROBE["exe"], EV_PROBE["source"] = ev_probe_path(host)
     # Хосту отдаётся КОПИЯ конфигурации с журналами в каталоге прогона, а не общий
     # `config/kompas-mcp.local.json`: тот указывает на `scratch/logs/host.jsonl` — файл, куда пишет
     # сервер, запущенный КЛИЕНТОМ. Измерено 18.09.2026: прогон приёмки по общей конфигурации добавил
@@ -20971,6 +20972,11 @@ def main():
         "config_path": config,
         "config_path_effective": measured_config,
         "worker_path_env": os.environ.get("KOMPAS_MCP_WORKER_PATH", ""),
+        # Среда прогона - полем: путь пробы `EV` называет, каким уровнем целостности она шла, и пустая
+        # строка значит «сборка из дерева». `probes.md#ev-probe-integrity` - правило и измерение.
+        "ev_probe_path": EV_PROBE["exe"],
+        "ev_probe_source": EV_PROBE["source"],
+        "ev_probe_env": os.environ.get("KOMPAS_MCP_EV_PROBE", ""),
         "report_path": rep.path,
         "report_copies": rep.mirror_paths,
         # Номер повтора длинного прогона (наряд RARE_FLAKES_SOAK §2.3). Прибор одного повтора не
@@ -63761,8 +63767,29 @@ def diag_checks(client, rep, app_id, workdir, process_id=None):
             f"truncated={[f.get('name') for f in files if f.get('truncated')]}")
 
 
-EV_PROBE_EXE = os.path.join(ROOT, "scripts", "probes", "events", "bin", "x64", "Release",
-                            "net10.0-windows", "EVProbe.exe")
+# INVARIANT: the probe runs at the SAME integrity level as the Host under test. A lower one enumerates an
+# empty running object table and answers "instance not found" for a live KOMPAS, so the rows read as FAIL.
+# MEASURED: an image inside the repository runs at Low integrity when the tree carries a Low mandatory label,
+# while the same image outside it runs unlabelled; KOMPAS started by the outside apparatus is High. A Low
+# process does not see a High entry, and the label follows the image, not the caller.
+# The copy BESIDE the Host wins over the in-tree build, so the probe travels with the apparatus it measures;
+# `KOMPAS_MCP_EV_PROBE` overrides both by name. History: docs/decisions/probes.md#ev-probe-integrity
+EV_PROBE_TREE = os.path.join(ROOT, "scripts", "probes", "events", "bin", "x64", "Release",
+                             "net10.0-windows", "EVProbe.exe")
+EV_PROBE = {"exe": EV_PROBE_TREE, "source": "tree"}
+
+
+def ev_probe_path(host):
+    """Resolved at startup from the Host under test; returns (path, source named as it was chosen)."""
+    configured = os.environ.get("KOMPAS_MCP_EV_PROBE")
+    if configured:
+        return os.path.abspath(configured), "env"
+    if host:
+        beside = os.path.join(os.path.dirname(os.path.abspath(host)), "EVProbe.exe")
+        if os.path.exists(beside):
+            return beside, "beside_host"
+    return EV_PROBE_TREE, "tree"
+
 
 
 def ev_probe_run(mode, doc_path, timeout=240, extra=None):
@@ -63773,10 +63800,11 @@ def ev_probe_run(mode, doc_path, timeout=240, extra=None):
     the first `--` argument, so an option appended after the path would be ignored.
     History: docs/decisions/adapter-core.md#document-events
     """
-    if not os.path.exists(EV_PROBE_EXE):
-        return None, "EVProbe.exe не собран: " + EV_PROBE_EXE
+    probe = EV_PROBE["exe"]
+    if not os.path.exists(probe):
+        return None, "EVProbe.exe не собран: " + probe
     try:
-        done = subprocess.run([EV_PROBE_EXE, mode] + list(extra or []) + [doc_path],
+        done = subprocess.run([probe, mode] + list(extra or []) + [doc_path],
                               capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, f"{mode}: проба не ответила за {timeout} с"

@@ -33,7 +33,20 @@ public static class StlFileInspector
         double[] MinMm,
         double[] MaxMm,
         bool BoxRead,
-        IReadOnlyList<string> UnverifiedAspects);
+        IReadOnlyList<string> UnverifiedAspects)
+    {
+        /// <summary>Longest edge of any triangle in the file, mm — the mesh step the file actually holds.</summary>
+        /// <remarks>WHY measured rather than requested: MEASURED on the target build, the STL converter does
+        /// not let <c>length</c>/<c>angle</c> change the mesh, so the requested step is not the step the file
+        /// has. A box comparison judged against the requested number fails on a fine request and passes on a
+        /// coarse one, while the risk being judged is the MESH's, not the request's.
+        /// History: docs/decisions/geometry.md#stl</remarks>
+        public double MaxEdgeMm { get; init; }
+
+        /// <summary>At least one triangle's three edges were read; a zero <see cref="MaxEdgeMm"/> without
+        /// this flag is "not measured", not "zero-length edges".</summary>
+        public bool EdgeRead { get; init; }
+    }
 
     /// <summary>What the FILE is, from its CONTENT — never from the request that produced it.</summary>
     /// <remarks>INVARIANT: the request is not evidence. MEASURED on the target build: the kernel's
@@ -89,6 +102,8 @@ public static class StlFileInspector
         var min = new[] { double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity };
         var max = new[] { double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity };
         var boxRead = false;
+        var maxEdge = 0d;
+        var edgeRead = false;
 
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new BinaryReader(stream);
@@ -127,6 +142,8 @@ public static class StlFileInspector
             }
 
             // The normal occupies the first 12 bytes; the three vertices follow at 12, 24 and 36.
+            var vertices = new double[3, 3];
+            var readable = true;
             for (var vertex = 0; vertex < 3; vertex++)
             {
                 var offset = 12 + vertex * 12;
@@ -135,17 +152,29 @@ public static class StlFileInspector
                     var value = BitConverter.ToSingle(record, offset + axis * 4);
                     if (!double.IsFinite(value))
                     {
+                        readable = false;
                         continue;
                     }
 
                     boxRead = true;
+                    vertices[vertex, axis] = value;
                     min[axis] = Math.Min(min[axis], value);
                     max[axis] = Math.Max(max[axis], value);
                 }
             }
+
+            if (readable)
+            {
+                edgeRead = true;
+                maxEdge = Math.Max(maxEdge, LongestEdge(vertices));
+            }
         }
 
-        return new StlFacts(length, fromSize, StlExportPlan.BinaryCountSource, min, max, boxRead, unverified);
+        return new StlFacts(length, fromSize, StlExportPlan.BinaryCountSource, min, max, boxRead, unverified)
+        {
+            MaxEdgeMm = maxEdge,
+            EdgeRead = edgeRead,
+        };
     }
 
     private static StlFacts InspectText(string path, long length)
@@ -161,6 +190,10 @@ public static class StlFileInspector
         var max = new[] { double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity };
         var boxRead = false;
         long count = 0;
+        var maxEdge = 0d;
+        var edgeRead = false;
+        var facet = new double[3, 3];
+        var facetVertices = 0;
 
         foreach (var line in File.ReadLines(path, Encoding.UTF8))
         {
@@ -168,6 +201,7 @@ public static class StlFileInspector
             if (trimmed.StartsWith("facet normal", StringComparison.OrdinalIgnoreCase))
             {
                 count++;
+                facetVertices = 0;
                 continue;
             }
 
@@ -183,17 +217,44 @@ public static class StlFileInspector
                 continue;
             }
 
+            var parsed = new double[3];
+            var allRead = true;
             for (var axis = 0; axis < 3; axis++)
             {
                 if (!double.TryParse(parts[axis + 1], NumberStyles.Float, CultureInfo.InvariantCulture,
                         out var value) || !double.IsFinite(value))
                 {
+                    allRead = false;
                     continue;
                 }
 
                 boxRead = true;
+                parsed[axis] = value;
                 min[axis] = Math.Min(min[axis], value);
                 max[axis] = Math.Max(max[axis], value);
+            }
+
+            if (!allRead)
+            {
+                continue;
+            }
+
+            if (facetVertices < 3)
+            {
+                for (var axis = 0; axis < 3; axis++)
+                {
+                    facet[facetVertices, axis] = parsed[axis];
+                }
+
+                facetVertices++;
+            }
+
+            // Three vertices complete a facet: the step the file holds is its longest edge.
+            if (facetVertices == 3)
+            {
+                edgeRead = true;
+                maxEdge = Math.Max(maxEdge, LongestEdge(facet));
+                facetVertices = 0;
             }
         }
 
@@ -202,6 +263,32 @@ public static class StlFileInspector
             unverified.Add("text_no_facet_lines — в файле нет строк facet normal: счёт треугольников не подтверждён");
         }
 
-        return new StlFacts(length, count, StlExportPlan.TextCountSource, min, max, boxRead, unverified);
+        return new StlFacts(length, count, StlExportPlan.TextCountSource, min, max, boxRead, unverified)
+        {
+            MaxEdgeMm = maxEdge,
+            EdgeRead = edgeRead,
+        };
+    }
+
+    /// <summary>Longest of the three pairwise distances between the vertices of one triangle.</summary>
+    private static double LongestEdge(double[,] vertices)
+    {
+        var longest = 0d;
+        for (var a = 0; a < 3; a++)
+        {
+            for (var b = a + 1; b < 3; b++)
+            {
+                var sum = 0d;
+                for (var axis = 0; axis < 3; axis++)
+                {
+                    var delta = vertices[a, axis] - vertices[b, axis];
+                    sum += delta * delta;
+                }
+
+                longest = Math.Max(longest, Math.Sqrt(sum));
+            }
+        }
+
+        return longest;
     }
 }

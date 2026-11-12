@@ -1401,8 +1401,13 @@ public sealed partial class Api5Session
         }
         else
         {
-            upperBound = profileAreaMm2 * DepthOf(command);
-            boundBasis = "profile_area_x_depth";
+            // INVARIANT: direction=symmetric lays the same depth on BOTH sides (two SetSideParam calls in
+            // ConfigureBase/Boss/Cut), so the swept prism is area × depth × 2. A one-sided figure judged a
+            // correct symmetric cut as material from nowhere (measured: 9,5448 removed against 4,8099).
+            upperBound = VolumeBound.PrismMm3(profileAreaMm2, DepthOf(command), resolved.Direction);
+            boundBasis = resolved.Direction == ExtrudeDirection.Symmetric
+                ? "profile_area_x_depth_x2_symmetric"
+                : "profile_area_x_depth";
         }
 
         var checks = new List<NamedCheck>
@@ -1443,7 +1448,8 @@ public sealed partial class Api5Session
         var geometryConfirmed = false;
         string? expectedNotComputed = null;
         var volumeDeltaFailed = false;
-        var bound = VolumeBound.Evaluate(measuredDelta, upperBound);
+        var bound = VolumeBound.Evaluate(measuredDelta, upperBound,
+            VolumeBound.PrismWords(resolved.Direction));
         switch (bound.Verdict)
         {
             case VolumeBoundVerdict.Confirmed:

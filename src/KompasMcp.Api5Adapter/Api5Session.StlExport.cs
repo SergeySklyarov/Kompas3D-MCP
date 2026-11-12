@@ -159,10 +159,13 @@ public sealed partial class Api5Session
             ? new BoundingBoxDto(min, max)
             : null;
 
-        // INVARIANT: the box tolerance is DERIVED from the tessellation step, never picked by eye. A chord
-        // between adjacent tessellation points deviates from the true surface by at most the step, so the
-        // tessellation box may fall short of the body box by up to that step.
-        var tolerance = plan.LengthMm;
+        // INVARIANT: the box tolerance is DERIVED from the mesh step the FILE holds, never from the requested
+        // one. MEASURED: the STL converter does not let length/angle change the mesh, so a tolerance taken
+        // from the request judges the request instead of the artefact — a fine request failed the box check
+        // on a file whose step was coarse. A chord over one step deviates from the surface by at most that
+        // step, which is why the measured step is the honest tolerance. The requested value is only a
+        // fallback, and that fallback is NAMED.
+        var tolerance = facts.EdgeRead ? facts.MaxEdgeMm : plan.LengthMm;
         var boxCompared = facts.BoxRead && bodyBox is not null;
         double? deviation = null;
         if (boxCompared)
@@ -178,6 +181,14 @@ public sealed partial class Api5Session
         }
 
         var unverified = new List<string>(facts.UnverifiedAspects);
+        if (!facts.EdgeRead)
+        {
+            unverified.Add(
+                "mesh_step_not_measured — шаг сетки из файла не прочитан (нет ни одного треугольника с "
+                + "тремя вершинами), поэтому допуск сверки габарита взят из ЗАПРОШЕННОГО шага, который к "
+                + "сетке STL не применяется");
+        }
+
         if (!boxCompared)
         {
             unverified.Add("body_box_not_read — габарит тела или вершин триангуляции нет, габариты не сверены");
@@ -212,19 +223,57 @@ public sealed partial class Api5Session
                 + $"{readAngle.ToString("R", CultureInfo.InvariantCulture)}");
         }
 
-        var geometryChecked = boxCompared && deviation <= tolerance;
-        var level = geometryChecked ? VerificationLevel.GeometryChecked : VerificationLevel.StructureChecked;
+        // INVARIANT: the level never claims more than was checked. The box comparison reads the LIVE body
+        // box and the FILE's vertices, but a matching box says nothing about the LOCAL profile: MEASURED on
+        // the customer's grooved core, the mesh kept 0,700/0,420 mm grooves for a model of 0,6/0,3 mm while
+        // the box matched within 0,05 mm. The level is therefore structure_checked, and the local profile is
+        // NAMED as unverified — a client that needs the profile must compare it outside the server.
+        // History: docs/decisions/geometry.md#stl
+        var boxMatches = boxCompared && deviation <= tolerance;
+        const VerificationLevel level = VerificationLevel.StructureChecked;
+
+        unverified.Add(
+            "stl_tessellation_not_applied — точность триангуляции к сетке STL не применяется: length и angle "
+            + "записаны в объект параметров и прочитаны обратно, но число треугольников от них не зависит "
+            + "(измерено: один и тот же файл при шаге 0,0001 и 10 мм; справка приписывает эти члены "
+            + "интерфейсу дополнительных форматов, формату STL — нет). Запрошенные числа не выдаются за "
+            + "достигнутую точность; шаг сетки измерен по файлу (" + MeshStepWord(facts, tolerance) + ")");
+
+        unverified.Add(
+            "local_profile_not_verified — габарит сетки не доказывает локальный профиль: сверка габарита "
+            + "видит только крайние координаты, а глубина канавки или посадка грани на этой сетке могут "
+            + "отличаться от модели. Отклонение вершин от аналитической поверхности документированным "
+            + "маршрутом не читается, поэтому уровень ответа — structure_checked, а локальный профиль "
+            + "сверяется вне сервера (например, по выгруженному STEP)");
+
+        var warnings = new List<string>
+        {
+            "Точность STL не применена: max_edge_length_mm и normal_angle_deg записаны в параметры "
+            + "экспорта, но сетку STL задаёт документ (измерено на v24). Шаг сетки в файле — "
+            + MeshStepWord(facts, tolerance) + "; для печати или локального контроля профиля "
+            + "триангулируйте выгруженный STEP внешним инструментом.",
+        };
+
+        // INVARIANT: the box is the BROADEST bound of the artefact, and the body box it is compared with is
+        // conservative for trimmed analytic surfaces (MEASURED: a cut torus reported 23 mm while its mesh
+        // spans 22,98238). Both facts belong to the answer, not to a comment.
+        unverified.Add(
+            "body_box_conservative — габарит тела читается ksPart.GetGabarit(full=false), который у "
+            + "обрезанных аналитических поверхностей может быть больше точной оболочки (измерено: тело "
+            + "23,0000 мм против сетки 22,98238 мм), поэтому совпадение габаритов не доказывает "
+            + "совпадения геометрии");
+
         var checks = new List<NamedCheck>
         {
             new("file_created", true, Observed: facts.ByteLength.ToString(CultureInfo.InvariantCulture) + " байт"),
             new("triangle_count_read_from_file", facts.TriangleCount > 0,
                 Observed: facts.TriangleCount.ToString(CultureInfo.InvariantCulture) + " (" + facts.CountSource + ")"),
             new("file_kind_matches_request", kindMatches, Observed: facts.CountSource),
-            new("triangle_box_matches_body", geometryChecked,
+            new("triangle_box_matches_body", boxMatches,
                 Observed: deviation is null
                     ? "габариты не сверены"
                     : deviation.Value.ToString("0.####", CultureInfo.InvariantCulture) + " мм при допуске "
-                      + tolerance.ToString("0.####", CultureInfo.InvariantCulture) + " мм"),
+                      + tolerance.ToString("0.####", CultureInfo.InvariantCulture) + " мм (шаг сетки из файла)"),
         };
 
         return new ExportStlResultDto
@@ -239,6 +288,7 @@ public sealed partial class Api5Session
             Format = StlExportPlan.FormatName,
             AppliedLengthMm = readLength,
             AppliedAngleDeg = readAngle,
+            MeshStepMm = facts.EdgeRead ? facts.MaxEdgeMm : null,
             TriangleBox = facts.BoxRead ? new BoundingBoxDto(facts.MinMm, facts.MaxMm) : null,
             BodyBox = bodyBox,
             BoxDeviationMm = deviation,
@@ -246,9 +296,15 @@ public sealed partial class Api5Session
             ReachedLevel = level,
             Verification = new VerificationDto(level, checks, unverified),
             UnverifiedAspects = unverified,
+            Warnings = warnings,
             SourceRevision = document.Revision,
         };
     }
+
+    /// <summary>The measured mesh step in words; the requested step is named as the fallback it is.</summary>
+    private static string MeshStepWord(StlFileInspector.StlFacts facts, double tolerance) => facts.EdgeRead
+        ? "наибольшее ребро " + tolerance.ToString("0.####", CultureInfo.InvariantCulture) + " мм"
+        : "не измерен, взят запрошенный шаг " + tolerance.ToString("0.####", CultureInfo.InvariantCulture) + " мм";
 
     /// <summary>A parameter member read back from the object; a member that does not read keeps the value
     /// that was requested and is named in <c>unverified_aspects</c> by the caller.</summary>

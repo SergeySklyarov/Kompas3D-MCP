@@ -1601,10 +1601,8 @@ public sealed partial class Api5Session : IDisposable
             return null;
         }
 
-        var full = DescribeBox(document, full: true,
-            "весь документ-модель: сплошные тела, эскизы и вспомогательная геометрия (ksPart.GetGabarit(full=true))");
-        var bodies = DescribeBox(document, full: false,
-            "только сплошные тела, без эскизов и вспомогательной геометрии (ksPart.GetGabarit(full=false))");
+        var full = DescribeBox(document, full: true, GabaritScopeWords.Full);
+        var bodies = DescribeBox(document, full: false, GabaritScopeWords.Bodies);
         return full is null || bodies is null ? null : new GabaritDto(full, bodies);
     }
 

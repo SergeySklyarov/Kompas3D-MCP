@@ -2870,11 +2870,20 @@ public sealed record ExportStlResultDto
     /// <summary>Format name on the wire; always "stl".</summary>
     public required string Format { get; init; }
 
-    /// <summary>Tessellation accuracy read BACK from the parameter object, mm.</summary>
+    /// <summary>Value written to <c>IAdditionFormatParam.length</c> and read BACK from the object, mm.</summary>
+    /// <remarks>INVARIANT: this is what the parameter object holds, NOT the step the file has. MEASURED on
+    /// the target build: the STL converter ignores <c>length</c>/<c>angle</c>, so the mesh step of a file
+    /// does not follow them; the step read from the file is <see cref="MeshStepMm"/>.
+    /// History: docs/decisions/geometry.md#stl</remarks>
     public required double AppliedLengthMm { get; init; }
 
-    /// <summary>Tessellation accuracy read BACK from the parameter object, degrees.</summary>
+    /// <summary>Value written to <c>IAdditionFormatParam.angle</c> and read BACK from the object, degrees.
+    /// Not the angular accuracy of the file — see <see cref="AppliedLengthMm"/>.</summary>
     public required double AppliedAngleDeg { get; init; }
+
+    /// <summary>Longest triangle edge read FROM THE FILE, mm — the mesh step the file actually holds. Null
+    /// when no triangle was readable.</summary>
+    public double? MeshStepMm { get; init; }
 
     /// <summary>Box of the tessellation read FROM THE FILE, mm. Null when no vertex was readable — a box
     /// of infinities would not serialise, and a box of zeros would be an invented measurement.</summary>
@@ -2882,13 +2891,14 @@ public sealed record ExportStlResultDto
 
     /// <summary>Box of the body measured through the documented gabarit route, mm. Null when unread.</summary>
     public BoundingBoxDto? BodyBox { get; init; }
-
     /// <summary>Largest per-axis difference between <see cref="TriangleBox"/> and <see cref="BodyBox"/>,
     /// mm; null when the comparison could not be made.</summary>
     public double? BoxDeviationMm { get; init; }
 
-    /// <summary>Tolerance derived from <see cref="AppliedLengthMm"/> that <see cref="BoxDeviationMm"/> is
-    /// judged against — never picked by eye.</summary>
+    /// <summary>Tolerance <see cref="BoxDeviationMm"/> is judged against: the mesh step MEASURED from the
+    /// file (<see cref="MeshStepMm"/>), because a chord over one tessellation step deviates from the
+    /// surface by at most that step. The requested <see cref="AppliedLengthMm"/> is used only when no step
+    /// could be measured, and that fallback is named in <see cref="UnverifiedAspects"/>.</summary>
     public required double BoxToleranceMm { get; init; }
 
     public required VerificationLevel ReachedLevel { get; init; }
@@ -2898,6 +2908,10 @@ public sealed record ExportStlResultDto
     public required VerificationDto Verification { get; init; }
 
     public required IReadOnlyList<string> UnverifiedAspects { get; init; }
+
+    /// <summary>Non-fatal findings the Host folds into the envelope's warnings, in the same channel the
+    /// extrusion's <c>warnings</c> uses.</summary>
+    public IReadOnlyList<string>? Warnings { get; init; }
 
     public required long SourceRevision { get; init; }
 }

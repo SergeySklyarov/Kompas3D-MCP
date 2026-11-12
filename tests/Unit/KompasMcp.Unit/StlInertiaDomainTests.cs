@@ -73,8 +73,54 @@ public sealed class StlInertiaDomainTests
             Assert.True(facts.BoxRead);
             Assert.Equal(new[] { 0d, 0d, 0d }, facts.MinMm);
             Assert.Equal(new[] { 10d, 20d, 5d }, facts.MaxMm);
+            // The step the FILE holds is its longest triangle edge: 10, 20 and √500 for this facet.
+            Assert.True(facts.EdgeRead);
+            Assert.Equal(Math.Sqrt(500d), facts.MaxEdgeMm, 6);
             // A text file's exact size depends on formatting, and that is NAMED rather than hidden.
             Assert.Contains(facts.UnverifiedAspects, a => a.StartsWith("text_file_size_is_formatting_dependent"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>The step of the mesh is measured FROM THE FILE, never taken from the request: the converter
+    /// does not apply the requested accuracy, so the requested number is not the step the artefact has.</summary>
+    /// <remarks>MEASURED: length 0.0001..10 mm produced the same triangle count, so a box tolerance derived
+    /// from the request judged the request instead of the mesh.
+    /// History: docs/decisions/geometry.md#stl</remarks>
+    [Fact]
+    public void BinaryStl_MeasuresTheLongestEdgeFromTheFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"stl-edge-{Guid.NewGuid():N}.stl");
+        try
+        {
+            using (var stream = File.Create(path))
+            using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write(new byte[80]);
+                writer.Write(1u);
+                for (var i = 0; i < 3; i++)
+                {
+                    writer.Write(0f); // normal
+                }
+
+                // A 3-4-5 triangle: the longest edge is 5 mm, independent of any requested step.
+                foreach (var vertex in new[] { (0f, 0f, 0f), (3f, 0f, 0f), (0f, 4f, 0f) })
+                {
+                    writer.Write(vertex.Item1);
+                    writer.Write(vertex.Item2);
+                    writer.Write(vertex.Item3);
+                }
+
+                writer.Write((ushort)0);
+            }
+
+            var facts = StlFileInspector.Inspect(path, binary: true);
+
+            Assert.True(facts.EdgeRead);
+            Assert.Equal(5d, facts.MaxEdgeMm, 4);
         }
         finally
         {

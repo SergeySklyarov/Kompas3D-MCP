@@ -16268,10 +16268,12 @@ def export_inertia_checks(client, rep, app_id, workdir):
     # требование снимается из проверки, а фактический ответ API не переписывается: строка EI.04b
     # называет измеренную независимость числа треугольников от этих членов.
     sweep = []
+    sweep_envs = []
     for step in (0.0001, 1.0, 10.0):
         sweep_path = _os.path.join(evidence_dir, f"cylinder-step-{step}.stl")
         env, code = export_stl(cyl_doc, sweep_path, True, step)
         sweep.append((step, code, result(env)))
+        sweep_envs.append(env)
     readback_ok = all(near((r or {}).get("applied_length_mm"), step, 1e-12)
                       and near((r or {}).get("applied_angle_deg"), ref["angle_deg"], 1e-9)
                       for step, _c, r in sweep)
@@ -16298,6 +16300,37 @@ def export_inertia_checks(client, rep, app_id, workdir):
             + "(разброс шага 100000x); maxTeselationCellCount 1..10000 тоже не меняет число (измерено "
             + "отдельной пробой)")
 
+    # ── EI.17.stl_precision_not_applied ───────────────────────────────────────────────────────────
+    # ДЕФЕКТ КЛИЕНТА (сердечник с канавками): два экспорта с 0,05 мм/2° и 0,01 мм/0,2° дали одно и то же
+    # число треугольников (3432), а независимая проверка нашла глубины канавок ~0,700 и ~0,420 мм вместо
+    # 0,6/0,3 при верной модели; ответ при этом был geometry_checked по габариту ±0,05 мм. Поэтому:
+    # записанные числа называются applied_* и НЕ выдаются за достигнутую точность, шаг сетки измеряется
+    # ПО ФАЙЛУ (mesh_step_mm), уровень не выше structure_checked, а неприменённая точность и непроверенный
+    # локальный профиль названы в unverified_aspects и warnings.
+    last_env = sweep_envs[-1]
+    last_res = sweep[-1][2]
+    aspects17 = [str(a) for a in (last_res.get("unverified_aspects") or [])]
+    warns17 = warnings_of_envelope(last_env)
+    rep.add("EI.17.stl_precision_not_applied",
+            "точность STL не применена и названа: applied_* - записанные числа, шаг сетки измерен из файла "
+            "(mesh_step_mm), уровень structure_checked, неприменённая точность и непроверенный локальный "
+            "профиль - в unverified_aspects и warnings, а не в успехе",
+            "PASS" if (last_res.get("reached_level") == "structure_checked"
+                       and verification_level(last_res) == "structure_checked"
+                       and isinstance(last_res.get("mesh_step_mm"), (int, float))
+                       and last_res.get("mesh_step_mm") > 0
+                       and isinstance(last_res.get("box_tolerance_mm"), (int, float))
+                       and abs(last_res.get("box_tolerance_mm") - last_res.get("mesh_step_mm")) <= 1e-9
+                       and any(a.startswith("stl_tessellation_not_applied") for a in aspects17)
+                       and any(a.startswith("local_profile_not_verified") for a in aspects17)
+                       and any("не применена" in w for w in warns17)) else "FAIL",
+            f"уровень={last_res.get('reached_level')} "
+            f"applied_length={last_res.get('applied_length_mm')} "
+            f"mesh_step_mm={last_res.get('mesh_step_mm')} "
+            f"box_tolerance_mm={last_res.get('box_tolerance_mm')} "
+            f"triangle_count={last_res.get('triangle_count')} "
+            f"аспекты={aspects17} warnings={warns17}")
+
     # ── EI.05.box ──────────────────────────────────────────────────────────────────────────────────
     plate_stl = _os.path.join(evidence_dir, "plate-binary.stl")
     env, code = export_stl(plate_doc, plate_stl, True, 1.0)
@@ -16311,14 +16344,37 @@ def export_inertia_checks(client, rep, app_id, workdir):
         box_ok = deviation <= tolerance
     rep.add("EI.05.box",
             "для плиты 100x80x10 габарит триангуляции совпал с measure.bbox по всем трём осям в "
-            "пределах шага; расхождение названо числом",
-            "PASS" if (not code and box_ok and pres.get("reached_level") == "geometry_checked"
-                       and ((env or {}).get("verification") or {}).get("level") == "geometry_checked") else "FAIL",
+            "пределах ИЗМЕРЕННОГО шага сетки; расхождение названо числом; уровень structure_checked, "
+            "потому что совпадение габарита локальный профиль не доказывает",
+            "PASS" if (not code and box_ok and pres.get("reached_level") == "structure_checked"
+                       and ((env or {}).get("verification") or {}).get("level") == "structure_checked"
+                       and isinstance(pres.get("mesh_step_mm"), (int, float))
+                       and isinstance(tolerance, (int, float))
+                       and abs(pres.get("mesh_step_mm") - tolerance) <= 1e-9) else "FAIL",
             f"error={code} triangle_box={json.dumps(pres.get('triangle_box'), ensure_ascii=False)} "
             f"body_box={json.dumps(pres.get('body_box'), ensure_ascii=False)} "
             f"measure.bbox={json.dumps(pbox, ensure_ascii=False)} "
-            f"отклонение={deviation} мм при допуске {tolerance} мм level={pres.get('reached_level')} "
+            f"отклонение={deviation} мм при допуске {tolerance} мм (шаг из файла="
+            f"{pres.get('mesh_step_mm')}) level={pres.get('reached_level')} "
             f"envelope_level={((env or {}).get('verification') or {}).get('level')}")
+
+    # ── EI.18.gabarit_conservative_named ─────────────────────────────────────────────────────────
+    # ДЕФЕКТ КЛИЕНТА (сердечник с канавками): после вырезов на 0° и 180° КОМПАС отдал габарит ±11,5 по X,
+    # а точная сетка - ±11,49119; габарит метода консервативен и не является доказательством неизменности.
+    # Строка требует, чтобы это ограничение было НАЗВАНО в области габарита, а не выводилось клиентом.
+    gc_env, gc_code = call("kompas_get_context", {"document_id": plate_doc, "detail": "full"})
+    gc_res = result(gc_env)
+    gc_bodies = (((gc_res.get("gabarit") or {}).get("bodies") or {}).get("scope") or "")
+    gc_full = (((gc_res.get("gabarit") or {}).get("full") or {}).get("scope") or "")
+    rep.add("EI.18.gabarit_conservative_named",
+            "область габарита называет ограничение метода: у обрезанных аналитических поверхностей "
+            "габарит может быть больше точной оболочки, поэтому совпадение габаритов не доказывает "
+            "совпадения геометрии",
+            "PASS" if (gc_code is None
+                       and "БОЛЬШЕ точной оболочки" in gc_bodies
+                       and "не доказывает совпадения геометрии" in gc_bodies
+                       and "не доказательство неизменности" in gc_full) else "FAIL",
+            f"error={gc_code} bodies.scope={gc_bodies!r} full.scope={gc_full!r}")
 
     # ── EI.06.inertia_central ──────────────────────────────────────────────────────────────────────
     env, code = measure(cyl_body, ["inertia"])
@@ -34458,6 +34514,17 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
     disc_both = math.pi * 25 * 10    # 785.3981633974483
     pad = 30 * 30 * 10               # 9000
 
+    # Reading a named check and the measured delta out of an extrusion answer. Defined HERE because
+    # EX42b (the symmetric prism row) uses them before the EX46 block that used to hold them.
+    def _by_name(env):
+        return {c.get("name"): c for c in checks_of(env)}
+
+    def _delta(env):
+        return ((env or {}).get("result") or {}).get("volume_delta_mm3")
+
+    def _named(env, prefix):
+        return any(str(u).startswith(prefix) for u in unverified_of(env))
+
     # Набор инструментов, ОБЪЯВЛЯЮЩИХ operation_id, прибор читает из `tools/list` поставки
     # (Client.declares_operation_id): вписанный руками список расходится с поставкой ровно тогда,
     # когда её меняют. Поле, которого схема не объявляет, отвергается Host'ом ДО COM — и отказ
@@ -34801,12 +34868,14 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
     doc, rev, body, err = build_plate("SM02-cut-symmetric")
     if err:
         rep.add("EX42", "симметричный вырез снимает обе половины: ровно pi*5^2*10", "FAIL", err)
+        rep.add("EX42b", "симметричный вырез: верхняя граница объёма учитывает ОБЕ стороны", "FAIL", err)
     else:
         sk, rev, serr = sketch(doc, rev, HOLE, "cut-sym", 5)
         if serr:
             rep.add("EX42", "симметричный вырез снимает обе половины", "FAIL", serr)
+            rep.add("EX42b", "симметричный вырез: верхняя граница объёма учитывает ОБЕ стороны", "FAIL", serr)
         else:
-            rev, _env, code = extrude(doc, rev, sk, operation="cut", depth_mm=5,
+            rev, env42, code = extrude(doc, rev, sk, operation="cut", depth_mm=5,
                                       direction="symmetric", end_condition="blind",
                                       target_body_ref=body)
             rows = bodies(doc)
@@ -34817,6 +34886,26 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
                     "code=" + str(code) + " V=" + str(v)
                     + " снято=" + str(None if v is None else plate - v)
                     + " ожидание=" + str(disc_both))
+            # MEASURED (клиент, сердечник с канавками): cut/symmetric depth_mm=0,9 снял по 0,9 мм в
+            # КАЖДУЮ сторону, а проверка объёма считала площадь×depth_mm и объявила верный вырез
+            # «материалом из ниоткуда» (ожидалось 4,8099 мм3, снято 9,5448 мм3). Граница обязана
+            # учитывать обе стороны, а базис - называть это словом.
+            chk42 = _by_name(env42)
+            basis42 = (chk42.get("expected_basis") or {}).get("observed")
+            delta42 = _delta(env42)
+            rep.add("EX42b", "симметричный вырез: верхняя граница объёма учитывает ОБЕ стороны "
+                             "(площадь x глубина x 2), проверка объёма пройдена",
+                    "PASS" if (code is None
+                               and basis42 == "profile_area_x_depth_x2_symmetric"
+                               and chk42.get("volume_delta", {}).get("passed") is True
+                               and "volume_upper_bound" not in chk42
+                               and isinstance(delta42, (int, float))
+                               and abs(delta42 - disc_both) <= 1e-4) else "FAIL",
+                    "code=" + str(code) + " дельта=" + str(delta42)
+                    + " ожидание(2 x площадь x глубина)=" + str(disc_both)
+                    + " базис=" + str(basis42)
+                    + " volume_delta=" + str(chk42.get("volume_delta"))
+                    + " unverified=" + str(unverified_of(env42)))
         close(doc)
 
     # ========= EX43/EX44: явная цель при нескольких телах, обе стороны контракта =========
@@ -34993,15 +35082,6 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
     # INVARIANT: сама граница судит то, что может: больше призмы, ноль и обратный знак - провал.
     # TEST: держит решение границы (`VolumeBound`) на живом КОМПАС; модульные тесты - `VolumeBoundTests`.
     # History: docs/decisions/adapter-core.md#volume-bound
-
-    def _by_name(env):
-        return {c.get("name"): c for c in checks_of(env)}
-
-    def _delta(env):
-        return ((env or {}).get("result") or {}).get("volume_delta_mm3")
-
-    def _named(env, prefix):
-        return any(str(u).startswith(prefix) for u in unverified_of(env))
 
     # ── EX46: boss, пересекающий тело, — не провал ───────────────────────────────────────────────
     ex46_desc = ("boss, пересекающий тело: прибавка меньше призмы - не провал, "

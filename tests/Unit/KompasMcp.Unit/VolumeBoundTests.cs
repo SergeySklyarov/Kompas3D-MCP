@@ -1,3 +1,4 @@
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Geometry;
 using Xunit;
 
@@ -113,5 +114,49 @@ public class VolumeBoundTests
         Assert.Null(VolumeBound.Evaluate(null, Prism).DifferenceMm3);
         Assert.Null(VolumeBound.Evaluate(Prism, null).DifferenceMm3);
         Assert.Equal("не читается", VolumeBound.Difference(VolumeBound.Evaluate(null, Prism)));
+    }
+
+    /// <summary>A symmetric extrusion is two-sided: the prism is area × depth × 2, and every other side is
+    /// one-sided. MEASURED on the customer's grooved core: a symmetric cut of depth 0.9 removed 9,5448 mm³
+    /// against a one-sided prism of 4,8099 mm³ — the one-sided figure called a correct cut "material from
+    /// nowhere".</summary>
+    [Fact]
+    public void SymmetricExtrusion_DoublesThePrism_BecauseTheDepthIsPerSide()
+    {
+        var area = 5.3443d;
+        var oneSided = VolumeBound.PrismMm3(area, 0.9d, ExtrudeDirection.Positive);
+
+        Assert.Equal(area * 0.9d, oneSided, 9);
+        Assert.Equal(2d * area * 0.9d, VolumeBound.PrismMm3(area, 0.9d, ExtrudeDirection.Symmetric), 9);
+        Assert.Equal(oneSided, VolumeBound.PrismMm3(area, 0.9d, ExtrudeDirection.Negative));
+    }
+
+    /// <summary>The verdict the defect produced, and the verdict the doubled prism produces: the same
+    /// measurement is "outside the bound" one-sided and "inside the bound" two-sided.</summary>
+    [Fact]
+    public void SymmetricBound_ContainsTheMeasuredRemoval_ThatTheOneSidedBoundCalledOutside()
+    {
+        var area = 5.3443d;
+        var measured = 9.5448d;
+
+        Assert.True(VolumeBound.Evaluate(measured, VolumeBound.PrismMm3(area, 0.9d, ExtrudeDirection.Positive))
+            .IsOutsideBound);
+        Assert.True(VolumeBound.Evaluate(measured, VolumeBound.PrismMm3(area, 0.9d, ExtrudeDirection.Symmetric))
+            .IsWithinBound);
+    }
+
+    /// <summary>The check's message names BOTH sides for a symmetric sweep, so a correct cut cannot be told
+    /// "the prism is 4,8099" as if that were the expectation.</summary>
+    [Fact]
+    public void SymmetricPrism_IsNamedWithBothSidesInTheReason()
+    {
+        var words = VolumeBound.PrismWords(ExtrudeDirection.Symmetric);
+        var reason = VolumeBound.Evaluate(9.5448d, 9.6198d, words).Reason!;
+
+        Assert.Contains("× 2", words);
+        Assert.Contains("КАЖДУЮ сторону", words);
+        Assert.Contains("× 2", reason);
+        Assert.Contains("9.6198", reason);
+        Assert.Equal("площадь × глубина", VolumeBound.PrismWords(ExtrudeDirection.Positive));
     }
 }

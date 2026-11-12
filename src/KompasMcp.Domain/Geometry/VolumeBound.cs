@@ -1,4 +1,5 @@
 using System.Globalization;
+using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
 
@@ -60,9 +61,29 @@ public static class VolumeBound
     /// <summary>The code the failed check and the named gap carry when the gain is outside the bound.</summary>
     public const string OutsideCode = "volume_delta_outside_bound";
 
+    /// <summary>The prism swept by a profile of a known area: area × depth, and × 2 for a symmetric
+    /// extrusion.</summary>
+    /// <remarks>INVARIANT: <c>direction=symmetric</c> lays the WHOLE <c>depth_mm</c> on EACH side of the
+    /// sketch plane, so the swept volume is area × depth × 2 — a one-sided figure would judge a correct cut
+    /// as material from nowhere. MEASURED: a symmetric cut of depth 0.9 removed 9,5448 mm³ against a
+    /// one-sided prism of 4,8099 mm³.
+    /// DOC: <c>ksdirectiontypeenum.html</c> — <c>dtBoth</c> «в обе стороны»; both sides are configured by
+    /// two <c>SetSideParam</c> calls with the same depth.
+    /// History: docs/decisions/adapter-core.md#volume-bound</remarks>
+    public static double PrismMm3(double profileAreaMm2, double depthMm, ExtrudeDirection direction) =>
+        direction == ExtrudeDirection.Symmetric
+            ? profileAreaMm2 * depthMm * 2d
+            : profileAreaMm2 * depthMm;
+
+    /// <summary>How the prism is spelled in the check's message: a symmetric sweep names BOTH sides, so the
+    /// number cannot read as a one-sided expectation.</summary>
+    public static string PrismWords(ExtrudeDirection direction) => direction == ExtrudeDirection.Symmetric
+        ? "площадь × глубина × 2 (direction=symmetric: глубина откладывается в КАЖДУЮ сторону)"
+        : "площадь × глубина";
+
     /// <summary>Compare a measured gain with the analytic prism. A bound that is not a finite positive
     /// number is "no bound"; an unread gain is "unread", never zero and never a verdict.</summary>
-    public static VolumeBoundOutcome Evaluate(double? measuredMm3, double? boundMm3)
+    public static VolumeBoundOutcome Evaluate(double? measuredMm3, double? boundMm3, string? prismWords = null)
     {
         if (boundMm3 is not double bound || !double.IsFinite(bound) || !(bound > 0d))
         {
@@ -84,18 +105,18 @@ public static class VolumeBound
         {
             return new VolumeBoundOutcome(
                 VolumeBoundVerdict.WithinBound, measured, bound, tolerance,
-                NotComputedReason(measured, bound));
+                NotComputedReason(measured, bound, prismWords));
         }
 
         return new VolumeBoundOutcome(
             VolumeBoundVerdict.OutsideBound, measured, bound, tolerance,
-            OutsideReason(measured, bound, tolerance));
+            OutsideReason(measured, bound, tolerance, prismWords));
     }
 
     /// <summary>The named gap for a gain inside the bound: it is NOT a mismatch, because the prism is a
     /// bound and the exact volume of the intersection with the body is not read by any documented route.</summary>
-    public static string NotComputedReason(double measuredMm3, double boundMm3) =>
-        NotComputedCode + " — призма профиля (площадь × глубина) " + Num(boundMm3)
+    public static string NotComputedReason(double measuredMm3, double boundMm3, string? prismWords = null) =>
+        NotComputedCode + " — призма профиля (" + (prismWords ?? "площадь × глубина") + ") " + Num(boundMm3)
         + " мм³ — ВЕРХНЯЯ граница, а не точное ожидание: измеренная прибавка " + Num(measuredMm3)
         + " мм³ меньше призмы, потому что инструмент пересекается с телом (приклеивание) или проходит "
         + "через полость (вырезание). Проверка верхней границы пройдена; точный объём пересечения "
@@ -104,9 +125,11 @@ public static class VolumeBound
 
     /// <summary>The named gap for a gain outside the bound: the one case the prism judges, with the reason
     /// the call is still a success (the feature exists; only its declared figure did not hold).</summary>
-    public static string OutsideReason(double measuredMm3, double boundMm3, double toleranceMm3) =>
-        OutsideCode + " — измеренная прибавка " + Num(measuredMm3) + " мм³ вне верхней границы призмы "
-        + Num(boundMm3) + " мм³ (допуск " + Num(toleranceMm3) + "): больше призмы, ноль или знак не тот. "
+    public static string OutsideReason(
+        double measuredMm3, double boundMm3, double toleranceMm3, string? prismWords = null) =>
+        OutsideCode + " — измеренная прибавка " + Num(measuredMm3) + " мм³ вне верхней границы призмы ("
+        + (prismWords ?? "площадь × глубина") + ") " + Num(boundMm3) + " мм³ (допуск "
+        + Num(toleranceMm3) + "): больше призмы, ноль или знак не тот. "
         + "Ни приклеивание, ни вырезание не может сдвинуть материал больше призмы, а нулевая прибавка "
         + "означает, что признак ничего не изменил.";
 

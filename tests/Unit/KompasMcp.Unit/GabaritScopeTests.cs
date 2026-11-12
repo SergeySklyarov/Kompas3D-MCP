@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Geometry;
 using Xunit;
 
 namespace KompasMcp.Unit;
@@ -87,5 +88,20 @@ public class GabaritScopeTests
 
         Assert.Null(node["full"]!.AsObject()["min_mm"]);
         Assert.Null(node["bodies"]!.AsObject()["size_mm"]);
+    }
+
+    /// <summary>Both scope words carry the LIMIT of the route: the box of a trimmed analytic surface can be
+    /// larger than the exact shell, so a matching box is not proof that the geometry matched.</summary>
+    /// <remarks>MEASURED: a torus cut at 0° and 180° reported 23,0000 mm on X while the exported mesh spans
+    /// 22,98238 mm. This is a limit of ksPart.GetGabarit, not a defect to be "fixed" by nudging numbers.
+    /// History: docs/decisions/adapter-core.md#gabarit-scope</remarks>
+    [Fact]
+    public void BothScopesNameTheConservativeBox()
+    {
+        Assert.Contains("БОЛЬШЕ точной оболочки", GabaritScopeWords.Bodies, StringComparison.Ordinal);
+        Assert.Contains("не доказывает совпадения геометрии", GabaritScopeWords.Bodies, StringComparison.Ordinal);
+        Assert.Contains("не доказательство неизменности", GabaritScopeWords.Full, StringComparison.Ordinal);
+        Assert.Contains("22,98238", GabaritScopeWords.Bodies, StringComparison.Ordinal);
+        Assert.Contains("gabarit_conservative", GabaritScopeWords.ConservationNote, StringComparison.Ordinal);
     }
 }

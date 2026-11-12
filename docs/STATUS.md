@@ -1352,7 +1352,9 @@ UNKNOWN 3 / FAIL 0.
   проверяет и поле, и закрытие по нему. `--emit-schemas` - дрейфа нет, `update-tool-listing.py` -
   блок совпадает; `long-comment-blocks.py` - 0/0/0, `lint-dashes.py` - 0,
   `check-evidence-links.py` - 0.
-- **Зачётный `--all`:** см. отчёт наряда (`CLIENT_FINDINGS_0_14_0_REPORT_20261111.md`).
+- **Зачётный `--all`** на чистом `73abc38` (аппарат вне дерева): **PASS 2297 / NAMED 10 / UNKNOWN 3 /
+  FAIL 0**, `docs/acceptance/evidence/20261112-client-findings-0-14-0-73abc38/all.json`. Прогон на
+  `3b80f32` дал 7 FAIL пробы `EV` (среда: `docs/decisions/probes.md#ev-probe-integrity`). Принят техлидом.
 - **Среда (не дефект, не долг).** Сборка, лежащая ВНУТРИ `C:\Projects\KompasMCP`, на этой машине не
   открывает `.spw` (`IDocuments.Open` возвращает NULL), а копия той же сборки вне дерева открывает:
   проверено на чистом `HEAD` (без правок наряда) - значит это условие машины, а не продукта. Прогон

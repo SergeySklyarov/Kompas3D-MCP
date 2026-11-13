@@ -461,7 +461,18 @@ public sealed partial class Api5Session : IDisposable
                 continue;
             }
 
-            var target = copies.RescuePath(document.Id, DateTimeOffset.UtcNow);
+            var target = copies.RescuePath(document.Id, document.Kind, DateTimeOffset.UtcNow);
+            if (target is null)
+            {
+                // INVARIANT: no copy rather than a copy whose name states a kind the document has not.
+                // MEASURED: a drawing rescued as ".m3d" was opened correctly but not found by its
+                // extension - the client searched for the drawing's own extension.
+                rescued.Add(new OwnedShutdownRescue(document.Id, null,
+                    $"спасательная копия НЕ снята: у вида документа '{document.Kind}' нет документированного " +
+                    "расширения, а прежнее '.m3d' не подставляется (правки теряются)"));
+                continue;
+            }
+
             var (ok, reason) = RescueCopyTo(document, target);
             rescued.Add(new OwnedShutdownRescue(document.Id, ok ? target : null, ok ? null : reason));
         }

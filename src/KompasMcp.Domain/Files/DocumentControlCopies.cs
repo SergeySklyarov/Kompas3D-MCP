@@ -39,14 +39,22 @@ public sealed class DocumentControlCopies
     public string RescueFolder => System.IO.Path.Combine(Folder, "rescue");
 
     /// <summary>The path a rescue copy is written to. The name carries the document id and the moment,
-    /// so two rescues of the same document are different files and neither overwrites the other.</summary>
+    /// so two rescues of the same document are different files and neither overwrites the other; the
+    /// extension names the KIND, so a client that looks for the copy by its kind's extension finds it.
+    /// <c>null</c> when the kind has no extension: the caller then names the reason, never a guess.</summary>
     /// <remarks>DOC: the copy is written through the documented <c>SaveAs(path)</c> — the API5
     /// <c>ksDocument3D.SaveAs</c> / <c>ksDocument2D.ksSaveDocument</c> or the API7
     /// <c>IKompasDocument.SaveAs</c> — into this service path, so the CLIENT's own file is not written.
     /// History: docs/decisions/files.md#rescue-copies</remarks>
-    public string RescuePath(string documentId, DateTimeOffset at)
+    public string? RescuePath(string documentId, DocumentKind kind, DateTimeOffset at)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
+        var extension = ExtensionFor(kind);
+        if (extension is null)
+        {
+            return null;
+        }
+
         var safeId = new string(documentId.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
         if (safeId.Length == 0)
         {
@@ -54,8 +62,27 @@ public sealed class DocumentControlCopies
         }
 
         var stamp = at.UtcDateTime.ToString("yyyyMMdd-HHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
-        return System.IO.Path.Combine(RescueFolder, $"{safeId}-{stamp}.m3d");
+        return System.IO.Path.Combine(RescueFolder, $"{safeId}-{stamp}{extension}");
     }
+
+    /// <summary>The rescue-file extension that names a document kind, or <c>null</c> when the kind has
+    /// none documented. A copy named <c>.m3d</c> for a drawing states a kind the document does not have.</summary>
+    /// <remarks>DOC: «Файл детали имеет расширение m3d» and «Файл сборки имеет расширение a3d»
+    /// (<c>47_2_1_1_trekhmernye_modeli.html</c>); the «Допустимые расширения» column of
+    /// <c>ksrequestfilestypeenum.html</c> names frw, cdw, m3d, a3d, kdw as KOMPAS document files.
+    /// ASSUMPTION: a specification is <c>.spw</c> - no mirrored page states it; the name follows the
+    /// extension the <c>.spw</c> open route already uses. LIMIT: a text document (<c>.kdw</c>) has no
+    /// <see cref="DocumentKind"/> in this build, so its rescue copy cannot be requested at all.
+    /// History: docs/decisions/files.md#rescue-copies</remarks>
+    private static string? ExtensionFor(DocumentKind kind) => kind switch
+    {
+        DocumentKind.Part => ".m3d",
+        DocumentKind.Assembly => ".a3d",
+        DocumentKind.Drawing => ".cdw",
+        DocumentKind.Fragment => ".frw",
+        DocumentKind.Specification => ".spw",
+        _ => null,
+    };
 
     /// <summary>Prepare the rescue folder. Returns <c>null</c> on success or the named reason — a rescue
     /// that cannot be written must be visible, not silently skipped.</summary>

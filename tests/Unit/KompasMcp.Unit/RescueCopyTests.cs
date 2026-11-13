@@ -1,3 +1,4 @@
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Files;
 using Xunit;
 
@@ -26,11 +27,38 @@ public class RescueCopyTests : IDisposable
     {
         var copies = Copies();
 
-        var path = copies.RescuePath("doc-1", DateTimeOffset.UnixEpoch);
+        var path = copies.RescuePath("doc-1", DocumentKind.Part, DateTimeOffset.UnixEpoch);
 
         Assert.Equal(
             Path.Combine(copies.RootDirectory, "control-copies", "rescue"),
             Path.GetDirectoryName(path));
+    }
+
+    /// <summary>The extension states the document KIND, so a client looking for the copy by the
+    /// extension of its kind finds it instead of a file that claims another kind.</summary>
+    [Theory]
+    [InlineData(DocumentKind.Part, ".m3d")]
+    [InlineData(DocumentKind.Assembly, ".a3d")]
+    [InlineData(DocumentKind.Drawing, ".cdw")]
+    [InlineData(DocumentKind.Fragment, ".frw")]
+    [InlineData(DocumentKind.Specification, ".spw")]
+    public void RescuePath_NamesTheKindOfTheDocument(DocumentKind kind, string extension)
+    {
+        var copies = Copies();
+
+        var path = copies.RescuePath("doc-1", kind, DateTimeOffset.UnixEpoch);
+
+        Assert.EndsWith(extension, path!, StringComparison.Ordinal);
+    }
+
+    /// <summary>A kind with no documented extension gets NO copy: <c>.m3d</c> for an unknown kind would
+    /// be a silent substitute, and the caller states the reason instead.</summary>
+    [Fact]
+    public void RescuePath_OnAKindWithoutAnExtension_ReturnsNull()
+    {
+        var copies = Copies();
+
+        Assert.Null(copies.RescuePath("doc-1", (DocumentKind)999, DateTimeOffset.UnixEpoch));
     }
 
     /// <summary>The rescue folder is a DIFFERENT directory from the control-copy folder, so the mutation
@@ -51,8 +79,8 @@ public class RescueCopyTests : IDisposable
         var copies = Copies();
         var at = new DateTimeOffset(2026, 10, 13, 8, 0, 0, TimeSpan.Zero);
 
-        var first = copies.RescuePath("doc-1", at);
-        var second = copies.RescuePath("doc-1", at.AddMilliseconds(1));
+        var first = copies.RescuePath("doc-1", DocumentKind.Part, at);
+        var second = copies.RescuePath("doc-1", DocumentKind.Part, at.AddMilliseconds(1));
 
         Assert.NotEqual(first, second);
     }
@@ -69,7 +97,7 @@ public class RescueCopyTests : IDisposable
     {
         var copies = Copies();
 
-        var path = copies.RescuePath(id, DateTimeOffset.UnixEpoch);
+        var path = copies.RescuePath(id, DocumentKind.Part, DateTimeOffset.UnixEpoch);
 
         Assert.Equal(copies.RescueFolder, Path.GetDirectoryName(path));
         Assert.DoesNotContain(Path.DirectorySeparatorChar.ToString(), Path.GetFileName(path), StringComparison.Ordinal);
@@ -81,7 +109,7 @@ public class RescueCopyTests : IDisposable
     {
         var copies = Copies();
 
-        var path = copies.RescuePath("///", DateTimeOffset.UnixEpoch);
+        var path = copies.RescuePath("///", DocumentKind.Part, DateTimeOffset.UnixEpoch);
 
         Assert.False(string.IsNullOrWhiteSpace(Path.GetFileName(path)));
         Assert.EndsWith(".m3d", path, StringComparison.Ordinal);

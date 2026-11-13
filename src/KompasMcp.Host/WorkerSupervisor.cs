@@ -467,28 +467,31 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _channel = null;
         _pipe = null;
 
+        // INVARIANT: ONE graceful window bounds the whole stop. The shutdown frame is answered (or given up
+        // on) inside it and the exit wait spends only what is left, so the session end gains no second wait.
+        // The answer must arrive BEFORE the channel is closed: a write followed by an immediate close loses
+        // the whole frame, and the Worker then learns about the end only from the broken channel.
+        // History: docs/decisions/host.md#client-shutdown
+        var deadline = Environment.TickCount64 + GracefulShutdownWindowMs;
+
         if (pipe is not null)
         {
-            if (channel is not null)
+            if (channel is not null && pipe.IsConnected && !channel.IsBroken)
             {
-                try
+                // A pipe object that exists but never connected cannot carry a frame: writing into it
+                // throws InvalidOperationException. See EnsureStartedAsync.
+                var (answer, problem) = await SessionEndHandshake
+                    .SendAsync(channel, RemainingMs(deadline))
+                    .ConfigureAwait(false);
+                if (answer is null)
                 {
-                    // A pipe object that exists but never connected cannot carry a frame: writing into
-                    // it throws InvalidOperationException. See EnsureStartedAsync.
-                    if (pipe.IsConnected)
-                    {
-                        await channel.WriteAsync(new IpcFrame
-                        {
-                            ProtocolVersion = IpcFrame.CurrentProtocolVersion,
-                            RequestId = Guid.NewGuid().ToString("N"),
-                            Kind = IpcFrameKind.Request,
-                            Command = WorkerCommands.Shutdown,
-                        }, CancellationToken.None).ConfigureAwait(false);
-                    }
+                    // Named, not swallowed: "the Worker was asked and did not answer" is what a wedged
+                    // Worker looks like, and the exit wait below then decides whether it has to be killed.
+                    _log.Write("warn", "worker shutdown report not received", new { reason = problem });
                 }
-                catch (Exception ex) when (ex is IOException or KompasContractException or InvalidOperationException or ObjectDisposedException)
+                else
                 {
-                    // Best effort: the pipe may already be gone.
+                    _log.Write("info", "worker shutdown report received", ShutdownReport(answer));
                 }
             }
 
@@ -519,7 +522,7 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         // end it with `KompasObject.Quit()` from the shutdown frames. INVARIANT: the exit wait is
         // ASYNCHRONOUS — a synchronous `_process.WaitForExit(20_000)` under `_restartGate` blocked a
         // pool thread and every parallel call. History: docs/decisions/host.md#no-tree-kill
-        var exited = await WaitForExitAsync(_process, GracefulShutdownWindowMs).ConfigureAwait(false);
+        var exited = await WaitForExitAsync(_process, RemainingMs(deadline)).ConfigureAwait(false);
         var killUsed = false;
         if (!exited)
         {
@@ -544,6 +547,35 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _process.Dispose();
         _process = null;
         return killUsed;
+    }
+
+    /// <summary>Milliseconds left of the stop budget; zero when it is spent.</summary>
+    private static int RemainingMs(long deadline) => (int)Math.Max(0, deadline - Environment.TickCount64);
+
+    /// <summary>The Worker's shutdown answer as the Host journal records it.</summary>
+    /// <remarks>WHY a summary and not the frame: on the session-end route this record is the ONLY proof the
+    /// Host received the report — the client sees it only through <c>kompas_disconnect</c>. A refused answer
+    /// or a missing field reads as null, never as success.
+    /// History: docs/decisions/host.md#client-shutdown</remarks>
+    private static object ShutdownReport(IpcFrame answer)
+    {
+        static bool? Flag(JsonNode? node) =>
+            node is JsonValue value && value.TryGetValue<bool>(out var parsed) ? parsed : null;
+
+        var payload = answer.Payload as JsonObject;
+        var applications = (payload?["owned_instance_shutdown"] as JsonArray)?
+            .OfType<JsonObject>()
+            .ToArray() ?? Array.Empty<JsonObject>();
+        return new
+        {
+            sessions_closed = Flag(payload?["sessions_closed"]),
+            applications = applications.Length,
+            process_ids = applications.Select(node => node["process_id"]?.ToString()).ToArray(),
+            all_exited = applications.Length > 0
+                && applications.All(node => Flag(node["process_exited"]) == true),
+            rescue_copies = applications.Sum(node => (node["rescue_copies"] as JsonArray)?.Count ?? 0),
+            problems = applications.Sum(node => (node["problems"] as JsonArray)?.Count ?? 0),
+        };
     }
 
     public async ValueTask DisposeAsync()

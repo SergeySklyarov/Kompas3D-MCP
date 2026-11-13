@@ -53,6 +53,11 @@ public sealed class CommandDispatcher
     /// <summary>Set when a command's outcome could not be observed; the Host must restart us.</summary>
     public bool NeedsReconciliation { get; private set; }
 
+    /// <summary>Which route ended this process, and whether the session-end sequence already ran.
+    /// Read by <see cref="Program"/> when it names the reason in the journal.
+    /// History: docs/decisions/host.md#client-shutdown</summary>
+    public SessionEndState End { get; } = new();
+
     public CommandDispatcher(StaExecutor sta, WorkerLog log, string controlCopyDirectory)
     {
         _sta = sta;
@@ -1971,7 +1976,12 @@ public sealed class CommandDispatcher
 
     private object? ShutdownPayload()
     {
+        // Named BEFORE the sequence runs: the record proves the frame arrived even when the sequence
+        // itself refuses or fails, and without it "the command never came" and "it came and did nothing"
+        // would read the same in the journal.
+        _log.Write("info", "shutdown command received", new { applications = _session.Applications.Count });
         var reports = ShutdownOwnedSessions();
+        End.Complete(byCommand: true);
         var node = new JsonObject { ["sessions_closed"] = true };
         if (reports.Count > 0)
         {
@@ -1999,6 +2009,15 @@ public sealed class CommandDispatcher
     public List<(string ApplicationId, OwnedShutdownReport Report)> ShutdownOwnedSessions()
     {
         var reports = new List<(string, OwnedShutdownReport)>();
+        if (End.SequenceDone)
+        {
+            // INVARIANT: the sequence runs AT MOST ONCE. The Host's command and this process's exit path
+            // can both reach it now that the command is delivered; the second caller must not rescue and
+            // quit a second time.
+            // History: docs/decisions/host.md#client-shutdown
+            return reports;
+        }
+
         var applications = _session.Applications
             .Select(a => new SessionApplication(a.Id, a.ProcessId, a.Ownership == ApplicationOwnership.Launched))
             .ToArray();
@@ -2067,6 +2086,7 @@ public sealed class CommandDispatcher
             }
         }
 
+        End.Complete(byCommand: false);
         return reports;
     }
 }

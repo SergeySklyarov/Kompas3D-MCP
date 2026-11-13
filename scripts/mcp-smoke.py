@@ -54134,6 +54134,122 @@ def shutdown_checks(host, config, workdir, rep):
             pass
         force_stop(pid)
 
+    # ═══════════ SD.12/SD.13: кадр `shutdown` доходит до Worker ═══════════
+    # Долг 95: Хост писал кадр `shutdown` и закрывал канал, не дожидаясь ответа. Измерено: Worker не
+    # получал НИ ОДНОГО байта кадра (`host closed the pipe`), команда была недостижима, а признака
+    # «конец по команде» в журнале не было. Теперь Хост ждёт ответ в том же окне штатного выхода и
+    # закрывает канал ПОСЛЕ него; строки читают ОБА журнала, потому что отчёт Worker клиенту на этом
+    # пути не возвращается - его получает Хост.
+    def host_log_of(probe):
+        try:
+            with open(probe.config, encoding="utf-8-sig") as fh:
+                return _json.load(fh).get("log_path")
+        except OSError:
+            return None
+
+    def journal_rows(path):
+        rows = []
+        if not path:
+            return rows
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        rows.append(_json.loads(line))
+                    except ValueError:
+                        continue
+        except OSError:
+            return rows
+        return rows
+
+    def wait_end_records(path, timeout_s=30):
+        """Записи журнала Worker, дождавшись записи о ПРИЧИНЕ конца.
+
+        Отчёт Worker (`owned instance shutdown`) пишется после `Quit()`, то есть позже ухода КОМПАСа;
+        чтение сразу после `wait_gone` потеряло бы и его, и запись о причине.
+        """
+        deadline = _time.monotonic() + timeout_s
+        rows = journal_rows(path)
+        while _time.monotonic() < deadline and not any(row.get("end_reason") for row in rows):
+            _time.sleep(0.25)
+            rows = journal_rows(path)
+        return rows
+
+    def end_count(rows, key, message):
+        return sum(1 for row in rows if row.get(key) == message)
+
+    sd12_text = ("SD.12: штатный конец связи — кадр `shutdown` доставлен, конец назван «по команде», "
+                 "порядок завершения выполнен ОДИН раз, отчёт получен Хостом")
+    probe = open_host("sd12")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.12", sd12_text, "FAIL", "launch: %s" % code)
+        else:
+            client_path = _os.path.join(workdir, "sd-sd12-client.m3d")
+            _doc, problem = build_saved_part(probe, app, client_path, "SD-sd12")
+            if problem:
+                rep.add("SD.12", sd12_text, "FAIL", problem)
+            else:
+                worker_log = worker_log_of(probe)
+                host_log = host_log_of(probe)
+                probe.p.stdin.close()
+                gone = wait_gone(pid, 45)
+                rows = wait_end_records(worker_log)
+                reasons = [row.get("end_reason") for row in rows if row.get("end_reason")]
+                received = [row for row in journal_rows(host_log)
+                            if row.get("message") == "worker shutdown report received"]
+                commands = end_count(rows, "message", "shutdown command received")
+                reports = end_count(rows, "message", "owned instance shutdown")
+                ok = (gone and reasons == ["by_command"] and commands == 1 and reports == 1
+                      and len(received) == 1)
+                rep.add("SD.12", sd12_text, "PASS" if ok else "FAIL",
+                        "ушёл=%s причины=%s команд=%d отчётов Worker=%d отчётов у Хоста=%d "
+                        "хост-запись=%s сообщения=%s"
+                        % (gone, reasons, commands, reports, len(received),
+                           received[0].get("process_ids") if received else None,
+                           [row.get("message") for row in rows[-5:]]))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
+        force_stop(pid)
+
+    sd13_text = ("SD.13: аварийный путь — Хост убит до команды: конец назван «по обрыву канала», "
+                 "порядок завершения и отчёт те же")
+    probe = open_host("sd13")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.13", sd13_text, "FAIL", "launch: %s" % code)
+        else:
+            client_path = _os.path.join(workdir, "sd-sd13-client.m3d")
+            _doc, problem = build_saved_part(probe, app, client_path, "SD-sd13")
+            if problem:
+                rep.add("SD.13", sd13_text, "FAIL", problem)
+            else:
+                worker_log = worker_log_of(probe)
+                probe.p.kill()
+                gone = wait_gone(pid, 45)
+                rows = wait_end_records(worker_log)
+                reasons = [row.get("end_reason") for row in rows if row.get("end_reason")]
+                commands = end_count(rows, "message", "shutdown command received")
+                reports = end_count(rows, "message", "owned instance shutdown")
+                ok = gone and reasons == ["channel_lost"] and commands == 0 and reports == 1
+                rep.add("SD.13", sd13_text, "PASS" if ok else "FAIL",
+                        "ушёл=%s причины=%s команд=%d отчётов Worker=%d сообщения=%s"
+                        % (gone, reasons, commands, reports,
+                           [row.get("message") for row in rows[-5:]]))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
+        force_stop(pid)
+
     # ═══════════ SD.08: после группы не осталось процессов ЭТОГО прогона ═══════════
     remaining_kompas = sorted(p for p in started_kompas if alive(p))
     live_hosts = pids_of("KompasMcp.Host.exe") or set()

@@ -138,8 +138,11 @@ public static class Program
             }
 
             // THE CHANNEL ENDED — SO THE HOST IS GONE. No new pipe: the process exits, and Main's
-            // finally closes sessions and releases COM.
-            log.Write("info", "host disconnected; worker exiting");
+            // finally closes sessions and releases COM. `end_reason` names WHICH route brought the end:
+            // the delivered shutdown command, or the channel breaking (Host killed, pipe closed first).
+            // Without it the journal could not tell the two apart — the command used to be unreachable.
+            // History: docs/decisions/host.md#client-shutdown
+            log.Write("info", "host disconnected; worker exiting", new { end_reason = session.End.Reason });
         }
     }
 

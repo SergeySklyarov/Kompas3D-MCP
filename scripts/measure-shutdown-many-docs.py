@@ -21,6 +21,12 @@ observation: the instrument reads the process list itself, it does not trust the
 Only a PID the instrument proved itself (`process_id` from `kompas_connect`) is ever stopped. Killing
 by name is forbidden by the project spec and appears nowhere here.
 
+BOTH JOURNALS OF EVERY RUN ARE READ, not just the timing: the Worker's `end_reason`, the raw sequence of
+its last messages, how many times the `shutdown` command reached it, how many `owned instance shutdown`
+reports it wrote, and whether the Host recorded receiving that report. The ORDER of those messages is
+the evidence for how the session end happened. A repeated entry in `--counts` (e.g. `1,1,1`) runs the
+same scenario that many times, which is how "N normal session ends in a row" is counted.
+
 Usage:
   python scripts/measure-shutdown-many-docs.py --host <host.exe> --out <json> [--counts 1,5,10]
       [--timeout 120] [--self-test]
@@ -235,13 +241,58 @@ def read_shutdown_entry(path):
     return last
 
 
+def read_journal(path):
+    """Every record of a JSONL journal, in the order written; a line that does not parse is dropped."""
+    rows = []
+    if not path or not os.path.isfile(path):
+        return rows
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                continue
+    return rows
+
+
+def session_end_evidence(worker_log, host_log):
+    """What BOTH journals say about the session end, read instead of assumed.
+
+    THE QUESTION THIS ANSWERS. Does the `shutdown` frame the Host writes reach the Worker, does the
+    Worker name the reason of its own exit, and does the Host see the Worker's report? The instrument
+    records the raw sequence of the last Worker journal messages, because the ORDER is the evidence:
+    "host closed the pipe" before "owned instance shutdown" means the end came by the channel breaking,
+    not by the command.
+    """
+    worker_rows = read_journal(worker_log)
+    host_rows = read_journal(host_log)
+    end_reason = None
+    for row in worker_rows:
+        if row.get("end_reason"):
+            end_reason = row["end_reason"]
+    return {
+        "worker_end_reason": end_reason,
+        "worker_end_messages": [r.get("message") for r in worker_rows[-6:]],
+        "worker_shutdown_command_records": sum(
+            1 for r in worker_rows if r.get("message") == "shutdown command received"),
+        "worker_shutdown_report_records": sum(
+            1 for r in worker_rows if r.get("message") == "owned instance shutdown"),
+        "host_report_received": sum(
+            1 for r in host_rows if r.get("message") == "worker shutdown report received"),
+        "host_report_missing": [r.get("reason") for r in host_rows
+                                if r.get("message") == "worker shutdown report not received"],
+    }
+
+
 def measure(host, base_config, count, workdir, timeout_s, entities=0):
     os.makedirs(workdir, exist_ok=True)
     isolated = isolate_config(base_config, workdir, "sd-many-n%d" % count)
     with open(base_config, encoding="utf-8-sig") as fh:
         cfg = json.load(fh)
     with open(isolated, encoding="utf-8-sig") as fh:
-        worker_log = json.load(fh).get("worker_log_path")
+        isolated_cfg = json.load(fh)
+    worker_log = isolated_cfg.get("worker_log_path")
+    host_log = isolated_cfg.get("log_path")
     rescue_dir = os.path.join(cfg.get("control_copy_directory") or workdir, "control-copies", "rescue")
 
     def rescue_snapshot():
@@ -308,6 +359,7 @@ def measure(host, base_config, count, workdir, timeout_s, entities=0):
 
         # The report and the cleanup run even when the scenario failed early: a failed build-up must not
         # leave a KOMPAS of THIS run alive, and the reason it failed must reach the record.
+        record.update(session_end_evidence(worker_log, host_log))
         entry = read_shutdown_entry(worker_log)
         if entry is not None:
             copies = entry.get("rescue_copies") or []
@@ -388,6 +440,13 @@ def main():
                  record.get("report_budget_ms"), record.get("report_rescue_ms"),
                  record.get("report_close_ms"), record.get("report_quit_ms"),
                  record.get("report_killed_by_pid"), record.get("problem") or ""), flush=True)
+        print("[measure] N=%d: end_reason=%s command_records=%s report_records=%s host_report=%s "
+              "missing=%s messages=%s"
+              % (count, record.get("worker_end_reason"),
+                 record.get("worker_shutdown_command_records"),
+                 record.get("worker_shutdown_report_records"),
+                 record.get("host_report_received"), record.get("host_report_missing"),
+                 record.get("worker_end_messages")), flush=True)
 
     payload = {"host": os.path.abspath(host), "counts": counts, "entities": entities,
                "records": records}

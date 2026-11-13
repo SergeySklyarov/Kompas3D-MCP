@@ -340,6 +340,24 @@ FAIL (`status=up_to_date`, PASS 31 / FAIL 1), на нынешнем при то�
 требовался (каркас прибора не менялся). Открыто **5** (95, 96, 97, 102, 103), этап 2 продолжается. Очередь:
 `DEBT_SHUTDOWN_FRAME_0_15`, `DEBT_ACCEPTANCE_TEXT_0_15`, `DEBT_RELEASE_GUARDS_0_15`.
 
+**Кадр `shutdown` доходит до Worker** (`DEBT_SHUTDOWN_FRAME_0_15`, 13.11.2026, коммит `33b9ba7`). Строка
+долга 95 закрыта: Хост пишет кадр `shutdown`, ждёт ответ Worker в ТОМ ЖЕ окне штатного выхода (20 с) и
+закрывает канал только после ответа; ожидание выхода процесса тратит остаток того же окна, поэтому
+второго ожидания нет и конец сеанса не удлинился. Worker пишет причину конца полем `end_reason` записи
+`host disconnected; worker exiting` (`by_command` / `channel_lost`), порядок завершения выполняется РОВНО
+один раз (`SessionEndState`: команда и собственный выход процесса - два вызывающих, второй пропускается).
+Хост пишет полученный отчёт записью `worker shutdown report received` (`process_ids`, `all_exited`,
+`rescue_copies`, `problems`), его отсутствие - `warn` с кодом отказа. Причина измерена ДО правки на
+`1a9a502` (Release, `scripts/measure-shutdown-many-docs.py`): Worker читал НОЛЬ байт кадра
+(`host closed the pipe`), записи `shutdown command received` не было, отчёта у Хоста не было. После
+правки - 10 концов сеанса подряд, в каждом `by_command`, одна команда, один отчёт, отчёт получен
+Хостом; время конца сеанса 5,59-5,98 с (до правки 5,75 с), при десяти несохранённых документах 6,75 с
+(до 6,67 с). Строки приёмки `SD.12`/`SD.13`; модульные тесты `SessionEndTests` (7), весь набор - 2045
+PASS / 0 FAIL. Причина и правило - `docs/decisions/host.md#client-shutdown`. Стражи `lint-dashes.py`,
+`check-evidence-links.py`, `long-comment-blocks.py` - 0. Полный прогон - на Release чистого коммита,
+числа и каталог - в отчёте наряда. Открыто **4** (96, 97, 102, 103). Очередь:
+`DEBT_ACCEPTANCE_TEXT_0_15`, `DEBT_RELEASE_GUARDS_0_15`.
+
 ## Архив журнала
 
 - `docs/status/journal-2026-11.md` - записи 11.2026: журнал цикла выпуска 0.14.0 (разбор технического

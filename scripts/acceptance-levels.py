@@ -35,15 +35,15 @@
 `blocked_api` НЕ закрывает: он означает, что возможность недостижима, а не что она проверена.
 Общая зависимость закрыта по действиям, которые она объявляет в `required_actions`.
 
-КОНТРОЛЬ ПРИБОРА (`--self-test`). Один ПОЛОЖИТЕЛЬНЫЙ набор (пройдено всё — обязан дать PASS) и
-по одному отрицательному на каждый уровень: (а) один обязательный FAIL в строках при закрытом
-объёме; (б) незакрытое положительное создание (`create = blocked_api`) с N/A-зависимыми
-действиями — ровно то состояние, которое до 19.09.2026 закрывалось правилом
-`all(v in ("verified", "not_applicable"))`; (в) инструменты клиенту не видны; (г) клиентская
-приёмка FAIL при трёх пройденных уровнях; (д) клиентская приёмка `not_run`; (е) клиентская приёмка
-не передана в правило. Ни один отрицательный набор не имеет права дать «полностью готово», и
-каждый называет СВОЙ уровень-виновника. Положительный набор обязателен ровно так же:
-отрицательный контроль сам по себе проходится правилом, всегда отвечающим FAIL.
+INSTRUMENT CONTROL (`--self-test`). POSITIVE sets (everything passed - must be PASS; one of them
+carries the client summary word `ACCEPTED`) and one negative per level: a mandatory FAIL among the
+rows while the scope is closed; an unreachable positive create (`create = blocked_api`) with
+N/A-dependent actions, which a rule `all(v in ("verified", "not_applicable"))` would call closed;
+tools invisible to the client; the client acceptance FAIL while the three other levels pass; the
+client acceptance `not_run`; the client acceptance not passed to the rule at all. No negative set
+may read as "fully ready", and each one names ITS OWN level. A rule that always answers FAIL passes
+any negative control while measuring nothing, so the positive sets are as mandatory as the
+negatives - and the gate NAMES the verdict word it read.
 """
 
 import json
@@ -298,16 +298,22 @@ def evaluate_release_scope(root):
     return combined
 
 
-def client_acceptance_gate(block):
-    """Вердикт уровня «клиентская приёмка» и НАЗВАННАЯ причина отказа.
+# INVARIANT: both words the acceptance summary carries are positive - the client prompt requires
+# `ACCEPTED`, the release pass writes `PASS` - and the gate NAMES the word it read. A single
+# accepted spelling made the summary a hand-edited file; a wrong word must stay visible instead.
+CLIENT_ACCEPTANCE_WORDS = ("PASS", "ACCEPTED")
 
-    Состояний ровно три, и ни одно не означает «пропустить»:
-      * `block is None` — приёмка не передана в правило: состояния нет вовсе;
-      * `status == "not_run"` — вызовов клиента не было;
-      * `status == "run"` — вердикт берётся из самого отчёта клиентской приёмки.
-    Всё, кроме `verdict == "PASS"`, даёт FAIL. Возврат `(None, None)` — только для строки
-    `CLIENT_ACCEPTANCE_SELF`: тогда гейт не применяется, и это записано в самом результате, а не
-    остаётся молчанием.
+
+def client_acceptance_gate(block):
+    """Verdict of the client acceptance level, and a reason that NAMES what it read.
+
+    Three states, none of them a skip: `None` - the acceptance was not passed to the rule at all;
+    `status == "not_run"` - the client made no calls; `status == "run"` - the word comes from the
+    client acceptance report itself.
+    INVARIANT: every word of `CLIENT_ACCEPTANCE_WORDS` accepts and every other word fails, and both
+    answers NAME the word, so a summary written in the prompt's word needs no hand edit while a
+    wrong word stays readable instead of being guessed.
+    `(None, None)` is returned only for `CLIENT_ACCEPTANCE_SELF`, where the gate does not apply.
     """
     if block is None:
         return "FAIL", "клиентская приёмка не передана в правило: состояние не измерено"
@@ -320,8 +326,8 @@ def client_acceptance_gate(block):
         return "FAIL", ("клиентская приёмка не выполнена (status=not_run): отсутствие проверки "
                         "не является PASS")
     verdict = block.get("verdict")
-    if verdict == "PASS":
-        return "PASS", None
+    if verdict in CLIENT_ACCEPTANCE_WORDS:
+        return "PASS", f"клиентская приёмка принята: verdict={verdict!r}"
     return "FAIL", f"клиентская приёмка: status={status!r}, verdict={verdict!r}"
 
 
@@ -454,7 +460,7 @@ def summarize_levels(counts, scope, transport, client_acceptance=None, full_run=
             "subject": "вызовы инструментов РАБОЧИМ КЛИЕНТОМ: приняла ли поставку клиентская "
                        "сессия, а не прибор",
             "gate": ("не применяется: этот отчёт и есть клиентская приёмка" if not gate_applies
-                     else "применяется: PASS только при status=run и verdict=PASS"),
+                     else "применяется: PASS только при status=run и verdict=PASS или ACCEPTED"),
             "status": client_acceptance.get("status")
                       if isinstance(client_acceptance, dict) else None,
             "report_verdict": client_acceptance.get("verdict")
@@ -478,23 +484,24 @@ def summarize_levels(counts, scope, transport, client_acceptance=None, full_run=
 
 
 def self_test():
-    """Контроль правила: один положительный набор и по одному отрицательному на КАЖДЫЙ уровень.
+    """Control of the rule: positive sets, one negative per level, and the verdict word table.
 
-    ПОЛОЖИТЕЛЬНЫЙ НАБОР СТОИТ ПЕРВЫМ И ОБЯЗАТЕЛЕН. Правило, всегда отвечающее FAIL, проходит любой
-    отрицательный контроль, ничего при этом не измеряя; поэтому «пройдено всё» обязано дать PASS —
-    иначе контроль не различает «отказ по делу» и «отказ всегда».
+    THE POSITIVE SETS STAND FIRST AND ARE MANDATORY. A rule that always answers FAIL passes any
+    negative control while measuring nothing, so "everything passed" must give PASS - otherwise the
+    control cannot tell a refusal on the merits from a refusal always.
 
-    Каждый отрицательный набор строится так, чтобы отказать мог ТОЛЬКО проверяемый уровень, и
-    ожидаемый виновник назван по имени: без этого набор с незакрытым объёмом «проходил» бы за счёт
-    клиентской приёмки, и контроль перестал бы проверять объём. Набор (в) воспроизводит состояние,
-    которое до 19.09.2026 закрывалось правилом `all(v in ("verified", "not_applicable"))`:
-    положительное создание недостижимо (`blocked_api`), а зависимые от него действия предметно
-    неприменимы. Наборы (д) и (е) воспроизводят состояние сеанса 2 от 21.09.2026, когда три уровня
-    были пройдены, а клиент не видел НИ ОДНОГО инструмента (`tools_visible 0`).
+    Every negative set is built so that ONLY the level under test can refuse, and the expected
+    culprit is named: without that a set with an open scope would "pass" thanks to the client
+    acceptance, and the control would stop testing the scope. The unreachable-create set is the
+    state a rule `all(v in ("verified", "not_applicable"))` would call closed: the positive create
+    is `blocked_api` and the actions depending on it are not applicable. The invisible-tools set is
+    the state with three levels passed and not a single tool visible to the client.
 
-    Все наборы СИНТЕТИЧЕСКИЕ и живут только здесь: это контроль ПРАВИЛА, а не измерение продукта.
-    Ссылка на реальный режим здесь не нужна и вредна: правило проверяется на составе статусов, и
-    привязка контроля к режиму, снятому из требований, пережила бы сам режим.
+    The word table has one reason: the gate must NAME the word it read, so a summary written in the
+    word the client prompt requires needs no hand edit and a wrong word stays readable.
+    All sets are SYNTHETIC and live only here: this is a control of the RULE, not a measurement of
+    the product. A reference to a real mode is not needed here and is harmful: the rule is tested on
+    a set of statuses, and a control tied to a mode removed from the requirements would outlive it.
     """
     # Числа знаменателя здесь — ЗЕРКАЛО текущего профиля, а не измерение: 54 режима и 15
     # зависимостей после снятия `dep.bodies.remove_selected` (наряд
@@ -524,6 +531,7 @@ def self_test():
                           "'mcp_implemented'"], verdict="INCOMPLETE")
     clean_rows = {"PASS": 178, "N/A": 6}
     client_ok = {"status": "run", "verdict": "PASS"}
+    client_accepted = {"status": "run", "verdict": "ACCEPTED"}
     client_fail = {"status": "run", "verdict": "FAIL"}
     client_absent = {"status": "not_run", "verdict": None}
     full_ok = {"report": "scratch/mcp-smoke/runs/test/smoke-all-report.json", "rows": 178}
@@ -532,6 +540,8 @@ def self_test():
     cases = [
         ("пройдено всё (положительный набор)",
          clean_rows, closed, transport_ok, client_ok, full_ok, "PASS", None),
+        ("пройдено всё, свод клиента словом ACCEPTED (положительный набор)",
+         clean_rows, closed, transport_ok, client_accepted, full_ok, "PASS", None),
         ("один обязательный FAIL в строках при закрытом объёме",
          {"PASS": 178, "FAIL": 1, "N/A": 6}, closed, transport_ok, client_ok, full_ok, "FAIL",
          "functional_acceptance"),
@@ -545,6 +555,15 @@ def self_test():
          clean_rows, closed, transport_ok, client_absent, full_ok, "FAIL", "client_acceptance"),
         ("клиентская приёмка не передана в правило",
          clean_rows, closed, transport_ok, None, full_ok, "FAIL", "client_acceptance"),
+        ("свод клиента словом INCOMPLETE",
+         clean_rows, closed, transport_ok, {"status": "run", "verdict": "INCOMPLETE"}, full_ok,
+         "FAIL", "client_acceptance"),
+        ("свод клиента словом в другом регистре",
+         clean_rows, closed, transport_ok, {"status": "run", "verdict": "accepted"}, full_ok,
+         "FAIL", "client_acceptance"),
+        ("свод клиента с пустым словом",
+         clean_rows, closed, transport_ok, {"status": "run", "verdict": ""}, full_ok,
+         "FAIL", "client_acceptance"),
         ("объём закрыт по открытым строкам, но прибор назвал расхождение (R5 06.10.2026)",
          clean_rows, closed_with_problems, transport_ok, client_ok, full_ok, "FAIL",
          "mandatory_scope"),
@@ -566,13 +585,25 @@ def self_test():
             if actual not in ("FAIL", "INCOMPLETE"):
                 failures.append(f"{name}: виновник назван {blamed}, а его вердикт {actual!r} — "
                                 f"отказ пришёл не от него")
+    # TEST: the gate names the word it read. A pass over `ACCEPTED` that answers without the word
+    # leaves the mismatch to be found by hand again, which is the state this control removes.
+    word_cases = (("PASS", "PASS"), ("ACCEPTED", "PASS"), ("INCOMPLETE", "FAIL"),
+                  ("accepted", "FAIL"), ("", "FAIL"))
+    for word, expected in word_cases:
+        got_word, reason = client_acceptance_gate({"status": "run", "verdict": word})
+        if got_word != expected:
+            failures.append(f"слово {word!r}: вердикт {got_word!r}, ожидание {expected!r}")
+        elif repr(word) not in (reason or ""):
+            failures.append(f"слово {word!r}: причина {reason!r} не называет прочитанное слово")
     if failures:
         print("КОНТРОЛЬ НЕ ПРОЙДЕН:")
         for line in failures:
             print("  -", line)
         return 1
-    print(f"контроль пройден: {len(cases)} наборов — 1 положительный (обязан дать PASS) и "
-          f"{len(cases) - 1} отрицательных, каждый отказал по своему уровню")
+    positives = sum(1 for case in cases if case[6] == "PASS")
+    print(f"контроль пройден: {len(cases)} наборов — {positives} положительных (обязаны дать PASS) "
+          f"и {len(cases) - positives} отрицательных, каждый отказал по своему уровню; "
+          f"слов вердикта клиента {len(word_cases)}: оба положительных приняты, остальные названы")
     return 0
 
 

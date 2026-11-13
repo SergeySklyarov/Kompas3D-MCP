@@ -2106,6 +2106,18 @@ def instrument_self_test():
             if saved_probe_env is not None:
                 os.environ["KOMPAS_MCP_EV_PROBE"] = saved_probe_env
 
+    # Файл итога проверки выпуска у группы `update` свой (долг 104). Проверка падает, если путь снова
+    # станет общим с Хостом машины или уедет из `%TEMP%`: там к нему неприменимы ни права, ни метка
+    # целостности, на которых держится запись файла Хостом.
+    tmp_dir = update_temp_dir()
+    own_cache = update_check_path(tmp_dir)
+    check("файл итога группы UN не общий с Хостом машины",
+          os.path.normcase(tmp_dir) != os.path.normcase(os.path.dirname(UPDATE_CHECK_SHARED))
+          and os.path.normcase(own_cache) != os.path.normcase(UPDATE_CHECK_SHARED), own_cache)
+    check("каталог файла итога группы UN — внутри %TEMP%",
+          os.path.normcase(tmp_dir).startswith(
+              os.path.normcase(os.path.normpath(tempfile.gettempdir())) + os.sep), tmp_dir)
+
     # Очистка среды перед прогоном (наряд API_AUDIT_TOOLS §3.2): прибор обязан НАЙТИ посторонний
     # процесс, ЗАВЕРШИТЬ его и ЗАПИСАТЬ это, а процессы прогона не тронуть. Обе половины проверяются
     # на живых процессах-заглушках (копия `cmd.exe` под чужим именем): «нашёл» без «завершил» и
@@ -57593,6 +57605,35 @@ def ops_checks(host, config, workdir, rep):
                 pass
 
 
+# Файл итога проверки выпуска, общий для всех Хостов машины: путь по умолчанию
+# (`HostOptions.Default("update-check.json")`, `Path.GetTempPath`), который читает и пишет клиентский
+# Хост. Группа `update` его не касается - см. `update_temp_dir`.
+UPDATE_CHECK_SHARED = os.path.join(tempfile.gettempdir(), "kompas-mcp", "update-check.json")
+
+
+def update_temp_dir():
+    """Свой каталог временных файлов Хостов группы `update`.
+
+    INVARIANT: он не `%TEMP%\\kompas-mcp` - путь, общий с Хостом машины (клиентским): тот кладёт туда
+    НАСТОЯЩИЙ выпуск, и строка, ждущая пустой или испорченный файл, видит его запись.
+    MEASURED: зачётный `--all` с живым клиентским Хостом: запись легла между удалением файла прибором
+    и стартом Хоста строки, строка отдала `up_to_date` вместо `unknown` с причиной. Каталог создан
+    ВНУТРИ общего, поэтому права и метка целостности у него те же, что у пути, куда Хост писал раньше.
+    History: docs/decisions/tests.md#update-file-isolation
+    """
+    return os.path.join(tempfile.gettempdir(), "kompas-mcp", "un-" + str(os.getpid()))
+
+
+def update_host_env(tmp_dir):
+    """Окружение Хоста строки: `Path.GetTempPath` читает `TMP`, затем `TEMP` - там и ложится файл итога."""
+    return {"TMP": tmp_dir, "TEMP": tmp_dir}
+
+
+def update_check_path(tmp_dir):
+    """Файл итога, который прочтёт и перепишет Хост с `TMP`/`TEMP` из `update_host_env`."""
+    return os.path.join(tmp_dir, "kompas-mcp", "update-check.json")
+
+
 def update_checks(host, config, workdir, rep):
     """UN.01…UN.06 — сообщение о новом выпуске без сети (наряд `UPDATE_NOTICE`).
 
@@ -57607,18 +57648,19 @@ def update_checks(host, config, workdir, rep):
     опубликовано на GitHub. Настоящий адрес прибором не проверяется - это отдельное утверждение,
     которое сеть делает недетерминированным.
 
-    ПОЧЕМУ СВОИ ХОСТЫ. Состояние складывается на старте процесса из файла итога, поэтому строку
-    `initialize.instructions` видно только в процессе, поднятом ПОСЛЕ записи итога. Свои Хосты также
-    держат файл итога отдельно от клиентского: перед каждой проверкой он удаляется (свежий итог
-    отменил бы запрос), а в конце удаляется снова - иначе выдуманный выпуск прожил бы сутки в
-    клиентском Хосте.
+    ПОЧЕМУ СВОИ ХОСТЫ И СВОЙ ФАЙЛ ИТОГА. Состояние складывается на старте процесса из файла итога,
+    поэтому строку `initialize.instructions` видно только в процессе, поднятом ПОСЛЕ записи итога.
+    Файл итога у строк свой (`update_temp_dir`): перед каждой проверкой он удаляется (свежий итог
+    отменил бы запрос), а в конце удаляется каталог - выдуманный выпуск не переживает приёмку.
     """
     import json as _json
-    import tempfile
 
     from localconfig import isolate_config
 
-    cache = os.path.join(tempfile.gettempdir(), "kompas-mcp", "update-check.json")
+    tmp_dir = update_temp_dir()
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    os.makedirs(tmp_dir)
+    cache = update_check_path(tmp_dir)
     feed = os.path.join(workdir, "update-feed.json")
 
     def clear_cache():
@@ -57634,10 +57676,9 @@ def update_checks(host, config, workdir, rep):
     def cache_written_here(expected_version):
         """Whether the cache file names a version THIS row's feed could have produced.
 
-        ЗАЧЕМ ТАК. Путь файла итога по умолчанию общий с живым клиентским Хостом на этой же машине:
-        любой его старт пишет туда НАСТОЯЩИЙ выпуск. Поэтому «файл существует» не доказывает, что его
-        написал проверяемый Хост - строка UN.04 проверяла бы чужую работу. Своей считается только
-        запись с версией, которую даёт фид этой строки.
+        ЗАЧЕМ ТАК. Каталог итога свой (`update_temp_dir`), но правил чтения два: «файл существует» не
+        должно становиться доказательством «его написал проверяемый Хост», если строке достался чужой
+        файл. Поэтому своей считается только запись с версией, которую даёт фид этой строки.
         """
         try:
             with open(cache, encoding="utf-8") as fh:
@@ -57656,7 +57697,8 @@ def update_checks(host, config, workdir, rep):
         }, ensure_ascii=False)
 
     def open_host(env):
-        probe = Client(host, isolate_config(config, workdir, "un-update"), env=env)
+        probe = Client(host, isolate_config(config, workdir, "un-update"),
+                       env={**(env or {}), **update_host_env(tmp_dir)})
         init = probe.call("initialize", {
             "protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "mcp-smoke-un", "version": "0"}}, timeout=60)
@@ -57773,7 +57815,7 @@ def update_checks(host, config, workdir, rep):
                            and not cache_written_here("999.0.0")) else "FAIL",
                 f"status={answer.get('status')} файл итога существует={os.path.exists(cache)} "
                 f"записан_этой_строкой={cache_written_here('999.0.0')}"
-                " (общий путь с клиентским Хостом: чужая запись не считается своей)")
+                f" (каталог итога свой: {os.path.dirname(os.path.dirname(cache))})")
 
         # --- UN.05: битый ответ источника ------------------------------------------------------
         clear_cache()
@@ -57790,8 +57832,8 @@ def update_checks(host, config, workdir, rep):
                            and (answer.get("reason") or "").strip()) else "FAIL",
                 f"status={answer.get('status')} reason={(answer.get('reason') or '')[:90]}")
     finally:
-        # Выдуманный выпуск не должен пережить приёмку: файл итога читает клиентский Хост.
-        clear_cache()
+        # Выдуманный выпуск не должен пережить приёмку: каталог итога удаляется целиком.
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         try:
             os.remove(feed)
         except OSError:

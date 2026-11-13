@@ -2081,6 +2081,31 @@ def instrument_self_test():
           [a for k, a in ALL_GROUPS_EXTRA if k == "suppress"] == [["--suppress-repeat",
                                                                  str(ALL_SUPPRESS_REPEAT)]])
 
+    # TEST: the probe needed by the EV rows is required beside an explicit Host and nowhere else.
+    # Both halves sit in one place: a copy beside the Host passes, its absence gives a refusal that
+    # names the path and the fix command, and a tree run without `--host` keeps the old fallback.
+    with tempfile.TemporaryDirectory() as tmp:
+        probe_host = os.path.join(tmp, "KompasMcp.Host.exe")
+        with open(probe_host, "w", encoding="utf-8") as fh:
+            fh.write("")
+        saved_probe_env = os.environ.pop("KOMPAS_MCP_EV_PROBE", None)
+        try:
+            absent = ev_probe_presence_problem(probe_host, True)
+            check("пробы нет рядом с Хостом — названный отказ",
+                  bool(absent) and os.path.join(tmp, "EVProbe.exe") in absent, str(absent))
+            check("отказ называет причину и команду исправления",
+                  bool(absent) and "Copy-Item" in absent and "низкой меткой" in absent,
+                  str(absent))
+            check("без --host сборка из дерева не меняется",
+                  ev_probe_presence_problem(probe_host, False) is None)
+            with open(os.path.join(tmp, "EVProbe.exe"), "w", encoding="utf-8") as fh:
+                fh.write("")
+            check("проба рядом с Хостом — допуск",
+                  ev_probe_presence_problem(probe_host, True) is None)
+        finally:
+            if saved_probe_env is not None:
+                os.environ["KOMPAS_MCP_EV_PROBE"] = saved_probe_env
+
     # Очистка среды перед прогоном (наряд API_AUDIT_TOOLS §3.2): прибор обязан НАЙТИ посторонний
     # процесс, ЗАВЕРШИТЬ его и ЗАПИСАТЬ это, а процессы прогона не тронуть. Обе половины проверяются
     # на живых процессах-заглушках (копия `cmd.exe` под чужим именем): «нашёл» без «завершил» и
@@ -21205,6 +21230,15 @@ def main():
             print("План --all не согласован с GROUPS: " + "; ".join(problems))
             return 2
     group, report_filename, report_title = selected_run_group(selected, all_groups)
+
+    # INVARIANT: a run that needs the event probe on an explicit `--host` refuses before the run
+    # directory exists when the probe would come only from the tree; that fallback reads the EV rows
+    # as FAIL at the end of a long run. TEST: instrument_self_test, "проба рядом" / "пробы нет".
+    if all_groups or selected.get("events"):
+        presence = ev_probe_presence_problem(host, explicit_host)
+        if presence:
+            print(presence)
+            return 2
 
     # Явный путь приёмки проверяется ДО создания каталога прогона: отказ обязан оставить дерево
     # таким, каким он его нашёл, — пустой каталог прогона после отказа выглядел бы как состоявшийся
@@ -64123,6 +64157,29 @@ def ev_probe_path(host):
             return beside, "beside_host"
     return EV_PROBE_TREE, "tree"
 
+
+def ev_probe_presence_problem(host, explicit_host):
+    """Refusal text when a probe run on an explicit Host would take the in-tree build, else None.
+
+    INVARIANT: `--host` names the apparatus under test, so the probe must be its neighbour (or be
+    named by KOMPAS_MCP_EV_PROBE). MEASURED: the in-tree image runs at Low integrity, sees an empty
+    ROT and reads the seven EV rows as FAIL at the end of a long run.
+    History: docs/decisions/probes.md#ev-probe-integrity
+    """
+    if not explicit_host or not os.path.exists(host):
+        return None
+    probe, source = ev_probe_path(host)
+    # The tree build may well exist; what is refused is taking it SILENTLY for an explicit Host.
+    if source != "tree" and os.path.exists(probe):
+        return None
+    beside = os.path.join(os.path.dirname(os.path.abspath(host)), "EVProbe.exe")
+    return (f"Проба событий не найдена: {probe} (источник {source}).\n"
+            f"Нужна копия рядом с Хостом: {beside}\n"
+            "Причина: сборка пробы из дерева идёт с низкой меткой целостности, не видит живой "
+            "КОМПАС в ROT, и строки EV читаются как FAIL после всего прогона.\n"
+            "Исправление: скопируйте EVProbe.* рядом с Хостом: Copy-Item \""
+            + EV_PROBE_TREE.replace("EVProbe.exe", "EVProbe.*")
+            + "\" -Destination \"" + os.path.dirname(os.path.abspath(host)) + "\"")
 
 
 def ev_probe_run(mode, doc_path, timeout=240, extra=None):

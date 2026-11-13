@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-12T18:57:59+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-13T08:04:02+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 177, маршрутов 816.
-- Измеряемая сборка: `release_build`, коммит `ed50f49`, дерево чистое; `KompasMcp.Host.dll` sha256 `e800eee292e56a64cc908651b9545ccdc74fef4eabb2d853f312954f4d87112a`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 178, маршрутов 818.
+- Измеряемая сборка: `release_build`, коммит `780bf03`, дерево чистое; `KompasMcp.Host.dll` sha256 `17feb6c5892bce1e0eb76bfe2fd0b03154b7564c9ea8c475c8a789f604dc97b7`.
 
 ## 2. Сверка полноты
 
@@ -21,9 +21,9 @@
 | schemas_matching_wire_by_shape | 11 |
 | matrix_rows | 237 |
 | catalog_modes_and_variants | 240 |
-| com_routes | 827 |
-| com_routes_confirmed_by_documentation | 816 |
-| com_routes_confirmed_over_wire | 816 |
+| com_routes | 829 |
+| com_routes_confirmed_by_documentation | 818 |
+| com_routes_confirmed_over_wire | 818 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 0 |
 | com_routes_confirmed_by_name | 5 |
@@ -37,16 +37,16 @@
 | rows_action_without_dedicated_row | 29 |
 | rows_actions_without_required_calls | 36 |
 | rows_status_lowered_by_unsupported_actions | 36 |
-| acceptance_rows | 2319 |
-| acceptance_calls_journal | 20542 |
-| acceptance_rows_with_call_window | 2319 |
+| acceptance_rows | 2322 |
+| acceptance_calls_journal | 20570 |
+| acceptance_rows_with_call_window | 2322 |
 | required_of_mismatches_matrix_vs_profile | 16 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 9, 'route_field': 5}.
-COM-маршрутов по сборкам: {'api7': 533, 'api5': 283, 'adapter-twins': 11}.
+COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-twins': 11}.
 
 ## 3. Инструменты
 
@@ -1297,7 +1297,7 @@ COM-маршрутов по сборкам: {'api7': 533, 'api5': 283, 'adapter-
 | `IPart7.Marking` | api7 | property | `prop String Marking` | 1 | Подтверждено | перечень интерфейса |
 | `IPart7.FileName` | api7 | property | `prop String FileName` | 8 | Подтверждено | перечень интерфейса |
 | `IPart7.Detail` | api7 | property | `prop Boolean Detail` | 1 | Подтверждено | перечень интерфейса |
-| `IPart7.Fixed` | api7 | property | `prop Boolean Fixed` | 1 | Подтверждено | перечень интерфейса |
+| `IPart7.Fixed` | api7 | property | `prop Boolean Fixed` | 2 | Подтверждено | перечень интерфейса |
 | `IPart7.LoadState` | api7 | property | `prop ksLoadStateEnum LoadState` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.fileName` | api5 | property | `prop String fileName` | 9 | Подтверждено | перечень интерфейса |
 | `ksPart.excluded` | api5 | property | `prop Boolean excluded` | 3 | Подтверждено | перечень интерфейса |
@@ -1316,7 +1316,7 @@ COM-маршрутов по сборкам: {'api7': 533, 'api5': 283, 'adapter-
 | `IKompasDocument3D.TopPart` | api7 | property | `prop Part7 TopPart` | 1 | Подтверждено | перечень интерфейса |
 | `ksPart.SetPlacement` | api5 | method | `Boolean SetPlacement(Object placement)` | 2 | Подтверждено | перечень интерфейса |
 | `ksPart.UpdatePlacement` | api5 | method | `Boolean UpdatePlacement()` | 2 | Подтверждено | перечень интерфейса |
-| `ksPart.fixedComponent` | api5 | property | `prop Boolean fixedComponent` | 1 | Подтверждено | перечень интерфейса |
+| `ksPart.fixedComponent` | api5 | property | `prop Boolean fixedComponent` | 2 | Подтверждено | перечень интерфейса |
 | `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 18 | Подтверждено | перечень интерфейса |
 | `ksPart.GetPlacement` | api5 | method | `Object GetPlacement()` | 2 | Подтверждено | перечень интерфейса |
 | `IPart7.Placement` | api7 | property | `prop Placement3D Placement` | 2 | Подтверждено | перечень интерфейса |
@@ -1421,7 +1421,9 @@ COM-маршрутов по сборкам: {'api7': 533, 'api5': 283, 'adapter-
 | `IDiametralDimension.Valid` | api7 | property | `prop Boolean Valid` | 1 | Подтверждено | перечень интерфейса |
 | `IDiametralDimension.Radius` | api7 | property | `prop Double Radius` | 1 | Подтверждено | перечень интерфейса |
 | `IDiametralDimension.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `IStamp.get_Text` | api7 | method | `Text get_Text(Int32 Id)` | 4 | Подтверждено | перечень интерфейса |
 | `IText.Str` | api7 | property | `prop String Str` | 2 | Подтверждено | перечень интерфейса |
+| `IStamp.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.Text` | api7 | property | `prop Text Text` | 3 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.AutoPlacement` | api7 | property | `prop Boolean AutoPlacement` | 2 | Подтверждено | перечень интерфейса |
 | `ITechnicalDemand.Update` | api7 | method | `Boolean Update()` | 2 | Подтверждено | перечень интерфейса |

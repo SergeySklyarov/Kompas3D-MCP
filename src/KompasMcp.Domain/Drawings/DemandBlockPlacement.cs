@@ -54,6 +54,18 @@ public static class DemandBlockPlacement
             frameLeft, frameRight, frameBottom, frameTop, what);
     }
 
+    /// <summary>The block's gabarits for the client, naming what the four numbers are NOT: the drawn
+    /// text's bounds.</summary>
+    /// <remarks>MEASURED: the kernel can report an auto-placed block with the FULL height of the free
+    /// area while the text is drawn at the block's bottom edge, so the numbers were read as the text's
+    /// bounds. DOC: <c>itext_str.html</c> is the text's only published member, so the text's own bounds
+    /// are named as not read, never guessed. History: docs/decisions/drawings.md#technical-demand-placement</remarks>
+    public static string DescribeDemand(IReadOnlyList<double> gabarits, IReadOnlyList<double> frames) =>
+        Describe(gabarits, frames)
+        + "; это габарит блока (BlocksGabarits), а не границы нарисованного текста: ядро может отдать его "
+        + "равным всему свободному месту листа, тогда как текст стоит у нижней границы блока; границы "
+        + "самого текста не читаются документированным маршрутом";
+
     /// <summary>The four numbers that put the block ABOVE the title block: the free area's bottom-left
     /// corner, with the block's own size clamped to the free area (the text is drawn at the block's
     /// bottom, so the bottom edge is what must sit above the stamp).</summary>

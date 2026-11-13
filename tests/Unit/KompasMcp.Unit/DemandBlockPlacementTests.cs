@@ -58,6 +58,20 @@ public class DemandBlockPlacementTests
         Assert.Contains("лист x[20.0..205.0] y[60.0..278.0]", text, StringComparison.Ordinal);
     }
 
+    /// <summary>The answer says the numbers are the block's gabarits and NOT the drawn text's bounds:
+    /// that misreading was the reported defect (an A4 block filling the whole free height).</summary>
+    [Fact]
+    public void DescribeDemand_NamesTheGabaritsAsNotTheTextBounds()
+    {
+        var text = DemandBlockPlacement.DescribeDemand(new[] { 20d, 60d, 195d, 278d }, Frames);
+
+        Assert.Contains("блок x[20.0..195.0] y[60.0..278.0]", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "габарит блока (BlocksGabarits), а не границы нарисованного текста", text, StringComparison.Ordinal);
+        Assert.Contains("у нижней границы блока", text, StringComparison.Ordinal);
+        Assert.Contains("не читаются документированным маршрутом", text, StringComparison.Ordinal);
+    }
+
     /// <summary>The measured failure: a 175 x 257 block on free y[60..278] is clamped to the free height and
     /// anchored at its bottom edge, so the text sits above the stamp instead of over it.</summary>
     [Fact]

@@ -2818,7 +2818,7 @@ public sealed partial class Api5Session
         }
 
         var within = DemandBlockPlacement.WithinSheet(gabarits, frames);
-        var observed = DemandBlockPlacement.Describe(gabarits, frames);
+        var observed = DemandBlockPlacement.DescribeDemand(gabarits, frames);
 
         return new DemandPlacement(autoPlacement, within, observed, null, gabarits, frames);
     }

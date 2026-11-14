@@ -11,7 +11,7 @@
       "kompasmcp.api5adapter": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Domain": "[0.13.0, )"
+          "KompasMcp.Domain": "[0.14.0, )"
         }
       },
       "kompasmcp.contracts": {
@@ -20,7 +20,7 @@
       "kompasmcp.domain": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Contracts": "[0.13.0, )"
+          "KompasMcp.Contracts": "[0.14.0, )"
         }
       }
     },

@@ -1361,10 +1361,10 @@ docstring `dsh_patch_entries`. Самопроверки обоих прибор�
 `20261113-210010-all-143792a` - FAIL 15, `20261113-153513-all-a6d9638` - FAIL 0. Набор отказов один:
 `FLT.02/03/04/06/07/08/09/10`, `SMB.40/41/44`, `VIS.FLT.flat_dxf`, `VIS.SMB.unbent_export`,
 `DRW-06.technical_demand.save_reopen`, `CP.16.client_setup_installed`. В отказах экспорта снимок
-называл `drawing_path` в `C:\Users\Administrator\AppData\Local\Temp\kompas-flatpart-<guid>.cdw` и
+называл `drawing_path` в `%TEMP%\kompas-flatpart-<guid>.cdw` и
 `reason: target_missing`: КОМПАС не создавал файл по этому пути, ответ был честным (`EXPORT_FAILED`).
 Отличие зачётного прогона от упавших, найденное в `run.json`: зачётный брал Хост из копии ВНЕ дерева
-(`C:\Projects\KompasMCP-run\release-a6d9638`), упавшие запускали Хост из
+(`..\KompasMCP-run\release-a6d9638`), упавшие запускали Хост из
 `src\KompasMcp.Host\bin\x64\Release`. Права и метки проверены `icacls`: у дерева
 `Mandatory Label\Low Mandatory Level:(I)(NW)` и ACE `S-1-4-105704783-448602583`, у копии вне дерева
 их нет; `%TEMP%` и `Documents` чистые, `Defender` Controlled Folder Access выключен (0). Измерено и
@@ -1372,7 +1372,7 @@ docstring `dsh_patch_entries`. Самопроверки обоих прибор�
 конфигурацию ячейки CP.16 в `Documents\KompasMCP\sandbox\...` (файл 1481 байт на диске), а Хост в тот
 же каталог - ничего (`JOURNAL_UNAVAILABLE`, `Access ... denied` на `owner.json.<pid>.tmp`).
 
-**Причина (измерена 14.11.2026).** Дерево `C:\Projects\KompasMCP` несёт обязательную метку `Low`
+**Причина (измерена 14.11.2026).** Дерево репозитория несёт обязательную метку `Low`
 (`icacls`: `Mandatory Label\Low Mandatory Level:(I)(NW)`) и ACE `S-1-4-105704783-448602583`: их ставит
 песочница dsh (`@deepseek-ai/dsh-sandbox-windows-acl`, `buildLowLabelAcl`), и после конца сеанса метка
 остаётся. Процесс, запущенный из файла с меткой Low, получает уровень целостности Low - измерено на

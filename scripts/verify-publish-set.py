@@ -28,8 +28,12 @@ REPORT отсечётся правилом сам, без правки приб�
 Запуск:
     python scripts/verify-publish-set.py            # проверить индекс
     python scripts/verify-publish-set.py --verbose   # показать все находки, не первые N
+    python scripts/verify-publish-set.py --machine-paths  # только локальные пути (5a/5b/5c)
 
 Код возврата: 0 — PASS, 1 — FAIL (есть находки уровня FAIL).
+
+`--machine-paths` - режим приёмки любого наряда, а не выпуска: те же строки 5a/5b/5c, что печатает
+полный прогон, без остальных проверок и без сборки поставки. Разбор - `docs/decisions/releases.md#release-guards`.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -431,19 +436,114 @@ def find_built_host(root: Path) -> tuple[Path | None, str]:
     return chosen, f"{chosen.parent.parent.name}/{chosen.parent.name}"
 
 
+def integrity_label(path: Path) -> str | None:
+    """The `Mandatory Label` line `icacls` prints for a file, or `None` when it is not readable.
+
+    MEASURED: the refusal of 13a on a clean tree was not a schema disagreement but the Low label of the
+    in-tree build, so the label - not only the exception text - is what the reader must see.
+    ASSUMPTION: `icacls` ships with Windows; when it is absent the label is simply not named.
+    History: docs/decisions/releases.md#release-guards
+    """
+    try:
+        res = subprocess.run(["icacls", str(path)], capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for line in (res.stdout or "").splitlines():
+        if "Mandatory Label" in line:
+            return " ".join(line.split())
+    return None
+
+
 def emit_schemas(host: Path, root: Path, out_dir: Path) -> str | None:
-    """Run the built Host to write its schemas; a NAMED refusal, or `None` when it succeeded."""
+    """Run the built Host to write its schemas; a NAMED refusal, or `None` when it succeeded.
+
+    INVARIANT: the Host gets `TMP`/`TEMP` INSIDE the repository, next to the output folder, and the
+    caller removes the whole working folder afterwards.
+    MEASURED: a Host built in the tree carries the Low integrity label and cannot create a file in
+    `%TEMP%` (`UnauthorizedAccessException`), so 13a read as a schema disagreement on a clean tree; a
+    Low process writes into Low objects, that is inside the tree.
+    DOC: the same way the run instruments give their Hosts a temp folder - docs/decisions/tests.md#run-temp-dir.
+    History: docs/decisions/releases.md#release-guards
+    """
     config = root / "config" / "kompas-mcp.example.json"
+    tmp_dir = out_dir.parent / "tmp"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"каталог выгрузки схем не создался в дереве: {exc}"
+    env = dict(os.environ, TMP=str(tmp_dir), TEMP=str(tmp_dir))
     try:
         res = subprocess.run([str(host), "--config", str(config), "--emit-schemas", str(out_dir)],
-                             cwd=str(root), capture_output=True, text=True, encoding="utf-8",
+                             cwd=str(root), env=env, capture_output=True, text=True, encoding="utf-8",
                              timeout=180)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"выгрузка схем не запустилась: {exc}"
     if res.returncode != 0:
-        return (f"выгрузка схем отказала (код {res.returncode}): "
-                f"{(res.stderr or '').strip()[:200]}")
+        detail = " ".join(((res.stderr or "") + "\n" + (res.stdout or "")).split())[:300]
+        label = integrity_label(host)
+        return (f"выгрузка схем отказала (код {res.returncode}, {host.name}"
+                + (f", {label}" if label else "") + f"): {detail}")
     return None
+
+
+def bom_json_issues(files: list[str], blobs: dict[str, bytes]) -> list[str]:
+    """Tracked JSON files that start with a UTF-8 byte-order mark.
+
+    INVARIANT: the first byte of a tracked `.json` is `{` or `[`, never `EF BB BF`.
+    MEASURED: every reader here opens JSON as `utf-8-sig`, so a BOM is invisible to instruments and to
+    review while the file on disk differs by three bytes from its previous edition.
+    LIMIT: tracked `.json` only; JSON inside a ZIP or under `scratch/` is out of the publish set.
+    History: docs/decisions/releases.md#release-guards
+    """
+    return [f"{rel}  ← начинается с BOM (EF BB BF): файл отличается от прежней редакции байтами, "
+            f"которых в ней не было; переписать без BOM"
+            for rel in files
+            if rel.lower().endswith(".json") and blobs.get(rel, b"").startswith(b"\xef\xbb\xbf")]
+
+
+def build_version(props_text: str | None) -> str | None:
+    """`<Version>` from `Directory.Build.props`, or `None` when the line is not there."""
+    if not props_text:
+        return None
+    found = re.search(r"<Version>([^<]+)</Version>", props_text)
+    return found.group(1).strip() if found else None
+
+
+def lock_range_issues(locks: dict[str, object], own: set[str], version: str) -> list[str]:
+    """Project dependency ranges in `packages.lock.json` that disagree with `<Version>`.
+
+    INVARIANT: a range naming one of THIS repository's projects is exactly `[<Version>, )`.
+    MEASURED: a plain `dotnet restore` leaves the stale range alone - the resolved graph did not change,
+    so the lock counts as up to date - and `0.13.0` survived two releases; `dotnet restore
+    --force-evaluate` rewrote it to `0.14.0` without hand editing.
+    LIMIT: third-party ranges are not checked: `Microsoft.Extensions.Hosting` is not `<Version>`.
+    History: docs/decisions/releases.md#release-guards
+    """
+    expected = f"[{version}, )"
+    issues: list[str] = []
+    for rel in sorted(locks):
+        doc = locks[rel]
+        deps = doc.get("dependencies") if isinstance(doc, dict) else None
+        if not isinstance(deps, dict):
+            continue
+        for target, entries in deps.items():
+            if not isinstance(entries, dict):
+                continue
+            for name, entry in entries.items():
+                if not isinstance(entry, dict) or entry.get("type") != "Project":
+                    continue
+                nested = entry.get("dependencies")
+                if not isinstance(nested, dict):
+                    continue
+                for dep, rng in nested.items():
+                    if dep.lower() not in own or rng == expected:
+                        continue
+                    issues.append(
+                        f"{rel}  ← {target}: `{dep}` = {rng}, а <Version> {version} - переписать "
+                        f"штатным restore: `dotnet restore KompasMcp.sln --force-evaluate`")
+    return issues
 
 
 CATALOG_REL = "src/KompasMcp.Host/Catalog/ToolCatalog.cs"
@@ -559,6 +659,48 @@ def self_test() -> int:
     if not PERSONAL_NAME_RX.search(_spelled("Сер", "гей")):
         failures.append("кириллическая форма личного имени больше не находится")
 
+    # Arm 5a/5c: a personal root is a FAIL row, an allowed vendor root is not a FAIL, an unknown root
+    # is a REVIEW row, and a set without a drive path prints nothing.
+    clean_content = {"docs/a.md": "путь без буквы диска: `%TEMP%\\run`\n"}
+    rows = machine_path_rows(list(clean_content), clean_content.__getitem__)
+    if any(found for _, _, found, _ in rows):
+        failures.append(f"5a/5c: чистый набор дал находки: {rows}")
+    leak_content = {"docs/a.md": "копия лежит в " + _spelled("C:", "\\Users\\someone\\AppData") + "\n"}
+    rows = machine_path_rows(list(leak_content), leak_content.__getitem__)
+    if not any(level == "FAIL" and any("docs/a.md" in item for item in found) for _, level, found, _ in rows):
+        failures.append(f"5a: путь личного профиля не назван отказом: {rows}")
+    odd_content = {"docs/b.md": "проба писала в Q:\\somewhere\\probe\n"}
+    rows = machine_path_rows(list(odd_content), odd_content.__getitem__)
+    if not any(level == "REVIEW" and any("Q:\\somewhere" in item for item in found)
+               for _, level, found, _ in rows):
+        failures.append(f"5c: необъявленный машинный корень не назван: {rows}")
+
+    # Arm 17: a BOM in a tracked JSON is NAMED, a non-JSON file with the same bytes is not.
+    blobs_clean = {"a/x.json": b'{"a": 1}', "b/notes.md": b"\xef\xbb\xbftext"}
+    if bom_json_issues(list(blobs_clean), blobs_clean):
+        failures.append("17: JSON без BOM назван находкой")
+    blobs_bom = {"a/profile.json": b"\xef\xbb\xbf{}"}
+    problems = bom_json_issues(list(blobs_bom), blobs_bom)
+    if len(problems) != 1 or "a/profile.json" not in problems[0]:
+        failures.append(f"17: BOM в JSON не назван файлом: {problems}")
+
+    # Arm 18: a stale own-project range is NAMED, the matching one and a third-party one are not.
+    own = {"kompasmcp.contracts"}
+    matching = {"dependencies": {"net10.0-windows7.0": {
+        "kompasmcp.domain": {"type": "Project",
+                             "dependencies": {"KompasMcp.Contracts": "[0.14.0, )"}},
+        "SomePackage": {"type": "Direct", "requested": "[1.0.0, )"}}}}
+    if lock_range_issues({"p/packages.lock.json": matching}, own, "0.14.0"):
+        failures.append("18: совпадающий диапазон назван расхождением")
+    stale = json.loads(json.dumps(matching))
+    stale["dependencies"]["net10.0-windows7.0"]["kompasmcp.domain"]["dependencies"][
+        "KompasMcp.Contracts"] = "[0.13.0, )"
+    problems = lock_range_issues({"p/packages.lock.json": stale}, own, "0.14.0")
+    if len(problems) != 1 or "0.13.0" not in problems[0] or "0.14.0" not in problems[0]:
+        failures.append(f"18: старый диапазон не назван числом и версией: {problems}")
+    if build_version("<Version>1.2.3</Version>") != "1.2.3" or build_version(None) is not None:
+        failures.append("18: `<Version>` из Directory.Build.props читается неверно")
+
     if failures:
         print("САМОПРОВЕРКА НЕ ПРОЙДЕНА:")
         for line in failures:
@@ -567,13 +709,64 @@ def self_test() -> int:
     print("самопроверка пройдена: кириллица в поток cp1252 печатается; схемы — совпадение чисто, "
           "изменённое описание, лишний и недостающий файл названы; реестр — литерал и константа "
           "собраны, неразрешённая константа названа; 5f — встроенное имя пропущено, "
-          "личное и кириллическая форма найдены")
+          "личное и кириллическая форма найдены; 5a/5c — личный и необъявленный корень названы, "
+          "чистый набор молчит; 17 — BOM назван, файл без BOM и не-JSON чист; "
+          "18 — старый диапазон назван, совпадающий и чужой пропущены")
     return 0
+
+
+def machine_path_rows(files: list[str], content) -> list[tuple[str, str, list[str], str]]:
+    """Checks 5a/5b/5c as report rows: machine paths of this developer's environment in the set.
+
+    INVARIANT: the rows are the SAME rows the full run prints, so `--machine-paths` at the acceptance
+    of any order measures what the release measures - a copy of the findings list would drift.
+    MEASURED: every match is shown, not the first per file: in the first edition the first match hid
+    the rest, and the customer's name in `docs/04` was closed by line 22 of the same file.
+    LIMIT: rows 5a/5b are patterns; 5c prints every machine root left over, allowed ones excepted, so a
+    new root becomes visible without editing the instrument.
+    History: docs/decisions/releases.md#release-guards
+    """
+    leaks_fail: list[str] = []
+    leaks_review: list[str] = []
+    seen_roots: dict[str, str] = {}
+    for rel in files:
+        if rel in SKIP_CONTENT_SCAN:
+            continue
+        text = content(rel)
+        if text is None:
+            continue
+        for rx, why in LEAK_FAIL:
+            for m in rx.finditer(text):
+                line = text[: m.start()].count("\n") + 1
+                leaks_fail.append(f"{rel}:{line}  ← {why}: {m.group(0)}")
+        for rx, why in LEAK_REVIEW:
+            for m in rx.finditer(text):
+                line = text[: m.start()].count("\n") + 1
+                leaks_review.append(f"{rel}:{line}  ← {why}: {m.group(0)}")
+        for m in ABSOLUTE_PATH_RX.finditer(text):
+            key = f"{m.group(1).upper()}:\\{m.group(2)}"
+            seen_roots.setdefault(key, f"{rel}:{text[: m.start()].count(chr(10)) + 1}")
+    unexplained = {
+        key: where for key, where in seen_roots.items()
+        if not any(rx.search(key) for rx, _ in LEAK_FAIL + LEAK_REVIEW)
+        and not any(key.upper().startswith(allowed.upper()) for allowed in ALLOWED_PATH_ROOTS)
+    }
+    leftovers = [f"{key}   (впервые в {where})" for key, where in sorted(unexplained.items())]
+    return [
+        ("5a. Личная среда разработчика в содержимом", "FAIL", leaks_fail, ""),
+        ("5b. Заводской путь вендора в содержимом", "REVIEW", leaks_review,
+         "не секрет, но на чужой машине это умолчание неверно; решить отдельно"),
+        ("5c. Прочие машинные корни в содержимом", "REVIEW", leftovers,
+         "не путь профиля и не путь вендора, но и не объявленный допустимым: "
+         "проверить, чей это корень, прежде чем публиковать"),
+    ]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Страж набора публикации KompasMCP")
     ap.add_argument("--verbose", action="store_true", help="показать все находки")
+    ap.add_argument("--machine-paths", action="store_true",
+                    help="только локальные пути этой машины (5a/5b/5c), без остальных проверок")
     ap.add_argument("--self-test", action="store_true",
                     help="самопроверка прибора: годный вход проходит, испорченный назван")
     args = ap.parse_args()
@@ -648,6 +841,25 @@ def main() -> int:
                 line = t[: m.start()].count("\n") + 1
                 out.append(f"{rel}:{line}  ← {s}")
         return out
+
+    def print_machine_paths() -> None:
+        """Prints rows 5a/5b/5c and adds their findings to `fail`/`review`.
+
+        INVARIANT: the full run and `--machine-paths` print the SAME rows: the mode exists so any
+        order's acceptance measures what the release measures. History: docs/decisions/releases.md#release-guards
+        """
+        for title, level, found, note in machine_path_rows(files, content):
+            (fail if level == "FAIL" else review).extend(found)
+            report(title, level, found, note)
+
+    if args.machine_paths:
+        print_machine_paths()
+        print("Проверялись ТОЛЬКО локальные пути (5a/5b/5c); полный набор - запуск без `--machine-paths`.")
+        if fail:
+            print(f"ВЕРДИКТ: FAIL - находок уровня ОТКАЗ: {len(fail)}; на решение: {len(review)}")
+            return 1
+        print(f"ВЕРДИКТ: PASS - отказов нет; на решение: {len(review)}")
+        return 0
 
     # 1. Пути, которых в публикации быть не должно.
     bad_paths: list[str] = []
@@ -726,50 +938,7 @@ def main() -> int:
                "путь собран не из литералов: проверить глазами, а не угадывать")
 
     # 5. Утечки среды в содержимом.
-    #    Показывается КАЖДОЕ совпадение, а не первое на файл: в первой редакции прибора
-    #    первое совпадение маскировало остальные, и по этой причине имя заказчика в
-    #    docs/04 (строки 18–21) не было видно — его закрывала строка 22 того же файла.
-    #    Это дефект прибора, а не факт о репозитории.
-    leaks_fail: list[str] = []
-    leaks_review: list[str] = []
-    seen_roots: dict[str, str] = {}
-    for rel in files:
-        if rel in SKIP_CONTENT_SCAN:
-            continue
-        text = content(rel)
-        if text is None:
-            continue
-        for rx, why in LEAK_FAIL:
-            for m in rx.finditer(text):
-                line = text[: m.start()].count("\n") + 1
-                leaks_fail.append(f"{rel}:{line}  ← {why}: {m.group(0)}")
-        for rx, why in LEAK_REVIEW:
-            for m in rx.finditer(text):
-                line = text[: m.start()].count("\n") + 1
-                leaks_review.append(f"{rel}:{line}  ← {why}: {m.group(0)}")
-        for m in ABSOLUTE_PATH_RX.finditer(text):
-            key = f"{m.group(1).upper()}:\\{m.group(2)}"
-            seen_roots.setdefault(key, f"{rel}:{text[: m.start()].count(chr(10)) + 1}")
-    fail += leaks_fail
-    review += leaks_review
-    report("5a. Личная среда разработчика в содержимом", "FAIL", leaks_fail)
-    report("5b. Заводской путь вендора в содержимом", "REVIEW", leaks_review,
-           "не секрет, но на чужой машине это умолчание неверно; решить отдельно")
-
-    # 5c. ВСЕ машинные корни, оставшиеся после 5a/5b. Перечень здесь — перечень
-    #     РАЗРЕШЁННОГО (устойчив и мал), а не запрещённого (растёт без границ).
-    #     Смысл проверки: новый корень — чужая машина, чужой заказчик, чужой проект —
-    #     обязан стать видимым сам, без правки прибора.
-    unexplained = {
-        key: where for key, where in seen_roots.items()
-        if not any(rx.search(key) for rx, _ in LEAK_FAIL + LEAK_REVIEW)
-        and not any(key.upper().startswith(allowed.upper()) for allowed in ALLOWED_PATH_ROOTS)
-    }
-    leftovers = [f"{key}   (впервые в {where})" for key, where in sorted(unexplained.items())]
-    review += leftovers
-    report("5c. Прочие машинные корни в содержимом", "REVIEW", leftovers,
-           "не путь профиля и не путь вендора, но и не объявленный допустимым: "
-           "проверить, чей это корень, прежде чем публиковать")
+    print_machine_paths()
 
     # 5d. Личные идентификаторы без пути: почта, сетевая доля, учётная запись, ключ.
     #     Класс заведён отдельно от 5a/5c измерением 22.09.2026: и адрес почты, и имя
@@ -1232,6 +1401,7 @@ def main() -> int:
     #      description in an existing file is invisible to counting, and the public reader takes the
     #      contract from `schemas/`. Host not built is NAMED, never a silent PASS.
     content_issues: list[str] = []
+    emitted_count: int | None = None
     host_exe, host_note = find_built_host(root)
     if host_exe is None:
         content_issues.append(
@@ -1245,22 +1415,39 @@ def main() -> int:
                     committed_schemas[rel[len("schemas/"):-len(".json")]] = json.loads(content(rel) or "")
                 except json.JSONDecodeError as exc:
                     content_issues.append(f"{rel}  ← не разбирается как JSON: {exc}")
-        with tempfile.TemporaryDirectory(prefix="schemas-emitted-") as tmp:
-            refusal = emit_schemas(host_exe, root, Path(tmp))
-            if refusal:
-                content_issues.append(refusal)
-            else:
-                emitted_schemas: dict[str, object] = {}
-                for path in sorted(Path(tmp).glob("*.json")):
-                    try:
-                        emitted_schemas[path.stem] = json.loads(path.read_text(encoding="utf-8-sig"))
-                    except json.JSONDecodeError as exc:
-                        content_issues.append(f"выдача схем: {path.name} не разбирается: {exc}")
-                content_issues += schema_content_diff(committed_schemas, emitted_schemas)
+        # INVARIANT: the working folder lies inside the tree (`scratch/`, git-ignored) and is removed
+        # here; a Host built in the tree is Low and writes only into Low objects, that is inside the
+        # tree. History: docs/decisions/releases.md#release-guards
+        scratch = root / "scratch"
+        try:
+            scratch.mkdir(exist_ok=True)
+            tmp = Path(tempfile.mkdtemp(prefix="schemas-emitted-", dir=str(scratch)))
+        except OSError as exc:
+            tmp = None
+            content_issues.append(f"каталог выгрузки схем не создался в дереве: {exc}")
+        if tmp is not None:
+            try:
+                out_dir = tmp / "schemas"
+                refusal = emit_schemas(host_exe, root, out_dir)
+                if refusal:
+                    content_issues.append(refusal)
+                else:
+                    emitted_schemas: dict[str, object] = {}
+                    for path in sorted(out_dir.glob("*.json")):
+                        try:
+                            emitted_schemas[path.stem] = json.loads(path.read_text(encoding="utf-8-sig"))
+                        except json.JSONDecodeError as exc:
+                            content_issues.append(f"выдача схем: {path.name} не разбирается: {exc}")
+                    content_issues += schema_content_diff(committed_schemas, emitted_schemas)
+                    emitted_count = len(emitted_schemas)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
     fail += content_issues
     report("13a. Содержимое схем против выдачи собранного Host", "FAIL", content_issues,
-           f"сверка НОРМАЛИЗОВАННОГО JSON с выгрузкой `--emit-schemas` (сборка: {host_note}): "
-           f"порядок ключей и переводы строк содержимым не считаются")
+           f"сверка НОРМАЛИЗОВАННОГО JSON с выгрузкой `--emit-schemas` (сборка: {host_note}), "
+           f"сверено схем: {emitted_count if emitted_count is not None else '—'}: порядок ключей и "
+           f"переводы строк содержимым не считаются; отказ выгрузки назван причиной - кодом, текстом "
+           f"и меткой целостности сборки, а не расхождением схем")
 
     # 14. ОБЪЯВЛЕННЫЕ списки инструментов против набора схем поставки.
     #     Класс заведён по измеренному случаю, а не по предположению: 23.09.2026
@@ -1431,6 +1618,40 @@ def main() -> int:
            "блок между `<!-- BEGIN/END TOOL LISTING -->` генерируется из `ToolCatalog.All`; "
            "сверяются ИМЕНА, а не формат — формат даёт Host, которого на индексе нет, а имена "
            "читатель принимает за контракт")
+
+    # 17. BOM в отслеживаемом JSON. Все читатели здесь открывают JSON как `utf-8-sig`, поэтому BOM
+    #     невидим и приборам, и вычитке, а файл на диске отличается от прежней редакции на три байта.
+    #     LIMIT: только отслеживаемый `.json`: JSON внутри ZIP и в `scratch/` вне набора.
+    #     History: docs/decisions/releases.md#release-guards
+    bom_issues = bom_json_issues(files, blobs)
+    fail += bom_issues
+    report("17. Отслеживаемый JSON без BOM", "FAIL", bom_issues,
+           "первый байт файла - `{` или `[`: BOM снимается перезаписью файла без него, содержимое "
+           "после BOM при этом не меняется")
+
+    # 18. Диапазон своих проектов в `packages.lock.json` против `<Version>`.
+    version = build_version(content("Directory.Build.props"))
+    own = {Path(p).stem.lower() for p in projects}
+    lock_docs: dict[str, object] = {}
+    lock_issues: list[str] = []
+    for rel in files:
+        if Path(rel).name != "packages.lock.json":
+            continue
+        try:
+            lock_docs[rel] = json.loads(content(rel) or "")
+        except json.JSONDecodeError as exc:
+            lock_issues.append(f"{rel}  ← не разбирается как JSON: {exc}")
+    if version is None:
+        lock_issues.append(
+            "`Directory.Build.props`  ← `<Version>` не найдена: сверять диапазон замков не с чем, "
+            "и это НЕ PASS")
+    else:
+        lock_issues += lock_range_issues(lock_docs, own, version)
+    fail += lock_issues
+    report("18. Диапазон своих проектов в lock-файлах равен <Version>", "FAIL", lock_issues,
+           f"сверено замков: {len(lock_docs)}, версия {version or '—'}: обычный `dotnet restore` "
+           f"оставляет старый диапазон (граф разрешённых пакетов не изменился), переписывает его "
+           f"`dotnet restore KompasMcp.sln --force-evaluate`")
 
     print("─" * 78)
     if fail:

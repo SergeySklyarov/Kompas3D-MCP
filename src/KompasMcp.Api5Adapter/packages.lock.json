@@ -14,7 +14,7 @@
       "kompasmcp.domain": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Contracts": "[0.13.0, )"
+          "KompasMcp.Contracts": "[0.14.0, )"
         }
       }
     },

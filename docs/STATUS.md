@@ -45,7 +45,7 @@
   (**145/145** режимов, **82/82** зависимостей, `problems []`).
 - **Последний полный прогон:** **PASS 2312 / NAMED 9 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
   `bdce5e1`, Release-сборка `626b63d` (штамп `0.14.0`), хост - копия вне дерева
-  (`C:\Projects\KompasMCP-run\release-626b63d`), `EVProbe.exe` рядом с ним, 2324 строки, 41 группа,
+  (`..\KompasMCP-run\release-626b63d`), `EVProbe.exe` рядом с ним, 2324 строки, 41 группа,
   40 минут, каталог `scratch/mcp-smoke/runs/20261114-123851-all-bdce5e1`; временные файлы прогона -
   в `<каталог прогона>\tmp` (поле `run_temp_dir` в `run.json`).
   Против прежнего зачёта `d6a2447` (PASS 2310 / NAMED 9 / UNKNOWN 3 / FAIL 0, каталог

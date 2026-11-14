@@ -1425,8 +1425,8 @@ docstring `dsh_patch_entries`. Самопроверки обоих прибор�
 (`--checkpoint-paths-only --host <сборка в дереве>`, код 2, сообщение называет каталог, метку Low и
 выход - Хост из копии вне дерева). Тот же прибор с Хостом из копии вне дерева: предусловие проходит,
 группа `checkpoint_paths` - 44 PASS / 0 FAIL, `CP.16` PASS. Тот же отказ воспроизведён отдельной пробой
-(`scratch/preflight-probe.txt`): у Хоста из дерева журнал в `Documents\...` не создаётся («Access to the
-path ... is denied»), у его копии вне дерева - создаётся.
+(`scratch/preflight-probe-in-tree.txt`, `scratch/preflight-probe-outside.txt`): у Хоста из дерева журнал в
+`Documents\...` не создаётся («Access to the path ... is denied»), у его копии вне дерева - создаётся.
 
 **LIMIT.** Проверяется только каталог `Documents\KompasMCP\sandbox`; другие каталоги вне каталога
 прогона строки не требуют. Проверка стоит один запуск Хоста (около секунды) и ничего не пишет в отчёт:

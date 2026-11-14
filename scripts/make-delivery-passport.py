@@ -294,6 +294,36 @@ def _run_generator(argv):
     return code, captured.getvalue()
 
 
+def _write_synthetic_reports(tmp, package_hashes, client_hashes, client_verdict):
+    """Synthetic reports of ONE delivery: package, full run, client entry and client acceptance.
+
+    INVARIANT: the hashes of the client report are a separate argument, so a control that needs a
+    FOREIGN delivery changes that report alone - otherwise the binary guard would refuse before the
+    rule under test, and the control would measure the guard.
+    """
+    work = os.path.join(tmp, "reports")
+    os.makedirs(work, exist_ok=True)
+    delivery = os.path.join(tmp, "delivery")
+    os.makedirs(delivery, exist_ok=True)
+    package = {"verdict": "PASS", "file_count": 1, "problems": [], "schema_mismatches": [],
+               "repo_drift": [], "tools_count": 0, "protocol_version": "2025-06-18",
+               "host_path": os.path.join(delivery, "KompasMcp.Host.exe"),
+               "worker_path": os.path.join(delivery, "KompasMcp.Worker.exe"), **package_hashes}
+    full = {"title": "синтетический полный прогон", "context": dict(package_hashes),
+            "rows": [{"id": "SYN.%02d" % i, "description": "синтетика", "verdict": "PASS"}
+                     for i in range(1, 11)]}
+    entry = {"verdict": "PASS", "config_path": os.path.join(tmp, "mcp.json"),
+             "rows": [{"id": "A01", "verdict": "PASS"}]}
+    acceptance = {"verdict": client_verdict, **client_hashes,
+                  "rows": [{"id": "C01", "verdict": client_verdict}]}
+    for name, doc in (("package-check.json", package), (FULL_RUN_REPORT, full),
+                      ("client-entry-check.json", entry),
+                      ("client-acceptance.json", acceptance)):
+        with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, ensure_ascii=False, indent=2)
+    return work
+
+
 def self_test_client_gate():
     """Verdict control: with the client acceptance failed the verdict must be FAIL, and it must FLIP to
     PASS when exactly one input - the client acceptance - is replaced by a passing one.
@@ -322,26 +352,7 @@ def self_test_client_gate():
               "adapter_sha256": "3" * 64}
     failures = []
     with tempfile.TemporaryDirectory(prefix="passport-gate-") as tmp:
-        work = os.path.join(tmp, "reports")
-        os.makedirs(work)
-        delivery_dir = os.path.join(tmp, "delivery")
-        os.makedirs(delivery_dir)
-        package = {"verdict": "PASS", "file_count": 1, "problems": [], "schema_mismatches": [],
-                   "repo_drift": [], "tools_count": 0, "protocol_version": "2025-06-18",
-                   "host_path": os.path.join(delivery_dir, "KompasMcp.Host.exe"),
-                   "worker_path": os.path.join(delivery_dir, "KompasMcp.Worker.exe"), **hashes}
-        full = {"title": "синтетический полный прогон", "context": dict(hashes),
-                "rows": [{"id": "SYN.%02d" % i, "description": "синтетика", "verdict": "PASS"}
-                         for i in range(1, 11)]}
-        entry = {"verdict": "PASS", "config_path": os.path.join(tmp, "mcp.json"),
-                 "rows": [{"id": "A01", "verdict": "PASS"}]}
-        acceptance = {"verdict": "FAIL", **hashes,
-                      "rows": [{"id": "C01", "verdict": "FAIL"}]}
-        for name, doc in (("package-check.json", package), (FULL_RUN_REPORT, full),
-                          ("client-entry-check.json", entry),
-                          ("client-acceptance.json", acceptance)):
-            with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
-                json.dump(doc, fh, ensure_ascii=False, indent=2)
+        work = _write_synthetic_reports(tmp, hashes, hashes, "FAIL")
 
         def read_passport(out_dir):
             with open(os.path.join(out_dir, "delivery-passport.json"), encoding="utf-8-sig") as fh:
@@ -382,12 +393,7 @@ def self_test_client_gate():
                                 f"{levels_seen} — тогда контроль не проверяет гейт")
 
         # Плечо (б): тот же отчёт, но клиент принял. Меняется РОВНО один вход.
-        patched = json.loads(json.dumps(acceptance))
-        patched["verdict"] = "PASS"
-        if isinstance(patched.get("transport_and_delivery"), dict):
-            patched["transport_and_delivery"]["verdict"] = "PASS"
-        with open(os.path.join(work, "client-acceptance.json"), "w", encoding="utf-8") as fh:
-            json.dump(patched, fh, ensure_ascii=False, indent=2)
+        _write_synthetic_reports(tmp, hashes, hashes, "PASS")
         pass_out = os.path.join(tmp, "out-pass")
         passport, output = run(pass_out)
         if passport is None:
@@ -430,6 +436,76 @@ def self_test_client_gate():
     print("контроль вердикта по клиентской приёмке пройден: на синтетическом наборе итог FAIL "
           "(уровень client_acceptance FAIL, entry PASS), с пройденной клиентской приёмкой — PASS, "
           "без отчёта полного прогона — FAIL с названной причиной")
+    return 0
+
+
+def self_test_foreign_delivery():
+    """Negative control of the demotion: a client summary from ANOTHER delivery never closes this one.
+
+    FOUR ARMS through the generator itself, varying ONE input at a time - the hashes of the client
+    report and its word. A foreign summary is FAIL in BOTH words of
+    `acceptance_levels.CLIENT_ACCEPTANCE_WORDS` and the passport is not fully ready; the same summary
+    of this delivery passes; a summary that claims no success keeps its word with `problems` named.
+    MEASURED on the rule that read the literal "PASS": the foreign "ACCEPTED" arm kept its word and
+    the passport answered PASS with `fully_ready true`, so this control refuses that rule.
+    History: docs/decisions/releases.md#client-acceptance-words
+    """
+    import tempfile
+
+    ours = {"host_dll_sha256": "1" * 64, "worker_dll_sha256": "2" * 64,
+            "adapter_sha256": "3" * 64}
+    foreign = {"host_dll_sha256": "a" * 64, "worker_dll_sha256": "b" * 64,
+               "adapter_sha256": "c" * 64}
+    # (плечо, хеши отчёта, слово, вердикт уровня, итог паспорта, виновник - problems)
+    arms = (("чужая поставка + ACCEPTED", foreign, "ACCEPTED", "FAIL", "FAIL", True),
+            ("чужая поставка + PASS", foreign, "PASS", "FAIL", "FAIL", True),
+            ("своя поставка + ACCEPTED", ours, "ACCEPTED", "ACCEPTED", "PASS", False),
+            ("чужая поставка + BLOCKED", foreign, "BLOCKED", "BLOCKED", "FAIL", True))
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="passport-foreign-") as tmp:
+        for index, (label, client_hashes, word, level_expected, verdict_expected,
+                    problems_expected) in enumerate(arms):
+            arm = os.path.join(tmp, "arm-%d" % index)
+            work = _write_synthetic_reports(arm, ours, client_hashes, word)
+            out = os.path.join(arm, "out")
+            code, output = _run_generator(["--reports", work, "--out", out,
+                                           "--allow-dirty-tree"])
+            path = os.path.join(out, "delivery-passport.json")
+            if code is not None or not os.path.exists(path):
+                failures.append(f"плечо {index + 1} ({label}): генератор не записал паспорт\n"
+                                + output)
+                continue
+            with open(path, encoding="utf-8-sig") as fh:
+                passport = json.load(fh)
+            level = passport["client_acceptance"]
+            got = passport["acceptance"]
+            named = " ".join(level.get("problems") or [])
+            if level["verdict"] != level_expected:
+                failures.append(f"плечо {index + 1} ({label}): слово {word!r} дало вердикт "
+                                f"{level['verdict']!r}, ожидание {level_expected!r}")
+            elif got["verdict"] != verdict_expected or got["fully_ready"] is not (
+                    verdict_expected == "PASS"):
+                failures.append(f"плечо {index + 1} ({label}): итог {got['verdict']!r} / "
+                                f"fully_ready {got['fully_ready']!r}, ожидание "
+                                f"{verdict_expected!r} / {verdict_expected == 'PASS'}")
+            elif problems_expected and not level.get("problems"):
+                failures.append(f"плечо {index + 1} ({label}): отказ без problems — причина "
+                                f"расхождения не названа")
+            elif problems_expected and word in levels.CLIENT_ACCEPTANCE_WORDS \
+                    and repr(word) not in named:
+                failures.append(f"плечо {index + 1} ({label}): прочитанное слово {word!r} в "
+                                f"problems не названо — {named!r}")
+            elif not problems_expected and level.get("problems"):
+                failures.append(f"плечо {index + 1} ({label}): своя поставка названа чужой — "
+                                f"{level['problems']!r}")
+
+    if failures:
+        print("КОНТРОЛЬ ЧУЖОЙ ПОСТАВКИ НЕ ПРОЙДЕН:")
+        for line in failures:
+            print("  -", line)
+        return 1
+    print("контроль чужой поставки пройден: 4 плеча — ACCEPTED и PASS чужой поставки дали FAIL, "
+          "ACCEPTED своей поставки прошёл, BLOCKED чужой остался BLOCKED с problems")
     return 0
 
 
@@ -621,8 +697,8 @@ def client_acceptance(package):
         key = row.get("verdict")
         verdicts[key] = verdicts.get(key, 0) + 1
 
-    # Клиентская приёмка, снятая с ДРУГОЙ поставки, эту не закрывает: хеши отчёта сверяются с
-    # хешами пакета. Расхождение — отказ, а не примечание.
+    # INVARIANT: client acceptance taken from ANOTHER delivery does not close this one - the hashes of
+    # the report are compared with the hashes of the package, and a mismatch is a refusal, not a note.
     problems = []
     for field in ("host_dll_sha256", "worker_dll_sha256", "adapter_sha256"):
         measured = report.get(field)
@@ -631,16 +707,17 @@ def client_acceptance(package):
             problems.append(f"{field}: в отчёте {measured}, в пакете {expected}")
     verdict = report.get("verdict")
     if problems:
-        # УЖЕСТОЧЕНО 18.09.2026, но не для всех вердиктов. Отказом расхождение хешей становится
-        # только тогда, когда отчёт УТВЕРЖДАЕТ успех: «PASS, снятый с другой поставки» — это ровно
-        # та подмена, ради неразличения которой наряд §6 требует двух разных результатов. Отчёт,
-        # который успеха не утверждает, от расхождения FAIL'ом не делается: FAIL по словарю проекта
-        # значит «проверено и не пройдено», а тут не проверялось ничего. Измерено в тот же день:
-        # клиентская приёмка BLOCKED снята с поставки 90144e18…, паспорт описывает 4de6f121… —
-        # верный ответ BLOCKED плюс список problems, а не FAIL.
-        if verdict == "PASS":
+        # INVARIANT: the mismatch demotes EVERY word of success, and the words come from the one list
+        # `acceptance_levels.CLIENT_ACCEPTANCE_WORDS` - a second literal here demoted only "PASS" while
+        # the gate accepted the same foreign summary spelled "ACCEPTED". A summary claiming no success
+        # keeps its word: FAIL means "checked and not passed", and nothing was checked here.
+        # History: docs/decisions/releases.md#client-acceptance-words
+        if verdict in levels.CLIENT_ACCEPTANCE_WORDS:
+            problems.append("клиентская приёмка снята не с той поставки, что описана в паспорте; "
+                            f"слово {verdict!r} понижено до FAIL")
             verdict = "FAIL"
-        problems.append("клиентская приёмка снята не с той поставки, что описана в паспорте")
+        else:
+            problems.append("клиентская приёмка снята не с той поставки, что описана в паспорте")
 
     return {
         "status": "run",
@@ -1289,7 +1366,8 @@ if __name__ == "__main__":
     # отчётах. Все три обязаны уметь отказать; ни один не имеет права «пройти» молча.
     if "--self-test" in sys.argv[1:]:
         raise SystemExit(levels.self_test() or self_test_measured_binaries()
-                         or self_test_client_gate() or self_test_full_run_report())
+                         or self_test_client_gate() or self_test_foreign_delivery()
+                         or self_test_full_run_report())
     # `main()` возвращает код: без `SystemExit` отказ (например, защита от перезаписи чужого
     # паспорта) печатался, но наружу отдавал 0 — вызывающая цепочка видела успех там, где записи
     # НЕ было. Возврат значения обязан быть видимым.

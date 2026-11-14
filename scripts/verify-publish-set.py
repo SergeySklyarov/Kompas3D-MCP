@@ -1619,9 +1619,10 @@ def main() -> int:
            "сверяются ИМЕНА, а не формат — формат даёт Host, которого на индексе нет, а имена "
            "читатель принимает за контракт")
 
-    # 17. BOM в отслеживаемом JSON. Все читатели здесь открывают JSON как `utf-8-sig`, поэтому BOM
-    #     невидим и приборам, и вычитке, а файл на диске отличается от прежней редакции на три байта.
-    #     LIMIT: только отслеживаемый `.json`: JSON внутри ZIP и в `scratch/` вне набора.
+    # 17. INVARIANT: a tracked `.json` starts with `{` or `[`, never with a BOM.
+    #     MEASURED: every reader here opens JSON as `utf-8-sig`, so a BOM is invisible to tools and to
+    #     review while the file differs from its previous revision by three bytes.
+    #     LIMIT: tracked `.json` only; JSON inside a ZIP or under `scratch/` is out of the set.
     #     History: docs/decisions/releases.md#release-guards
     bom_issues = bom_json_issues(files, blobs)
     fail += bom_issues
@@ -1629,7 +1630,7 @@ def main() -> int:
            "первый байт файла - `{` или `[`: BOM снимается перезаписью файла без него, содержимое "
            "после BOM при этом не меняется")
 
-    # 18. Диапазон своих проектов в `packages.lock.json` против `<Version>`.
+    # 18. INVARIANT: the range of own projects in `packages.lock.json` equals `<Version>`.
     version = build_version(content("Directory.Build.props"))
     own = {Path(p).stem.lower() for p in projects}
     lock_docs: dict[str, object] = {}

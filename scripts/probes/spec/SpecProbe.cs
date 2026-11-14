@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -16,7 +16,7 @@ namespace SpecProbe;
 /// disk in its own process, so "persisted" means "written to the file", not "visible in this session".
 /// DOC: SPEC_EXT_RESEARCH_DEVELOPER_PROMPT.md §1.4; the SDK mirror pages cited in each method.
 /// History: docs/decisions/bom.md#spec-ext</remarks>
-internal sealed class SpecProbe : IDisposable
+internal sealed partial class SpecProbe : IDisposable
 {
     // Known values are the whole point: a read that returns "something" proves nothing. Markings do not
     // repeat the components' own markings, so a row of the probe is never confused with the row KOMPAS
@@ -73,6 +73,19 @@ internal sealed class SpecProbe : IDisposable
                 case "closed":
                     StageFinal(modelPath);
                     VerifySpw(spwPath);
+                    break;
+                case "spw-build":
+                case "spw-create":
+                case "spw-reopen":
+                case "spw-api5":
+                case "spw-delete":
+                case "spw-final":
+                case "spw-sync":
+                case "spw-sync-final":
+                case "spw-extra":
+                case "spw-extra-final":
+                case "spw-link":
+                    RunSpwStage(stage);
                     break;
                 default:
                     Record("stage", "известное имя стадии", stage, "FAIL");

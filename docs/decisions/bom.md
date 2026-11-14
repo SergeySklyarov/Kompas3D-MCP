@@ -26,7 +26,7 @@
 | признак использования в спецификации | `IProductDataManager.ObjectSpcUsed(PropObject, SpcUsed)`; сам менеджер — `QueryInterface` у `IKompasDocument` | `iproductdatamanager_objectspcused.html`, `iproductdatamanager.html` | есть (значения — `ksSpcUsedTypeEnum`) |
 | исполнения | `IEmbodiment`, `IEmbodimentsManager` | `iembodiment.html` | интерфейс есть; точка входа (`IEmbodimentsManager`) страницей не подтверждена |
 | номера системных свойств | `SystemPropertyType`: 4 Обозначение, 5 Наименование, 6 Количество, 15 Позиция, 20 Раздел спецификации | `systempropertytype.html` | значения есть, применение в COM не подтверждено (см. ниже) |
-| чтение значения свойства по объекту `IProperty` | `IPropertyKeeper.GetPropertyValue(Property, Value, BaseUnit, FromSource)` | `ipropertykeeper_getpropertyvalue.html` | есть, но объект `IProperty` берётся у `IPropertyMng`, а он в справке есть только как KsAPI |
+| чтение значения свойства по объекту `IProperty` | `IPropertyKeeper.GetPropertyValue(Property, Value, BaseUnit, FromSource)` | `ipropertykeeper_getpropertyvalue.html` | есть; `IProperty` берётся у `IPropertyMng`, а он документирован в COM как QI у `IApplication` (`ipropertymng.html`, поправка 14.11.2026, `#spec-spw`) |
 
 Уровень (б) — родная спецификация КОМПАС:
 
@@ -239,8 +239,10 @@
   строку модели. В «не входит»: удаление строки модели через API5.
 - **Связь с компонентом документирована, но не подтверждена постановкой.**
   `ISpecificationBaseObjects.AddWithParam(…, IPropertyKeeper, …)` связывает строку и объект общим
-  ключом информационного объекта; точки входа в `IPropertyKeeper` в COM нет (в зеркале - KsAPI,
-  `#not-included`). В профиль не входит, вопрос заказчику - в отчёте.
+  ключом информационного объекта; точки входа в `IPropertyKeeper` в COM тогда не нашли (в зеркале, как
+  считалось, - только KsAPI, `#not-included`). В профиль не входит, вопрос заказчику - в отчёте.
+  **Поправка 14.11.2026:** вывод ошибочен - `ipropertykeeper.html` называет `IPart7` и другие
+  интерфейсы-владельцы и `IUnknown::QueryInterface`; маршрут измерен, подробности - `#spec-spw`.
 - **Связь модели и `.spw`.** `ISpecificationDescription.SpecificationDocumentName` - полное имя
   подключённого `.spw` у чертежа/сборки; `ISpecificationBaseObject.Documents` - документы, чья
   геометрия подключена к строке, «только для объектов в документе спецификации»
@@ -369,7 +371,9 @@
 - **Пределы.** Строка живёт в модели до `kompas_save_document`; переживание сохранения и переоткрытия
   проверяет приёмка (`SPEC-02.save_reopen`), и это названо в `unverified_aspects` самого ответа. Связь
   строки с компонентом (`ISpecificationBaseObjects.AddWithParam` + `IPropertyKeeper`) не создаётся:
-  точки входа в COM нет, постановка не измерена - граница документации. Перенос раздела (`SetSection`
+  тогда считалось, что точки входа в COM нет, и постановка не измерена. **Поправка 14.11.2026:** точка
+  входа документирована (`ipropertykeeper.html`) и измерена - `#spec-spw`; запрет этого наряда остаётся
+  историей, а сама возможность входит в следующий блок. Перенос раздела (`SetSection`
   не сохраняется), правка и удаление строк - другие наряды. Удаление объекта, который ещё не создан в
   документе (ветка «нет колонки»), этим нарядом НЕ измерялось: отказ называет результат `Delete()`,
   каким он был.
@@ -498,6 +502,89 @@
   живёт в модели до `kompas_save_document`; его переживание сохранением и переоткрытием проверяет
   приёмка (`SPEC-04.save_reopen`), и это названо в `unverified_aspects` самого ответа.
 
+## #spec-spw — документ-спецификация `.spw` (наряд `SPEC_SPW_RESEARCH_0_15`, 14.11.2026)
 
+Первый наряд новых возможностей цикла 0.15: заказчик выбрал блок «Спецификация `.spw`» (поправка плана
+сто одиннадцатая). Код продукта не менялся; страницы, маршруты и замеры —
+`SPEC_SPW_RESEARCH_0_15_REPORT_20261114.md`, доказательства —
+`docs/acceptance/evidence/20261114-spec-spw-9786eb8/`, прибор — `scripts/probes/spec/` (стадии `spw-*`).
 
-
+- **Строки `.spw` пишутся теми же интерфейсами, что строки модели.** `ISpecificationDescriptions` —
+  свойство БАЗОВОГО `IKompasDocument` (`ikompasdocument_specificationdescriptions.html`); строка
+  создаётся `ISpecificationBaseObjects.Add(section, attrNumb)` + `ISpecificationObject.Update()`
+  («объект будет добавлен в коллекцию, но в документе не появится» — `ispecificationbaseobjects_add.html`)
+  и удаляется `ISpecificationObject.Delete()` (`ispecificationobject_delete.html`). Порядок шагов тот
+  же, что у модели, поэтому профиль расширяет существующие инструменты, а не заводит второй набор.
+- **Новый `.spw` уже имеет описание.** Измерено: `IDocuments.Add(ksDocumentSpecification, …)` даёт
+  документ с непустым `SpecificationDescriptions.Active` (`StyleID` = 1), поэтому вызов
+  `Add("", 0, "")` для `.spw` не нужен; у стиля 12 разделов, 7 основных колонок (Формат, Зона, Позиция,
+  Обозначение, Наименование, Количество, Примечание) и 9 дополнительных (Масса + 8 пользовательских).
+- **Колонки сверх четырёх адресуются ТИПОМ и номером типа.** `ISpecificationColumns.Column(type,
+  ColumnNumber, BlockNumber)` (`ispecificationcolumns_column.html`), 17 типов
+  (`ksspecificationcolumntypeenum.html`): Формат 1, Зона 2, Позиция 3, Обозначение 4, Наименование 5,
+  Количество 6, Примечание 7, Масса 8, Материал 9, Пользовательская 10, Код 11, Завод 12, Номер
+  документа 13, Наименование документа 14, Код документа 15, Код ОКП 16. Основные колонки —
+  `ISpecificationObject.Columns`, дополнительные — `AdditionalColumns`
+  (`ispecificationobject_additionalcolumns.html`): «Дополнительные колонки содержат сведения,
+  дополняющие информацию, включаемую в стандартный бланк. В таблице спецификации такие колонки не видны
+  и на печать не выводятся» (`ispecificationcolumns.html`). Значение пишется и читается через
+  `ISpecificationColumnItems.Item(index).Value` по типу значения `ValueType`
+  (`ispecificationcolumnitem_value.html`).
+- **Запись основной колонки проходит при СОЗДАНИИ строки; после неё — только API5.** Измерено: Формат
+  «А4» и Примечание, записанные до первого `Update()`, читаются списком документа, через API5 и после
+  переоткрытия; те же две колонки, записанные у уже созданной строки, в файл не попадают и список теряет
+  их сразу, тогда как дополнительная Масса, записанная в том же состоянии, в файле остаётся (1,25).
+  Правка существующей строки через API7 (`Update()` = false) в файл не попадает; через API5
+  (`ksSpcObjectEdit` → `ksSetSpcObjectColumnText`/`ksSpcCount`/`ksSpcMassa` → `ksSpcObjectEnd`) —
+  попадает. Два FAIL прибора — это и есть два расхождения с документированной записью API7, а не дефект
+  прибора; правило для профиля одно: строка пишется целиком при создании, правится через API5.
+- **Раздел и вид строки при создании.** Раздел задаёт `BaseObjects.Add(section, attrNumb)`; номер
+  принадлежит стилю, ноль отвергается («Объект c номером раздела 0.0. добавить нельзя»); расширенные
+  параметры (подраздел, дополнительный раздел, блок, вложенный раздел и блок, признак «заполнить
+  наименование по материалу») задаёт `ISpecificationObjectCreateParam`, который получают
+  `IKompasDocument1.GetInterface(ksSpecificationObjectCreateParam)` («Данный интерфейс можно получить
+  с помощью метода IKompasDocument1::GetInterface», `ispecificationobjectcreateparam.html`) и передают
+  в `AddWithParam`. Тип строки читается у `ISpecificationObject.ObjectType`.
+- **Связь строки с компонентом документирована И измерена — прежняя запись `#spec-ext` ошибочна.**
+  `ipropertykeeper.html`: «Данный интерфейс можно получить у IPart7, IBody7, IEmbodiment, IMacroObject,
+  IInsertionObject или IKompasDocument2D посредством вызова метода IUnknown::QueryInterface» — точка
+  входа в COM ЕСТЬ, и эта страница лежала в зеркале с наряда `BOM_RESEARCH`; вывод «точки входа нет»
+  был ошибкой поиска, а не границей документации. `AddWithParam(Param, PropertyObject, FillText,
+  Geometry)` — «объект спецификации и объект будут иметь общий ключ информационного объекта»,
+  «изменения будут передаваться в объект спецификации» (`ispecificationbaseobjects_addwithparam.html`).
+  Измерено: `IKompasDocument3D.TopPart` → `IPart7` → QI `IPropertyKeeper` (ключ `984eae75-…`),
+  `AddWithParam` создаёт строку `.spw` с ТЕМ ЖЕ `UniqueMetaObjectKey` и `SyncronizeWithProperties` = True;
+  переживание связанной строки сохранением не измерено. Флаг синхронизации в API5 —
+  `GetSpcPropertyFill`/`ksSetSpcPropertyFill` («Синхронизировать со свойствами компонента»).
+  **Ту же поправку получает `#routes`:** `IPropertyMng` документирован в COM (`ipropertymng.html` — QI у
+  `IApplication`), `IProperty` берётся у него (`iproperty.html`), поэтому запись «только KsAPI» снята.
+- **Связь `.spw` с моделью документирована с обеих сторон.** `SpecificationDocumentName` —
+  «получить и установить полное имя файла документа спецификации подключенной к данному чертежу или
+  сборке. Доступно только для чертежа или сборки», и «После изменения параметров оформления нужно
+  вызвать метод Update» (`ispecificationdescription_specificationdocumentname.html`): подключение
+  `.spw` к модели программное. `ISpecificationTuning.LinkType` — «Позволяет включать и блокировать
+  связь, подключенных друг к другу документов - спецификации и модели (сборочного чертежа)», значения
+  `slNone`/`slOnlyObjects`/`slWithPositionCalculate` (`ispecificationtuning_linktype.html`,
+  `ksspecificationlinktypeenum.html`); `IDocuments.DocumentSynchronize` — «Реализовано только для
+  спецификации» (`idocuments_documentsynchronize.html`); `ISpecificationDocument.AttachedDocuments`
+  (`ispecificationdocument_attacheddocuments.html`) и `RebuildDocument`.
+- **Перестроение и переоткрытие строку не теряют.** Измерено: `RebuildDocument()` при живой строке
+  вернул false, `Crossed` = False, строка на месте; после `Save()`, переоткрытия и перестроения строка
+  со значениями в файле. У нового `.spw` `LinkType` = `ksLinkWithPositionCalculate`,
+  `DocumentSynchronize` = True. Влияние синхронизации на записанную строку НЕ измерено: у постановки нет
+  подключённой модели, синхронизировать нечего — это `LIMIT:`, а не долг.
+- **Создание `.spw` с нуля тоже документировано.** `IDocuments.Add(ksDocumentSpecification, Visible)`
+  (`idocuments_add.html`) и `ksSpcDocument.ksCreateDocument(ksDocumentParam)` («Документ становится
+  текущим (видимым или не видимым)», `ksspcdocument_kscreatedocument.html`), поэтому исключение
+  «создание `.spw` с нуля, если справка не даёт маршрута» к этому блоку не относится: маршрут есть.
+  Листы сборочного чертежа (`ksGetSpcSheetSB`/`ksSetSpcSheetSB`) и исполнения остаются вне блока.
+- **Профиль — предложением: `spec-spw-v1`.** Четыре существующих инструмента `kompas_specification_*`
+  расширяются видом документа «спецификация» и дополнительными колонками (адресуются типом), чтение
+  `.spw` публикует их и `unique_number`; пятый, `kompas_specification_link_row`, — единственный новый
+  (связь с компонентом). Контракт аддитивный → MINOR. Состав и порядок нарядов — раздел 6 отчёта.
+- **Пределы.** Причина, по которой `Update()` не сохраняет правку API7, не установлена (тот же класс, что
+  `#spec-edit-row`). Страниц `ksspcdocument_methods` и `ksspcobjparam_subsectionname` в v24 нет
+  (404, `wire-report.json`): перечень методов `ksSpcDocument` собран по страницам членов, свойство
+  `subSectionName` документировано только списком свойств. Удаления строки МОДЕЛИ через API5 нет
+  (`ksSpecification - методы` такого члена не содержит); удаление строки `.spw` — API7 `Delete()` или
+  API5 `ksSpcDocument.ksDeleteObj`.

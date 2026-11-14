@@ -479,6 +479,27 @@ Debug - успешно, `dotnet test -c Debug --no-build` - **2045/2045** (пе�
 `--all`, сборка и `dotnet test` не требовались. Правило - `docs/decisions/releases.md#mcp-registry`.
 Открыто **3** (96, 97, 106); очередь - выпуск 0.15.0.
 
+**Исследование блока «спецификация `.spw`»** (`SPEC_SPW_RESEARCH_0_15`, 14.11.2026, коммит `9786eb8`).
+Строки `.spw` пишутся теми же интерфейсами API7, что строки модели (`SpecificationDescriptions` →
+`BaseObjects.Add` + `Update`), правка существующей строки сохраняется ТОЛЬКО через API5
+(`ksSpcObjectEdit…End`), удаление - API7 `Delete()` и API5 `ksSpcDocument.ksDeleteObj`. Измерено: при
+создании в файл попадают и колонки сверх четырёх (Формат и Примечание, записанные до первого
+`Update()`); после создания основные колонки через API7 не пишутся, а дополнительные (Масса) - пишутся;
+перестроение и переоткрытие строку не теряют. Документированных маршрутов по четырём темам - 43 из 44
+строк таблиц отчёта, измерено 29. Связь строки с компонентом документирована и измерена: `IPart7` →
+QI `IPropertyKeeper` → `AddWithParam` даёт строку с общим ключом информационного объекта; прежняя
+запись «точки входа нет» поправлена в `#spec-ext`, `#spec-add-row`, `#spec-delete-row`, `#routes`.
+Страницы: снято 3 в `reference/kompas-sdk-v24/docs-wire-20261114-spw/` (сценарий
+`_fetch_docs_wire_20261114_spw.py`), два имени (`ksspcdocument_methods`, `ksspcobjparam_subsectionname`)
+измерены как 404 и названы. Пробы: прибор `scripts/probes/spec/`, новые стадии `spw-*`, 11 прогонов,
+**PASS 77 / FAIL 2 / INFO 22**; два FAIL - измеренный ответ API7, не дефект прибора. Предложен профиль
+`spec-spw-v1`: три расширенных инструмента `kompas_specification_*_row` плюс новый
+`kompas_specification_add_linked_row`, контракт аддитивный → MINOR. Правило - `docs/decisions/bom.md#spec-spw`;
+отчёт - `SPEC_SPW_RESEARCH_0_15_REPORT_20261114.md`; доказательства -
+`docs/acceptance/evidence/20261114-spec-spw-9786eb8/`. Открыто **3** (96, 97, 106); очередь - наряды
+блока `.spw` по разделу 6 отчёта (состав утверждает техлид). `src/` не менялся, `--all` и `dotnet test`
+не требовались; стражи `lint-dashes.py`, `check-evidence-links.py`, `long-comment-blocks.py` - 0.
+
 ## Архив журнала
 
 - `docs/status/journal-2026-11.md` - записи 11.2026: журнал цикла выпуска 0.14.0 (разбор технического

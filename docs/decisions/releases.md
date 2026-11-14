@@ -465,3 +465,39 @@ Host по `config.command`; `verify-mcp-approval.py` отвечает на во�
 называет, что хранилища нет и шаг не применим, а появление хранилища в известных местах превращает
 строку в названный отказ. Шаг перевода записи после публикации правит только `config.command` (копия
 до правки), без снятия подтверждений.
+
+## <a id="mcp-registry"></a>Официальный каталог MCP публикуется до удаления прежнего релиза (решение заказчика 14.11.2026)
+
+**Правило.** Наряд выпуска публикует новую версию в официальном каталоге MCP
+(`registry.modelcontextprotocol.io`, имя `io.github.SergeySklyarov/kompas3d-mcp`) и проверяет её ДО
+удаления прежнего релиза GitHub (`#only-latest-release`). Порядок: `.mcpb` в новом релизе -> публикация
+в каталоге -> проверка записи -> удаление прежнего релиза.
+
+**Почему.** Каталог хранит только метаданные; запись версии ссылается на файл `.mcpb` в релизе GitHub
+(`packages[].identifier`) с его SHA-256. Удаление релиза, на который ссылается последняя версия
+каталога, оставляет в каталоге нерабочую ссылку.
+
+**Как собирается (первая публикация 14.11.2026, версия 0.14.0).**
+- `.mcpb` - zip поставки `KompasMCP-v<Version>-win-x64.zip`, разложенный в `server/`, плюс
+  `manifest.json` (`manifest_version` 0.3, `server.type` = `binary`, `entry_point`
+  `server/KompasMcp.Host.exe`, `compatibility.platforms` = `win32`). Конфиг-файл не нужен: корни задаются
+  переменными `KOMPAS_MCP_WRITABLE_ROOTS`, `KOMPAS_MCP_EXPORT_ROOTS` (оба - `user_config.work_directory`)
+  и `KOMPAS_MCP_READONLY_ROOTS` (`user_config.read_only_directory`, необязательно); журналы - во
+  временной папке по умолчанию `HostOptions`.
+- Проверка и упаковка: `npx @anthropic-ai/mcpb validate manifest.json`, `npx @anthropic-ai/mcpb pack`.
+  Имя файла содержит `mcp` строчными (требование каталога к адресу): `kompas-mcp-<Version>-win-x64.mcpb`.
+- Перед загрузкой - запуск `KompasMcp.Host.exe` из распакованного пакета с этими переменными:
+  `initialize`, `tools/list`, `kompas_health` без `config_errors`.
+- `server.json`: схема `https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json`,
+  `description` не длиннее 100 символов, `packages[]` - `registryType` `mcpb`, `identifier` - адрес
+  файла в релизе, `version`, `fileSha256`, `transport.type` = `stdio`. Версия - только `<Version>`.
+- `mcp-publisher` - из релизов `modelcontextprotocol/registry`
+  (`mcp-publisher_windows_amd64.tar.gz`): `validate server.json`, `login github` (код устройства
+  вводит владелец на github.com/login/device, код живёт около 15 минут), `publish server.json`.
+- Проверка: `GET https://registry.modelcontextprotocol.io/v0/servers?search=kompas3d-mcp` - версия
+  `isLatest`, `identifier` и `fileSha256` совпадают с файлом, скачанным из релиза.
+
+**Что пока не так.** 0.14.0 опубликована вручную: `.mcpb` добавлен в уже опубликованный релиз
+`v0.14.0` в обход `scripts/package-release.py`, `SHA256SUMS.txt` этого релиза его не перечисляет,
+`manifest.json` и `server.json` в репозитории нет. Перенос сборки `.mcpb` и `server.json` в
+`package-release.py` - задача наряда выпуска 0.15.0 или отдельного наряда до него.

@@ -122,6 +122,11 @@
   закрыт, `KOMPAS.exe` на машине нет. Прибор `scripts/check-session-end.py` и его базовая линия
   `docs/acceptance/evidence/delivery-v0.11.0-56cd3af/client/session-end-baseline.json` остаются
   историей цикла 0.11.0; в приёмке 0.12.0 строка отмечена как не выполняемая клиентом по определению.
+- **Официальный каталог MCP (14.11.2026).** `io.github.SergeySklyarov/kompas3d-mcp` 0.14.0 опубликован,
+  запись ссылается на `kompas-mcp-0.14.0-win-x64.mcpb` в релизе `v0.14.0`. Наряд выпуска 0.15.0
+  публикует в каталоге новую версию со своим `.mcpb` ДО удаления релиза `v0.14.0` (правило `AGENTS.md`,
+  «Версии и выпуски»; `docs/decisions/releases.md#mcp-registry`). Сборка `.mcpb` и `server.json` в
+  `package-release.py` ещё не перенесена.
 - Проверка установщика `Install-KompasMcp.ps1` на машине владельца - за владельцем.
 - **Действующая очередь нарядов** - `coverage/solid-v24/implementation-plan.md`, датированная поправка
   тридцать вторая (25.10.2026); здесь она не пересказывается.

@@ -131,8 +131,7 @@
 - **Официальный каталог MCP (14.11.2026).** `io.github.SergeySklyarov/kompas3d-mcp` 0.14.0 опубликован,
   запись ссылается на `kompas-mcp-0.14.0-win-x64.mcpb` в релизе `v0.14.0`. Наряд выпуска 0.15.0
   публикует в каталоге новую версию со своим `.mcpb` ДО удаления релиза `v0.14.0` (правило `AGENTS.md`,
-  «Версии и выпуски»; `docs/decisions/releases.md#mcp-registry`). Сборка `.mcpb` и `server.json` в
-  `package-release.py` ещё не перенесена.
+  «Версии и выпуски»; `docs/decisions/releases.md#mcp-registry`).
 - Проверка установщика `Install-KompasMcp.ps1` на машине владельца - за владельцем.
 - **Действующая очередь нарядов** - `coverage/solid-v24/implementation-plan.md`, датированная поправка
   тридцать вторая (25.10.2026); здесь она не пересказывается.
@@ -453,6 +452,32 @@ Debug - успешно, `dotnet test -c Debug --no-build` - **2045/2045** (пе�
 `long-comment-blocks.py` по изменённому файлу - 0. `src/`, `schemas/`, `mcp-smoke.py` не менялись, `--all`
 и `dotnet test` не требовались. Правило - `docs/decisions/releases.md#client-acceptance-words`. Строки
 долга у находки нет; открыто **3** (96, 97, 106).
+
+**`.mcpb` и `server.json` собирает прибор выпуска** (`RELEASE_MCPB_PACKAGING_0_15`, 14.11.2026, коммит
+`0c33628`). Сборка `.mcpb` и записи каталога больше не делается рукой: `scripts/package-release.py`
+раскладывает ТУ ЖЕ поставку под `server/`, подставляет в отслеживаемые шаблоны
+`packaging/mcpb/manifest.json` и `packaging/registry/server.json` версию из `<Version>`, адрес файла в
+релизе и измеренный SHA-256, проверяет манифест документированным `npx @anthropic-ai/mcpb validate`,
+упаковывает `pack` и кладёт `kompas-mcp-<Version>-win-x64.mcpb` рядом с ZIP; `server.json` пишется
+рядом, но ассетом выпуска не является. Файл назван `SHA256SUMS.txt`, `release-manifest.json` (`mcpb`,
+`mcpb_sha256`) и командой публикации; прибор печатает шаги каталога и напоминание, что прежний релиз
+удаляется ПОСЛЕ проверки записи. Отказы, все с причиной и кодом 1: `.mcpb` не собран или не прошёл
+`validate`; хеш в `server.json` не равен хешу файла; версия в `manifest.json`/`server.json` не равна
+`<Version>`; `description` в `server.json` длиннее 100 символов; длинное или среднее тире в текстах
+обоих файлов (страж тот же - `lint-dashes.py`, второго нет); байты `server/` не равны байтам поставки.
+`--self-test` прибора - **53 плеча** (было 34), и каждое новое падает при обезвреженном решении:
+обратная правка шести функций названа в отчёте. Проба п. 6: `.mcpb` собран из поставки `0.14.0`
+(`artifacts/publish-v0.14.0-d6a2447`), распакован вне дерева, Хост из него отвечает на `initialize`
+(`0.14.0`), `tools/list` (14 инструментов) и `kompas_health` - `config_errors []`, `config_warnings []`;
+КОМПАС при этом не запускался. Сверка с образцом 0.14.0: 191 запись совпала по именам и порядку,
+содержимое расходится только в `author.name` («KompasMCP» вместо личного имени - имя в отслеживаемый
+файл не попадает, страж `verify-publish-set.py` 5f). Предел назван в приборе: `mcpb pack` ставит в
+архив текущее время, поэтому публикуется хеш ЭТОГО файла, а не воспроизводимый. Проверки:
+`package-release.py --self-test` - 0; `verify-publish-set.py` - PASS (отказов 0, на решение 494),
+`--self-test` - 0, `--machine-paths` - PASS (69); `lint-dashes.py` - 0; `check-evidence-links.py` - 0;
+`long-comment-blocks.py` по изменённым файлам - 0. `src/`, `schemas/`, `mcp-smoke.py` не менялись,
+`--all`, сборка и `dotnet test` не требовались. Правило - `docs/decisions/releases.md#mcp-registry`.
+Открыто **3** (96, 97, 106); очередь - выпуск 0.15.0.
 
 ## Архив журнала
 

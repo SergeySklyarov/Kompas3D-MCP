@@ -71,6 +71,13 @@
 | [docs/operator-guide/claude-setup.md](operator-guide/claude-setup.md) | установка готового выпуска и подключение к Claude Code и Claude Desktop |
 | [docs/distribution/](distribution/) | заметки выпуска, инструкция в архиве пакета, лицензии зависимостей |
 
+## Пакеты выпуска
+
+| Где | Что |
+|---|---|
+| [`packaging/mcpb/manifest.json`](../packaging/mcpb/manifest.json) | шаблон манифеста `.mcpb`; версию подставляет [`scripts/package-release.py`](../scripts/package-release.py) |
+| [`packaging/registry/server.json`](../packaging/registry/server.json) | шаблон записи каталога MCP; адрес файла в релизе, версию и SHA-256 подставляет тот же прибор |
+
 ## Код
 
 ```

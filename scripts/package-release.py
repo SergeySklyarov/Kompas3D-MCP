@@ -20,10 +20,13 @@ the notes docs/distribution/<tag>.md open with that title, and neither they nor 
 ZIP carries a long dash (scripts/lint-dashes.py). The release is published with the printed command.
 History: docs/decisions/releases.md#dashes
 
-Writes three assets next to each other, ready for a GitHub Release:
+Writes the release assets next to each other, ready for a GitHub Release:
   KompasMCP-<tag>-win-x64.zip   the delivery as is, plus LICENSE, notices, install notes, installer
+  kompas-mcp-<Version>-win-x64.mcpb  the same delivery under `server/`, plus the rendered MCPB manifest
   release-manifest.json         public manifest: tag, scope, requirements, own assembly hashes
-  SHA256SUMS.txt                SHA-256 of the ZIP, the manifest and the installer
+  SHA256SUMS.txt                SHA-256 of every asset above
+and, next to them but NOT a release asset:
+  server.json                   catalog entry of the .mcpb, for `mcp-publisher publish`
 
 INVARIANT: the delivery is copied byte for byte; this script adds files, never rebuilds or edits a
 binary. A release that needs a different binary needs a new accepted delivery first.
@@ -36,6 +39,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -294,7 +298,6 @@ PRODUCT_SOURCES = ["src", "Directory.Build.props", "Directory.Build.targets",
 
 def sources_problem(build_commit, passport_commit):
     """Why product sources differ between the build commit and the passport commit; None if equal."""
-    import subprocess
     done = subprocess.run(["git", "diff", "--quiet", build_commit, passport_commit, "--", *PRODUCT_SOURCES],
                           cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if done.returncode == 0:
@@ -374,6 +377,93 @@ def self_test_not_included():
         ]
 
 
+def write_bundle(path, payload, manifest_text):
+    """A bundle shaped like `mcpb pack` output, written without `npx`: the self-test's fixture."""
+    with zipfile.ZipFile(path, "w") as bundle:
+        bundle.writestr("manifest.json", manifest_text)
+        for rel, data in payload.items():
+            bundle.writestr("server/" + rel, data)
+    return path
+
+
+def self_test_bundle():
+    """The `.mcpb` and catalog arms: each refusal fires on fixed input, the shipped templates pass.
+
+    No network and no `npx`: the arms call the decisions the release takes, and the bundle they read
+    is written here. A leftover placeholder and a dash cannot be produced by the shipped templates,
+    so each gets its own arm on an edited copy of the rendered text.
+    """
+    version, tag = "0.4.1", "v0.4.1"
+    name = MCPB_NAME.format(version=version)
+    url = RELEASE_ASSET_URL.format(tag=tag, name=name)
+    manifest_text = render(read_template(MCPB_MANIFEST_REL), {"VERSION": version})
+    with tempfile.TemporaryDirectory(prefix="bundle-selftest-") as root:
+        delivery = os.path.join(root, "delivery")
+        files, payload = [], {}
+        for rel, data in (("KompasMcp.Host.exe", b"exe"), ("config/kompas-mcp.example.json", b"{}")):
+            full = os.path.join(delivery, *rel.split("/"))
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as handle:
+                handle.write(data)
+            files.append((rel, full))
+            payload[rel] = data
+        expected = {rel: sha256(full) for rel, full in files}
+        bundle = write_bundle(os.path.join(root, name), payload, manifest_text)
+        server_text = render(read_template(CATALOG_SERVER_REL),
+                             {"VERSION": version, "MCPB_URL": url, "MCPB_SHA256": sha256(bundle)})
+        good = json.loads(server_text)
+        short = dict(good, description="я" * DESCRIPTION_LIMIT)
+        long = dict(good, description="я" * (DESCRIPTION_LIMIT + 1))
+        original, shutil.which = shutil.which, lambda tool: None
+        try:
+            no_npx, no_npx_problems = pack_mcpb(files, manifest_text, name, root)
+        finally:
+            shutil.which = original
+        return [
+            (no_npx is None and no_npx_problems != [], "без npx .mcpb не собран, причина названа"),
+            (template_problems(MCPB_MANIFEST_REL, manifest_text) == [],
+             f"шаблон {MCPB_MANIFEST_REL} подставлен полностью"),
+            (template_problems("t", manifest_text.replace(version, "@VERSION@")) != [],
+             "неподставленный @VERSION@ отвергнут"),
+            (dash_problems(CATALOG_SERVER_REL, server_text) == [],
+             f"шаблон {CATALOG_SERVER_REL} без длинных тире"),
+            (dash_problems("s", server_text.replace("BOM", "BOM \u2014")) != [],
+             "длинное тире в тексте server.json отвергнуто"),
+            (mcpb_validation_problem(0, "Manifest schema validation passes!") is None,
+             "прошедший validate принят"),
+            (mcpb_validation_problem(1, "ERROR: server.type: Invalid enum value") is not None,
+             "отказ validate назван причиной"),
+            (bundle_version_problem(MCPB_MANIFEST_REL, json.loads(manifest_text), version) is None,
+             "версия манифеста совпадает с <Version>"),
+            (bundle_version_problem(MCPB_MANIFEST_REL, {"version": "0.4.0"}, version) is not None,
+             "чужая версия манифеста отвергнута"),
+            (bundle_version_problem(CATALOG_SERVER_REL, good, version) is None,
+             "версия server.json совпадает с <Version>"),
+            (mcpb_payload_problems(bundle, expected) == [],
+             "server/ в .mcpb равен поставке"),
+            (mcpb_payload_problems(write_bundle(
+                os.path.join(root, "changed.mcpb"), dict(payload, **{"KompasMcp.Host.exe": b"ex"}),
+                manifest_text), expected) != [], "другие байты файла в server/ отвергнуты"),
+            (mcpb_payload_problems(write_bundle(
+                os.path.join(root, "extra.mcpb"), dict(payload, **{"extra.txt": b"x"}), manifest_text),
+                expected) != [], "лишний файл в server/ отвергнут"),
+            (mcpb_payload_problems(write_bundle(
+                os.path.join(root, "short.mcpb"), {"KompasMcp.Host.exe": b"exe"}, manifest_text),
+                expected) != [], "недостающий файл в server/ отвергнут"),
+            (server_problems(good, version, bundle, url) == [], "server.json описывает этот .mcpb"),
+            (server_problems(dict(good, packages=[dict(good["packages"][0], fileSha256="0" * 64)]),
+                             version, bundle, url) != [], "чужой fileSha256 отвергнут"),
+            (server_problems(dict(good, packages=[dict(good["packages"][0], version="0.4.0")]),
+                             version, bundle, url) != [], "чужая версия пакета отвергнута"),
+            (server_problems(dict(good, packages=[dict(good["packages"][0], identifier="https://x")]),
+                             version, bundle, url) != [], "чужой адрес пакета отвергнут"),
+            (server_problems(long, version, bundle, url) != [],
+             f"description длиннее {DESCRIPTION_LIMIT} символов отвергнут"),
+            (server_problems(short, version, bundle, url) == [],
+             f"description ровно {DESCRIPTION_LIMIT} символов принят"),
+        ]
+
+
 def self_test():
     """The pure checks on fixed inputs: each refusal fires, and the clean case passes."""
     props = "<Project><PropertyGroup><Version>0.4.1</Version></PropertyGroup></Project>"
@@ -421,6 +511,7 @@ def self_test():
          "число инструментов строкой отвергнуто"),
         self_test_profile_catalog(),
         *self_test_not_included(),
+        *self_test_bundle(),
     ]
     failed = [title for ok, title in cases if not ok]
     for ok, title in cases:
@@ -447,6 +538,133 @@ def sha256(path):
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+# INVARIANT (bundle): the `.mcpb` and the catalog entry are rendered from these tracked templates;
+# version, release address and hash are MEASURED here, so no published text repeats a number by hand.
+# LIMIT: `mcpb pack` stamps the current time into every entry, so the same inputs give another file
+# hash on the next run; only the hash of THIS bundle is published.
+# History: docs/decisions/releases.md#mcp-registry
+MCPB_MANIFEST_REL = "packaging/mcpb/manifest.json"
+CATALOG_SERVER_REL = "packaging/registry/server.json"
+MCPB_NAME = "kompas-mcp-{version}-win-x64.mcpb"
+RELEASE_ASSET_URL = "https://github.com/SergeySklyarov/Kompas3D-MCP/releases/download/{tag}/{name}"
+CATALOG_QUERY = "https://registry.modelcontextprotocol.io/v0/servers?search=kompas3d-mcp"
+DESCRIPTION_LIMIT = 100
+PLACEHOLDER_RE = re.compile(r"@[A-Z][A-Z0-9_]*@")
+
+
+def read_template(rel):
+    """The tracked template as text; a missing template is a named refusal, not a traceback."""
+    path = os.path.join(ROOT, rel)
+    if not os.path.isfile(path):
+        sys.exit(f"ОТКАЗ: выпуск не собран.\n  - нет шаблона {rel}")
+    with open(path, encoding="utf-8-sig") as handle:
+        return handle.read()
+
+
+def render(template, values):
+    """The template with every `@NAME@` replaced from `values`."""
+    for name, value in values.items():
+        template = template.replace(f"@{name}@", value)
+    return template
+
+
+def template_problems(label, text):
+    """Why the rendered text still names a placeholder: the tool does not know that name."""
+    return [f"{label}: не подставлено {name} - шаблон собран не прибором"
+            for name in sorted(set(PLACEHOLDER_RE.findall(text)))]
+
+
+def bundle_version_problem(label, data, version):
+    """Why the rendered JSON asset names another version; None when it names `<Version>`."""
+    if data.get("version") == version:
+        return None
+    return f"{label}: версия «{data.get('version')}», а у выпуска «{version}»"
+
+
+def mcpb_validation_problem(returncode, output):
+    """Why `mcpb validate` refuses the manifest; None when it passed."""
+    if returncode == 0:
+        return None
+    return f"{MCPB_MANIFEST_REL}: mcpb validate отверг манифест: {' '.join(output.split())[:400]}"
+
+
+def mcpb_payload_problems(mcpb_path, expected):
+    """Why the `server/` part of the bundle is not the delivery byte for byte; empty when it is.
+
+    `expected` maps a posix path to the SHA-256 of the file as it goes into the ZIP. The bundle is
+    that same set under `server/`, so a file present on one side only, or with other bytes, means the
+    two assets a client chooses between describe different deliveries.
+    """
+    with zipfile.ZipFile(mcpb_path) as bundle:
+        got = {name[len("server/"):]: hashlib.sha256(bundle.read(name)).hexdigest()
+               for name in bundle.namelist() if name.startswith("server/") and not name.endswith("/")}
+    label = os.path.basename(mcpb_path)
+    problems = [f"{label}: в server/ нет файла поставки {rel}" for rel in sorted(set(expected) - set(got))]
+    problems += [f"{label}: в server/ лишний файл {rel}" for rel in sorted(set(got) - set(expected))]
+    problems += [f"{label}: байты server/{rel} не равны байтам поставки"
+                 for rel in sorted(set(got) & set(expected)) if got[rel] != expected[rel]]
+    return problems
+
+
+def server_problems(server, version, mcpb_path, expected_url):
+    """Why `server.json` cannot describe this `.mcpb` in the catalog; empty when it can."""
+    packages = server.get("packages") or []
+    if len(packages) != 1:
+        return [f"{CATALOG_SERVER_REL}: ожидается ровно один пакет, а их {len(packages)}"]
+    package = packages[0]
+    problems = []
+    if package.get("version") != version:
+        problems.append(f"{CATALOG_SERVER_REL}: packages[0].version «{package.get('version')}», "
+                        f"а у выпуска «{version}»")
+    if package.get("identifier") != expected_url:
+        problems.append(f"{CATALOG_SERVER_REL}: identifier «{package.get('identifier')}» не адрес "
+                        f"файла в релизе «{expected_url}»")
+    measured = sha256(mcpb_path)
+    if package.get("fileSha256") != measured:
+        problems.append(f"{CATALOG_SERVER_REL}: fileSha256 «{package.get('fileSha256')}» не равен "
+                        f"хешу файла «{measured}»")
+    description = server.get("description") or ""
+    if len(description) > DESCRIPTION_LIMIT:
+        problems.append(f"{CATALOG_SERVER_REL}: description длиной {len(description)} символов, "
+                        f"предел каталога {DESCRIPTION_LIMIT}")
+    return problems
+
+
+def pack_mcpb(files, manifest_text, name, workdir):
+    """Stage the delivery under `server/`, validate the manifest and pack the bundle.
+
+    Returns `(path, problems)`; the path is None when nothing was packed. `npx @anthropic-ai/mcpb`
+    is the documented route (docs/decisions/releases.md#mcp-registry), so a missing `npx` stops the
+    release instead of falling back to a ZIP written here without validation.
+    """
+    npx = shutil.which("npx")
+    if not npx:
+        return None, ["npx не найден в PATH: без `npx @anthropic-ai/mcpb` .mcpb не собрать"]
+    stage = os.path.join(workdir, "mcpb")
+    os.makedirs(stage, exist_ok=True)
+    for rel, full in files:
+        target = os.path.join(stage, "server", *rel.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(full, target)
+    manifest_path = os.path.join(stage, "manifest.json")
+    with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(manifest_text)
+    done = subprocess.run([npx, "--yes", "@anthropic-ai/mcpb", "validate", manifest_path],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          timeout=600)
+    problem = mcpb_validation_problem(done.returncode, done.stdout + done.stderr)
+    if problem:
+        return None, [problem]
+    bundle = os.path.join(workdir, name)
+    done = subprocess.run([npx, "--yes", "@anthropic-ai/mcpb", "pack", stage, bundle],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          timeout=600)
+    if done.returncode != 0 or not os.path.isfile(bundle):
+        return None, [f"{MCPB_MANIFEST_REL}: mcpb pack не собрал {name}: "
+                      f"{' '.join((done.stdout + done.stderr).split())[:400]}"]
+    return bundle, []
 
 
 def main():
@@ -546,6 +764,40 @@ def main():
     if problems:
         sys.exit("ОТКАЗ: выпуск не собран.\n  - " + "\n  - ".join(problems))
 
+    # INVARIANT: the bundle and the catalog entry are built and checked BEFORE any asset is written,
+    # so a refused release leaves nothing in `out`. The bundle itself lives in a temp directory.
+    workdir = tempfile.mkdtemp(prefix="release-mcpb-")
+    mcpb_name = MCPB_NAME.format(version=version)
+    mcpb_url = RELEASE_ASSET_URL.format(tag=a.tag, name=mcpb_name)
+    manifest_text = render(read_template(MCPB_MANIFEST_REL), {"VERSION": version})
+    problems = template_problems(MCPB_MANIFEST_REL, manifest_text)
+    problems += dash_problems(MCPB_MANIFEST_REL, manifest_text)
+    bundle, bundle_problems = pack_mcpb(files, manifest_text, mcpb_name, workdir)
+    problems += bundle_problems
+    server_text = ""
+    mcpb_sha = None
+    if bundle:
+        mcpb_sha = sha256(bundle)
+        problems += mcpb_payload_problems(bundle, {rel: sha256(full) for rel, full in files})
+        server_text = render(read_template(CATALOG_SERVER_REL),
+                             {"VERSION": version, "MCPB_URL": mcpb_url, "MCPB_SHA256": mcpb_sha})
+        problems += template_problems(CATALOG_SERVER_REL, server_text)
+        problems += dash_problems(CATALOG_SERVER_REL, server_text)
+        for label, text in ((MCPB_MANIFEST_REL, manifest_text), (CATALOG_SERVER_REL, server_text)):
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError as error:
+                problems.append(f"{label}: не разбирается как JSON после подстановки: {error}")
+                continue
+            problem = bundle_version_problem(label, data, version)
+            if problem:
+                problems.append(problem)
+            if label == CATALOG_SERVER_REL:
+                problems += server_problems(data, version, bundle, mcpb_url)
+    if problems:
+        shutil.rmtree(workdir, ignore_errors=True)
+        sys.exit("ОТКАЗ: выпуск не собран.\n  - " + "\n  - ".join(problems))
+
     os.makedirs(out, exist_ok=True)
 
     # Fixed timestamps keep the archive reproducible from the same inputs.
@@ -563,6 +815,8 @@ def main():
         "version": version,
         "platform": "win-x64",
         "zip": zip_name,
+        "mcpb": mcpb_name,
+        "mcpb_sha256": mcpb_sha,
         "installer": "Install-KompasMcp.ps1",
         "scope": scope_text,
         "profiles": manifest_profiles,
@@ -597,18 +851,37 @@ def main():
     with open(os.path.join(ROOT, EXTRA_FILES["Install-KompasMcp.ps1"]), "rb") as src, open(installer, "wb") as dst:
         dst.write(src.read())
 
+    mcpb_path = os.path.join(out, mcpb_name)
+    shutil.copyfile(bundle, mcpb_path)
+    server_path = os.path.join(out, "server.json")
+    with open(server_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(server_text)
+    shutil.rmtree(workdir, ignore_errors=True)
+
     with open(os.path.join(out, "SHA256SUMS.txt"), "w", encoding="ascii", newline="\n") as f:
-        for p in (zip_path, manifest_path, installer):
+        for p in (zip_path, mcpb_path, manifest_path, installer):
             f.write(f"{sha256(p)}  {os.path.basename(p)}\n")
 
     assets = " ".join(f'"{os.path.join(out, n)}"' for n in
-                      (zip_name, "release-manifest.json", "SHA256SUMS.txt", "Install-KompasMcp.ps1"))
-    print(json.dumps({"out": out, "zip": zip_name, "zip_sha256": sha256(zip_path), "files": len(files),
+                      (zip_name, mcpb_name, "release-manifest.json", "SHA256SUMS.txt",
+                       "Install-KompasMcp.ps1"))
+    catalog_steps = [
+        f'mcp-publisher validate "{server_path}"',
+        "mcp-publisher login github  # код устройства вводит заказчик на github.com/login/device",
+        f'mcp-publisher publish "{server_path}"',
+        f"проверить запись: GET {CATALOG_QUERY} - version isLatest, identifier и fileSha256 "
+        "совпадают с файлом, скачанным из релиза",
+        "прежний релиз удаляется ПОСЛЕ проверки записи каталога",
+    ]
+    print(json.dumps({"out": out, "zip": zip_name, "zip_sha256": sha256(zip_path),
+                      "mcpb": mcpb_name, "mcpb_sha256": mcpb_sha, "server_json": server_path,
+                      "files": len(files),
                       "tools": counts["tools_count"], "operations": counts["operations_count"],
                       "title": a.title, "notes": notes_rel,
                       "publish_command": f'gh release create {a.tag} --title "{a.title}" '
                                          f'--notes-file {notes_rel} {assets}',
-                      "after_publish_check": f"python scripts/lint-dashes.py --release {a.tag}"},
+                      "after_publish_check": f"python scripts/lint-dashes.py --release {a.tag}",
+                      "catalog_steps": catalog_steps},
                      ensure_ascii=False, indent=2))
 
 

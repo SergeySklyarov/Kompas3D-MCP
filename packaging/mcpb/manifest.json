@@ -1,0 +1,44 @@
+{
+  "manifest_version": "0.3",
+  "name": "kompas3d-mcp",
+  "display_name": "KompasMCP - KOMPAS-3D v24",
+  "version": "@VERSION@",
+  "description": "MCP server that drives a licensed KOMPAS-3D v24 x64 via its COM API: parts, assemblies, drawings, export.",
+  "long_description": "An MCP server that lets an AI agent drive a real, licensed KOMPAS-3D v24 (x64): parts, sketches, features, assemblies and mates, bill of materials, specifications, drawings, sheet metal, STEP/DXF/IGES export. Every mutating call reports a measured verification level, is journaled for safe retries and is confined to configured disk roots. Requires Windows x64, an installed and licensed KOMPAS-3D v24 x64 and the .NET 10 Runtime x64. Documentation is in Russian.",
+  "author": { "name": "KompasMCP", "url": "https://github.com/SergeySklyarov" },
+  "repository": { "type": "git", "url": "https://github.com/SergeySklyarov/Kompas3D-MCP" },
+  "homepage": "https://github.com/SergeySklyarov/Kompas3D-MCP",
+  "documentation": "https://github.com/SergeySklyarov/Kompas3D-MCP#readme",
+  "support": "https://github.com/SergeySklyarov/Kompas3D-MCP/issues",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["kompas-3d", "kompas", "cad", "ascon", "com"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/KompasMcp.Host.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/KompasMcp.Host.exe",
+      "args": [],
+      "env": {
+        "KOMPAS_MCP_WRITABLE_ROOTS": "${user_config.work_directory}",
+        "KOMPAS_MCP_EXPORT_ROOTS": "${user_config.work_directory}",
+        "KOMPAS_MCP_READONLY_ROOTS": "${user_config.read_only_directory}"
+      }
+    }
+  },
+  "user_config": {
+    "work_directory": {
+      "type": "directory",
+      "title": "Work folder",
+      "description": "Folder where the server may create, save and export models. It must not lie inside the read-only folder.",
+      "required": true,
+      "default": "${DOCUMENTS}"
+    },
+    "read_only_directory": {
+      "type": "directory",
+      "title": "Read-only models folder",
+      "description": "Optional folder with your own models: the server may open them but never writes there.",
+      "required": false
+    }
+  },
+  "compatibility": { "platforms": ["win32"] }
+}

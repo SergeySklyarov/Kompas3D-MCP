@@ -37,8 +37,9 @@ LONG_DASHES = {
     "\u2E3B": "THREE-EM DASH",
 }
 
-# INVARIANT: every file a reader meets outside the source tree: GitHub front pages, release notes, and
-# each text file that goes into the release ZIP. A new published text file is added here.
+# INVARIANT: every file a reader meets outside the source tree: GitHub front pages, release notes,
+# each text file that goes into the release ZIP, and the templates of the release bundle and the
+# catalog entry. A new published text file is added here.
 PUBLIC_TEXT = [
     "README.md",
     "KOMPAS3D_MCP.md",
@@ -52,6 +53,8 @@ PUBLIC_TEXT = [
     "docs/operator-guide",
     "docs/how-it-works.md",
     "docs/project-status.md",
+    "packaging/mcpb/manifest.json",
+    "packaging/registry/server.json",
 ]
 
 TEXT_SUFFIXES = (".md", ".txt", ".json", ".ps1", "")

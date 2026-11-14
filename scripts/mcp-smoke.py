@@ -152,6 +152,29 @@ def sync_budget_ms():
         return 40000
 
 
+# INVARIANT: every Host of a run gets TMP/TEMP inside the run directory, because the product writes
+# its temporary drawing where the WORKER's `Path.GetTempPath()` points, and the KOMPAS that the Worker
+# starts does not always write into the machine's `%TEMP%`.
+# MEASURED: with TMP/TEMP at `%TEMP%` the DXF export refused `EXPORT_FAILED (target_missing)`, and
+# the same rows passed with the temporary directory inside the working tree.
+# History: docs/decisions/tests.md#run-temp-dir
+RUN_TEMP_DIR = None
+
+
+def run_temp_env():
+    """TMP/TEMP of a Host of this run: the run directory, or ``{}`` before a run has one."""
+    return {"TMP": RUN_TEMP_DIR, "TEMP": RUN_TEMP_DIR} if RUN_TEMP_DIR else {}
+
+
+def host_env(env=None):
+    """Environment of a Host: the harness's own, the run's TMP/TEMP, then the caller's overrides.
+
+    INVARIANT: the caller's `env` wins over the run temporary directory - the `update` group points
+    TMP/TEMP at its own cache directory and must keep it.
+    """
+    return {**os.environ, **run_temp_env(), **(env or {})}
+
+
 class Client:
     def __init__(self, host_exe, config, env=None):
         args = [host_exe]
@@ -160,7 +183,7 @@ class Client:
         # `env` дописывается к окружению прибора: группе UN нужен свой источник проверки выпуска
         # (`KOMPAS_MCP_UPDATE_FEED`) и выключатель, а общий os.environ она не трогает - иначе
         # переменная пережила бы свою строку и попала бы в чужой Хост.
-        child_env = None if env is None else {**os.environ, **env}
+        child_env = host_env(env)
         # Путь к исполняемому файлу и конфигурация хранятся: группа SD поднимает СВОИ процессы Хоста
         # тем же исполняемым файлом и той же конфигурацией, а не угадывает их.
         self.host_exe = host_exe
@@ -2291,6 +2314,39 @@ def instrument_self_test():
     check("lossless: нефинитное число найдено и путь назван",
           len(non_finite) == 1 and non_finite[0]["rule"] == "non_finite"
           and non_finite[0]["path"] == "result.rows[0].x", str(non_finite))
+
+    # The run's own TMP/TEMP (`RUN_TEMP_DIR`): every Host must get it, and the row's own environment
+    # must still win - the `update` group points TMP/TEMP at its cache and would otherwise lose it.
+    # Both halves and the "no run yet" case, because a single positive one proves nothing.
+    global RUN_TEMP_DIR
+    saved_temp_dir = RUN_TEMP_DIR
+    try:
+        RUN_TEMP_DIR = None
+        check("до прогона TMP/TEMP не переопределены", run_temp_env() == {})
+        RUN_TEMP_DIR = os.path.join(tempfile.gettempdir(), "run-tmp-probe")
+        run_env = host_env()
+        check("Хост прогона получает TMP/TEMP каталога прогона",
+              os.path.normcase(str(run_env.get("TMP"))) == os.path.normcase(RUN_TEMP_DIR)
+              and os.path.normcase(str(run_env.get("TEMP"))) == os.path.normcase(RUN_TEMP_DIR),
+              str(run_env.get("TMP")))
+        own = host_env({"TMP": "C:\\own", "TEMP": "C:\\own"})
+        check("своё окружение строки сильнее каталога прогона",
+              own.get("TMP") == "C:\\own" and own.get("TEMP") == "C:\\own")
+    finally:
+        RUN_TEMP_DIR = saved_temp_dir
+
+    # PRE of the client-setup row (`client_sandbox_precondition`): a refusal must NAME what is wrong
+    # and never raise, because it runs before the run directory exists.
+    with tempfile.TemporaryDirectory() as tmp:
+        absent = client_sandbox_precondition(os.path.join(tmp, "no-host.exe"), "unused.json",
+                                             root=os.path.join(tmp, "sandbox"))
+        check("предусловие среды называет отсутствующий Хост",
+              bool(absent) and "no-host.exe" in absent, str(absent))
+        absent_config = client_sandbox_precondition(sys.executable,
+                                                    os.path.join(tmp, "no-config.json"),
+                                                    root=os.path.join(tmp, "sandbox"))
+        check("предусловие среды называет недоступную конфигурацию",
+              bool(absent_config) and "no-config.json" in absent_config, str(absent_config))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -20788,6 +20844,56 @@ def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
             f"коды эталона={src_body_code}/{src_measure_code}")
 
 
+def client_sandbox_precondition(host, config, root=None):
+    """PRE: the directory the client-setup row writes into accepts a write from a PRODUCT process.
+
+    INVARIANT: the probe runs INSIDE a Host, never in this process. MEASURED: in a failing run the
+    harness wrote the cell configuration into that folder while the Host wrote nothing into it, so a
+    check made by the harness itself would have passed and `CP.16` would have failed later.
+    Returns a problem text naming the directory and what was observed, or ``None`` when it is usable.
+    """
+    from localconfig import isolate_config
+
+    base = root or os.path.join(os.path.expanduser("~"), "Documents", "KompasMCP", "sandbox")
+    cell = os.path.join(base, "preflight-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+    if not os.path.isfile(host):
+        return "предусловие среды не проверено: Хоста нет по пути " + host
+    try:
+        probe_config = isolate_config(config, cell, "preflight")
+    except (OSError, ValueError) as exc:
+        return ("предусловие среды не проверено: каталог %s или конфигурация %s недоступны (%s) - "
+                "зачётный прогон не начинается" % (cell, config, exc))
+    probe = None
+    try:
+        probe = Client(host, probe_config)
+        probe.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                  "clientInfo": {"name": "mcp-smoke-preflight", "version": "0"}},
+                   timeout=60)
+        with open(probe_config, encoding="utf-8-sig") as fh:
+            journal = (json.load(fh) or {}).get("log_path")
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            if journal and os.path.isfile(journal) and os.path.getsize(journal):
+                return None
+            time.sleep(0.2)
+    except (OSError, McpError) as exc:
+        return ("предусловие среды: Хост не поднялся с журналом в %s (%s) - зачётный прогон "
+                "не начинается" % (cell, exc))
+    finally:
+        if probe is not None:
+            try:
+                if probe.p.stdin:
+                    probe.p.stdin.close()
+                probe.p.wait(timeout=60)
+            except Exception:
+                probe.p.kill()
+        shutil.rmtree(cell, ignore_errors=True)
+    return ("предусловие среды: Хост не записал журнал в %s - каталог недоступен процессу продукта. "
+            "Обычная причина: файлы дерева несут метку целостности Low, и запущенный из них Хост "
+            "(с Worker'ом и КОМПАСом) пишет только внутрь дерева. Строка CP.16 в такой среде откажет, "
+            "поэтому зачётный прогон не начинается: запустите Хост из копии ВНЕ дерева." % cell)
+
+
 def main():
     # Arguments are read FIRST: a typo in a flag name must neither raise KOMPAS, nor close foreign
     # processes, nor create a run directory.
@@ -21252,6 +21358,15 @@ def main():
             print(presence)
             return 2
 
+    # PRE: the client-setup row writes into the client's own folder under `Documents`, and a run that
+    # cannot write there reports a FAIL of the environment as a FAIL of the product. The probe is a
+    # Host, because the harness could write there itself (see `client_sandbox_precondition`).
+    if all_groups or selected.get("checkpoint_paths"):
+        problem = client_sandbox_precondition(host, config)
+        if problem:
+            print(problem)
+            return 2
+
     # Явный путь приёмки проверяется ДО создания каталога прогона: отказ обязан оставить дерево
     # таким, каким он его нашёл, — пустой каталог прогона после отказа выглядел бы как состоявшийся
     # запуск без доказательств.
@@ -21272,6 +21387,11 @@ def main():
     started_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     commit, tree_dirty = git_state(ROOT)
     run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty)
+    # The run's own TMP/TEMP exists before the first Host starts: `run_temp_env` gives it to every
+    # Host, and the Worker inside inherits it (see the comment above `RUN_TEMP_DIR`).
+    global RUN_TEMP_DIR
+    RUN_TEMP_DIR = os.path.join(run_dir, "tmp")
+    os.makedirs(RUN_TEMP_DIR, exist_ok=True)
     rep = Report(report_title, os.path.join(run_dir, report_filename))
     # Разбивка по группам — только у полного прогона: его один отчёт несёт строки всех групп.
     rep.grouped = all_groups
@@ -21326,6 +21446,9 @@ def main():
         "adapter_sha256": file_sha256(os.path.join(os.path.dirname(worker_used), "KompasMcp.Api5Adapter.dll")),
         "config_path": config,
         "config_path_effective": measured_config,
+        # The temporary directory of every Host of this run: the DXF export is judged by WHERE the
+        # product wrote its temporary drawing, so the path is evidence, not a detail.
+        "run_temp_dir": RUN_TEMP_DIR,
         "worker_path_env": os.environ.get("KOMPAS_MCP_WORKER_PATH", ""),
         # Среда прогона - полем: путь пробы `EV` называет, каким уровнем целостности она шла, и пустая
         # строка значит «сборка из дерева». `probes.md#ev-probe-integrity` - правило и измерение.
@@ -54134,12 +54257,13 @@ def shutdown_checks(host, config, workdir, rep):
             pass
         force_stop(pid)
 
-    # ═══════════ SD.12/SD.13: кадр `shutdown` доходит до Worker ═══════════
-    # Долг 95: Хост писал кадр `shutdown` и закрывал канал, не дожидаясь ответа. Измерено: Worker не
-    # получал НИ ОДНОГО байта кадра (`host closed the pipe`), команда была недостижима, а признака
-    # «конец по команде» в журнале не было. Теперь Хост ждёт ответ в том же окне штатного выхода и
-    # закрывает канал ПОСЛЕ него; строки читают ОБА журнала, потому что отчёт Worker клиенту на этом
-    # пути не возвращается - его получает Хост.
+    # ═══════════ SD.12/SD.13: the `shutdown` frame reaches the Worker ═══════════
+    # INVARIANT: the Host waits for the answer inside its own shutdown window and closes the channel
+    # only after it; both journals are read because the Worker report does not come back to the
+    # client on this path - the Host receives it.
+    # MEASURED: a Host that closed the channel without waiting delivered no byte of the frame
+    # (`host closed the pipe`): the command was unreachable and no "by command" end was recorded.
+    # History: docs/decisions/tests.md#shutdown-frame-reaches-worker
     def host_log_of(probe):
         try:
             with open(probe.config, encoding="utf-8-sig") as fh:
@@ -54163,10 +54287,10 @@ def shutdown_checks(host, config, workdir, rep):
         return rows
 
     def wait_end_records(path, timeout_s=30):
-        """Записи журнала Worker, дождавшись записи о ПРИЧИНЕ конца.
+        """Worker journal rows, waiting for the record that names the END reason.
 
-        Отчёт Worker (`owned instance shutdown`) пишется после `Quit()`, то есть позже ухода КОМПАСа;
-        чтение сразу после `wait_gone` потеряло бы и его, и запись о причине.
+        The Worker report (`owned instance shutdown`) is written after `Quit()`, that is later than
+        the KOMPAS exit; read right after `wait_gone`, it would be lost along with the reason row.
         """
         deadline = _time.monotonic() + timeout_s
         rows = journal_rows(path)

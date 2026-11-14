@@ -456,7 +456,7 @@ def self_test_foreign_delivery():
             "adapter_sha256": "3" * 64}
     foreign = {"host_dll_sha256": "a" * 64, "worker_dll_sha256": "b" * 64,
                "adapter_sha256": "c" * 64}
-    # (плечо, хеши отчёта, слово, вердикт уровня, итог паспорта, виновник - problems)
+    # INVARIANT: one arm = (label, report hashes, word, level verdict, passport verdict, problems named).
     arms = (("чужая поставка + ACCEPTED", foreign, "ACCEPTED", "FAIL", "FAIL", True),
             ("чужая поставка + PASS", foreign, "PASS", "FAIL", "FAIL", True),
             ("своя поставка + ACCEPTED", ours, "ACCEPTED", "ACCEPTED", "PASS", False),

@@ -435,6 +435,25 @@ Debug - успешно, `dotnet test -c Debug --no-build` - **2045/2045** (пе�
 `lint-dashes.py` (0), `check-evidence-links.py` (0), `long-comment-blocks.py` по изменённым файлам (0).
 `--all` не требовался: `.cs` в `src/` и `mcp-smoke.py` не менялись. Открыто **3** (96, 97, 106).
 
+**Свод клиента с чужой поставки не проходит словом `ACCEPTED`** (`DEBT_PASSPORT_VERDICT_0_15`,
+14.11.2026, коммит `4668803`). Находка `DEBT_ACCEPTANCE_VERDICT_0_15` §5, в текст прежнего наряда не
+попавшая. `client_acceptance` паспорта понижает вердикт свода до `FAIL` при расхождении хешей сборок, но
+понижало только слово `PASS`: свод клиента словом `ACCEPTED`, снятый с чужой поставки, получал
+`problems`, оставался `ACCEPTED`, и гейт `client_acceptance_gate` (он принимает оба слова) пропускал его
+как пройденный. Измерено на `HEAD` `97e25dd` синтетическим набором: чужой `ACCEPTED` - паспорт
+`verdict PASS`, `fully_ready true`; чужой `PASS` - `FAIL`. Теперь слова успеха читаются из ОДНОГО
+списка - `CLIENT_ACCEPTANCE_WORDS` (`scripts/acceptance-levels.py`), второго литерала в паспорте нет, а
+понижение называет прочитанное слово в `problems`; свод, успеха не утверждающий (`BLOCKED`,
+`INCOMPLETE`, `None`), слово сохраняет, как и раньше. Отрицательный контроль - `self_test_foreign_delivery`
+в `--self-test` паспорта, четыре плеча через генератор: чужой `ACCEPTED` - FAIL, чужой `PASS` - FAIL, свой
+`ACCEPTED` - пройден, чужой `BLOCKED` - остаётся `BLOCKED` с `problems`; на коде до правки плечо чужого
+`ACCEPTED` падает (слово даёт `ACCEPTED` вместо `FAIL`). Проверки: `make-delivery-passport.py --self-test`
+- 0, `acceptance-levels.py --self-test` - 0, `verify-publish-set.py --self-test` - 0 и `--machine-paths` -
+0 (`PASS`, отказов 0, на решение 69), `lint-dashes.py` - 0, `check-evidence-links.py` - 0,
+`long-comment-blocks.py` по изменённому файлу - 0. `src/`, `schemas/`, `mcp-smoke.py` не менялись, `--all`
+и `dotnet test` не требовались. Правило - `docs/decisions/releases.md#client-acceptance-words`. Строки
+долга у находки нет; открыто **3** (96, 97, 106).
+
 ## Архив журнала
 
 - `docs/status/journal-2026-11.md` - записи 11.2026: журнал цикла выпуска 0.14.0 (разбор технического

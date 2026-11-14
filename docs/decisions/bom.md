@@ -507,7 +507,7 @@
 Первый наряд новых возможностей цикла 0.15: заказчик выбрал блок «Спецификация `.spw`» (поправка плана
 сто одиннадцатая). Код продукта не менялся; страницы, маршруты и замеры —
 `SPEC_SPW_RESEARCH_0_15_REPORT_20261114.md`, доказательства —
-`docs/acceptance/evidence/20261114-spec-spw-9786eb8/`, прибор — `scripts/probes/spec/` (стадии `spw-*`).
+`docs/acceptance/evidence/20261114-spec-spw-aa0f7eb/`, прибор — `scripts/probes/spec/` (стадии `spw-*`).
 
 - **Строки `.spw` пишутся теми же интерфейсами, что строки модели.** `ISpecificationDescriptions` —
   свойство БАЗОВОГО `IKompasDocument` (`ikompasdocument_specificationdescriptions.html`); строка
@@ -555,7 +555,7 @@
   Измерено: `IKompasDocument3D.TopPart` → `IPart7` → QI `IPropertyKeeper` (ключ `984eae75-…`),
   `AddWithParam` создаёт строку `.spw` с ТЕМ ЖЕ `UniqueMetaObjectKey` и `SyncronizeWithProperties` = True;
   переживание связанной строки сохранением не измерено. Флаг синхронизации в API5 —
-  `GetSpcPropertyFill`/`ksSetSpcPropertyFill` («Синхронизировать со свойствами компонента»).
+  `ksGetSpcPropertyFill`/`ksSetSpcPropertyFill` («Синхронизировать со свойствами компонента»).
   **Ту же поправку получает `#routes`:** `IPropertyMng` документирован в COM (`ipropertymng.html` — QI у
   `IApplication`), `IProperty` берётся у него (`iproperty.html`), поэтому запись «только KsAPI» снята.
 - **Связь `.spw` с моделью документирована с обеих сторон.** `SpecificationDocumentName` —
@@ -580,7 +580,7 @@
   Листы сборочного чертежа (`ksGetSpcSheetSB`/`ksSetSpcSheetSB`) и исполнения остаются вне блока.
 - **Профиль — предложением: `spec-spw-v1`.** Четыре существующих инструмента `kompas_specification_*`
   расширяются видом документа «спецификация» и дополнительными колонками (адресуются типом), чтение
-  `.spw` публикует их и `unique_number`; пятый, `kompas_specification_link_row`, — единственный новый
+  `.spw` публикует их и `unique_number`; пятый, `kompas_specification_add_linked_row`, — единственный новый
   (связь с компонентом). Контракт аддитивный → MINOR. Состав и порядок нарядов — раздел 6 отчёта.
 - **Пределы.** Причина, по которой `Update()` не сохраняет правку API7, не установлена (тот же класс, что
   `#spec-edit-row`). Страниц `ksspcdocument_methods` и `ksspcobjparam_subsectionname` в v24 нет

@@ -479,7 +479,7 @@ Debug - успешно, `dotnet test -c Debug --no-build` - **2045/2045** (пе�
 `--all`, сборка и `dotnet test` не требовались. Правило - `docs/decisions/releases.md#mcp-registry`.
 Открыто **3** (96, 97, 106); очередь - выпуск 0.15.0.
 
-**Исследование блока «спецификация `.spw`»** (`SPEC_SPW_RESEARCH_0_15`, 14.11.2026, коммит `9786eb8`).
+**Исследование блока «спецификация `.spw`»** (`SPEC_SPW_RESEARCH_0_15`, 14.11.2026, коммит `aa0f7eb`).
 Строки `.spw` пишутся теми же интерфейсами API7, что строки модели (`SpecificationDescriptions` →
 `BaseObjects.Add` + `Update`), правка существующей строки сохраняется ТОЛЬКО через API5
 (`ksSpcObjectEdit…End`), удаление - API7 `Delete()` и API5 `ksSpcDocument.ksDeleteObj`. Измерено: при
@@ -496,7 +496,7 @@ QI `IPropertyKeeper` → `AddWithParam` даёт строку с общим кл
 `spec-spw-v1`: три расширенных инструмента `kompas_specification_*_row` плюс новый
 `kompas_specification_add_linked_row`, контракт аддитивный → MINOR. Правило - `docs/decisions/bom.md#spec-spw`;
 отчёт - `SPEC_SPW_RESEARCH_0_15_REPORT_20261114.md`; доказательства -
-`docs/acceptance/evidence/20261114-spec-spw-9786eb8/`. Открыто **3** (96, 97, 106); очередь - наряды
+`docs/acceptance/evidence/20261114-spec-spw-aa0f7eb/`. Открыто **3** (96, 97, 106); очередь - наряды
 блока `.spw` по разделу 6 отчёта (состав утверждает техлид). `src/` не менялся, `--all` и `dotnet test`
 не требовались; стражи `lint-dashes.py`, `check-evidence-links.py`, `long-comment-blocks.py` - 0.
 

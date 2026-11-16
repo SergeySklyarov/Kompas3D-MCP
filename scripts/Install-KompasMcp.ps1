@@ -106,13 +106,16 @@ function Test-Dependencies {
         $ver = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
         $result.KompasExe = $exe
         $result.KompasVersion = $ver
-        if ($ver -and $ver.StartsWith("24.")) { Ok "КОМПАС-3D $ver ($exe)" }
+        $major = $null
+        if ($ver -and [int]::TryParse($ver.Split('.')[0], [ref]$major) -and $major -ge 24) {
+            Ok "КОМПАС-3D $ver ($exe)"
+        }
         elseif ($SkipKompasVersionCheck) {
-            Warn "КОМПАС найден версии $ver (проверка v24 пропущена по ключу -SkipKompasVersionCheck)"
+            Warn "КОМПАС найден версии $ver (проверка пропущена по ключу -SkipKompasVersionCheck)"
         }
         else {
-            Bad "КОМПАС найден, но версия $ver, а выпуск проверен на v24"
-            $problems.Add("Нужен КОМПАС-3D v24 x64; найдена версия $ver (для пропуска укажите -SkipKompasVersionCheck).")
+            Bad "КОМПАС найден, но версия $ver (ожидалась v24, v25 или новее)"
+            $problems.Add("Нужен КОМПАС-3D v24, v25 или новее x64; найдена версия $ver (для пропуска укажите -SkipKompasVersionCheck).")
         }
         $root = Split-Path -Parent (Split-Path -Parent $exe)
         $interop = @(

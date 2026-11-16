@@ -11,7 +11,7 @@
 ## Что нужно на машине
 
 - Windows x64.
-- Установленный и лицензированный **КОМПАС-3D v24 x64** (или v25 при запуске с флагом `-SkipKompasVersionCheck`),
+- Установленный и лицензированный **КОМПАС-3D v24 или v25 x64** (включая Study-редакции),
   хотя бы раз запущенный от имени этого пользователя (для регистрации в COM). Установщик КОМПАС не ставит
   и реестр не меняет.
 - **.NET 10 Runtime x64** (`Microsoft.NETCore.App 10.x`). Подходит и .NET 10 Desktop Runtime x64,
@@ -45,13 +45,8 @@ if ($want -ne $got) { throw "контрольная сумма установщ�
 powershell -NoProfile -ExecutionPolicy Bypass -File "$dir\Install-KompasMcp.ps1" -RegisterAntigravity
 ```
 
-Если на машине установлен КОМПАС-3D v25 (вместо проверенного v24), добавьте флаг `-SkipKompasVersionCheck`:
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$dir\Install-KompasMcp.ps1" -RegisterAntigravity -SkipKompasVersionCheck
-```
-
 Свои папки с моделями можно передать установщику через `-ReadOnlyRoot "<папка с моделями>"`: сервер будет их читать,
-но не писать.
+но не писать. Установщик автоматически определяет версии КОМПАС-3D v24 и v25.
 
 Что делает установщик:
 1. **Зависимости.** Проверяет Windows x64, регистрацию КОМПАС-3D COM, `Interop.Kompas6API5.dll` и наличие .NET 10 Runtime x64.

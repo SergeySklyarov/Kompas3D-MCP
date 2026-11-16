@@ -35,6 +35,12 @@ param(
     [string]$CodexHome = "",
     # Write the [mcp_servers.<ServerName>] entry into Codex config.toml.
     [switch]$RegisterCodex,
+    # Antigravity config directory. Empty means ~\.gemini\config.
+    [string]$AntigravityHome = "",
+    # Write the mcpServers.<ServerName> entry into Antigravity mcp_config.json.
+    [switch]$RegisterAntigravity,
+    # Allow installing when KOMPAS version differs from validated v24 (e.g. v25).
+    [switch]$SkipKompasVersionCheck,
     # Allow replacing an entry with the same name that points outside this InstallRoot.
     [switch]$ReplaceExistingEntry,
     # Offline install from files already on disk (all three are required together).
@@ -52,6 +58,7 @@ $ErrorActionPreference = "Stop"
 
 function Say([string]$text) { Write-Host $text }
 function Ok([string]$text) { Write-Host "  [OK]   $text" -ForegroundColor Green }
+function Warn([string]$text) { Write-Host "  [WARN] $text" -ForegroundColor Yellow }
 function Bad([string]$text) { Write-Host "  [FAIL] $text" -ForegroundColor Red }
 function Stop-Install([string]$text) { Write-Host ""; Write-Host "ОСТАНОВЛЕНО: $text" -ForegroundColor Red; exit 1 }
 
@@ -100,9 +107,12 @@ function Test-Dependencies {
         $result.KompasExe = $exe
         $result.KompasVersion = $ver
         if ($ver -and $ver.StartsWith("24.")) { Ok "КОМПАС-3D $ver ($exe)" }
+        elseif ($SkipKompasVersionCheck) {
+            Warn "КОМПАС найден версии $ver (проверка v24 пропущена по ключу -SkipKompasVersionCheck)"
+        }
         else {
             Bad "КОМПАС найден, но версия $ver, а выпуск проверен на v24"
-            $problems.Add("Нужен КОМПАС-3D v24 x64; найдена версия $ver.")
+            $problems.Add("Нужен КОМПАС-3D v24 x64; найдена версия $ver (для пропуска укажите -SkipKompasVersionCheck).")
         }
         $root = Split-Path -Parent (Split-Path -Parent $exe)
         $interop = @(
@@ -499,6 +509,59 @@ function Register-Codex([string]$hostExe, [string]$configPath) {
     return $toml
 }
 
+function Register-Antigravity([string]$hostExe, [string]$configPath) {
+    Say "6. Регистрация в Antigravity"
+    $home_ = if ($AntigravityHome) { $AntigravityHome } else { Join-Path (Join-Path $env:USERPROFILE ".gemini") "config" }
+    $cfgFile = Join-Path $home_ "mcp_config.json"
+    New-Item -ItemType Directory -Force -Path $home_ | Out-Null
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $existing = $null
+    if (Test-Path -LiteralPath $cfgFile) {
+        $raw = Get-Content -LiteralPath $cfgFile -Raw -Encoding UTF8
+        if ($raw -and $raw.Trim().Length -gt 0) {
+            try { $existing = $raw | ConvertFrom-Json } catch { Stop-Install "не удалось разобрать ${cfgFile}: $($_.Exception.Message)" }
+        }
+    }
+    if ($existing -and $existing.mcpServers -and $existing.mcpServers.PSObject.Properties[$ServerName]) {
+        $prevEntry = $existing.mcpServers.PSObject.Properties[$ServerName].Value
+        $cmdLine = if ($prevEntry.command) { $prevEntry.command.ToString().ToLowerInvariant() } else { "" }
+        $ours = $cmdLine.Contains((Join-Path $InstallRoot "versions").ToLowerInvariant()) -or
+                $cmdLine.Contains($currentLink.ToLowerInvariant())
+        if (-not $ours -and -not $ReplaceExistingEntry) {
+            Say "  В $cfgFile уже есть [mcpServers.$ServerName] не из этой установки:"
+            Say "    command = $($prevEntry.command)"
+            Stop-Install "запись не заменена. Выберите другое имя (-ServerName kompas-release) или явно разрешите замену (-ReplaceExistingEntry)."
+        }
+    }
+    if (Test-Path -LiteralPath $cfgFile) {
+        $backup = "$cfgFile.kompasmcp-$stamp.bak"
+        Copy-Item -LiteralPath $cfgFile -Destination $backup
+        Ok "резервная копия: $backup"
+    }
+    # INVARIANT: writes valid JSON matching Antigravity mcp_config.json schema.
+    # Uses ordered dictionary to keep formatting stable and preserve other registered servers.
+    $serversDict = [ordered]@{}
+    if ($existing -and $existing.mcpServers) {
+        foreach ($prop in $existing.mcpServers.PSObject.Properties) {
+            if ($prop.Name -ne $ServerName) {
+                $serversDict[$prop.Name] = $prop.Value
+            }
+        }
+    }
+    $serversDict[$ServerName] = [ordered]@{
+        command = $hostExe
+        args = @("--config", $configPath)
+        disabled = $false
+    }
+    $rootObj = [ordered]@{
+        mcpServers = $serversDict
+    }
+    $json = $rootObj | ConvertTo-Json -Depth 10
+    [IO.File]::WriteAllText($cfgFile, $json, (New-Object Text.UTF8Encoding($false)))
+    Ok "записано [mcpServers.$ServerName] в $cfgFile"
+    return $cfgFile
+}
+
 # --- 5b. The permanent install path ----------------------------------------------------------
 
 function Set-CurrentLink([string]$target) {
@@ -681,8 +744,10 @@ if (-not $SkipSelfTest) {
 
 $toml = $null
 if ($RegisterCodex) { $toml = Register-Codex $hostExe $configPath }
+$agJson = $null
+if ($RegisterAntigravity) { $agJson = Register-Antigravity $hostExe $configPath }
 
-$state = [ordered]@{ tag = $Tag; current = $currentLink; versions = $versionDir; host = $hostExe; config = $configPath; codex_config = $toml; server_name = $ServerName; installed_utc = (Get-Date).ToUniversalTime().ToString("o") }
+$state = [ordered]@{ tag = $Tag; current = $currentLink; versions = $versionDir; host = $hostExe; config = $configPath; codex_config = $toml; antigravity_config = $agJson; server_name = $ServerName; installed_utc = (Get-Date).ToUniversalTime().ToString("o") }
 [IO.File]::WriteAllText((Join-Path $InstallRoot "installed.json"), ($state | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Say ""
@@ -695,9 +760,18 @@ if ($toml) {
     Say ""
     Say "Дальше: перезапустите Codex (в приложении - Restart, в IDE - Restart extension; CLI подхватит"
     Say "сам в новой сессии) и в новой сессии вызовите kompas_health и kompas_capabilities."
-} else {
+}
+if ($agJson) {
+    Say "  Antigravity: [mcpServers.$ServerName] в $agJson"
     Say ""
-    Say "В Codex не регистрировалось (нет -RegisterCodex). Блок для config.toml:"
+    Say "Дальше: перезапустите Antigravity (или начните новую сессию) и вызовите kompas_health и kompas_capabilities."
+}
+if (-not $toml -and -not $agJson) {
+    Say ""
+    Say "В клиентах не регистрировалось (нет -RegisterCodex или -RegisterAntigravity)."
+    Say "Блок для Antigravity (~/.gemini/config/mcp_config.json):"
+    Say "  `"mcpServers`": { `"$ServerName`": { `"command`": `"$($hostExe.Replace('\', '\\'))`", `"args`": [`"--config`", `"$($configPath.Replace('\', '\\'))`"] } }"
+    Say "Блок для Codex (config.toml):"
     Say "  [mcp_servers.$ServerName]"
     Say "  command = '$hostExe'"
     Say "  args = [""--config"", '$configPath']"

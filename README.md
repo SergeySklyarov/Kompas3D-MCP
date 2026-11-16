@@ -54,9 +54,19 @@ https://github.com/SergeySklyarov/Kompas3D-MCP
 Установи и подключи последнюю принятую версию KompasMCP из этого репозитория на этой Windows-машине по инструкции docs/operator-guide/claude-setup.md; проверь зависимости, checksum и доступность инструментов; мои модели не изменяй.
 ```
 
+<p>
+  <b>Google Antigravity</b>
+</p>
+
+```text
+https://github.com/SergeySklyarov/Kompas3D-MCP
+Установи и подключи последнюю принятую версию KompasMCP из этого репозитория на этой Windows-машине по инструкции docs/operator-guide/antigravity-setup.md; проверь зависимости, checksum и доступность инструментов; мои модели не изменяй.
+```
+
 После установки перезапустите клиент и в новом чате попросите «вызови kompas_health и
 kompas_capabilities»: сервер ответит версией и списком инструментов. Подробно:
 [Codex](docs/operator-guide/codex-setup.md), [Claude](docs/operator-guide/claude-setup.md),
+[Antigravity](docs/operator-guide/antigravity-setup.md),
 [другой MCP-клиент и ручная установка](docs/operator-guide/install.md),
 [сборка из исходников](docs/operator-guide/build.md).
 

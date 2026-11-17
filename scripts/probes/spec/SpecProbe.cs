@@ -90,6 +90,15 @@ internal sealed partial class SpecProbe : IDisposable
                 case "spw-columns-final":
                     RunSpwStage(stage);
                     break;
+                case "link-model-write":
+                case "link-model-write-twice":
+                case "link-model-read":
+                case "link-spw-write":
+                case "link-spw-write-twice":
+                case "link-spw-read":
+                case "link-key-check":
+                    RunLinkStage(stage);
+                    break;
                 case "model-columns-write":
                     ModelColumnsWrite();
                     break;

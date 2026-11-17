@@ -290,19 +290,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 397
-- **строк_полностью_закрыто:** 210
-- **строк_с_каким_либо_прогрессом:** 233
+- **строк_каталога:** 400
+- **строк_полностью_закрыто:** 213
+- **строк_с_каким_либо_прогрессом:** 236
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 164
-- **режимов_и_вариантов:** 240
-- **применимых_действий:** 3183
-- **действий_verified:** 1430
-- **покрытие_действий:** 44.9%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1430, 'not_applicable': 787, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 88, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 90, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 167
+- **режимов_и_вариантов:** 243
+- **применимых_действий:** 3198
+- **действий_verified:** 1445
+- **покрытие_действий:** 45.2%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1445, 'not_applicable': 802, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 91, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 93, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -1095,6 +1095,9 @@
 | `SPEC-02.row.create` | BOM | practical_required | SPEC_ADD_ROW | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-02.discovery, SPEC-02.schema, SPEC-02.create_assembly, SPEC-02.read_by_other_tool, SPEC-02.save_reopen, SPEC-02.create_part, SPEC-02.negative_input, SPEC-02.negative_section, SPEC-02.negative_revision, SPEC-02.negative_kind |
 | `SPEC-03.row.edit` | BOM | practical_required | SPEC_EDIT_ROW | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-03.discovery, SPEC-03.schema, SPEC-03.prepare_row, SPEC-03.edit_marking, SPEC-03.edit_name, SPEC-03.edit_quantity, SPEC-03.edit_position, SPEC-03.edit_together, SPEC-03.previous_values, SPEC-03.untouched_checked, SPEC-03.preexisting_row, SPEC-03.negative_input, SPEC-03.negative_foreign_ref, SPEC-03.negative_revision, SPEC-03.negative_stale_reference, SPEC-03.negative_unknown_row, SPEC-03.negative_kind, SPEC-03.save_reopen, SPEC-03.negative_value_type |
 | `SPEC-04.row.delete` | BOM | practical_required | SPEC_DELETE_ROW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | OK | OK | н/п | SPEC-04.discovery, SPEC-04.schema, SPEC-04.prepare_model, SPEC-04.delete_created, SPEC-04.neighbours_intact, SPEC-04.origin_note, SPEC-04.delete_preexisting, SPEC-04.get_specification_absent, SPEC-04.negative_input, SPEC-04.negative_revision, SPEC-04.negative_stale_deleted, SPEC-04.negative_stale_marking, SPEC-04.negative_unknown_row, SPEC-04.negative_kind, SPEC-04.save_reopen |
+| `SPEC-05.spw.row.create` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-05.discovery, SPEC-05.schema, SPEC-05.open_for_write, SPEC-05.create_with_columns, SPEC-05.read_by_other_tool, SPEC-05.columns_published, SPEC-05.save_reopen, SPEC-05.negative_unknown_column, SPEC-05.negative_duplicate_column, SPEC-05.negative_inactive |
+| `SPEC-06.spw.row.edit` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-06.discovery, SPEC-06.edit_marking, SPEC-06.edit_name, SPEC-06.edit_quantity, SPEC-06.edit_position, SPEC-06.edit_together, SPEC-06.untouched_checked, SPEC-06.save_reopen, SPEC-06.position_after_reopen, SPEC-06.negative_stale_reference, SPEC-06.negative_unknown_row, SPEC-06.negative_inactive |
+| `SPEC-07.spw.row.delete` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | OK | OK | н/п | SPEC-07.discovery, SPEC-07.delete_created, SPEC-07.neighbours_intact, SPEC-07.save_reopen, SPEC-07.negative_stale_deleted, SPEC-07.negative_stale_marking, SPEC-07.negative_inactive |
 | `IGES.export` | IGES | practical_required | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | IGES.01.discover, IGES.02.block, IGES.03.more_entities, IGES.04.assembly, IGES.05.revision_conflict, IGES.06.extension_refusal, IGES.07.overwrite, IGES.08.answer_shape |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1954,6 +1957,22 @@
   - Строка, которую КОМПАС ведёт от компонента, удаляется как обычная и предупреждается в notes, но восстанавливается ли она после перестроения или сохранения - не измерено: постановки с такой строкой нет, а документированного маршрута, создающего связь строки с компонентом (AddWithParam + IPropertyKeeper), в COM нет.
   - Перенумерация позиций после удаления не делается: позиции остальных строк остаются теми, что записал документ, и это видно в перечитанном списке.
   - Удаление объектов документа-спецификации .spw (ksSpcDocument.ksDeleteObj) и удаление описания спецификации (ISpecificationDescription.Delete) не входят: у .spw свои строки и свой маршрут, а описание спецификации - не строка.
+- `SPEC-05.spw.row.create` — закрыт целиком
+  - Доп. колонки пишутся только при СОЗДАНИИ: записанная после Update() основная колонка в файл не попадает (измерено), поэтому правка доп. колонок у существующей строки - отдельный наряд SPEC_SPW_COLUMNS.
+  - У .spw API5-дорога существует только у АКТИВНОГО документа (SpcActiveDocument), а v24 не документирует вызова активации: неактивный .spw - CAPABILITY_UNAVAILABLE до мутации с названным выходом (закрыть и открыть kompas_open_document). Открытый по path документ открыт только для чтения и для записи требует access=edit.
+  - Колонка ищется сначала в основных, затем в дополнительных колонках объекта, и которой нет - CAPABILITY_UNAVAILABLE с перечнем доступных; блок исполнений адресуется в Column[тип, номер, блок], а значение пишется в элемент с индексом блока (у постановки все колонки одноблочные).
+  - Строка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-05.save_reopen).
+  - Связь строки с компонентом (AddWithParam + IPropertyKeeper) этим инструментом не создаётся: она документирована и делается отдельным инструментом наряда SPEC_SPW_LINK_ROW.
+- `SPEC-06.spw.row.edit` — закрыт целиком
+  - Правка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-06.save_reopen).
+  - Правка доп. колонок у существующей строки не входит (наряд SPEC_SPW_COLUMNS): этот инструмент меняет только marking, name, quantity и position.
+  - API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до правки с названным выходом.
+  - Перенос раздела не входит: Section доступен только для чтения, а SetSection в файл не попадает (измерено).
+- `SPEC-07.spw.row.delete` — закрыт целиком
+  - Удаление живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-07.save_reopen).
+  - Удаление объектов документа-спецификации (ksSpcDocument.ksDeleteObj) и удаление описания спецификации не входят: удаляется СТРОКА маршрутом API7.
+  - Строка, которую КОМПАС ведёт от компонента, удаляется как обычная с предупреждением specification_row_may_return; восстанавливается ли она - не измерено (нет постановки со связанной строкой).
+  - API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до удаления.
 - `IGES.export` — закрыт целиком
   - Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.
   - Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.

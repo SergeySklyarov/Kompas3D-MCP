@@ -107,11 +107,11 @@ public class SpecificationRowDeleteTests
     }
 
     [Fact]
-    public void TheDescriptionNamesTheDeleteRouteTheStaleReferenceAndTheSpwLimit()
+    public void TheDescriptionNamesTheDeleteRouteTheStaleReferenceAndTheSpwDocument()
     {
         var description = Tool("kompas_specification_delete_row").Description;
 
-        // A reader must see which road deletes, how the absence is confirmed, what a stale reference means and
+        // A reader must see which road deletes, how the absence is confirmed, that a .spw is a target too, and
         // what the tool does not do.
         Assert.Contains("ISpecificationObject.Delete()", description, StringComparison.Ordinal);
         Assert.Contains("ksGetSpcObjectNumber", description, StringComparison.Ordinal);
@@ -119,7 +119,8 @@ public class SpecificationRowDeleteTests
         Assert.Contains("GEOMETRY_FAILED", description, StringComparison.Ordinal);
         Assert.Contains("восстановить", description, StringComparison.Ordinal);
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);
-        Assert.Contains(".spw", description, StringComparison.Ordinal);
+        Assert.Contains("ДОКУМЕНТЕ-спецификации .spw", description, StringComparison.Ordinal);
+        Assert.Contains("SpcActiveDocument", description, StringComparison.Ordinal);
     }
 
     [Fact]

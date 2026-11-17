@@ -94,7 +94,13 @@ public sealed record GetSpecificationDocumentCommand
 /// the document gives for it — both are read, neither is derived from the other.
 /// INVARIANT: <c>unique_number</c> is the number the DOCUMENT assigned («присваивается при создании»), and
 /// the address a write tool takes back: a row that was not created by this session is addressable only
-/// because the row publishes it. History: docs/decisions/bom.md#spec-edit-row</remarks>
+/// because the row publishes it.
+/// INVARIANT: <c>columns</c> and <c>column_types</c> are the values the DOCUMENT answered, keyed by column
+/// TYPE and number — never by an ordinal, which depends on the style. A missing column is null, an empty
+/// text is "" and an emptied number answers 0: three answers, three meanings.
+/// DOC: <c>ksspecificationcolumntypeenum.html</c>, <c>ispecificationcolumns_column.html</c>,
+/// <c>ispecificationcolumnitem_value.html</c>.
+/// History: docs/decisions/bom.md#spec-edit-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
 public sealed record SpecificationLineDto(
     string? Section,
     int? SectionNumber,
@@ -102,7 +108,9 @@ public sealed record SpecificationLineDto(
     string? Marking,
     string? Name,
     string? Quantity,
-    double? UniqueNumber = null);
+    double? UniqueNumber = null,
+    IReadOnlyDictionary<string, object?>? Columns = null,
+    IReadOnlyDictionary<string, string>? ColumnTypes = null);
 
 /// <summary>The specification rows, their number, the route and the notes.</summary>
 /// <remarks>INVARIANT: <c>count</c> is the number of rows in the answer, so a caller reads one number
@@ -140,17 +148,17 @@ public sealed record GetSpecificationDocumentResult(
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> UnverifiedAspects);
 
-/// <summary>Create one row of a MODEL specification — block <c>SPEC_ADD_ROW</c>, mode
-/// <c>SPEC-02.row.create</c>.</summary>
+/// <summary>Create one row of a specification — block <c>SPEC-02.row.create</c> for a MODEL, block
+/// <c>SPEC-05.spw.row.create</c> for a <c>.spw</c> DOCUMENT.</summary>
 /// <remarks>ROUTE: <c>ISpecificationDescription.BaseObjects.Add(section, 0)</c> puts the object into the
 /// COLLECTION only; the columns and <c>Update()</c> are what create it in the document
 /// (<c>ispecificationbaseobjects_add.html</c>, <c>ispecificationobject_update.html</c>).
 /// INVARIANT: the answer is not "the call returned" — the row is read back through BOTH documented roads
 /// and compared with the request; a disagreement is a refusal with a snapshot, never a success.
-/// History: docs/decisions/bom.md#spec-add-row</remarks>
+/// History: docs/decisions/bom.md#spec-add-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
 public sealed record AddSpecificationRowCommand
 {
-    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    /// <summary>A part, an assembly or a <c>.spw</c> document: each has its own specification rows.</summary>
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }
@@ -166,7 +174,24 @@ public sealed record AddSpecificationRowCommand
 
     /// <summary>Row position; null leaves the numbering to the document.</summary>
     public int? Position { get; init; }
+
+    /// <summary>Columns beyond the four fields, written BEFORE the first <c>Update()</c>.</summary>
+    /// <remarks>LIMIT: an existing row's extra columns are not edited by this call — a column written after
+    /// <c>Update()</c> does not reach the file for the main columns (measured), so the write is create-only.
+    /// DOC: <c>ksspecificationcolumntypeenum.html</c> names the types, <c>ispecificationcolumns_column.html</c>
+    /// the [type, number, block] address.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    public IReadOnlyList<SpecificationExtraColumnDto>? ExtraColumns { get; init; }
 }
+
+/// <summary>One column beyond the four fields: its documented TYPE, its number and the value as text.</summary>
+/// <param name="Type">Stable latin key of a <c>ksSpecificationColumnTypeEnum</c> value: format, zone, note,
+/// mass, material, user, code, factory, document_number, document_name, document_code, code_okp.</param>
+/// <param name="Number">«номер колонки данного типа, начиная с 1»; null means the first one.</param>
+/// <param name="Block">«номер блока исполнений, начиная с 0»; null means the main block.</param>
+/// <remarks>INVARIANT: the four row fields address their columns themselves, so their keys are refused here
+/// instead of being written twice. History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+public sealed record SpecificationExtraColumnDto(string Type, int? Number, int? Block, string Value);
 
 /// <summary>The row that was created, named the way the rest of the contract names a row.</summary>
 /// <param name="UniqueNumber">Read from the object itself and confirmed by <c>ksGetSpcObjectNumber</c>;
@@ -186,17 +211,17 @@ public sealed record AddSpecificationRowResult(
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> UnverifiedAspects);
 
-/// <summary>Edit one row of a MODEL specification — block <c>SPEC_EDIT_ROW</c>.</summary>
+/// <summary>Edit one row of a specification: a MODEL or a <c>.spw</c> DOCUMENT.</summary>
 /// <remarks>ROUTE: API5 only — the documented road whose write SURVIVES the file: <c>ksSpcObjectEdit</c> →
 /// <c>ksSetSpcObjectColumnText</c>/<c>ksSpcCount</c>/<c>ksSpcPosition</c> → <c>ksSpcObjectEnd</c>
 /// (<c>ksspecification_ksspcobjectedit.html</c>). The API7 column write answers <c>Update() = false</c> on an
 /// existing row (measured), so it is not a write road here.
 /// INVARIANT: the row is addressed by the reference the creation and the read publish; a row that is gone,
-/// or whose marking no longer matches it, is <c>STALE_REFERENCE</c> with the model untouched.
-/// History: docs/decisions/bom.md#spec-edit-row</remarks>
+/// or whose marking no longer matches it, is <c>STALE_REFERENCE</c> with the document untouched.
+/// History: docs/decisions/bom.md#spec-edit-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
 public sealed record EditSpecificationRowCommand
 {
-    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    /// <summary>A part, an assembly or a <c>.spw</c> document.</summary>
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }
@@ -228,16 +253,18 @@ public sealed record EditSpecificationRowResult(
     IReadOnlyList<string> Notes,
     IReadOnlyList<string> UnverifiedAspects);
 
-/// <summary>Delete one row of a MODEL specification — block <c>SPEC_DELETE_ROW</c>.</summary>
+/// <summary>Delete one row of a specification — block <c>SPEC-04.row.delete</c> for a MODEL, block
+/// <c>SPEC-07.spw.row.delete</c> for a <c>.spw</c> DOCUMENT.</summary>
 /// <remarks>ROUTE: API7 <c>ISpecificationObject.Delete()</c> — «удалить базовый или вспомогательный объект
 /// спецификации из документа и из коллекции» (<c>ispecificationobject_delete.html</c>). The row is found by
 /// the SAME shared lookup the edit uses, and its marking is checked against the reference before the call.
-/// INVARIANT: a row that is gone, or whose marking no longer matches, is <c>STALE_REFERENCE</c> with the model
-/// untouched; success is the absence the document answers through BOTH roads after the call, never the answer
-/// of <c>Delete()</c> itself. History: docs/decisions/bom.md#spec-delete-row</remarks>
+/// INVARIANT: a row that is gone, or whose marking no longer matches, is <c>STALE_REFERENCE</c> with the
+/// document untouched; success is the absence the document answers through BOTH roads after the call, never
+/// the answer of <c>Delete()</c> itself.
+/// History: docs/decisions/bom.md#spec-delete-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
 public sealed record DeleteSpecificationRowCommand
 {
-    /// <summary>A part or an assembly: a specification belongs to a model.</summary>
+    /// <summary>A part, an assembly or a <c>.spw</c> document.</summary>
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }

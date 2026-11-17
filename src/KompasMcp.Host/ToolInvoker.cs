@@ -334,6 +334,17 @@ public sealed class ToolInvoker : IAsyncDisposable
                 yield return new SchemaViolation("/" + refused.Field, "value", refused.Message);
             }
 
+            // Extra columns carry a type key, a number, a block and a non-blank value: an unknown key, one of
+            // the four row fields, a non-positive number, a negative block, a blank value or the same column
+            // twice is refused BEFORE the journal and BEFORE COM. The Worker repeats the SAME pure rule.
+            // History: docs/decisions/bom.md#spec-spw-row-write
+            SpecificationExtraColumns.Parse(ReadExtraColumns(arguments["extra_columns"]), out var extraRefused);
+            if (extraRefused is not null)
+            {
+                yield return new SchemaViolation(
+                    "/extra_columns/" + extraRefused.Field, "value", extraRefused.Message);
+            }
+
             yield break;
         }
 
@@ -1457,6 +1468,33 @@ public sealed class ToolInvoker : IAsyncDisposable
     // and the strict GetValue<T>/TryGetValue<T> overloads silently return nothing for that storage.
     private static string? ReadString(JsonNode? node, string key) =>
         node is JsonObject obj ? JsonScalars.ReadString(obj[key]) : null;
+
+    /// <summary>The <c>extra_columns</c> array as the pure rule reads it; a missing or malformed field is
+    /// "no columns", and the schema has already refused anything that is not an array.</summary>
+    private static IReadOnlyList<SpecificationExtraColumnDto>? ReadExtraColumns(JsonNode? node)
+    {
+        if (node is not JsonArray array)
+        {
+            return null;
+        }
+
+        var items = new List<SpecificationExtraColumnDto>(array.Count);
+        foreach (var item in array)
+        {
+            if (item is not JsonObject entry)
+            {
+                continue;
+            }
+
+            items.Add(new SpecificationExtraColumnDto(
+                ReadString(entry, "type") ?? string.Empty,
+                ReadInt(entry, "number"),
+                ReadInt(entry, "block"),
+                ReadString(entry, "value") ?? string.Empty));
+        }
+
+        return items;
+    }
 
     /// <summary>The field is present and not null. Differs from a bare `TryGetPropertyValue` in that an
     /// empty string and zero count as present: the refusal must come from the "field forbidden in this

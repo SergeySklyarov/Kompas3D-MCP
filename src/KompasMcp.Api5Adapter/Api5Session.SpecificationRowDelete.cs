@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Kompas6API5;
 using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Contracts;
@@ -40,26 +41,30 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = refused.Field });
         }
 
-        var document = RequireModelForRowWrite(command.DocumentId, "удаляет");
+        var document = RequireRowWriteDocument(command.DocumentId, "удаляет");
         var notes = new List<string>();
         var checks = new List<NamedCheck>();
         var unique = command.RowRef.UniqueNumber;
 
+        // The API5 road is resolved BEFORE the row is looked for: for a .spw it exists only while the document
+        // is active, and a deletion whose absence could not be read back through it would be unverifiable.
+        // History: docs/decisions/bom.md#spec-spw-row-write
+        var specification = SpecificationForRowWrite(document, notes);
+
         var description = ActiveSpecificationDescription(document, notes)
             ?? throw StaleDeleteRefusal(document, command,
                 "У документа нет описания спецификации (Active = NULL): строки, которую адресует ссылка, "
-                + "не существует, модель не тронута.", null);
+                + "не существует, документ не тронут.", null);
 
         var listed = ObjectsWithNumber(description, unique, out var candidates);
         if (listed is null)
         {
             throw StaleDeleteRefusal(document, command, candidates == 0
-                ? $"Строки с номером {Fmt(unique)} в документе нет: ссылка устарела, модель не тронута."
+                ? $"Строки с номером {Fmt(unique)} в документе нет: ссылка устарела, документ не тронут."
                 : $"Строк с номером {Fmt(unique)} в документе несколько ({candidates}): ссылка не адресует "
-                  + "одну строку, модель не тронута.", null);
+                  + "одну строку, документ не тронут.", null);
         }
 
-        var specification = Specification5(document);
         var pointer = Int(() => specification.ksGetSpcObject(unique));
         var confirmed = pointer is > 0
             && SameUniqueNumber(Double(() => specification.ksGetSpcObjectNumber(pointer.Value)), unique);
@@ -68,19 +73,19 @@ public partial class Api5Session
             throw StaleDeleteRefusal(document, command,
                 $"ksGetSpcObject({Fmt(unique)}) + ksGetSpcObjectNumber не подтвердили строку: указатель "
                 + (pointer is > 0 ? "отвечает другим номером или не отвечает" : "не получен")
-                + ". Чужую строку под этим номером не удаляем, модель не тронута.", null);
+                + ". Чужую строку под этим номером не удаляем, документ не тронут.", null);
         }
 
         var previous = ReadSpecificationLine(specification, listed, notes)
             ?? throw StaleDeleteRefusal(document, command,
                 "Строка есть в списке, но её поля не прочитаны документированным маршрутом: сверять ссылку "
-                + "и называть удалённые значения не с чем, модель не тронута.", null);
+                + "и называть удалённые значения не с чем, документ не тронут.", null);
 
         if (!RowMarkingMatches(command.RowRef.Marking, previous.Marking))
         {
             throw StaleDeleteRefusal(document, command,
                 $"Маркировка строки «{previous.Marking ?? "не прочитана"}» не равна маркировке ссылки "
-                + $"«{command.RowRef.Marking}»: ссылку выдали на прежнее состояние строки, модель не тронута.",
+                + $"«{command.RowRef.Marking}»: ссылку выдали на прежнее состояние строки, документ не тронут.",
                 previous);
         }
 
@@ -139,7 +144,7 @@ public partial class Api5Session
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             BumpRevision(document, "specification.delete_row");
-            var still = TryReadRow(document, unique, notes);
+            var still = TryReadRow(document, specification, unique, notes);
             snapshot["delete"] = "вызов прервался: " + ex.Message;
             snapshot["after"] = still?.Row;
             snapshot["revision"] = document.Revision;
@@ -164,7 +169,7 @@ public partial class Api5Session
 
         if (deleted != true)
         {
-            var still = TryReadRow(document, unique, notes);
+            var still = TryReadRow(document, specification, unique, notes);
             snapshot["delete"] = deleted;
             snapshot["after"] = still?.Row;
             snapshot["revision"] = document.Revision;
@@ -184,7 +189,7 @@ public partial class Api5Session
                 });
         }
 
-        var after = ReadAfterDelete(document, unique, notes);
+        var after = ReadAfterDelete(document, specification, unique, notes);
         var missing = beforeOther
             .Where(row => !after.Rows.Any(kept => SameRowNumber(kept, row)))
             .Select(row => row.Unique)
@@ -256,8 +261,9 @@ public partial class Api5Session
         // deletion across a save and a reopen is the acceptance's business, not this call's.
         var unverified = new List<string>
         {
-            "row_deletion_not_written_to_file — удаление живёт в модели до kompas_save_document; переживание "
-            + "сохранения и переоткрытия проверяет приёмка (SPEC-04.save_reopen), а не этот вызов",
+            "row_deletion_not_written_to_file — удаление живёт в документе до kompas_save_document; переживание "
+            + "сохранения и переоткрытия проверяет приёмка (SPEC-04.save_reopen для модели, "
+            + "SPEC-07.save_reopen для .spw), а не этот вызов",
         };
 
         return new DeleteSpecificationRowResult(
@@ -355,7 +361,7 @@ public partial class Api5Session
     /// longer answer it. A road that cannot be read is a refusal, never an assumed absence.
     /// History: docs/decisions/bom.md#spec-delete-row</remarks>
     private (List<RowSnapshot> Rows, bool AbsentApi7, bool AbsentApi5) ReadAfterDelete(
-        DocumentEntry document, double unique, List<string> notes)
+        DocumentEntry document, ksSpecification specification, double unique, List<string> notes)
     {
         var description = ActiveSpecificationDescription(document, notes)
             ?? throw DeleteReadRefusal(document, unique,
@@ -365,7 +371,6 @@ public partial class Api5Session
         var rows = RowCensus(description, notes);
         var absentApi7 = !rows.Any(row => IsDeletedRow(row, unique));
 
-        var specification = Specification5(document);
         var pointer = Int(() => specification.ksGetSpcObject(unique));
         var pointerNumber = pointer is > 0
             ? Double(() => specification.ksGetSpcObjectNumber(pointer.Value))

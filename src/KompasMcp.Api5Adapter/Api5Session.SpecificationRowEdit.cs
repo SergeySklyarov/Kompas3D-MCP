@@ -25,11 +25,11 @@ namespace KompasMcp.Api5Adapter;
 public partial class Api5Session
 {
     private const string SpecificationRowEditRoute =
-        "api5:ksDocument3D.GetSpecification() → ksGetSpcObject(unique_number) → ksGetSpcObjectNumber (сверка "
-        + "указателя) → ksSpcObjectEdit → ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / "
-        + "ksSpcPosition → ksSpcObjectEnd; до и после правки строка читается обеими дорогами: API7 "
-        + "(SpecificationDescriptions.Active → Objects → Columns → ColumnItems) и API5 "
-        + "(ksGetSpcObjectColumnText + ksGetSpcSectionName)";
+        "api5:ksDocument3D.GetSpecification() (модель) или SpcActiveDocument().GetSpecification() (.spw) → "
+        + "ksGetSpcObject(unique_number) → ksGetSpcObjectNumber (сверка указателя) → ksSpcObjectEdit → "
+        + "ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / ksSpcPosition → ksSpcObjectEnd; до и "
+        + "после правки строка читается обеими дорогами: API7 (SpecificationDescriptions.Active → Objects → "
+        + "Columns → ColumnItems) и API5 (ksGetSpcObjectColumnText + ksGetSpcSectionName)";
 
     /// <summary>Edit the row the reference addresses and answer what the document holds afterwards.</summary>
     public EditSpecificationRowResult EditSpecificationRow(EditSpecificationRowCommand command)
@@ -46,15 +46,20 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = refused.Field });
         }
 
-        var document = RequireModelForRowWrite(command.DocumentId, "правит");
+        var document = RequireRowWriteDocument(command.DocumentId, "правит");
         var notes = new List<string>();
         var checks = new List<NamedCheck>();
         var unique = command.RowRef.UniqueNumber;
 
+        // The API5 road is resolved BEFORE any check that could turn into a mutation: for a .spw it exists
+        // only while the document is active, and the refusal names the remedy.
+        // History: docs/decisions/bom.md#spec-spw-row-write
+        var specification = SpecificationForRowWrite(document, notes);
+
         var description = ActiveSpecificationDescription(document, notes)
             ?? throw StaleRowRefusal(document, command,
                 "У документа нет описания спецификации (Active = NULL): строки, которую адресует ссылка, "
-                + "не существует, модель не тронута.", null);
+                + "не существует, документ не тронут.", null);
 
         // The row is found in the list and then through the API5 pointer, and the pointer answers its own
         // number: a foreign row under this number would be edited silently otherwise.
@@ -62,12 +67,11 @@ public partial class Api5Session
         if (listed is null)
         {
             throw StaleRowRefusal(document, command, candidates == 0
-                ? $"Строки с номером {Fmt(unique)} в документе нет: ссылка устарела, модель не тронута."
+                ? $"Строки с номером {Fmt(unique)} в документе нет: ссылка устарела, документ не тронут."
                 : $"Строк с номером {Fmt(unique)} в документе несколько ({candidates}): ссылка не адресует "
-                  + "одну строку, модель не тронута.", null);
+                  + "одну строку, документ не тронут.", null);
         }
 
-        var specification = Specification5(document);
         var pointer = Int(() => specification.ksGetSpcObject(unique));
         var confirmed = pointer is > 0
             && SameUniqueNumber(Double(() => specification.ksGetSpcObjectNumber(pointer.Value)), unique);
@@ -76,19 +80,19 @@ public partial class Api5Session
             throw StaleRowRefusal(document, command,
                 $"ksGetSpcObject({Fmt(unique)}) + ksGetSpcObjectNumber не подтвердили строку: указатель "
                 + (pointer is > 0 ? "отвечает другим номером или не отвечает" : "не получен")
-                + ". Чужую строку под этим номером не правим, модель не тронута.", null);
+                + ". Чужую строку под этим номером не правим, документ не тронут.", null);
         }
 
         var previous = ReadSpecificationLine(specification, listed, notes)
             ?? throw StaleRowRefusal(document, command,
                 "Строка есть в списке, но её поля не прочитаны документированным маршрутом: сверять ссылку "
-                + "и сравнивать правку не с чем, модель не тронута.", null);
+                + "и сравнивать правку не с чем, документ не тронут.", null);
 
         if (!RowMarkingMatches(command.RowRef.Marking, previous.Marking))
         {
             throw StaleRowRefusal(document, command,
                 $"Маркировка строки «{previous.Marking ?? "не прочитана"}» не равна маркировке ссылки "
-                + $"«{command.RowRef.Marking}»: ссылку выдали на прежнее состояние строки, модель не тронута.",
+                + $"«{command.RowRef.Marking}»: ссылку выдали на прежнее состояние строки, документ не тронут.",
                 previous);
         }
 
@@ -193,7 +197,7 @@ public partial class Api5Session
 
         if (failedField is not null)
         {
-            var now = TryReadRow(document, unique, notes);
+            var now = TryReadRow(document, specification, unique, notes);
             snapshot["applied_by_setters"] = applied.ToArray();
             snapshot["failed_field"] = failedField;
             snapshot["ksSpcObjectEnd"] = ended is null
@@ -219,7 +223,7 @@ public partial class Api5Session
                 });
         }
 
-        var after = ReadRowAfterEdit(document, unique, notes);
+        var after = ReadRowAfterEdit(document, specification, unique, notes);
         var api7 = new Dictionary<string, string?>(StringComparer.Ordinal);
         var api5 = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var (field, text, type) in fields)
@@ -279,8 +283,9 @@ public partial class Api5Session
         // across a save and a reopen is the acceptance's business, not this call's.
         var unverified = new List<string>
         {
-            "row_not_written_to_file — правка живёт в модели до kompas_save_document; переживание "
-            + "сохранения и переоткрытия проверяет приёмка (SPEC-03.save_reopen), а не этот вызов",
+            "row_not_written_to_file — правка живёт в документе до kompas_save_document; переживание "
+            + "сохранения и переоткрытия проверяет приёмка (SPEC-03.save_reopen для модели, "
+            + "SPEC-06.save_reopen для .spw), а не этот вызов",
         };
 
         return new EditSpecificationRowResult(
@@ -429,7 +434,8 @@ public partial class Api5Session
     /// <c>ksGetSpcObjectNumber</c> before any of its texts are published.
     /// History: docs/decisions/bom.md#spec-edit-row</remarks>
     private (ISpecificationBaseObject Listed, SpecificationLineDto Row, ksSpecification Specification, int Pointer)
-        ReadRowAfterEdit(DocumentEntry document, double unique, List<string> notes)
+        ReadRowAfterEdit(
+            DocumentEntry document, ksSpecification specification, double unique, List<string> notes)
     {
         var description = ActiveSpecificationDescription(document, notes)
             ?? throw RowEditReadRefusal(document, unique,
@@ -442,7 +448,6 @@ public partial class Api5Session
                 : $"После правки строк с номером {Fmt(unique)} в документе {candidates}: одна ссылка больше не "
                   + "адресует одну строку.", null);
 
-        var specification = Specification5(document);
         var pointer = Int(() => specification.ksGetSpcObject(unique));
         if (pointer is null or <= 0)
         {
@@ -459,7 +464,7 @@ public partial class Api5Session
 
     /// <summary>The row after a refused edit, for the snapshot only: a failure here must not hide the refusal.</summary>
     private (ISpecificationBaseObject Listed, SpecificationLineDto Row)? TryReadRow(
-        DocumentEntry document, double unique, List<string> notes)
+        DocumentEntry document, ksSpecification specification, double unique, List<string> notes)
     {
         try
         {
@@ -475,7 +480,7 @@ public partial class Api5Session
                 return null;
             }
 
-            var row = ReadSpecificationLine(Specification5(document), listed, notes);
+            var row = ReadSpecificationLine(specification, listed, notes);
             return row is null ? null : (listed, row);
         }
         catch (KompasContractException)
@@ -534,8 +539,9 @@ public partial class Api5Session
     /// но редактировался в данном документе»; <c>ispecificationbaseobject_syncronizewithproperties.html</c> —
     /// «Брать данные из свойств и передавать данные в свойства объекта».
     /// INVARIANT: neither member NAMES a component, so the note reports them as READ and no row is refused for
-    /// its origin. LIMIT: a documented sign tying a row to a component does not exist in COM (<c>IPropertyKeeper</c>
-    /// has no entry point), so none is searched. History: docs/decisions/bom.md#spec-edit-row</remarks>
+    /// its origin. The link itself is documented and made by its own tool (<c>AddWithParam</c> +
+    /// <c>IPropertyKeeper</c>), not queried here. History: docs/decisions/bom.md#spec-edit-row,
+    /// docs/decisions/bom.md#spec-spw</remarks>
     private static bool AddRowOrigin(ISpecificationBaseObject listed, List<string> notes)
     {
         var state = SafeRead.EnumOrNull<ksSpecificationObjectStateEnum>(() => listed.State);

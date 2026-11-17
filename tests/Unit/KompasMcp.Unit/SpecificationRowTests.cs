@@ -68,7 +68,7 @@ public class SpecificationRowTests
     }
 
     [Fact]
-    public void TheSchemaDemandsTheRowFieldsAndLeavesPositionOptional()
+    public void TheSchemaDemandsTheRowFieldsAndLeavesPositionAndExtraColumnsOptional()
     {
         var schema = Tool("kompas_specification_add_row").InputSchema;
         var properties = (JsonObject)schema["properties"]!;
@@ -78,13 +78,36 @@ public class SpecificationRowTests
         // `timeout_ms` is added to every tool by the request builder, not declared by this one;
         // `operation_id` is declared because the tool is a mutation.
         Assert.Equal(
-            new[] { "document_id", "expected_revision", "marking", "name", "operation_id", "position",
-                    "quantity", "section_number" },
+            new[] { "document_id", "expected_revision", "extra_columns", "marking", "name", "operation_id",
+                    "position", "quantity", "section_number" },
             properties.Select(pair => pair.Key).Except(new[] { "timeout_ms" }).OrderBy(k => k, StringComparer.Ordinal));
         Assert.Equal(
             new[] { "document_id", "expected_revision", "marking", "name", "operation_id", "quantity",
                     "section_number" },
             required.OrderBy(k => k, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TheExtraColumnsSchemaIsAClosedListOfDocumentedTypes()
+    {
+        var schema = Tool("kompas_specification_add_row").InputSchema;
+        var extra = (JsonObject)((JsonObject)schema["properties"]!)["extra_columns"]!;
+        var items = (JsonObject)extra["items"]!;
+        var fields = (JsonObject)items["properties"]!;
+        var type = (JsonObject)fields["type"]!;
+        var keys = ((JsonArray)type["enum"]!).Select(node => node!.GetValue<string>()).ToArray();
+
+        // The four row fields are inputs of their own, so they must not be writable as extra columns twice.
+        Assert.DoesNotContain("position", keys);
+        Assert.DoesNotContain("marking", keys);
+        Assert.DoesNotContain("name", keys);
+        Assert.DoesNotContain("quantity", keys);
+        Assert.Contains("format", keys);
+        Assert.Contains("mass", keys);
+        Assert.Contains("user", keys);
+        Assert.Equal(12, keys.Length);
+        Assert.Equal(new[] { "type", "value" }, ((JsonArray)items["required"]!)
+            .Select(node => node!.GetValue<string>()).OrderBy(k => k, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -104,12 +127,16 @@ public class SpecificationRowTests
     {
         var description = Tool("kompas_specification_add_row").Description;
 
-        // A reader must be able to tell a created row from a call that only entered the collection.
+        // A reader must be able to tell a created row from a call that only entered the collection, see that a
+        // .spw is a target, and know why extra columns exist only at creation.
         Assert.Contains("Update()", description, StringComparison.Ordinal);
         Assert.Contains("GEOMETRY_FAILED", description, StringComparison.Ordinal);
         Assert.Contains("IPropertyKeeper", description, StringComparison.Ordinal);
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);
         Assert.Contains("0.0.", description, StringComparison.Ordinal);
+        Assert.Contains("ДОКУМЕНТЕ-спецификации .spw", description, StringComparison.Ordinal);
+        Assert.Contains("extra_columns", description, StringComparison.Ordinal);
+        Assert.Contains("ДО первого Update()", description, StringComparison.Ordinal);
     }
 
     [Fact]

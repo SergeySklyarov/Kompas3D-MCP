@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 164,
+   "operations": 167,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 240,
+   "modes_and_variants": 243,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
@@ -8650,6 +8650,51 @@
       }
      ]
     }
+     ,
+     {
+      "id": "SPEC-05",
+      "name": "Создание строки документа-спецификации .spw",
+      "level": "mcp_verified",
+      "doc_source": "ispecificationbaseobjects_add.html, ispecificationobject_update.html, ikompasdocument_specificationdescriptions.html, ispecificationobject_columns.html, ispecificationobject_additionalcolumns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_uniquenumber.html, ispecificationobject_delete.html, ispecificationstyle_sections.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ispecificationobject_section.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html, kompasobject_spcactivedocument.html, ksspcdocument_getspecification.html",
+      "route": "API7 в документ-спецификацию .spw: SpecificationDescriptions.Active (у .spw описание уже есть) -> ISpecificationBaseObjects.Add(section, 0) кладёт объект в КОЛЛЕКЦИЮ -> колонки основных (ISpecificationObject.Columns) и дополнительных (AdditionalColumns) коллекций по типу, номеру и блоку -> ОДИН ISpecificationObject.Update() создаёт строку; extra_columns пишутся ДО первого Update() (измерено: записанное после него в файл не попадает); успех подтверждается перечитыванием описания заново, опознанием строки как НОВОГО объекта Objects и сверкой каждой колонки обеими дорогами - API7 (Columns/AdditionalColumns -> ColumnItems) и API5 SpcActiveDocument().GetSpecification() -> ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcObjectColumnText(тип, номер, блок); расхождение - GEOMETRY_FAILED со снимком",
+      "modes": [
+       {
+        "id": "SPEC-05.spw.row.create",
+        "name": "Создать строку .spw: раздел, обозначение, наименование, количество, позиция и колонки сверх них",
+        "level": "mcp_verified"
+       }
+      ]
+     }
+     ,
+     {
+      "id": "SPEC-06",
+      "name": "Правка строки документа-спецификации .spw",
+      "level": "mcp_verified",
+      "doc_source": "ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html, ispecificationobject_uniquenumber.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_section.html, ispecificationsectionstyle_number.html, ispecificationsectionstyle_name.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html, ksspecificationobjectstateenum.html, kompasobject_spcactivedocument.html",
+      "route": "API5 в документ-спецификацию .spw, единственный маршрут правки, который сохраняется: SpcActiveDocument().GetSpecification() (дорога существует только у АКТИВНОГО документа, поэтому неактивный .spw - CAPABILITY_UNAVAILABLE до правки) -> ksGetSpcObject(row_ref.unique_number) -> ksGetSpcObjectNumber (сверка указателя) -> ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1, текст) / ksSpcPosition -> ksSpcObjectEnd; до правки маркировка сверяется со ссылкой, после - строка перечитывается обеими дорогами (API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а не названные - с прежними значениями; расхождение - GEOMETRY_FAILED со снимком",
+      "modes": [
+       {
+        "id": "SPEC-06.spw.row.edit",
+        "name": "Править строку .spw: обозначение, наименование, количество, позиция",
+        "level": "mcp_verified"
+       }
+      ]
+     }
+     ,
+     {
+      "id": "SPEC-07",
+      "name": "Удаление строки документа-спецификации .spw",
+      "level": "mcp_verified",
+      "doc_source": "ispecificationobject_delete.html, ispecificationobject_uniquenumber.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html, ksspecificationobjectstateenum.html, ispecificationdescription_objects.html, ispecificationobject_columns.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ispecificationobject_section.html, ksspecification_ksgetspcobject.html, ksspecification_ksgetspcobjectnumber.html, ksspecification_ksgetspcsectionname.html, ksspecification_ksgetspcobjectcolumntext.html, ksspecificationcolumntypeenum.html, kompasobject_spcactivedocument.html",
+      "route": "API7 в документ-спецификацию .spw: строка находится по row_ref.unique_number в ISpecificationDescription.Objects общим кодом правки, подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber и сверкой маркировки, значения читаются обеими дорогами ДО удаления, затем документированный ISpecificationObject.Delete(); после вызова список перечитывается ОБЕИМИ дорогами: API7 Objects (строки с этим номером нет, строк на одну меньше, прочие на месте по номеру и значениям) и API5 ksGetSpcObject по удалённому номеру (указателя нет); неактивный .spw - CAPABILITY_UNAVAILABLE до удаления, потому что отсутствие обязано читаться обеими дорогами",
+      "modes": [
+       {
+        "id": "SPEC-07.spw.row.delete",
+        "name": "Удалить строку .spw по ссылке row_ref: значения до удаления, число строк до и после",
+        "level": "mcp_verified"
+       }
+      ]
+     }
    ]
   } ,{
   "id": "IGES",

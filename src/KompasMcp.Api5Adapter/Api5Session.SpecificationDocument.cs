@@ -248,6 +248,7 @@ public partial class Api5Session
                     + "спецификации: название раздела не прочитано, номер прочитан");
             }
 
+            var published = Api7ColumnPublication(item, notes);
             var row = new SpecificationLineDto(
                 section,
                 sectionNumber,
@@ -255,7 +256,9 @@ public partial class Api5Session
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnMark, "marking", notes),
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnName, "name", notes),
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnCount, "quantity", notes),
-                Double(() => item.UniqueNumber));
+                Double(() => item.UniqueNumber),
+                published.Values,
+                published.Types);
             rows.Add(row);
 
             if (specification5 is not null)
@@ -307,31 +310,46 @@ public partial class Api5Session
     /// <remarks>DOC: <c>kompasobject_spcactivedocument.html</c> — «Если документ спецификации не активен,
     /// функция возвращает NULL»; <c>ksspcdocument_getspecification.html</c>.
     /// INVARIANT: the document is not activated to make this road available — that would change the user's
-    /// window. Identity is checked on the API7 object before the API5 call is trusted.</remarks>
+    /// window, and v24 documents no activation call. Identity is checked on the API7 object before the API5
+    /// call is trusted. History: docs/decisions/bom.md#spec-read-spw</remarks>
     private ksSpecification? Specification5OfActiveDocument(DocumentEntry document, List<string> unverified)
     {
-        const string unavailable = "api5_road_unavailable — вторая, независимая дорога (API5 "
-            + "SpcActiveDocument → GetSpecification → ksGetSpcObjectColumnText) ";
+        var specification = ActiveDocumentSpecification5(document, out var reason);
+        if (specification is null)
+        {
+            unverified.Add("api5_road_unavailable — вторая, независимая дорога (API5 "
+                + "SpcActiveDocument → GetSpecification → ksGetSpcObjectColumnText) " + reason
+                + "; строки прочитаны ОДНОЙ дорогой (API7)");
+        }
+
+        return specification;
+    }
+
+    /// <summary>The API5 specification of a document only while it IS active; null carries the reason.</summary>
+    /// <remarks>DOC: <c>kompasobject_spcactivedocument.html</c> — the API5 root answers the ACTIVE document,
+    /// so a document that is not active has no API5 road; <c>ksspcdocument_getspecification.html</c>.
+    /// INVARIANT: a road this call cannot take is NAMED, never silently replaced by the other one.
+    /// History: docs/decisions/bom.md#spec-read-spw, docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private ksSpecification? ActiveDocumentSpecification5(DocumentEntry document, out string? reason)
+    {
         var application = _applications.TryGetValue(document.ApplicationId, out var entry) ? entry : null;
         var document7 = DocumentAsApi7(document);
         if (application is null || document7 is null)
         {
-            unverified.Add(unavailable + "недоступна: экземпляр или API7-дескриптор документа не найден; "
-                + "строки прочитаны ОДНОЙ дорогой (API7)");
+            reason = "недоступна: экземпляр или API7-дескриптор документа не найден";
             return null;
         }
 
         var active = SafeRead.Ref(() => BridgeForApplication(application).Application()?.ActiveDocument);
         if (active is null)
         {
-            unverified.Add(unavailable + "недоступна: активный документ сеанса не прочитан");
+            reason = "недоступна: активный документ сеанса не прочитан";
             return null;
         }
 
         if (!SameComObject(active, document7))
         {
-            unverified.Add(unavailable + "недоступна: документ-спецификация не активен, а активировать его "
-                + "чтение не вправе; строки прочитаны ОДНОЙ дорогой (API7)");
+            reason = "недоступна: документ-спецификация не активен";
             return null;
         }
 
@@ -341,15 +359,15 @@ public partial class Api5Session
             var active5 = application.Application.SpcActiveDocument() as ksSpcDocument;
             if (active5?.GetSpecification() is ksSpecification specification)
             {
+                reason = null;
                 return specification;
             }
 
-            unverified.Add(unavailable + "недоступна: SpcActiveDocument().GetSpecification() не дал "
-                + "ksSpecification");
+            reason = "недоступна: SpcActiveDocument().GetSpecification() не дал ksSpecification";
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            unverified.Add(unavailable + $"прервалась: {ex.Message}");
+            reason = $"прервалась: {ex.Message}";
         }
 
         return null;
@@ -480,6 +498,91 @@ public partial class Api5Session
                 + $"{ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>Every column of one row, by the key of its documented TYPE and number.</summary>
+    /// <returns>The values the document answered and, for each key, the name of the element's value type.</returns>
+    /// <remarks>INVARIANT: a value is published as the DOCUMENT answers it — text stays text, a number stays a
+    /// number — so the three readings of the read road stay apart: no column is null, an empty text is "", and
+    /// an emptied number answers 0. Joining the items of one column with «|» is the read road's own rule for
+    /// embodiment blocks and is not a second value.
+    /// DOC: <c>ispecificationobject_columns.html</c>, <c>ispecificationobject_additionalcolumns.html</c>,
+    /// <c>ispecificationcolumn_columntype.html</c>, <c>_columntypenumber.html</c>, <c>_valuetype.html</c>,
+    /// <c>ispecificationcolumnitems_item.html</c>, <c>ispecificationcolumnitem_value.html</c>,
+    /// <c>ksspecificationcolumntypeenum.html</c>.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static (IReadOnlyDictionary<string, object?> Values, IReadOnlyDictionary<string, string> Types)
+        Api7ColumnPublication(ISpecificationBaseObject item, List<string> notes)
+    {
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var types = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var additional in new[] { false, true })
+        {
+            try
+            {
+                var columns = additional ? item.AdditionalColumns : item.Columns;
+                for (var index = 0; columns is not null && index < columns.Count; index++)
+                {
+                    if (columns[index] is not ISpecificationColumn column)
+                    {
+                        continue;
+                    }
+
+                    var type = Int(() => (int)column.ColumnType);
+                    var number = Int(() => column.ColumnTypeNumber);
+                    if (type is null || number is null)
+                    {
+                        notes.Add("specification_column_type_unread — тип или номер колонки объекта не "
+                            + "прочитан: колонка не опубликована");
+                        continue;
+                    }
+
+                    var key = SpecificationColumnKeys.KeyOf(type.Value, number.Value);
+                    types[key] = SafeRead.EnumOrNull<ksValueTypeEnum>(() => column.ValueType)?.ToString()
+                                 ?? "не прочитан";
+                    values[key] = ColumnRawValue(column, key, notes);
+                }
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException or NullReferenceException)
+            {
+                notes.Add($"specification_columns_unread — {(additional ? "дополнительные" : "основные")} "
+                    + $"колонки объекта не прочитаны: {ex.Message}");
+            }
+        }
+
+        return (values, types);
+    }
+
+    /// <summary>The value one column carries, joined over its items, or null when it carries none.</summary>
+    /// <remarks>A column of the style that has no item is NOT an empty value: null says «значение не прочитано»
+    /// and the note names the key, so a client does not read an absent column as an empty one.</remarks>
+    private static object? ColumnRawValue(ISpecificationColumn column, string key, List<string> notes)
+    {
+        var items = SafeRead.Ref(() => column.ColumnItems);
+        if (items is null || items.Count == 0)
+        {
+            notes.Add($"specification_column_empty — колонка {key} пришла без элементов: значение не прочитано");
+            return null;
+        }
+
+        var read = new List<object?>();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var value = SafeRead.TryRead(() => items[index]?.Value);
+            if (!value.Ok)
+            {
+                notes.Add($"specification_column_unread — элемент колонки {key} не прочитан");
+                return null;
+            }
+
+            read.Add(value.Value);
+        }
+
+        return read.Count == 1
+            ? read[0]
+            : string.Join(
+                "|",
+                read.Select(value => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty));
     }
 
     /// <summary>Digest of a <c>.spw</c>: how many objects it has and the texts of their columns.</summary>

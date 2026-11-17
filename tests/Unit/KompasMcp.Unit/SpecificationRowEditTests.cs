@@ -138,11 +138,12 @@ public class SpecificationRowEditTests
     }
 
     [Fact]
-    public void TheDescriptionNamesTheApi5RouteTheStaleReferenceAndTheApi7Limit()
+    public void TheDescriptionNamesTheApi5RouteTheActiveSpwRoadAndTheApi7Limit()
     {
         var description = Tool("kompas_specification_edit_row").Description;
 
-        // A reader must see which road persists, what a stale reference means, and what the tool does not do.
+        // A reader must see which road persists, that it reaches a .spw only while active, what a stale
+        // reference means, and what the tool does not do.
         Assert.Contains("ksSpcObjectEdit", description, StringComparison.Ordinal);
         Assert.Contains("ksSpcObjectEnd", description, StringComparison.Ordinal);
         Assert.Contains("STALE_REFERENCE", description, StringComparison.Ordinal);
@@ -150,6 +151,8 @@ public class SpecificationRowEditTests
         Assert.Contains("Update() = false", description, StringComparison.Ordinal);
         Assert.Contains("SetSection", description, StringComparison.Ordinal);
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);
+        Assert.Contains("SpcActiveDocument", description, StringComparison.Ordinal);
+        Assert.Contains("ДОКУМЕНТЕ-спецификации .spw", description, StringComparison.Ordinal);
     }
 
     [Fact]

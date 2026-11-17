@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Kompas6API5;
 using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Contracts;
@@ -8,23 +9,27 @@ using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Creation of one row of a MODEL specification — block <c>SPEC_ADD_ROW</c>.</summary>
+/// <summary>Creation of one row of a specification — a MODEL document or a <c>.spw</c> DOCUMENT.</summary>
 /// <remarks>DOC: <c>ispecificationbaseobjects_add.html</c> — «После вызова метода Add объект будет
 /// добавлен в коллекцию, но в документе не появится. Для отображения объекта в документе нужно задать его
 /// параметры и вызвать метод ISpecificationObject::Update»; <c>ispecificationobject_update.html</c> — тем
 /// же методом создаётся объект; <c>ispecificationcolumnitem_value.html</c> — значение элемента по
-/// <c>ValueType</c>.
+/// <c>ValueType</c>; <c>ikompasdocument_specificationdescriptions.html</c> — the collection is the BASE
+/// document's property, so a <c>.spw</c> goes through the same route.
+/// MEASURED: the columns written BEFORE the first <c>Update()</c> reach the file, the ones written after it do
+/// not (main columns), which is why <c>extra_columns</c> exists only on creation.
 /// INVARIANT: a row whose values the document did not answer back — through API7 AND through API5 — is not
-/// a success: the answer is a refusal with a snapshot of what the model holds.
-/// History: docs/decisions/bom.md#spec-add-row</remarks>
+/// a success: the answer is a refusal with a snapshot of what the document holds.
+/// History: docs/decisions/bom.md#spec-add-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
 public partial class Api5Session
 {
     private const string SpecificationRowRoute =
         "api7:IKompasDocument.SpecificationDescriptions.Active (или Add(\"\", 0, \"\")) → "
-        + "ISpecificationDescription.BaseObjects.Add(section, 0) → ISpecificationObject.Columns → "
-        + "ColumnItems.Value по типу колонки → Update(); перечитывание - описание заново, строка = "
-        + "новый объект Objects, затем api5:ksDocument3D.GetSpecification().ksGetSpcObject → "
-        + "ksGetSpcObjectNumber + ksGetSpcObjectColumnText";
+        + "ISpecificationDescription.BaseObjects.Add(section, 0) → ISpecificationObject.Columns / "
+        + "AdditionalColumns → ColumnItems.Value по типу колонки → Update(); перечитывание - описание заново, "
+        + "строка = новый объект Objects, затем api5:ksDocument3D.GetSpecification() (модель) или "
+        + "SpcActiveDocument().GetSpecification() (.spw) → ksGetSpcObject → ksGetSpcObjectNumber + "
+        + "ksGetSpcObjectColumnText";
 
     /// <summary>Create the row and answer what the document holds afterwards.</summary>
     public AddSpecificationRowResult AddSpecificationRow(AddSpecificationRowCommand command)
@@ -41,9 +46,24 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["field"] = refused.Field });
         }
 
-        var document = RequireModelForRowWrite(command.DocumentId, "создаёт");
+        var extra = SpecificationExtraColumns.Parse(command.ExtraColumns, out var extraRefused) ?? [];
+        if (extraRefused is not null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                extraRefused.Message,
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["field"] = extraRefused.Field });
+        }
+
+        var document = RequireRowWriteDocument(command.DocumentId, "создаёт");
         var notes = new List<string>();
         var checks = new List<NamedCheck>();
+
+        // The API5 road is resolved BEFORE anything enters the collection: for a .spw it exists only while the
+        // document is active, and a write that cannot be read back through it would have to be reported as an
+        // unverified effect. History: docs/decisions/bom.md#spec-spw-row-write
+        var specification = SpecificationForRowWrite(document, notes);
         var descriptionCreated = false;
         var description = SpecificationDescriptionForWrite(document, notes, out descriptionCreated);
 
@@ -87,6 +107,7 @@ public partial class Api5Session
         var created = AddBaseObject(baseObjects, document, command, descriptionCreated);
         var fields = RowFields(command);
         WriteRowFields(created, fields, document, command, descriptionCreated);
+        WriteExtraColumns(created, extra, document, command, descriptionCreated);
 
         var updated = UpdateRow(created, document, command, descriptionCreated);
 
@@ -96,17 +117,19 @@ public partial class Api5Session
 
         var handleUnique = ReadCreatedRow(created, document, command, updated);
         var (row, documentUnique) = VerifyRowBack(
-            document, handleUnique, numbersBefore, fields, command, checks, notes);
+            document, specification, handleUnique, numbersBefore, fields, extra, command, checks, notes);
 
         notes.Insert(0, $"specification_row_created — строка создана и прочитана обратно: "
-            + $"unique_number={Fmt(documentUnique)}, раздел {command.SectionNumber}");
+            + $"unique_number={Fmt(documentUnique)}, раздел {command.SectionNumber}, документ "
+            + DocumentKindName(document.Kind));
 
         // LIMIT: the tool works in memory; the file is written by kompas_save_document, so survival of the
         // row across a save and a reopen is the acceptance's business, not this call's.
         var unverified = new List<string>
         {
-            "row_not_written_to_file — строка живёт в модели до kompas_save_document; переживание "
-            + "сохранения и переоткрытия проверяет приёмка (SPEC-02.save_reopen), а не этот вызов",
+            "row_not_written_to_file — строка живёт в документе до kompas_save_document; переживание "
+            + "сохранения и переоткрытия проверяет приёмка (SPEC-02.save_reopen для модели, "
+            + "SPEC-05.save_reopen для .spw), а не этот вызов",
         };
 
         return new AddSpecificationRowResult(
@@ -121,32 +144,92 @@ public partial class Api5Session
             unverified);
     }
 
-    /// <summary>A model document: a specification belongs to an assembly or a part, not to a <c>.spw</c>.</summary>
+    /// <summary>The document a row write may address: a model or a <c>.spw</c> specification document.</summary>
     /// <param name="operation">The verb of the call («создаёт», «правит») — the refusal has to name what was
     /// refused, and two tools writing rows must not answer with one another's sentence.</param>
-    /// <remarks>LIMIT: a drawing is refused too — its specification description is a different level and is
-    /// not in this contract. The refusal is <c>WRONG_DOCUMENT_KIND</c>: the same code the read tool answers,
-    /// so two calls on one wrong document do not speak two vocabularies.</remarks>
-    private DocumentEntry RequireModelForRowWrite(string documentId, string operation)
+    /// <remarks>DOC: <c>ikompasdocument_specificationdescriptions.html</c> — the description collection belongs
+    /// to the BASE document, so a specification document carries its own rows.
+    /// LIMIT: a drawing is refused too — its specification description is a different level and is not in this
+    /// contract. The refusal is <c>WRONG_DOCUMENT_KIND</c>: the same code the read tool answers, so two calls
+    /// on one wrong document do not speak two vocabularies.
+    /// History: docs/decisions/bom.md#spec-add-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private DocumentEntry RequireRowWriteDocument(string documentId, string operation)
     {
         var document = RequireDocument(documentId);
-        if (document.Kind is DocumentKind.Assembly or DocumentKind.Part)
+        if (document.Kind is DocumentKind.Assembly or DocumentKind.Part or DocumentKind.Specification)
         {
             return document;
         }
 
         throw new KompasContractException(
             ErrorCodes.WrongDocumentKind,
-            $"Документ «{documentId}» имеет тип {document.Kind}: строку спецификации {operation} только "
-            + "документ-модель (сборка или деталь). У документа-спецификации .spw свои строки, и этот "
-            + "инструмент их не пишет.",
+            $"Документ «{documentId}» имеет тип {document.Kind}: строку спецификации {operation} модель "
+            + "(сборка или деталь) либо документ-спецификация .spw. У чертежа своя спецификация, и её строки "
+            + "в этот контракт не входят.",
             RetryPolicy.Never,
             details: new Dictionary<string, object?>
             {
                 ["kind"] = document.Kind.ToString(),
-                ["supported_kinds"] = new[] { "assembly", "part" },
+                ["supported_kinds"] = new[] { "assembly", "part", "specification" },
             });
     }
+
+    /// <summary>The API5 specification a row write goes through — one road for a model and for a <c>.spw</c>.</summary>
+    /// <remarks>DOC: <c>ksdocument3d_getspecification.html</c> (the model's own specification);
+    /// <c>kompasobject_spcactivedocument.html</c> — «Если документ спецификации не активен, функция
+    /// возвращает NULL»; <c>ksspcdocument_getspecification.html</c>.
+    /// INVARIANT: v24 documents no call that ACTIVATES a document, so a <c>.spw</c> that is not active is a
+    /// refusal BEFORE any mutation, with the remedy named — never a write whose second road is missing.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private ksSpecification SpecificationForRowWrite(DocumentEntry document, List<string> notes)
+    {
+        if (document.Kind is DocumentKind.Assembly or DocumentKind.Part)
+        {
+            return Specification5(document);
+        }
+
+        if (document.Access == DocumentAccess.ReadOnly)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Документ-спецификация «{document.Id}» открыт только для чтения (access=read_only): строку "
+                + "писать некуда, документ не тронут. Откройте файл через kompas_open_document с "
+                + "access=edit — этот доступ делает документ активным, и запись пойдёт документированным "
+                + "маршрутом.",
+                RetryPolicy.Never);
+        }
+
+        var specification = ActiveDocumentSpecification5(document, out var reason);
+        if (specification is not null)
+        {
+            notes.Add("specification_row_write_by_active_document — запись строк .spw идёт маршрутом "
+                + "документа-спецификации: SpcActiveDocument().GetSpecification()");
+            return specification;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            $"Документ-спецификация «{document.Id}» не активен, а API5-дорога адресует только активный "
+            + "документ (" + reason + "): писать строку без неё нельзя — успех подтверждается перечитыванием "
+            + "ОБЕИМИ дорогами. Документ не тронут. Выход: закройте его (kompas_close_document) и откройте "
+            + "снова kompas_open_document — открытый этим вызовом документ становится активным.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?>
+            {
+                ["document_id"] = document.Id,
+                ["reason"] = reason,
+                ["remedy"] = "kompas_close_document, затем kompas_open_document с access=edit",
+            });
+    }
+
+    /// <summary>The document's kind in the words the answer uses.</summary>
+    private static string DocumentKindName(DocumentKind kind) => kind switch
+    {
+        DocumentKind.Assembly => "сборка",
+        DocumentKind.Part => "деталь",
+        DocumentKind.Specification => "документ-спецификация .spw",
+        _ => kind.ToString(),
+    };
 
     /// <summary>The description the row goes into: the document's own, or the DEFAULT one created here.</summary>
     /// <remarks>DOC: <c>ispecificationdescriptions_add.html</c> — «Если LayoutName и StyleID не заданы, то
@@ -340,13 +423,8 @@ public partial class Api5Session
     {
         foreach (var (field, text, type) in fields)
         {
-            var columns = SafeRead.Ref(() => created.Columns);
-            var column = columns is null
-                ? null
-                : SafeRead.Ref(() => columns.Column[type, SpecificationColumnNumbers.FirstOfType,
-                    SpecificationColumnNumbers.MainBlock]);
-            var items = column?.ColumnItems as ISpecificationColumnItems;
-            var element = items is { Count: > 0 } ? items[0] : null;
+            var element = ElementOf(ColumnOf(
+                created, type, SpecificationColumnNumbers.FirstOfType, SpecificationColumnNumbers.MainBlock));
             if (element is null)
             {
                 throw RowWriteRefusal(
@@ -397,6 +475,137 @@ public partial class Api5Session
                     new Dictionary<string, object?> { ["field"] = field, ["value"] = text });
             }
         }
+    }
+
+    /// <summary>Write the requested extra columns — BEFORE the first <c>Update()</c>, which is what carries them
+    /// into the file.</summary>
+    /// <remarks>DOC: <c>ispecificationobject_additionalcolumns.html</c>, <c>ispecificationcolumns_column.html</c>
+    /// ([type, number, block]), <c>ispecificationcolumnitem_value.html</c> (the value follows ValueType).
+    /// MEASURED: a main column written before the first <c>Update()</c> reaches the file, one written after it
+    /// does not. INVARIANT: a column the document does not have is refused with the list of the ones it HAS,
+    /// and the object that only entered the collection is deleted again.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private void WriteExtraColumns(
+        ISpecificationBaseObject created, IReadOnlyList<SpecificationExtraColumn> extra, DocumentEntry document,
+        AddSpecificationRowCommand command, bool descriptionCreated)
+    {
+        foreach (var column in extra)
+        {
+            var type = (ksSpecificationColumnTypeEnum)column.Type;
+            var key = SpecificationColumnKeys.KeyOf(column.Type, column.Number);
+            var found = ColumnOf(created, type, column.Number, column.Block);
+            var items = found is null ? null : SafeRead.Ref(() => found.ColumnItems);
+            // ASSUMPTION: the item order of a column follows its block numbers, so block 0 is the first item.
+            // Every column of the acceptance fixture has one item, and a column with several is refused rather
+            // than guessed. History: docs/decisions/bom.md#spec-spw-row-write
+            if (items is null || items.Count == 0 || column.Block >= items.Count)
+            {
+                var available = DescribeAvailableColumns(created);
+                throw RowWriteRefusal(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"Колонки «{key}» (тип {column.Type}, номер {column.Number}, блок {column.Block}) у объекта "
+                    + "нет: в стиле спецификации такой колонки не задано, значение записать некуда. Доступные "
+                    + $"колонки: {available}. Строка в документ не добавлена.",
+                    created, document, command, descriptionCreated,
+                    new Dictionary<string, object?>
+                    {
+                        ["missing_column"] = key,
+                        ["column_type"] = column.Type,
+                        ["column_number"] = column.Number,
+                        ["column_block"] = column.Block,
+                        ["available_columns"] = available,
+                    });
+            }
+
+            var read = SafeRead.TryRead(() => items[column.Block]);
+            var element = read.Ok ? read.Value : null;
+            var valueType = element is null
+                ? null
+                : SafeRead.EnumOrNull<ksValueTypeEnum>(() => element.ValueType);
+            if (element is null || valueType is null)
+            {
+                throw RowWriteRefusal(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"Элемент колонки «{key}» не прочитан: тип значения неизвестен, записывать нечем. Строка в "
+                    + "документ не добавлена.",
+                    created, document, command, descriptionCreated,
+                    new Dictionary<string, object?> { ["unread_value_type"] = key });
+            }
+
+            if (!TryColumnValue(column.Value, valueType.Value, out var value))
+            {
+                throw RowWriteRefusal(
+                    ErrorCodes.InvalidArgument,
+                    $"Значение «{column.Value}» не подходит колонке «{key}»: её элемент ждёт "
+                    + $"{DescribeValueType(valueType.Value)}. Строка в документ не добавлена.",
+                    created, document, command, descriptionCreated,
+                    new Dictionary<string, object?>
+                    {
+                        ["field"] = key,
+                        ["value"] = column.Value,
+                        ["value_type"] = valueType.Value.ToString(),
+                    });
+            }
+
+            try
+            {
+                element.Value = value;
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
+            {
+                throw RowWriteRefusal(
+                    ErrorCodes.CapabilityUnavailable,
+                    $"ISpecificationColumnItem.Value колонки «{key}» прервался: {ex.Message}. Строка в документ "
+                    + "не добавлена.",
+                    created, document, command, descriptionCreated,
+                    new Dictionary<string, object?> { ["field"] = key, ["value"] = column.Value });
+            }
+        }
+    }
+
+    /// <summary>The column of a type, number and block, searched in the MAIN collection and then in the
+    /// ADDITIONAL one — the style decides which collection holds it.</summary>
+    /// <remarks>DOC: <c>ispecificationobject_columns.html</c> and <c>ispecificationobject_additionalcolumns.html</c>
+    /// name the two collections; <c>ispecificationcolumns_column.html</c> the address [type, number, block].
+    /// MEASURED: Формат, Зона, Примечание are main columns of the <c>.spw</c> style, Масса and the user columns
+    /// are additional ones. History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static ISpecificationColumn? ColumnOf(
+        ISpecificationBaseObject item, ksSpecificationColumnTypeEnum type, int number, int block)
+    {
+        foreach (var additional in new[] { false, true })
+        {
+            var columns = additional ? SafeRead.Ref(() => item.AdditionalColumns) : SafeRead.Ref(() => item.Columns);
+            var column = columns is null
+                ? null
+                : SafeRead.Ref(() => columns.Column[type, number, block]);
+            if (column is ISpecificationColumn found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The element a value is written through: a column without items carries no value.</summary>
+    private static ISpecificationColumnItem? ElementOf(ISpecificationColumn? column)
+    {
+        var items = column is null ? null : SafeRead.Ref(() => column.ColumnItems);
+        return items is { Count: > 0 } ? items[0] : null;
+    }
+
+    /// <summary>What the object DOES have, for the refusal that cannot write into what it does not.</summary>
+    /// <remarks>DOC: <c>ispecificationcolumn_columntype.html</c>, <c>_columntypenumber.html</c>,
+    /// <c>_valuetype.html</c>.</remarks>
+    private static string DescribeAvailableColumns(ISpecificationBaseObject item)
+    {
+        var published = Api7ColumnPublication(item, new List<string>());
+        if (published.Types.Count == 0)
+        {
+            return "ни одной колонки у объекта не прочитано";
+        }
+
+        return string.Join(", ", published.Types.Select(pair => pair.Key + " (" + pair.Value + ")"));
     }
 
     /// <summary><c>Update()</c> is what creates the object in the document — a false answer is not success.</summary>
@@ -475,9 +684,10 @@ public partial class Api5Session
     /// <c>GEOMETRY_FAILED</c> with the snapshot, because the model then holds something other than what the
     /// client asked for. History: docs/decisions/bom.md#spec-add-row</remarks>
     private (SpecificationLineDto Row, double Unique) VerifyRowBack(
-        DocumentEntry document, double handleUnique, HashSet<double> numbersBefore,
+        DocumentEntry document, ksSpecification specification, double handleUnique, HashSet<double> numbersBefore,
         List<(string Field, string Text, ksSpecificationColumnTypeEnum Type)> fields,
-        AddSpecificationRowCommand command, List<NamedCheck> checks, List<string> notes)
+        IReadOnlyList<SpecificationExtraColumn> extra, AddSpecificationRowCommand command,
+        List<NamedCheck> checks, List<string> notes)
     {
         var readNotes = new List<string>();
 
@@ -539,7 +749,7 @@ public partial class Api5Session
                 readNotes, null, null, observed);
         }
 
-        var specification5 = Specification5(document);
+        var specification5 = specification;
         var pointer = Int(() => specification5.ksGetSpcObject(unique));
         var numberReadBack = pointer is > 0 ? Double(() => specification5.ksGetSpcObjectNumber(pointer.Value)) : null;
         var pointerMatches = pointer is > 0 && SameUniqueNumber(numberReadBack, unique);
@@ -566,9 +776,29 @@ public partial class Api5Session
             checks.Add(new NamedCheck(field + "_read_back", matches, api7[field] + " / " + api5[field], text));
         }
 
-        var row = ReadSpecificationLine(specification5, listed, readNotes);
-        checks.Add(new NamedCheck("row_fields_read_back", row is not null));
-        if (row is null)
+        // The extra columns are verified the same way, and with the TYPE of their element: a mass is a number,
+        // so "1.25" and "1,25" are one value while "1.2" is not. History: docs/decisions/bom.md#spec-spw-row-write
+        var published = Api7ColumnPublication(listed, readNotes);
+        foreach (var column in extra)
+        {
+            var key = SpecificationColumnKeys.KeyOf(column.Type, column.Number);
+            var api7Value = published.Values.TryGetValue(key, out var value) ? value : null;
+            var api5Value = Column(
+                specification5, pointer!.Value, (ksSpecificationColumnTypeEnum)column.Type, column.Number,
+                column.Block);
+            var valueType = published.Types.TryGetValue(key, out var typeName) ? typeName : null;
+            var matches = ColumnValueMatches(column.Value, api7Value, valueType)
+                          && ColumnValueMatches(column.Value, api5Value, valueType);
+            checks.Add(new NamedCheck(
+                key + "_read_back", matches,
+                $"{FormatValue(api7Value)} / {api5Value}", column.Value));
+            api7[key] = FormatValue(api7Value);
+            api5[key] = api5Value;
+        }
+
+        var read = ReadSpecificationLine(specification5, listed, readNotes);
+        checks.Add(new NamedCheck("row_fields_read_back", read is not null));
+        if (read is null)
         {
             throw RowReadRefusal(document, command, unique,
                 "Строка найдена, но её поля не прочитаны документированным маршрутом (API5-указатель и "
@@ -585,8 +815,58 @@ public partial class Api5Session
         }
 
         notes.AddRange(readNotes);
+        var row = read with { Columns = published.Values, ColumnTypes = published.Types };
         return (row, unique);
     }
+
+    /// <summary>Whether the document answered the requested column value, by the TYPE of its element.</summary>
+    /// <remarks>INVARIANT: a number is compared AS a number and a text AS a text — «1,25» and «1.25» are one
+    /// mass, while «007» and «7» are two markings. The comparison is per column, not per row, because the
+    /// element's <c>ValueType</c> is what decides how the document answers.
+    /// DOC: <c>ispecificationcolumnitem_value.html</c>.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static bool ColumnValueMatches(string requested, object? readBack, string? valueType)
+    {
+        var read = readBack as string ?? FormatValue(readBack);
+        if (read is null)
+        {
+            return false;
+        }
+
+        if (string.Equals(requested.Trim(), read.Trim(), StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (valueType is not null && valueType.Contains("Integer", StringComparison.Ordinal))
+        {
+            return TryInteger(requested, out var left) && TryInteger(read, out var right) && left == right;
+        }
+
+        if (valueType is not null && valueType.Contains("Float", StringComparison.Ordinal))
+        {
+            return TryReal(requested, out var left) && TryReal(read, out var right)
+                   && Math.Abs(left - right) < 1e-9;
+        }
+
+        return false;
+    }
+
+    /// <summary>A number the document or the client wrote, in either decimal separator.</summary>
+    /// <remarks>A specification column of a Russian style answers «1,25» while the request may carry «1.25»:
+    /// the value is one number, and refusing it would be a false failure.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static bool TryReal(string text, out double value) =>
+        double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+        || double.TryParse(
+            text.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+    private static bool TryInteger(string text, out long value) =>
+        long.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+
+    /// <summary>The raw value of a column as one text, for a refusal or a comparison.</summary>
+    private static string? FormatValue(object? value) =>
+        value is null ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
 
     /// <summary>Whether a row of the document carries exactly the values this call wrote.</summary>
     /// <remarks>Used ONLY to find the row when the number read from the created handle is not the number

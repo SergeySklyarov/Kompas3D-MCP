@@ -16602,6 +16602,168 @@
       ]
     },
     {
+      "operation_id": "SPEC-05.spw.row.create",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-spw-v1",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261114-spec-spw-aa0f7eb/",
+        "docs/decisions/bom.md#spec-spw-row-write"
+      ],
+      "parameters_schema": "schemas/kompas_specification_add_row.json",
+      "adapter_route": "kompas_specification_add_row по document_id документа-спецификации .spw: SpecificationDescriptions.Active (у .spw описание уже есть, StyleID=1) -> ISpecificationBaseObjects.Add(section, 0) кладёт объект в КОЛЛЕКЦИЮ -> колонки основных (ISpecificationObject.Columns) и дополнительных (AdditionalColumns) коллекций по типу, номеру и блоку -> ОДИН ISpecificationObject.Update() создаёт строку; extra_columns пишутся ДО первого Update() (измерено: записанное после него в файл не попадает), масса и пользовательские колонки живут в AdditionalColumns; успех подтверждается перечитыванием описания заново, опознанием строки как НОВОГО объекта Objects и сверкой каждой записанной колонки обеими дорогами - API7 (Columns/AdditionalColumns -> ColumnItems) и API5 SpcActiveDocument().GetSpecification() -> ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcObjectColumnText(тип, номер, блок); расхождение - GEOMETRY_FAILED со снимком (ispecificationbaseobjects_add.html, ispecificationobject_update.html, ikompasdocument_specificationdescriptions.html, ispecificationobject_additionalcolumns.html, ispecificationcolumns_column.html, ispecificationcolumnitem_value.html, ksspecificationcolumntypeenum.html, kompasobject_spcactivedocument.html, ksspcdocument_getspecification.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "verified",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "edit": "правка строки .spw - наряд SPEC_EDIT_ROW: этот инструмент только создаёт",
+        "rebuild": "создание строки не перестраивает документ: строка - объект спецификации, а не признак дерева",
+        "suppress_restore": "у создания строки нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами и сохранением с переоткрытием"
+      },
+      "tests": [
+        "SPEC-05.discovery",
+        "SPEC-05.schema",
+        "SPEC-05.open_for_write",
+        "SPEC-05.create_with_columns",
+        "SPEC-05.read_by_other_tool",
+        "SPEC-05.columns_published",
+        "SPEC-05.save_reopen",
+        "SPEC-05.negative_unknown_column",
+        "SPEC-05.negative_duplicate_column",
+        "SPEC-05.negative_inactive"
+      ],
+      "limitations": [
+        "Доп. колонки пишутся только при СОЗДАНИИ: записанная после Update() основная колонка в файл не попадает (измерено), поэтому правка доп. колонок у существующей строки - отдельный наряд SPEC_SPW_COLUMNS.",
+        "У .spw API5-дорога существует только у АКТИВНОГО документа (SpcActiveDocument), а v24 не документирует вызова активации: неактивный .spw - CAPABILITY_UNAVAILABLE до мутации с названным выходом (закрыть и открыть kompas_open_document). Открытый по path документ открыт только для чтения и для записи требует access=edit.",
+        "Колонка ищется сначала в основных, затем в дополнительных колонках объекта, и которой нет - CAPABILITY_UNAVAILABLE с перечнем доступных; блок исполнений адресуется в Column[тип, номер, блок], а значение пишется в элемент с индексом блока (у постановки все колонки одноблочные).",
+        "Строка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-05.save_reopen).",
+        "Связь строки с компонентом (AddWithParam + IPropertyKeeper) этим инструментом не создаётся: она документирована и делается отдельным инструментом наряда SPEC_SPW_LINK_ROW."
+      ]
+    },
+    {
+      "operation_id": "SPEC-06.spw.row.edit",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-spw-v1",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261114-spec-spw-aa0f7eb/",
+        "docs/decisions/bom.md#spec-spw-row-write"
+      ],
+      "parameters_schema": "schemas/kompas_specification_edit_row.json",
+      "adapter_route": "kompas_specification_edit_row по document_id документа-спецификации .spw: строка находится по row_ref.unique_number в ISpecificationDescription.Objects и подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя), её маркировка сверяется со ссылкой (расхождение - STALE_REFERENCE, документ не тронут), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / ksSpcPosition -> ksSpcObjectEnd; API5-дорога начинается со SpcActiveDocument().GetSpecification() и существует только у активного документа-спецификации, поэтому неактивный .spw - CAPABILITY_UNAVAILABLE до правки; после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами (API7 Objects -> Columns/AdditionalColumns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а НЕназванные - с прежним значением; расхождение - GEOMETRY_FAILED со снимком (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html, kompasobject_spcactivedocument.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "создание строки - наряд SPEC_ADD_ROW: этот инструмент правит существующую строку",
+        "rebuild": "правка строки не перестраивает документ",
+        "suppress_restore": "у правки строки нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами и сохранением с переоткрытием"
+      },
+      "tests": [
+        "SPEC-06.discovery",
+        "SPEC-06.edit_marking",
+        "SPEC-06.edit_name",
+        "SPEC-06.edit_quantity",
+        "SPEC-06.edit_position",
+        "SPEC-06.edit_together",
+        "SPEC-06.untouched_checked",
+        "SPEC-06.save_reopen",
+        "SPEC-06.position_after_reopen",
+        "SPEC-06.negative_stale_reference",
+        "SPEC-06.negative_unknown_row",
+        "SPEC-06.negative_inactive"
+      ],
+      "limitations": [
+        "Правка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-06.save_reopen).",
+        "Правка доп. колонок у существующей строки не входит (наряд SPEC_SPW_COLUMNS): этот инструмент меняет только marking, name, quantity и position.",
+        "API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до правки с названным выходом.",
+        "Перенос раздела не входит: Section доступен только для чтения, а SetSection в файл не попадает (измерено)."
+      ]
+    },
+    {
+      "operation_id": "SPEC-07.spw.row.delete",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-spw-v1",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261114-spec-spw-aa0f7eb/",
+        "docs/decisions/bom.md#spec-spw-row-write"
+      ],
+      "parameters_schema": "schemas/kompas_specification_delete_row.json",
+      "adapter_route": "kompas_specification_delete_row по document_id документа-спецификации .spw: строка находится по row_ref.unique_number в ISpecificationDescription.Objects общим кодом правки, подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber и сверкой маркировки, значения читаются обеими дорогами ДО удаления, затем документированный ISpecificationObject.Delete() (ispecificationobject_delete.html); после вызова список перечитывается ОБЕИМИ дорогами: API7 Objects (строки с этим номером нет, строк ровно на одну меньше, прочие на месте по номеру и значениям) и API5 ksGetSpcObject по удалённому номеру (указателя нет); Delete() = false, исключение или неподтверждённое удаление - отказ со снимком, а не успех; неактивный .spw - CAPABILITY_UNAVAILABLE до удаления, потому что отсутствие обязано читаться обеими дорогами (kompasobject_spcactivedocument.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "verified",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "создание строки - наряд SPEC_ADD_ROW: этот инструмент удаляет существующую строку",
+        "edit": "правка строки - наряд SPEC_EDIT_ROW: этот инструмент строку не меняет, а удаляет",
+        "rebuild": "удаление строки не перестраивает документ",
+        "suppress_restore": "у удаления нет режима подавления: строку от компонента инструмент удаляет и предупреждает в notes",
+        "geometry_validation": "строка спецификации геометрии не имеет: результат сверяется отсутствием строки и сохранностью соседей обеими дорогами и переоткрытием файла"
+      },
+      "tests": [
+        "SPEC-07.discovery",
+        "SPEC-07.delete_created",
+        "SPEC-07.neighbours_intact",
+        "SPEC-07.save_reopen",
+        "SPEC-07.negative_stale_deleted",
+        "SPEC-07.negative_stale_marking",
+        "SPEC-07.negative_inactive"
+      ],
+      "limitations": [
+        "Удаление живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-07.save_reopen).",
+        "Удаление объектов документа-спецификации (ksSpcDocument.ksDeleteObj) и удаление описания спецификации не входят: удаляется СТРОКА маршрутом API7.",
+        "Строка, которую КОМПАС ведёт от компонента, удаляется как обычная с предупреждением specification_row_may_return; восстанавливается ли она - не измерено (нет постановки со связанной строкой).",
+        "API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до удаления."
+      ]
+    },
+    {
       "operation_id": "SM-24.move_faces",
       "kind": "profile_mode",
       "context": "part.single_body",

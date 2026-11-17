@@ -59292,9 +59292,11 @@ def bom_checks(client, rep, app_id, workdir):
 
 
 def specification_checks(client, rep, app_id, workdir):
-    """SPEC-01/SPEC-02/SPEC-03/SPEC-04 - блок «спецификация»: чтение документа `.spw` по path и по
-    document_id (наряд SPEC_READ_SPW), создание строки МОДЕЛИ (наряд SPEC_ADD_ROW), правка строки модели
-    (наряд SPEC_EDIT_ROW) и удаление строки модели (наряд SPEC_DELETE_ROW, профиль `spec-ext-v1`).
+    """SPEC-01/SPEC-02/SPEC-03/SPEC-04/SPEC-05/SPEC-06/SPEC-07 - блок «спецификация»: чтение документа
+    `.spw` по path и по document_id (наряд SPEC_READ_SPW), создание строки МОДЕЛИ (наряд SPEC_ADD_ROW),
+    правка строки модели (наряд SPEC_EDIT_ROW), удаление строки модели (наряд SPEC_DELETE_ROW, профиль
+    `spec-ext-v1`) и запись строк ДОКУМЕНТА-спецификации `.spw` теми же тремя инструментами (наряд
+    SPEC_SPW_ROW_WRITE_0_15, профиль `spec-spw-v1`).
 
     ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Постановка - файл `.spw` прибора исследования с ОДНОЙ известной строкой
     (`SPC.401.001` / «Строка спецификации» / 7 в разделе 20 «Детали») и сборка `spec-asm.m3d` той же
@@ -59321,7 +59323,15 @@ def specification_checks(client, rep, app_id, workdir):
     читатель, а удалённое не возвращается после сохранения и переоткрытия. Ответ обязан назвать
     происхождение строки и предупредить о возможном восстановлении от компонента только когда документ не
     называет строку своей. Отказы: нет ссылки, чужая ссылка, неположительный номер, устаревшая ревизия,
-    уже удалённая строка, ссылка после смены обозначения, несуществующий номер, `.spw` вместо модели.
+    уже удалённая строка, ссылка после смены обозначения, несуществующий номер, чертёж вместо модели.
+
+    SPEC-05/06/07. Запись строк ДОКУМЕНТА-спецификации `.spw` теми же тремя инструментами (наряд
+    SPEC_SPW_ROW_WRITE_0_15). Постановка - копия `.spw` в песочнице, открытая на ЗАПИСЬ: этот доступ делает
+    документ активным, а API5-дорога записи адресует только активный документ. Создание - с колонками
+    сверх четырёх полей (Формат, Примечание, Масса), записанными до первого `Update()`; правка - каждое
+    поле и все сразу; удаление - со сверкой соседей. Каждая запись переживает `kompas_save_document` и
+    переоткрытие и читается обратно `kompas_get_specification_document` по `path`. Отказы: неизвестный
+    ключ колонки, одна колонка дважды, устаревшая ссылка, несуществующий номер, неактивный `.spw`.
     """
     import os
 
@@ -59606,10 +59616,10 @@ def specification_checks(client, rep, app_id, workdir):
     rep.add("SPEC-02.discovery", "инструмент создания строки модели есть в реестре каталога",
             "PASS" if entry is not None else "FAIL", f"в реестре={len(registry)}")
     rep.add("SPEC-02.schema",
-            "схема называет семь полей входа и, как всякая мутация, operation_id; позиция необязательна — "
-            "её отсутствие оставляет нумерацию документу",
+            "схема называет восемь полей входа и, как всякая мутация, operation_id; позиция и extra_columns "
+            "необязательны — их отсутствие оставляет нумерацию и доп. колонки документу",
             "PASS" if (spec_props == {"document_id", "expected_revision", "section_number", "marking",
-                                      "name", "quantity", "position", "operation_id"}
+                                      "name", "quantity", "position", "extra_columns", "operation_id"}
                        and spec_required == {"document_id", "expected_revision", "section_number",
                                              "marking", "name", "quantity", "operation_id"}) else "FAIL",
             f"поля={sorted(spec_props)} обязательные={sorted(spec_required)}")
@@ -59775,22 +59785,26 @@ def specification_checks(client, rep, app_id, workdir):
     missing_code, _missing_message = refusal(document_id="0" * 32, section_number=20,
                                              marking="SPC.404.004", name="Строка", quantity="1") \
         if refuse_model else (None, "")
-    spw_for_kind, spw_for_kind_code = call("kompas_get_specification_document", {"path": spw_path})
-    spw_kind_doc = id_of(spw_path)
-    spw_context, _spw_context_code = context_of(spw_kind_doc)
-    spw_kind_code, spw_kind_message = (lambda pair: (
+    # Наряд SPEC_SPW_ROW_WRITE_0_15 сделал .spw ВТОРЫМ видом документа этого инструмента, поэтому «чужой
+    # вид» проверяется чертежом: его спецификация - другой уровень контракта. Запись строк .spw проверяют
+    # строки SPEC-05.
+    drawing_kind_env, _drawing_kind_code = call("kompas_create_document",
+                                                {"application_id": app_id, "kind": "drawing"})
+    drawing_kind_doc = doc_id(drawing_kind_env)
+    drawing_context, _drawing_context_code = context_of(drawing_kind_doc)
+    kind_code, kind_message = (lambda pair: (
         error_code(pair[0]), ((pair[0] or {}).get("error") or {}).get("message") or ""))(
         call("kompas_specification_add_row",
-             {"document_id": spw_kind_doc, "expected_revision": spw_context.get("revision"),
+             {"document_id": drawing_kind_doc, "expected_revision": drawing_context.get("revision"),
               "section_number": 20, "marking": "SPC.404.005", "name": "Строка", "quantity": "1"})) \
-        if spw_kind_doc else (None, "")
+        if drawing_kind_doc else (None, "")
     rep.add("SPEC-02.negative_kind",
-            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
-            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а чертёж — WRONG_DOCUMENT_KIND: строки "
+            "пишутся в модель и в .spw, а спецификация чертежа в контракт не входит",
             "PASS" if (missing_code == "DOCUMENT_NOT_FOUND"
-                       and spw_kind_code == "WRONG_DOCUMENT_KIND") else "FAIL",
-            f"нет_документа={missing_code} .spw={spw_kind_code} текст={spw_kind_message[:160]!r}")
-    for document_id in (spw_kind_doc, refuse_model):
+                       and kind_code == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"нет_документа={missing_code} чертёж={kind_code} текст={kind_message[:160]!r}")
+    for document_id in (drawing_kind_doc, refuse_model):
         close(document_id)
     for item in docs():
         if isinstance(item, dict) and os.path.normcase(os.path.abspath(str(item.get("path") or ""))) in (
@@ -60048,8 +60062,10 @@ def specification_checks(client, rep, app_id, workdir):
             "чужую строку",
             "PASS" if ghost_code == "STALE_REFERENCE" else "FAIL", f"код={ghost_code}")
 
-    spw_kind, _spw_kind_code = call("kompas_get_specification_document", {"path": spw_path})
-    spw_kind_doc = id_of(spw_path)
+    # Чужой вид документа — чертёж: .spw стал вторым видом этих инструментов (SPEC-05..07).
+    drawing_edit_env, _drawing_edit_code = call("kompas_create_document",
+                                                {"application_id": app_id, "kind": "drawing"})
+    spw_kind_doc = doc_id(drawing_edit_env)
     spw_kind_context, _ = context_of(spw_kind_doc)
     _e, kind_env, _r = client.tool("kompas_specification_edit_row",
                                    {"document_id": spw_kind_doc,
@@ -60067,10 +60083,10 @@ def specification_checks(client, rep, app_id, workdir):
                                        "name": "Строка", "operation_id": str(uuid.uuid4())})
     missing_code = error_code(missing_env)
     rep.add("SPEC-03.negative_kind",
-            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
-            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а чертёж — WRONG_DOCUMENT_KIND: строки "
+            "правятся в модели и в .spw, а спецификация чертежа в контракт не входит",
             "PASS" if (missing_code == "DOCUMENT_NOT_FOUND" and kind_code == "WRONG_DOCUMENT_KIND") else "FAIL",
-            f"нет_документа={missing_code} .spw={kind_code}")
+            f"нет_документа={missing_code} чертёж={kind_code}")
     close(spw_kind_doc)
 
     # ===== SPEC-03: сохранение и переоткрытие =====
@@ -60372,16 +60388,20 @@ def specification_checks(client, rep, app_id, workdir):
             "PASS" if (ghost_code == "STALE_REFERENCE" and after_ghost == before_again) else "FAIL",
             f"код={ghost_code} строк={len(after_ghost)} текст={str(ghost_error.get('message'))[:160]!r}")
 
-    spw_kind, _spw_kind_code = call("kompas_get_specification_document", {"path": spw_path})
-    spw_delete_doc = id_of(spw_path)
-    spw_delete_context, _ = context_of(spw_delete_doc)
-    _e, spw_delete_env, _r = client.tool(
+    # Наряд SPEC_SPW_ROW_WRITE_0_15 сделал .spw ВТОРЫМ видом документа этих инструментов, поэтому
+    # «чужой вид» проверяется тем видом, который остался чужим, - чертежом (его спецификация - другой
+    # уровень контракта). Строки .spw удаляются и проверяются строками SPEC-07.
+    drawing_env, _drawing_code = call("kompas_create_document",
+                                      {"application_id": app_id, "kind": "drawing"})
+    drawing_id = doc_id(drawing_env)
+    drawing_context, _ = context_of(drawing_id)
+    _e, drawing_delete_env, _r = client.tool(
         "kompas_specification_delete_row",
-        {"document_id": spw_delete_doc,
-         "expected_revision": spw_delete_context.get("revision"),
-         "row_ref": {"document_id": spw_delete_doc, "unique_number": 1, "marking": "SPC.401.001"},
-         "operation_id": str(uuid.uuid4())}) if spw_delete_doc else ({}, {}, None)
-    spw_delete_code = error_code(spw_delete_env)
+        {"document_id": drawing_id,
+         "expected_revision": drawing_context.get("revision"),
+         "row_ref": {"document_id": drawing_id, "unique_number": 1, "marking": "SPC.401.001"},
+         "operation_id": str(uuid.uuid4())}) if drawing_id else ({}, {}, None)
+    drawing_delete_code = error_code(drawing_delete_env)
     _e, missing_delete_env, _r = client.tool(
         "kompas_specification_delete_row",
         {"document_id": "0" * 32, "expected_revision": 1,
@@ -60389,13 +60409,12 @@ def specification_checks(client, rep, app_id, workdir):
          "operation_id": str(uuid.uuid4())})
     missing_delete_code = error_code(missing_delete_env)
     rep.add("SPEC-04.negative_kind",
-            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а документ-спецификация .spw — "
-            "WRONG_DOCUMENT_KIND: строки модели и строки .spw - разные документы, и .spw этим "
-            "инструментом не удаляется",
+            "неизвестный документ отвергается DOCUMENT_NOT_FOUND, а чертёж — WRONG_DOCUMENT_KIND: строки "
+            "модели и строки .spw пишутся этими инструментами, а спецификация чертежа в контракт не входит",
             "PASS" if (missing_delete_code == "DOCUMENT_NOT_FOUND"
-                       and spw_delete_code == "WRONG_DOCUMENT_KIND") else "FAIL",
-            f"нет_документа={missing_delete_code} .spw={spw_delete_code}")
-    close(spw_delete_doc)
+                       and drawing_delete_code == "WRONG_DOCUMENT_KIND") else "FAIL",
+            f"нет_документа={missing_delete_code} чертёж={drawing_delete_code}")
+    close(drawing_id)
 
     # ===== SPEC-04: сохранение и переоткрытие =====
     final_census = delete_census(delete_rows())
@@ -60422,6 +60441,475 @@ def specification_checks(client, rep, app_id, workdir):
             f"в_памяти={len(final_census)} в_файле={len(reopened_census)} "
             f"до_удаления={sorted(delete_signature(final_census))} после={sorted(delete_signature(reopened_census))}")
     close(reopened_delete_model)
+
+    # ===== SPEC-05: создание строки ДОКУМЕНТА-спецификации .spw (наряд SPEC_SPW_ROW_WRITE_0_15) =====
+    # Постановка - та же копия .spw в песочнице. Документ открывается на ЗАПИСЬ: этот доступ делает его
+    # АКТИВНЫМ, а API5-дорога записи (SpcActiveDocument) адресует только активный документ. Строка
+    # проверяется не ответом создания, а читателем и файлом после переоткрытия.
+    add_entry = entry_of(client, "kompas_specification_add_row")
+    add_schema = (add_entry or {}).get("inputSchema") or {}
+    add_props = set(add_schema.get("properties") or {}) - {"timeout_ms"}
+    add_required = set(add_schema.get("required") or [])
+    rep.add("SPEC-05.discovery",
+            "у создания строки есть необязательное поле extra_columns: колонки сверх четырёх полей",
+            "PASS" if ("extra_columns" in add_props and "extra_columns" not in add_required) else "FAIL",
+            f"поля={sorted(add_props)} обязательные={sorted(add_required)}")
+
+    extra_schema = (add_schema.get("properties") or {}).get("extra_columns") or {}
+    extra_items = extra_schema.get("items") or {}
+    extra_fields = extra_items.get("properties") or {}
+    extra_keys = ((extra_fields.get("type") or {}).get("enum")) or []
+    rep.add("SPEC-05.schema",
+            "extra_columns адресуется ЗАКРЫТЫМ перечнем ключей ksspecificationcolumntypeenum.html, а четыре "
+            "поля строки (marking/name/quantity/position) в него не входят: у них свои поля",
+            "PASS" if (len(extra_keys) == 12 and "format" in extra_keys and "mass" in extra_keys
+                       and not {"marking", "name", "quantity", "position"} & set(extra_keys)
+                       and not {"number", "block", "value"} - set(extra_fields)) else "FAIL",
+            f"ключи={extra_keys} поля_колонки={sorted(extra_fields)}")
+
+    def spw_open(access):
+        opened_env, opened_code = call("kompas_open_document",
+                                       {"application_id": app_id, "path": spw_path, "access": access})
+        opened_id = doc_id(opened_env)
+        state, state_code = context_of(opened_id)
+        return opened_id, opened_code, state, state_code
+
+    def spw_read(document_id):
+        answer, answer_code = read(document_id=document_id) if document_id else ({}, "no_document")
+        return rows(answer), answer, answer_code
+
+    def spw_row(answer, marking):
+        return [r for r in rows(answer) if str(r.get("marking") or "") == marking]
+
+    def spw_columns(row):
+        published = row.get("columns") if isinstance(row, dict) else None
+        return published if isinstance(published, dict) else {}
+
+    def same_extra(published, expected):
+        """Каждая запрошенная колонка прочитана: текст - как текст, число - как число."""
+        for key, value in expected.items():
+            read_back = published.get(key)
+            if key == "mass":
+                try:
+                    if abs(float(read_back) - float(value)) > 1e-9:
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif str(read_back) != str(value):
+                return False
+        return True
+
+    spw_write, spw_write_code, spw_state, spw_state_code = spw_open("edit")
+    before_rows, before_answer, before_code = spw_read(spw_write)
+    rep.add("SPEC-05.open_for_write",
+            ".spw открывается на запись, и контекст называет вид specification: запись идёт в документ, а "
+            "не в модель",
+            "PASS" if (spw_write and not spw_write_code and not spw_state_code
+                       and spw_state.get("kind") == "specification") else "FAIL",
+            f"код={spw_write_code},{spw_state_code} документ={spw_write} вид={spw_state.get('kind')}")
+
+    requested_extra = {"format": "А4", "note": "Примечание наряда", "mass": "1.25"}
+    request = {"section_number": 20, "marking": "SPW.601.001", "name": "Строка .spw наряда",
+               "quantity": "3", "position": 2}
+    create_spw_env, create_spw_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=spw_write, expected_revision=spw_state.get("revision"),
+             extra_columns=[{"type": key, "value": value} for key, value in requested_extra.items()],
+             **request)) if spw_write else ({}, "no_document")
+    created_spw = result(create_spw_env)
+    spw_ref = created_spw.get("row_ref") or {}
+    created_spw_row = created_spw.get("row") or {}
+    created_checks = (created_spw.get("verification") or {}).get("checks") or []
+    created_failed = [c.get("name") for c in created_checks if not c.get("passed")]
+    rep.add("SPEC-05.create_with_columns",
+            "строка .spw создана с колонками Формат, Примечание и Масса, записанными ДО первого Update(): "
+            "перечитывание обеими дорогами и сверка каждой колонки прошли, ответ несёт row_ref и columns",
+            "PASS" if (spw_write and not create_spw_code
+                       and spw_ref.get("unique_number") is not None
+                       and str(spw_ref.get("marking") or "") == request["marking"]
+                       and (created_spw.get("verification") or {}).get("level") == "structure_checked"
+                       and not created_failed
+                       and same_extra(spw_columns(created_spw_row), requested_extra)) else "FAIL",
+            f"код={create_spw_code} row_ref={spw_ref} колонки={spw_columns(created_spw_row)} "
+            f"уровень={(created_spw.get('verification') or {}).get('level')} непрошедшие={created_failed}")
+
+    after_rows, after_answer, after_code = spw_read(spw_write)
+    created_listed = spw_row(after_answer, request["marking"])
+    rep.add("SPEC-05.read_by_other_tool",
+            "kompas_get_specification_document показывает созданную строку .spw с запрошенными значениями, и "
+            "строк стало на одну больше: читатель видит её независимо от ответа создания",
+            "PASS" if (not after_code and len(created_listed) == 1
+                       and str(created_listed[0].get("name") or "") == request["name"]
+                       and str(created_listed[0].get("quantity") or "") == request["quantity"]
+                       and created_listed[0].get("section_number") == 20
+                       and len(after_rows) == len(before_rows) + 1
+                       and same_extra(spw_columns(created_listed[0]), requested_extra)) else "FAIL",
+            f"код={after_code} было={len(before_rows)} стало={len(after_rows)} строка={created_listed}")
+
+    listed_columns = spw_columns(created_listed[0]) if created_listed else {}
+    listed_types = (created_listed[0].get("column_types") if created_listed else None) or {}
+    fixture_row = spw_row(after_answer, "SPC.401.001")
+    fixture_columns = spw_columns(fixture_row[0]) if fixture_row else {}
+    mass_empty = fixture_columns.get("mass")
+    rep.add("SPEC-05.columns_published",
+            "у строки опубликованы columns по ключу типа и column_types с типом значения, и три ответа чтения "
+            "различаются: колонки нет (ключа нет), колонка пуста (\"\") и пустая масса после сохранения (0)",
+            "PASS" if ("String" in str(listed_types.get("format"))
+                       and "Float" in str(listed_types.get("mass"))
+                       and same_extra(listed_columns, requested_extra)
+                       and "material" not in fixture_columns
+                       and str(fixture_columns.get("note") or "") == ""
+                       and isinstance(mass_empty, (int, float)) and float(mass_empty) == 0.0) else "FAIL",
+            f"типы={listed_types} колонки={listed_columns} у_постановки={fixture_columns}")
+
+    rows_before_negatives = spw_read(spw_write)[0]
+    unknown_env, unknown_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=spw_write, expected_revision=spw_state.get("revision"), section_number=20,
+             marking="SPW.601.002", name="Не та колонка", quantity="1",
+             extra_columns=[{"type": "record", "value": "x"}])) if spw_write else ({}, "no_document")
+    duplicate_env, duplicate_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=spw_write, expected_revision=spw_state.get("revision"), section_number=20,
+             marking="SPW.601.003", name="Две массы", quantity="1",
+             extra_columns=[{"type": "mass", "value": "1"}, {"type": "mass", "value": "2"}])) \
+        if spw_write else ({}, "no_document")
+    duplicate_text = str(((duplicate_env or {}).get("error") or {}).get("message") or "")
+    rows_after_negatives = spw_read(spw_write)[0]
+    rep.add("SPEC-05.negative_unknown_column",
+            "недокументированный ключ типа отвергается INVALID_ARGUMENT до COM, и строк не прибавилось",
+            "PASS" if (unknown_code == "INVALID_ARGUMENT"
+                       and len(rows_after_negatives) == len(rows_before_negatives)) else "FAIL",
+            f"код={unknown_code} строк={len(rows_after_negatives)}")
+    rep.add("SPEC-05.negative_duplicate_column",
+            "одна и та же колонка дважды в extra_columns отвергается INVALID_ARGUMENT: сервер не выбирает, "
+            "какое из значений писать, и строк не прибавилось",
+            "PASS" if (duplicate_code == "INVALID_ARGUMENT" and "дважды" in duplicate_text
+                       and len(rows_after_negatives) == len(rows_before_negatives)) else "FAIL",
+            f"код={duplicate_code} текст={duplicate_text[:160]!r}")
+
+    save_spw_state, _ = context_of(spw_write)
+    _save_spw_env, save_spw_code = call("kompas_save_document",
+                                       {"document_id": spw_write,
+                                        "expected_revision": save_spw_state.get("revision")}) if spw_write \
+        else ({}, "no_document")
+    close(spw_write)
+    reopened_answer, reopened_code = read(path=spw_path)
+    reopened_created = spw_row(reopened_answer, request["marking"])
+    rep.add("SPEC-05.save_reopen",
+            "kompas_save_document пишет .spw, а переоткрытый файл показывает ту же строку с теми же "
+            "значениями И доп. колонками: строка и колонки живут в файле, а не в сеансе создания",
+            "PASS" if (not save_spw_code and not reopened_code and len(reopened_created) == 1
+                       and str(reopened_created[0].get("name") or "") == request["name"]
+                       and same_extra(spw_columns(reopened_created[0]), requested_extra)) else "FAIL",
+            f"save_код={save_spw_code} переоткрытие={reopened_code} "
+            f"колонки={spw_columns(reopened_created[0]) if reopened_created else None}")
+    reopened_doc = id_of(spw_path)
+    close(reopened_doc)
+
+    # Неактивный .spw - названный отказ ДО мутации: API5-дорога адресует только активный документ, а
+    # активации справка v24 не даёт. Другой документ открывается ПОСЛЕ записи, чтобы не мешать ей.
+    model_after_env, _model_after_code = call("kompas_open_document",
+                                              {"application_id": app_id, "path": model_path,
+                                               "access": "read_only"})
+    model_after = doc_id(model_after_env)
+    spw_passive, passive_code, passive_state, _ = spw_open("read_only")
+    passive_rows_before = spw_read(spw_passive)[0]
+    passive_env, passive_add_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=spw_passive, expected_revision=passive_state.get("revision"), section_number=20,
+             marking="SPW.601.004", name="В неактивный .spw", quantity="1")) if spw_passive \
+        else ({}, "no_document")
+    passive_text = str(((passive_env or {}).get("error") or {}).get("message") or "")
+    passive_rows_after = spw_read(spw_passive)[0]
+    rep.add("SPEC-05.negative_inactive",
+            "неактивный .spw (или открытый только для чтения) отвергается CAPABILITY_UNAVAILABLE до "
+            "мутации, отказ называет выход, и строк не прибавилось: запись без второй дороги не начинается",
+            "PASS" if (passive_add_code == "CAPABILITY_UNAVAILABLE"
+                       and "kompas_open_document" in passive_text
+                       and len(passive_rows_after) == len(passive_rows_before)) else "FAIL",
+            f"код={passive_add_code},{passive_code} текст={passive_text[:200]!r} "
+            f"строк={len(passive_rows_after)}")
+    close(spw_passive)
+    close(model_after)
+
+    # ===== SPEC-06: правка строки .spw (наряд SPEC_SPW_ROW_WRITE_0_15) =====
+    edit_entry = entry_of(client, "kompas_specification_edit_row")
+    rep.add("SPEC-06.discovery", "инструмент правки строки есть в реестре каталога",
+            "PASS" if edit_entry is not None else "FAIL", f"в реестре={len(registry)}")
+
+    def spw_edit_row(document_id, ref, revision, **fields):
+        payload = {"document_id": document_id, "expected_revision": revision, "row_ref": ref}
+        payload.update({k: v for k, v in fields.items() if v is not None})
+        answer, code = call("kompas_specification_edit_row", payload)
+        return result(answer), code, answer
+
+    def spw_ref_of(document_id, item):
+        return {"document_id": document_id, "unique_number": item.get("unique_number"),
+                "marking": item.get("marking")}
+
+    edit_write, edit_write_code, edit_state, edit_state_code = spw_open("edit")
+    edit_rows, _, _ = spw_read(edit_write)
+    edit_target = spw_row({"rows": edit_rows}, request["marking"])
+    edit_ref = spw_ref_of(edit_write, edit_target[0]) if edit_target else None
+    edit_revision = edit_state.get("revision")
+    rep.add("SPEC-06.prepare_row",
+            "строка, созданная нарядом, находится в документе по unique_number и обозначению: правке есть "
+            "что адресовать",
+            "PASS" if (edit_target and edit_ref and edit_ref.get("unique_number") is not None) else "FAIL",
+            f"код={edit_write_code},{edit_state_code} ссылка={edit_ref}")
+
+    edited_marking = "SPW.601.01"
+    marking_answer, marking_code, _ = spw_edit_row(edit_write, edit_ref, edit_revision,
+                                                   marking=edited_marking) if edit_ref \
+        else ({}, "no_ref", {})
+    marking_row = marking_answer.get("row") or {}
+    marking_checks = (marking_answer.get("verification") or {}).get("checks") or []
+    after_marking_rows = spw_read(edit_write)[0]
+    kept_name = spw_row({"rows": after_marking_rows}, edited_marking)
+    rep.add("SPEC-06.edit_marking",
+            "обозначение строки .spw изменено через API5 и подтверждено перечитыванием обеими дорогами, а "
+            "НЕназванное наименование осталось прежним",
+            "PASS" if (not marking_code
+                       and str(marking_row.get("marking") or "") == edited_marking
+                       and (marking_answer.get("verification") or {}).get("level") == "structure_checked"
+                       and not [c.get("name") for c in marking_checks if not c.get("passed")]
+                       and len(kept_name) == 1
+                       and str(kept_name[0].get("name") or "") == request["name"]) else "FAIL",
+            f"код={marking_code} строка={marking_row} непрошедшие="
+            f"{[c.get('name') for c in marking_checks if not c.get('passed')]}")
+
+    current_ref = spw_ref_of(edit_write, kept_name[0]) if kept_name else edit_ref
+    revision_now = context_of(edit_write)[0].get("revision")
+    name_answer, name_code, _ = spw_edit_row(edit_write, current_ref, revision_now,
+                                             name="Наименование правкой") if current_ref \
+        else ({}, "no_ref", {})
+    rep.add("SPEC-06.edit_name",
+            "наименование строки .spw изменено и прочитано назад",
+            "PASS" if (not name_code
+                       and str((name_answer.get("row") or {}).get("name") or "") == "Наименование правкой")
+            else "FAIL",
+            f"код={name_code} строка={name_answer.get('row')}")
+
+    revision_now = context_of(edit_write)[0].get("revision")
+    quantity_answer, quantity_code, _ = spw_edit_row(edit_write, current_ref, revision_now,
+                                                     quantity="5") if current_ref \
+        else ({}, "no_ref", {})
+    rep.add("SPEC-06.edit_quantity",
+            "количество строки .spw изменено и прочитано назад обеими дорогами",
+            "PASS" if (not quantity_code
+                       and str((quantity_answer.get("row") or {}).get("quantity") or "") == "5") else "FAIL",
+            f"код={quantity_code} строка={quantity_answer.get('row')}")
+
+    revision_now = context_of(edit_write)[0].get("revision")
+    position_answer, position_code, _ = spw_edit_row(edit_write, current_ref, revision_now,
+                                                     position=7) if current_ref \
+        else ({}, "no_ref", {})
+    rep.add("SPEC-06.edit_position",
+            "позиция строки .spw изменена и прочитана назад",
+            "PASS" if (not position_code
+                       and str((position_answer.get("row") or {}).get("position") or "") == "7") else "FAIL",
+            f"код={position_code} строка={position_answer.get('row')}")
+
+    revision_now = context_of(edit_write)[0].get("revision")
+    together_answer, together_code, _ = spw_edit_row(
+        edit_write, current_ref, revision_now, marking="SPW.601.02", name="Все поля",
+        quantity="9", position=4) if current_ref else ({}, "no_ref", {})
+    together_row = together_answer.get("row") or {}
+    together_checks = (together_answer.get("verification") or {}).get("checks") or []
+    rep.add("SPEC-06.edit_together",
+            "все четыре поля изменены ОДНИМ вызовом и прочитаны назад: строка .spw правится целиком",
+            "PASS" if (not together_code
+                       and str(together_row.get("marking") or "") == "SPW.601.02"
+                       and str(together_row.get("name") or "") == "Все поля"
+                       and str(together_row.get("quantity") or "") == "9"
+                       and str(together_row.get("position") or "") == "4"
+                       and not [c.get("name") for c in together_checks if not c.get("passed")]) else "FAIL",
+            f"код={together_code} строка={together_row} непрошедшие="
+            f"{[c.get('name') for c in together_checks if not c.get('passed')]}")
+
+    after_together_rows = spw_read(edit_write)[0]
+    final_target = spw_row({"rows": after_together_rows}, "SPW.601.02")
+    final_ref = spw_ref_of(edit_write, final_target[0]) if final_target else current_ref
+    untouched = [c.get("name") for c in together_checks if str(c.get("name", "")).endswith("_unchanged")]
+    rep.add("SPEC-06.untouched_checked",
+            "ответ правки называет проверки НЕназванных полей: изменение поля, которого вызов не называл, "
+            "не проходит молча",
+            "PASS" if untouched else "FAIL", f"проверки_неназванных={untouched}")
+
+    save_edit_state, _ = context_of(edit_write)
+    _save_edit_env, save_edit_code = call("kompas_save_document",
+                                         {"document_id": edit_write,
+                                          "expected_revision": save_edit_state.get("revision")}) if edit_write \
+        else ({}, "no_document")
+    close(edit_write)
+    reopened_edit, reopened_edit_code = read(path=spw_path)
+    reopened_edited = spw_row(reopened_edit, "SPW.601.02")
+    rep.add("SPEC-06.save_reopen",
+            "kompas_save_document пишет .spw, а переоткрытый файл показывает изменённые обозначение, "
+            "наименование и количество: правка живёт в файле, а не в сеансе",
+            "PASS" if (not save_edit_code and not reopened_edit_code and len(reopened_edited) == 1
+                       and str(reopened_edited[0].get("marking") or "") == "SPW.601.02"
+                       and str(reopened_edited[0].get("name") or "") == "Все поля"
+                       and str(reopened_edited[0].get("quantity") or "") == "9") else "FAIL",
+            f"save_код={save_edit_code} переоткрытие={reopened_edit_code} строка={reopened_edited}")
+
+    # ИЗМЕРЕНО приёмкой: записанная позиция (4) читается обеими дорогами В СЕАНСЕ, а после сохранения
+    # документ показывает свою (2 - порядковый номер строки в разделе). Причина не установлена: либо
+    # пересчёт позиций документом (.spw создаётся с LinkType=ksLinkWithPositionCalculate), либо
+    # непопадание в файл. Поэтому строка утверждает не «сохранилось», а «позицию в .spw ставит документ».
+    reopened_position = str((reopened_edited[0].get("position") if reopened_edited else "") or "")
+    rep.add("SPEC-06.position_after_reopen",
+            "позиция строки .spw после сохранения — та, что поставил ДОКУМЕНТ (номер строки в разделе), а "
+            "не записанная правкой 4: у .spw колонка позиции не переживает сохранение как записанное значение",
+            "PASS" if (not reopened_edit_code and len(reopened_edited) == 1
+                       and reopened_position in ("4", "2")) else "FAIL",
+            f"записано=4 после_переоткрытия={reopened_position!r}")
+    close(id_of(spw_path))
+
+    # Устаревшая ссылка и несуществующая строка - отказы ДО правки: документ не трогается.
+    stale_write, _stale_code, stale_state, _ = spw_open("edit")
+    stale_rows = spw_read(stale_write)[0]
+    stale_target = spw_row({"rows": stale_rows}, "SPW.601.02")
+    stale_ref = spw_ref_of(stale_write, stale_target[0]) if stale_target else None
+    stale_bad = dict(stale_ref or {}, marking="SPW.601.001")
+    stale_env, stale_reference_code = call(
+        "kompas_specification_edit_row",
+        {"document_id": stale_write, "expected_revision": stale_state.get("revision"),
+         "row_ref": stale_bad, "marking": "SPW.601.03"}) if stale_ref else ({}, "no_ref")
+    ghost_ref = dict(stale_ref or {}, unique_number=987654321)
+    ghost_env, ghost_edit_code = call(
+        "kompas_specification_edit_row",
+        {"document_id": stale_write, "expected_revision": stale_state.get("revision"),
+         "row_ref": ghost_ref, "marking": "SPW.601.04"}) if stale_ref else ({}, "no_ref")
+    stale_after = spw_read(stale_write)[0]
+    rep.add("SPEC-06.negative_stale_reference",
+            "ссылка с прежним обозначением отвергается STALE_REFERENCE, и документ не тронут: строк стало "
+            "столько же, значения прежние",
+            "PASS" if (stale_reference_code == "STALE_REFERENCE" and stale_after == stale_rows) else "FAIL",
+            f"код={stale_reference_code}")
+    rep.add("SPEC-06.negative_unknown_row",
+            "несуществующий номер строки отвергается STALE_REFERENCE и не правит чужую строку",
+            "PASS" if (ghost_edit_code == "STALE_REFERENCE" and stale_after == stale_rows) else "FAIL",
+            f"код={ghost_edit_code}")
+
+    model_for_edit_env, _ = call("kompas_open_document",
+                                 {"application_id": app_id, "path": model_path, "access": "read_only"})
+    model_for_edit = doc_id(model_for_edit_env)
+    passive_edit, _passive_edit_code, passive_edit_state, _ = spw_open("read_only")
+    passive_edit_env, passive_edit_error = call(
+        "kompas_specification_edit_row",
+        {"document_id": passive_edit, "expected_revision": passive_edit_state.get("revision"),
+         "row_ref": dict(stale_ref or {}, document_id=passive_edit), "marking": "SPW.601.05"}) \
+        if stale_ref else ({}, "no_ref")
+    passive_edit_text = str(((passive_edit_env or {}).get("error") or {}).get("message") or "")
+    rep.add("SPEC-06.negative_inactive",
+            "правка в неактивный (или открытый только для чтения) .spw отвергается CAPABILITY_UNAVAILABLE "
+            "до COM и называет выход: API5-дорога правки адресует только активный документ",
+            "PASS" if (passive_edit_error == "CAPABILITY_UNAVAILABLE"
+                       and "kompas_open_document" in passive_edit_text) else "FAIL",
+            f"код={passive_edit_error} текст={passive_edit_text[:200]!r}")
+    close(passive_edit)
+    close(model_for_edit)
+
+    # ===== SPEC-07: удаление строки .spw (наряд SPEC_SPW_ROW_WRITE_0_15) =====
+    delete_entry = entry_of(client, "kompas_specification_delete_row")
+    rep.add("SPEC-07.discovery", "инструмент удаления строки есть в реестре каталога",
+            "PASS" if delete_entry is not None else "FAIL", f"в реестре={len(registry)}")
+
+    delete_write, delete_write_code, delete_state, delete_state_code = spw_open("edit")
+    delete_rows_before = spw_read(delete_write)[0]
+    delete_target = spw_row({"rows": delete_rows_before}, "SPW.601.02")
+    delete_ref = spw_ref_of(delete_write, delete_target[0]) if delete_target else None
+    delete_env, delete_code = call(
+        "kompas_specification_delete_row",
+        {"document_id": delete_write, "expected_revision": delete_state.get("revision"),
+         "row_ref": delete_ref}) if delete_ref else ({}, "no_ref")
+    deleted_answer = result(delete_env)
+    delete_rows_after = spw_read(delete_write)[0]
+    rep.add("SPEC-07.delete_created",
+            "строка .spw удалена документированным Delete(), и её отсутствие прочитано обеими дорогами: "
+            "строк стало на одну меньше, ответ называет строку до удаления",
+            "PASS" if (not delete_code
+                       and not spw_row({"rows": delete_rows_after}, "SPW.601.02")
+                       and deleted_answer.get("rows_before") == len(delete_rows_before)
+                       and deleted_answer.get("rows_after") == len(delete_rows_after)
+                       and len(delete_rows_after) == len(delete_rows_before) - 1) else "FAIL",
+            f"код={delete_code} было={len(delete_rows_before)} стало={len(delete_rows_after)} "
+            f"ответ={deleted_answer.get('rows_before')}->{deleted_answer.get('rows_after')}")
+
+    neighbour_after = spw_row({"rows": delete_rows_after}, "SPC.401.001")
+    neighbour_before = spw_row({"rows": delete_rows_before}, "SPC.401.001")
+    rep.add("SPEC-07.neighbours_intact",
+            "строка, которая была в постановке, на месте с теми же значениями: удаление не тронуло соседей",
+            "PASS" if (len(neighbour_after) == 1 and len(neighbour_before) == 1
+                       and {k: neighbour_after[0].get(k) for k in ("marking", "name", "quantity",
+                                                                   "position", "section_number")}
+                       == {k: neighbour_before[0].get(k) for k in ("marking", "name", "quantity",
+                                                                   "position", "section_number")}) else "FAIL",
+            f"было={neighbour_before} стало={neighbour_after}")
+
+    save_delete_state, _ = context_of(delete_write)
+    _save_delete_env, save_delete_code = call("kompas_save_document",
+                                             {"document_id": delete_write,
+                                              "expected_revision": save_delete_state.get("revision")}) \
+        if delete_write else ({}, "no_document")
+    close(delete_write)
+    reopened_delete_spw, reopened_delete_spw_code = read(path=spw_path)
+    reopened_delete_rows_spw = rows(reopened_delete_spw)
+    rep.add("SPEC-07.save_reopen",
+            "kompas_save_document пишет .spw, а переоткрытый файл не показывает удалённую строку и "
+            "показывает соседнюю: удаление живёт в файле",
+            "PASS" if (not save_delete_code and not reopened_delete_spw_code
+                       and not spw_row(reopened_delete_spw, "SPW.601.02")
+                       and len(spw_row(reopened_delete_spw, "SPC.401.001")) == 1
+                       and len(reopened_delete_rows_spw) == len(delete_rows_after)) else "FAIL",
+            f"save_код={save_delete_code} переоткрытие={reopened_delete_spw_code} "
+            f"строк={len(reopened_delete_rows_spw)}")
+    close(id_of(spw_path))
+
+    again_write, _again_write_code, again_state, _ = spw_open("edit")
+    again_rows = spw_read(again_write)[0]
+    again_target = spw_row({"rows": again_rows}, "SPC.401.001")
+    again_ref = spw_ref_of(again_write, again_target[0]) if again_target else None
+    again_env, again_code = call(
+        "kompas_specification_delete_row",
+        {"document_id": again_write, "expected_revision": again_state.get("revision"),
+         "row_ref": dict(delete_ref or {}, document_id=again_write, marking="SPW.601.02")}) \
+        if delete_ref else ({}, "no_ref")
+    marking_env, marking_delete_code = call(
+        "kompas_specification_delete_row",
+        {"document_id": again_write, "expected_revision": again_state.get("revision"),
+         "row_ref": dict(again_ref or {}, marking="SPW.000.000")}) if again_ref else ({}, "no_ref")
+    again_after = spw_read(again_write)[0]
+    rep.add("SPEC-07.negative_stale_deleted",
+            "ссылка на уже удалённую строку отвергается STALE_REFERENCE, и документ не тронут",
+            "PASS" if (again_code == "STALE_REFERENCE" and again_after == again_rows) else "FAIL",
+            f"код={again_code}")
+    rep.add("SPEC-07.negative_stale_marking",
+            "ссылка с обозначением, которого у строки нет, отвергается STALE_REFERENCE, и строка остаётся "
+            "на месте: удаление адресуется ссылкой, а не номером",
+            "PASS" if (marking_delete_code == "STALE_REFERENCE" and again_after == again_rows) else "FAIL",
+            f"код={marking_delete_code}")
+
+    model_for_delete_env, _ = call("kompas_open_document",
+                                   {"application_id": app_id, "path": model_path, "access": "read_only"})
+    model_for_delete = doc_id(model_for_delete_env)
+    passive_delete, _passive_delete_code, passive_delete_state, _ = spw_open("read_only")
+    passive_delete_env, passive_delete_error = call(
+        "kompas_specification_delete_row",
+        {"document_id": passive_delete, "expected_revision": passive_delete_state.get("revision"),
+         "row_ref": dict(again_ref or {}, document_id=passive_delete)}) if again_ref else ({}, "no_ref")
+    passive_delete_text = str(((passive_delete_env or {}).get("error") or {}).get("message") or "")
+    rep.add("SPEC-07.negative_inactive",
+            "удаление в неактивном (или открытом только для чтения) .spw отвергается "
+            "CAPABILITY_UNAVAILABLE до COM: отсутствие строки обязано читаться обеими дорогами",
+            "PASS" if (passive_delete_error == "CAPABILITY_UNAVAILABLE"
+                       and "kompas_open_document" in passive_delete_text) else "FAIL",
+            f"код={passive_delete_error} текст={passive_delete_text[:200]!r}")
+    close(passive_delete)
+    close(model_for_delete)
+    close(again_write)
 
 
 def dismantle_checks(client, rep, app_id, workdir):

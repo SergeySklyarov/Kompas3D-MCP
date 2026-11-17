@@ -25,6 +25,18 @@ public static class SpecificationFieldPages
     /// History: docs/decisions/bom.md#spec-edit-row</remarks>
     public const string UniqueNumber = "ispecificationobject_uniquenumber.html";
 
+    /// <summary>Every column beyond the four fields, by the key of its TYPE and number.</summary>
+    /// <remarks>DOC: <c>ispecificationcolumnitem_value.html</c> — the element's value follows
+    /// <c>ValueType</c>; <c>ispecificationcolumns_column.html</c> addresses it by type, number and block.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    public const string Columns = "ispecificationcolumnitem_value.html";
+
+    /// <summary>Which columns the object has, and the type of value each of them carries.</summary>
+    /// <remarks>DOC: <c>ispecificationcolumn_valuetype.html</c> — «ksValueTypeInteger - VT_I4,
+    /// ksValueTypeFloat - VT_R8, ksValueTypeString - VT_BSTR».
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    public const string ColumnTypes = "ispecificationcolumn_valuetype.html";
+
     /// <summary>The table in the order the contract publishes the fields.</summary>
     public static IReadOnlyList<(string Field, string Page)> All { get; } =
     [
@@ -35,6 +47,8 @@ public static class SpecificationFieldPages
         ("name", Name),
         ("quantity", Quantity),
         ("unique_number", UniqueNumber),
+        ("columns", Columns),
+        ("column_types", ColumnTypes),
     ];
 }
 

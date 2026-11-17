@@ -597,9 +597,16 @@ public static class ToolCatalog
             // History: docs/decisions/bom.md#spec-read-spw
             ReadOnly("kompas_get_specification_document", "Строки документа-спецификации (.spw)",
                 "Объекты родной спецификации ДОКУМЕНТА .spw: {section, section_number, position, marking, "
-                + "name, quantity, unique_number} — тот же вид строк, что у kompas_get_specification, но "
+                + "name, quantity, unique_number, columns, column_types} — тот же вид строк, что у "
+                + "kompas_get_specification, но "
                 + "прочитанный у "
-                + "самого документа-спецификации. Адресация — РОВНО ОДНО из path (абсолютный путь к .spw, "
+                + "самого документа-спецификации. columns — значения КОЛОНОК по ключу ТИПА и номера "
+                + "(format, zone, note, mass, material, user, code, factory, document_number, document_name, "
+                + "document_code, code_okp), column_types — какие колонки у объекта есть и тип их значения "
+                + "(ksValueTypeString/Integer/Float). Три ответа чтения различаются и означают разное: null — "
+                + "колонки у объекта нет; \"\" — колонка есть и пуста; 0 у массы после сохранения — пусто "
+                + "(колонка числовая, и пустое число документ отвечает нулём). Адресация — РОВНО ОДНО из path "
+                + "(абсолютный путь к .spw, "
                 + "политика путей чтения) и document_id уже открытого документа: оба поля сразу или ни "
                 + "одного — INVALID_ARGUMENT до обращения к КОМПАС. Маршрут чтения — API7: IDocuments.Open → "
                 + "IKompasDocument.SpecificationDescriptions.Active → Objects → Columns → ColumnItems, "
@@ -612,8 +619,9 @@ public static class ToolCatalog
                 + "Объекты без колонок (имя раздела, комментарий, начало блока и т.п.) называются в notes "
                 + "своим документированным типом, а не выбрасываются молча. Отказы: PATH_NOT_ALLOWED, "
                 + "DOCUMENT_NOT_FOUND (нет файла или не открылся), CAPABILITY_UNAVAILABLE (это не "
-                + "документ-спецификация либо API7 недоступен). ПРЕДЕЛ: правка и запись строк .spw этим "
-                + "выпуском не входят; открытый по path документ открыт только для чтения.",
+                + "документ-спецификация либо API7 недоступен). Строки .spw пишут kompas_specification_add_row, "
+                + "kompas_specification_edit_row и kompas_specification_delete_row; открытый по path документ "
+                + "открыт только для чтения, и запись требует kompas_open_document с access=edit.",
                 Sch.Props(
                     ("path", Sch.Described(
                         Sch.Nullable(Sch.Ref("#/$defs/path")),
@@ -630,29 +638,39 @@ public static class ToolCatalog
             // SPEC-02: the first WRITE of the block — a MODEL row. Add() only fills the collection, Update()
             // creates the row, and the answer is decided by reading it back through both roads.
             // History: docs/decisions/bom.md#spec-add-row
-            Mutation("kompas_specification_add_row", "Создать строку спецификации модели",
-                "Создаёт СТРОКУ спецификации модели (детали или сборки) и подтверждает её обратным "
-                + "чтением. Маршрут — API7: SpecificationDescriptions.Active → BaseObjects.Add(раздел, 0) "
+            Mutation("kompas_specification_add_row", "Создать строку спецификации (модель или .spw)",
+                "Создаёт СТРОКУ спецификации — в модели (детали или сборки) либо в ДОКУМЕНТЕ-спецификации "
+                + ".spw — и подтверждает её обратным чтением. Маршрут — API7: SpecificationDescriptions.Active "
+                + "(у .spw описание уже есть) → BaseObjects.Add(раздел, 0) "
                 + "добавляет объект только в КОЛЛЕКЦИЮ, значения пишутся в колонки по ИХ ТИПУ "
                 + "(ksSColumnMark/ksSColumnName/ksSColumnCount/ksSColumnPosition), а в документе строка "
                 + "появляется только после ISpecificationObject.Update(). Поэтому успех — не возврат "
                 + "вызова: строка перечитывается ОБЕИМИ дорогами (API7: Objects → UniqueNumber → Columns → "
                 + "ColumnItems; API5: ksGetSpcObject → ksGetSpcObjectNumber → ksGetSpcObjectColumnText), и "
                 + "значения сверяются с запрошенными. Расхождение — GEOMETRY_FAILED со снимком, а не "
-                + "успех. Ответ: row_ref {document_id, unique_number, marking}, прочитанная строка, route, "
-                + "notes, verification и unverified_aspects: файл этим вызовом НЕ пишется — сохранение "
+                + "успех. Ответ: row_ref {document_id, unique_number, marking}, прочитанная строка с "
+                + "columns и column_types, route, notes, verification и unverified_aspects: файл этим вызовом "
+                + "НЕ пишется — сохранение "
                 + "делает kompas_save_document, и переживание строки сохранением проверяет приёмка. "
-                + "Раздел берётся по номеру в СТИЛЕ спецификации (обычно 20 «Детали»), а не по порядку "
+                + "extra_columns — колонки СВЕРХ четырёх полей (Формат, Зона, Примечание, Масса, Материал, "
+                + "Пользовательская, Код, Завод, Номер/Наименование/Код документа, Код ОКП): они пишутся ДО "
+                + "первого Update(), потому что записанное после него в файл не попадает (измерено), и "
+                + "проверяются тем же перечитыванием с типом значения своей колонки. Раздел берётся по номеру "
+                + "в СТИЛЕ спецификации (обычно 20 «Детали»), а не по порядку "
                 + "ГОСТ; если у документа нет описания спецификации, создаётся описание по умолчанию, и это "
                 + "названо в notes (и в отказе, если после создания строку некуда деть). Отказы: "
                 + "INVALID_ARGUMENT (пустые marking/name/quantity, section_number 0 — «Объект c номером "
-                + "раздела 0.0. добавить нельзя», значение не того типа, что ждёт колонка), "
-                + "WRONG_DOCUMENT_KIND (не модель: .spw, чертёж), CAPABILITY_UNAVAILABLE (раздела нет в "
-                + "стиле — с перечнем доступных; в стиле нет колонки нужного типа; Update() = false), "
-                + "GEOMETRY_FAILED (чтение назад не подтвердило строку). ПРЕДЕЛ: строка живёт в модели до "
-                + "сохранения; связь строки с компонентом (IPropertyKeeper) НЕ создаётся — точки входа в "
-                + "COM нет (граница документации), поэтому строка не привязана к экземпляру сборки; "
-                + "перенос раздела, правка и удаление строк — другие наряды.",
+                + "раздела 0.0. добавить нельзя», значение не того типа, что ждёт колонка, неизвестный ключ "
+                + "или повтор колонки в extra_columns), "
+                + "WRONG_DOCUMENT_KIND (ни модель, ни .spw: чертёж), CAPABILITY_UNAVAILABLE (раздела нет в "
+                + "стиле — с перечнем доступных; в стиле нет колонки нужного типа — с перечнем доступных "
+                + "колонок; Update() = false; .spw не активен так, что API5-дорога недоступна; .spw открыт "
+                + "только для чтения), "
+                + "GEOMETRY_FAILED (чтение назад не подтвердило строку). ПРЕДЕЛ: строка живёт в документе до "
+                + "сохранения; доп. колонки пишутся только при СОЗДАНИИ (правка их у существующей строки — "
+                + "отдельный наряд); связь строки с компонентом этим инструментом НЕ создаётся — она "
+                + "документирована (ISpecificationBaseObjects.AddWithParam + IPropertyKeeper) и делается "
+                + "отдельным инструментом; перенос раздела, правка и удаление строк — другие наряды.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -665,7 +683,8 @@ public static class ToolCatalog
                     ("quantity", Sch.Str("Количество как текст: колонку «Количество» документ читает "
                         + "текстом, а элемент колонки приводит значение к своему типу.")),
                     ("position", Sch.Nullable(Sch.Int(
-                        "Позиция строки. null — позицию ставит документ (нумерация раздела).", 0)))),
+                        "Позиция строки. null — позицию ставит документ (нумерация раздела).", 0))),
+                    ("extra_columns", SpecificationExtraColumnsSchema())),
                 WorkerCommands.AddSpecificationRow,
                 requiresDocument: true,
                 requiresRevision: true),
@@ -673,17 +692,23 @@ public static class ToolCatalog
             // SPEC-03: the EDIT of a model row. API5 is the only road whose write survives the file, and the
             // answer is decided by reading the row back through both roads after ksSpcObjectEnd.
             // History: docs/decisions/bom.md#spec-edit-row
-            Mutation("kompas_specification_edit_row", "Изменить строку спецификации модели",
-                "Правит УЖЕ СУЩЕСТВУЮЩУЮ строку спецификации модели (детали или сборки) и подтверждает "
+            Mutation("kompas_specification_edit_row", "Изменить строку спецификации (модель или .spw)",
+                "Правит УЖЕ СУЩЕСТВУЮЩУЮ строку спецификации — в модели (детали или сборки) либо в "
+                + "ДОКУМЕНТЕ-спецификации .spw — и подтверждает "
                 + "правку перечитыванием. Строка адресуется row_ref {document_id, unique_number, marking} — "
                 + "той же ссылкой, что отдают kompas_specification_add_row и чтение: строки с таким "
                 + "unique_number нет или её обозначение не равно row_ref.marking — STALE_REFERENCE, и "
-                + "модель не трогается. Меняются только названные поля: marking, name, quantity (тексты) и "
+                + "документ не трогается. Меняются только названные поля: marking, name, quantity (тексты) и "
                 + "position (целое ≥ 0); поле, которого нет во входе, остаётся прежним, а изменение "
                 + "НЕназванного поля — GEOMETRY_FAILED со снимком. Маршрут — API5, единственный, который "
                 + "сохраняется: ksGetSpcObject(unique_number) → сверка ksGetSpcObjectNumber → "
                 + "ksSpcObjectEdit → ksSetSpcObjectColumnText по ТИПУ колонки / ksSpcCount / ksSpcPosition → "
-                + "ksSpcObjectEnd. Правка через API7 (ColumnItems.Value, Text.Str) НЕ используется: "
+                + "ksSpcObjectEnd. У модели дорога начинается с ksDocument3D.GetSpecification(), у .spw — со "
+                + "SpcActiveDocument().GetSpecification(): API5 адресует только АКТИВНЫЙ документ-спецификацию, "
+                + "а активировать документ программно v24 не позволяет, поэтому неактивный .spw — "
+                + "CAPABILITY_UNAVAILABLE до правки с названным выходом (закрыть и открыть "
+                + "kompas_open_document с access=edit). Правка через API7 (ColumnItems.Value, Text.Str) НЕ "
+                + "используется: "
                 + "измерено, что на существующей строке она отвечает Update() = false и в файл не попадает. "
                 + "Успех — не возврат сеттера: после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами "
                 + "(API7 Objects → Columns → ColumnItems и API5 ksGetSpcObjectColumnText + "
@@ -692,15 +717,20 @@ public static class ToolCatalog
                 + "unverified_aspects; файл этим вызовом НЕ пишется — сохранение делает "
                 + "kompas_save_document. Отказы: INVALID_ARGUMENT (пустой набор изменений, пустое значение "
                 + "заданного текстового поля, значение не того типа, что ждёт колонка, row_ref.document_id не "
-                + "равен document_id, отрицательная позиция), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (не "
-                + "модель: .spw, чертёж), STALE_REFERENCE (строки нет, её номер не подтверждён указателем, "
-                + "обозначение не совпало — модель не тронута), REVISION_CONFLICT, CAPABILITY_UNAVAILABLE "
-                + "(ksSpcObjectEdit вернул 0; в стиле нет колонки нужного типа), GEOMETRY_FAILED (чтение "
+                + "равен document_id, отрицательная позиция), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (ни "
+                + "модель, ни .spw: чертёж), STALE_REFERENCE (строки нет, её номер не подтверждён указателем, "
+                + "обозначение не совпало — документ не тронут), REVISION_CONFLICT, CAPABILITY_UNAVAILABLE "
+                + "(ksSpcObjectEdit вернул 0; в стиле нет колонки нужного типа; .spw не активен), "
+                + "GEOMETRY_FAILED (чтение "
                 + "назад не подтвердило правку). Отказ посреди правки называет, что уже изменилось, со "
-                + "снимком. ПРЕДЕЛ: перенос раздела (SetSection не сохраняется), запись строк .spw, масса "
+                + "снимком. ИЗМЕРЕНО на .spw: записанная позиция читается обеими дорогами в сеансе, но после "
+                + "kompas_save_document документ показывает свою (номер строки в разделе) — позицию .spw "
+                + "ставит документ, поэтому правку позиции у .spw не считайте переживающей сохранение. "
+                + "ПРЕДЕЛ: перенос раздела (SetSection не сохраняется), правка доп. колонок "
+                + "(наряд SPEC_SPW_COLUMNS), масса "
                 + "(ksSpcMassa) и составные значения (ksSpcChangeValue) не входят; связь строки с "
-                + "компонентом не создаётся и не ищется — документированной точки входа в IPropertyKeeper в "
-                + "COM нет, поэтому строку, которую КОМПАС ведёт от компонента, инструмент правит как "
+                + "компонентом этим инструментом не создаётся и не ищется, поэтому строку, которую КОМПАС "
+                + "ведёт от компонента, инструмент правит как "
                 + "обычную, а notes называет то, что документ сам говорит о её происхождении (State, "
                 + "SyncronizeWithProperties).",
                 Sch.Props(
@@ -723,15 +753,20 @@ public static class ToolCatalog
             // SPEC-04: the DELETE of a model row. The documented API7 Delete() is the road; the answer is the
             // absence read back through both roads, not the return of the call.
             // History: docs/decisions/bom.md#spec-delete-row
-            Mutation("kompas_specification_delete_row", "Удалить строку спецификации модели",
-                "Удаляет СУЩЕСТВУЮЩУЮ строку спецификации модели (детали или сборки) и подтверждает удаление "
+            Mutation("kompas_specification_delete_row", "Удалить строку спецификации (модель или .spw)",
+                "Удаляет СУЩЕСТВУЮЩУЮ строку спецификации — в модели (детали или сборки) либо в "
+                + "ДОКУМЕНТЕ-спецификации .spw — и подтверждает удаление "
                 + "перечитыванием. Строка адресуется row_ref {document_id, unique_number, marking} — той же "
                 + "ссылкой, что отдают kompas_specification_add_row и чтение: строки с таким unique_number "
-                + "нет или её обозначение не равно row_ref.marking — STALE_REFERENCE, и модель не "
+                + "нет или её обозначение не равно row_ref.marking — STALE_REFERENCE, и документ не "
                 + "трогается. Маршрут — документированный ISpecificationObject.Delete() "
                 + "(ispecificationobject_delete.html: «удалить базовый или вспомогательный объект "
                 + "спецификации из документа и из коллекции»); строка находится по номеру тем же общим кодом, "
                 + "что у правки, и её указатель API5 сверяется через ksGetSpcObjectNumber до вызова. "
+                + "API5-дорога у .spw начинается со SpcActiveDocument().GetSpecification() и существует только "
+                + "у АКТИВНОГО документа; неактивный .spw — CAPABILITY_UNAVAILABLE до удаления с названным "
+                + "выходом (закрыть и открыть kompas_open_document с access=edit), потому что отсутствие "
+                + "строки обязано читаться обеими дорогами. "
                 + "Успех — не возврат Delete(): после него список перечитывается ОБЕИМИ дорогами (API7 "
                 + "Objects и API5 ksGetSpcObject по удалённому номеру), и ответ называет удалённую строку с её "
                 + "значениями до удаления, число строк до и после, отсутствие строки, уменьшение ровно на "
@@ -742,11 +777,11 @@ public static class ToolCatalog
                 + "инструмент удаляет как обычную и предупреждает в notes, что КОМПАС может восстановить её "
                 + "при перестроении или сохранении. Отказы: INVALID_ARGUMENT (нет row_ref, "
                 + "row_ref.document_id не равен document_id, обозначение не задано, номер не положителен, "
-                + "значение не того типа), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (не модель), "
+                + "значение не того типа), DOCUMENT_NOT_FOUND, WRONG_DOCUMENT_KIND (ни модель, ни .spw: "
+                + "чертёж), "
                 + "STALE_REFERENCE, REVISION_CONFLICT, CAPABILITY_UNAVAILABLE (Delete() = false или "
-                + "исключение), GEOMETRY_FAILED (удаление не подтвердилось перечитыванием). ПРЕДЕЛ: строки "
-                + "документа-спецификации .spw этим инструментом не удаляются (у них ksSpcDocument.ksDeleteObj "
-                + "и свой наряд), перенумерация позиций после удаления не делается, файл этим вызовом НЕ "
+                + "исключение; .spw не активен), GEOMETRY_FAILED (удаление не подтвердилось перечитыванием). "
+                + "ПРЕДЕЛ: перенумерация позиций после удаления не делается, файл этим вызовом НЕ "
                 + "пишется — сохранение делает kompas_save_document.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
@@ -5040,6 +5075,43 @@ public static class ToolCatalog
                 ("marking", Sch.Str(
                     "Обозначение строки на момент выдачи ссылки. Ссылка сверяется с документом по нему: "
                     + "другое обозначение — STALE_REFERENCE, а не правка чужой строки."))));
+
+    /// <summary>The columns beyond the four row fields, addressed by their documented TYPE and number.</summary>
+    /// <remarks>INVARIANT: `type` is a CLOSED list of the documented keys — a free string would let a client
+    /// write into a column the style may not have, and the refusal would come from the kernel instead of the
+    /// schema. The four row fields are absent from the list on purpose: they are separate inputs.
+    /// DOC: <c>ksspecificationcolumntypeenum.html</c>, <c>ispecificationcolumns_column.html</c>.
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static JsonObject SpecificationExtraColumnsSchema() =>
+        Sch.Nullable(Sch.Arr(
+            Sch.Obj(
+                "Колонка сверх четырёх полей строки",
+                new[] { "type", "value" },
+                Sch.Props(
+                    ("type", Sch.Enum(
+                        "Ключ типа колонки из ksspecificationcolumntypeenum.html: format (Формат), zone (Зона), "
+                        + "note (Примечание), mass (Масса), material (Материал), user (Пользовательская), "
+                        + "code (Код), factory (Завод изготовитель), document_number (Номер документа), "
+                        + "document_name (Наименование документа), document_code (Код документа), "
+                        + "code_okp (Код ОКП). Поля строки position/marking/name/quantity сюда не входят: у них "
+                        + "свои поля.",
+                        "format", "zone", "note", "mass", "material", "user", "code", "factory",
+                        "document_number", "document_name", "document_code", "code_okp")),
+                    ("number", Sch.Nullable(Sch.Int(
+                        "Номер колонки данного типа, начиная с 1 (ispecificationcolumns_column.html). Не задан "
+                        + "— первая колонка этого типа.", 1))),
+                    ("block", Sch.Nullable(Sch.Int(
+                        "Номер блока исполнений, начиная с 0. Не задан — основной блок.", 0))),
+                    ("value", Sch.Str(
+                        "Значение текстом: элемент колонки приводит его к своему типу (ksValueTypeString — "
+                        + "текст, ksValueTypeInteger — целое, ksValueTypeFloat — число; «1,25» и «1.25» "
+                        + "принимаются одинаково)."))),
+                "Колонки сверх marking, name, quantity и position — записываются при СОЗДАНИИ строки, до "
+                + "первого Update(): измерено, что записанная после него основная колонка в файл не "
+                + "попадает. Колонка, которой нет у объекта в стиле документа, — CAPABILITY_UNAVAILABLE с "
+                + "перечнем доступных. Правки доп. колонок у существующей строки этот инструмент не делает."),
+            "Колонки сверх четырёх полей строки: значения сверяются перечитыванием обеими дорогами.",
+            max: 32));
 
     /// <summary>A session-control tool: handled by the Host itself, not the Worker.</summary>
     /// <remarks>A separate factory: these tools write no operation journal and must answer when there

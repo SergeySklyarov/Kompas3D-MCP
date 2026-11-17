@@ -275,8 +275,16 @@ public partial class Api5Session
     /// History: docs/decisions/bom.md#spec-read</remarks>
     private static string? Column(
         ksSpecification specification, int pointer, ksSpecificationColumnTypeEnum type) =>
-        Text(() => specification.ksGetSpcObjectColumnText(
-            pointer, (int)type, SpecificationColumnNumbers.FirstOfType, SpecificationColumnNumbers.MainBlock));
+        Column(specification, pointer, type, SpecificationColumnNumbers.FirstOfType,
+            SpecificationColumnNumbers.MainBlock);
+
+    /// <summary>The text of one column, named by type, number and block — the full documented address.</summary>
+    /// <remarks>DOC: <c>ksspecification_ksgetspcobjectcolumntext.html</c> — «ispoln — номер колонки данного
+    /// типа, начиная с 1; block — номер блока исполнений, начиная с 0».
+    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
+    private static string? Column(
+        ksSpecification specification, int pointer, ksSpecificationColumnTypeEnum type, int number, int block) =>
+        Text(() => specification.ksGetSpcObjectColumnText(pointer, (int)type, number, block));
 
     /// <summary>A model document: a specification belongs to an assembly or a part.</summary>
     /// <remarks>LIMIT: a drawing and a fragment are refused — the order reads specification objects of a

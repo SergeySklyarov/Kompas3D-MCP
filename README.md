@@ -19,7 +19,8 @@
 > *English summary.* An MCP server that lets an AI agent drive a real, licensed KOMPAS-3D v24 (x64):
 > parts, sketches, features, assemblies and mates (including component patterns and nested components),
 > a bill of materials with CSV/JSON export, component properties, native model specification rows
-> (create, edit, delete) and specification documents (`.spw`, read), drawings, sheet metal, direct face
+> (create, edit, delete) and specification documents (`.spw`: read, and create, edit or delete their
+> rows together with extra columns such as format, note and mass), drawings, sheet metal, direct face
 > editing (move, delete, restore), stiffening ribs, counterbored, countersunk, spherical-bottom and
 > conical holes, STEP/DXF/IGES export. Every mutating call reports a measured verification level, is
 > journaled for safe retries and is confined to configured disk roots. No arbitrary code execution.
@@ -87,7 +88,8 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
   положение»; разнесённый вид, сечения, проверка пересечений и зазоров.
 - **Состав изделия (BOM) и спецификации.** Сводная ведомость сборки с деревом и количествами, её
   выгрузка в CSV и JSON, свойства компонента по ссылке; чтение родной спецификации модели и
-  документа-спецификации `.spw`, создание, правка и удаление строки спецификации модели.
+  документа-спецификации `.spw`, создание, правка и удаление строки спецификации модели и строки
+  документа-спецификации с дополнительными колонками (формат, зона, примечание, масса и др.).
 - **Листовой металл.** Листовое тело, сгибы, отверстия и вырезы, развёртка и её выгрузка в DXF.
 - **Чертежи.** Ассоциативные виды, разрезы, размеры (у диаметрального ответ называет и число на
   чертеже), основная надпись, технические требования, которые вписываются в свободное место листа,
@@ -106,9 +108,10 @@ SOLIDWORKS). В центре дерево построения в КОМПАС-3
 
 Чего пока нет и что в работе: [состояние и планы](docs/project-status.md).
 
-Текущий выпуск - **0.14.0**: 134 операции, 14 прямых инструментов, 23 профиля приёмки, режимов
-**145/145** и зависимостей **82/82**, открытых нет. Заметки выпуска:
-[distribution/v0.14.0.md](docs/distribution/v0.14.0.md).
+Текущий выпуск - **0.15.0**: 134 операции, 14 прямых инструментов, 24 профиля приёмки, режимов
+**150/150** и зависимостей **82/82**, открытых нет. Кроме архива сервер поставляется пакетом `.mcpb`
+для официального каталога MCP. Заметки выпуска:
+[distribution/v0.15.0.md](docs/distribution/v0.15.0.md).
 
 ## Почему ему можно доверять
 

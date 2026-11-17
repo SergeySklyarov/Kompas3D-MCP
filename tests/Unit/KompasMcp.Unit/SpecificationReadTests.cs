@@ -32,7 +32,7 @@ public class SpecificationReadTests
     {
         var pages = SpecificationFieldPages.All;
 
-        Assert.Equal(9, pages.Count);
+        Assert.Equal(10, pages.Count);
         Assert.All(pages, p => Assert.EndsWith(".html", p.Page, StringComparison.Ordinal));
         Assert.All(pages, p => Assert.Contains("specification", p.Page, StringComparison.OrdinalIgnoreCase));
     }

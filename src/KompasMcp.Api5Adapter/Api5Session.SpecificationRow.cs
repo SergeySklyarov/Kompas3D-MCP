@@ -599,7 +599,7 @@ public partial class Api5Session
     /// <c>_valuetype.html</c>.</remarks>
     private static string DescribeAvailableColumns(ISpecificationBaseObject item)
     {
-        var published = Api7ColumnPublication(item, new List<string>());
+        var published = Api7ColumnPublication(item, model: false, new List<string>());
         if (published.Types.Count == 0)
         {
             return "ни одной колонки у объекта не прочитано";
@@ -778,7 +778,8 @@ public partial class Api5Session
 
         // The extra columns are verified the same way, and with the TYPE of their element: a mass is a number,
         // so "1.25" and "1,25" are one value while "1.2" is not. History: docs/decisions/bom.md#spec-spw-row-write
-        var published = Api7ColumnPublication(listed, readNotes);
+        var published = Api7ColumnPublication(
+            listed, document.Kind is DocumentKind.Assembly or DocumentKind.Part, readNotes);
         foreach (var column in extra)
         {
             var key = SpecificationColumnKeys.KeyOf(column.Type, column.Number);
@@ -815,7 +816,12 @@ public partial class Api5Session
         }
 
         notes.AddRange(readNotes);
-        var row = read with { Columns = published.Values, ColumnTypes = published.Types };
+        var row = read with
+        {
+            Columns = published.Values,
+            ColumnTypes = published.Types,
+            ColumnEditable = published.Editable,
+        };
         return (row, unique);
     }
 
@@ -961,7 +967,10 @@ public partial class Api5Session
 
     /// <summary>The value the element of a column accepts, in the type its <c>ValueType</c> names.</summary>
     /// <remarks>DOC: <c>ispecificationcolumnitem_value.html</c> — <c>ksValueTypeInteger</c> is VT_I4,
-    /// <c>ksValueTypeFloat</c> is VT_R8, <c>ksValueTypeString</c> is VT_BSTR.</remarks>
+    /// <c>ksValueTypeFloat</c> is VT_R8, <c>ksValueTypeString</c> is VT_BSTR.
+    /// INVARIANT: a real number is taken in both decimal separators («1,25» and «1.25» are one mass), because
+    /// the contract's own wording publishes exactly that and a Russian style answers with a comma.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
     private static bool TryColumnValue(string text, ksValueTypeEnum type, out object? value)
     {
         switch (type)
@@ -975,7 +984,7 @@ public partial class Api5Session
 
                 break;
             case ksValueTypeEnum.ksValueTypeFloat:
-                if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var real))
+                if (TryReal(text, out var real))
                 {
                     value = real;
                     return true;

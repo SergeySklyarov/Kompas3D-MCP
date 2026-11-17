@@ -8695,6 +8695,36 @@
        }
       ]
      }
+     ,
+     {
+      "id": "SPEC-08",
+      "name": "Колонки строки документа-спецификации .spw: значения, типы и признак пишущихся",
+      "level": "mcp_verified",
+      "doc_source": "ispecificationobject_columns.html, ispecificationobject_additionalcolumns.html, ispecificationcolumn_columntype.html, ispecificationcolumn_columntypenumber.html, ispecificationcolumn_valuetype.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ksspecificationcolumntypeenum.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspcmassa.html",
+      "route": "чтение колонок строки .spw - API7 SpecificationDescriptions.Active -> Objects -> Columns/AdditionalColumns -> ColumnItems.Item(i).Value по типу и номеру колонки; публикуются columns (значения по ключу типа и номера), column_types (тип значения каждой колонки) и column_editable - признак, что правка пишет колонку этого типа. Перечень пишущихся получен замером тип за типом (правка -> Save -> другой процесс -> чтение обеими дорогами) и живёт в одном месте кода; у модели тем же замером найдена дыра - зона, поэтому признак зависит от вида документа. Вторая дорога - API5 ksGetSpcObject -> ksGetSpcObjectColumnText у активного документа",
+      "modes": [
+       {
+        "id": "SPEC-08.spw.columns.read",
+        "name": "Прочитать колонки строки .spw: значения, типы значений и признак пишущихся",
+        "level": "mcp_verified"
+       }
+      ]
+     }
+     ,
+     {
+      "id": "SPEC-09",
+      "name": "Правка дополнительных колонок строки: тип за типом, сохранение и переоткрытие",
+      "level": "mcp_verified",
+      "doc_source": "ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspcmassa.html, ksspecification_ksspcobjectend.html, ispecificationcolumnitem_value.html, ispecificationcolumn_valuetype.html, ispecificationcolumns_column.html, ispecificationcolumn_columnitems.html, ispecificationcolumnitems_item.html, ispecificationobject_columns.html, ispecificationobject_additionalcolumns.html, ksspecificationcolumntypeenum.html, ispecificationtuning_calculateposition.html, ispecificationtuning_initialposition.html, ispecificationtuning_sections.html, ispecificationtuningsection_putposition.html, ispecificationtuning_update.html",
+      "route": "правка доп. колонок строки - тем же API5-маршрутом, что четыре поля: ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип, номер, блок, текст) для текстовых колонок либо ksSpcMassa(текст) для массы -> ksSpcObjectEnd; до мутации тип сверяется с измеренным перечнем пишущихся (иного - CAPABILITY_UNAVAILABLE с перечнем), колонка ищется в основных и дополнительных колонках объекта, значение приводится к типу элемента; после правки строка перечитывается ОБЕИМИ дорогами, запрошенные колонки сверяются типоспецифично, а НЕназванные - с прочитанными до правки; расхождение - GEOMETRY_FAILED со снимком. Позиция строки .spw - номер документа (PutPosition раздела = TRUE, InitialPosition), поэтому ответ правки позиции называет это в warnings",
+      "modes": [
+       {
+        "id": "SPEC-09.spw.columns.write",
+        "name": "Править доп. колонки строки .spw тип за типом: сохранение, переоткрытие и отказы",
+        "level": "mcp_verified"
+       }
+      ]
+     }
    ]
   } ,{
   "id": "IGES",

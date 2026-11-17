@@ -20,16 +20,21 @@ public static class SpecificationRowEditInput
     /// <summary>The rule as the client reads it: one wording for the Host and the Worker.</summary>
     public const string Rule =
         "Правке нужна ссылка на строку этой же модели (row_ref с unique_number и marking) и хотя бы одно из "
-        + "marking, name, quantity, position; заданное текстовое поле не пустое, позиция не отрицательна.";
+        + "marking, name, quantity, position, extra_columns; заданное текстовое поле не пустое, позиция не "
+        + "отрицательна.";
 
     /// <summary>The first broken rule, or <c>null</c> when the request is well formed.</summary>
+    /// <param name="extraColumns">How many <c>extra_columns</c> the request names: a set of columns alone is a
+    /// change set too, so «ничего не названо» counts them. Their own rule is <see cref="SpecificationExtraColumns"/>.
+    /// </param>
     public static SpecificationRowEditRefusal? Validate(
         string? documentId,
         SpecificationRowRefValues? rowRef,
         string? marking,
         string? name,
         string? quantity,
-        int? position)
+        int? position,
+        int extraColumns = 0)
     {
         if (rowRef is null)
         {
@@ -58,12 +63,12 @@ public static class SpecificationRowEditInput
                 + "ссылка без него не адресует ничего.");
         }
 
-        if (marking is null && name is null && quantity is null && position is null)
+        if (marking is null && name is null && quantity is null && position is null && extraColumns == 0)
         {
             return new SpecificationRowEditRefusal(
                 "row_ref",
-                "Набор изменений пуст: не задано ни одного из marking, name, quantity, position, а вызов без "
-                + "изменений ничего не доказывает. " + Rule);
+                "Набор изменений пуст: не задано ни одного из marking, name, quantity, position, extra_columns, "
+                + "а вызов без изменений ничего не доказывает. " + Rule);
         }
 
         if (marking is not null && string.IsNullOrWhiteSpace(marking))

@@ -85,7 +85,16 @@ internal sealed partial class SpecProbe : IDisposable
                 case "spw-extra":
                 case "spw-extra-final":
                 case "spw-link":
+                case "spw-columns-write":
+                case "spw-columns-read":
+                case "spw-columns-final":
                     RunSpwStage(stage);
+                    break;
+                case "model-columns-write":
+                    ModelColumnsWrite();
+                    break;
+                case "model-columns-read":
+                    ModelColumnsRead();
                     break;
                 default:
                     Record("stage", "известное имя стадии", stage, "FAIL");

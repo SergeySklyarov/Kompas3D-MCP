@@ -101,13 +101,45 @@ public class SpecificationRowEditTests
 
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         Assert.Equal(
-            new[] { "document_id", "expected_revision", "marking", "name", "operation_id", "position",
-                    "quantity", "row_ref" },
+            new[] { "document_id", "expected_revision", "extra_columns", "marking", "name", "operation_id",
+                    "position", "quantity", "row_ref" },
             properties.Select(pair => pair.Key).Except(new[] { "timeout_ms" }).OrderBy(k => k, StringComparer.Ordinal));
-        // `position` stays optional: its absence means "the position does not change", not "position 0".
+        // `position` and `extra_columns` stay optional: their absence means "does not change", not "erase it".
         Assert.Equal(
             new[] { "document_id", "expected_revision", "operation_id", "row_ref" },
             required.OrderBy(k => k, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void TheExtraColumnsAreTheSameClosedListTheCreationTakes()
+    {
+        var edit = (JsonObject)Tool("kompas_specification_edit_row").InputSchema["properties"]!;
+        var add = (JsonObject)Tool("kompas_specification_add_row").InputSchema["properties"]!;
+
+        // One schema builder for both tools: the KEYS and the required fields of a column cannot differ between
+        // creating and editing (only the explanation of what the call does with them).
+        static JsonObject Items(JsonObject tool) =>
+            (JsonObject)((JsonObject)tool["extra_columns"]!)["items"]!;
+
+        var editItems = Items(edit);
+        var addItems = Items(add);
+        Assert.Equal(
+            ((JsonArray)((JsonObject)((JsonObject)addItems["properties"]!)["type"]!)["enum"]!).ToJsonString(),
+            ((JsonArray)((JsonObject)((JsonObject)editItems["properties"]!)["type"]!)["enum"]!).ToJsonString());
+        Assert.Equal(
+            ((JsonArray)addItems["required"]!).ToJsonString(),
+            ((JsonArray)editItems["required"]!).ToJsonString());
+        Assert.Equal(
+            addItems["additionalProperties"]!.ToJsonString(),
+            editItems["additionalProperties"]!.ToJsonString());
+    }
+
+    [Fact]
+    public void ASetOfExtraColumnsAloneIsAChangeSet()
+    {
+        // No field is named, and the call still says what to change — the rule counts the columns.
+        Assert.Null(SpecificationRowEditInput.Validate(Document, Ref("SPC.402.001", 3), null, null, null, null, 1));
+        Assert.NotNull(SpecificationRowEditInput.Validate(Document, Ref("SPC.402.001", 3), null, null, null, null, 0));
     }
 
     [Fact]
@@ -153,6 +185,19 @@ public class SpecificationRowEditTests
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);
         Assert.Contains("SpcActiveDocument", description, StringComparison.Ordinal);
         Assert.Contains("ДОКУМЕНТЕ-спецификации .spw", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheDescriptionNamesTheExtraColumnsAndThePositionWarning()
+    {
+        var description = Tool("kompas_specification_edit_row").Description;
+
+        // The two additions a reader has to see: what else can be written, and that a .spw position is not kept.
+        Assert.Contains("extra_columns", description, StringComparison.Ordinal);
+        Assert.Contains("ksSpcMassa", description, StringComparison.Ordinal);
+        Assert.Contains("warnings", description, StringComparison.Ordinal);
+        Assert.Contains("PutPosition", description, StringComparison.Ordinal);
+        Assert.DoesNotContain("правка доп. колонок (наряд", description, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -157,4 +157,38 @@ public class SpecificationExtraColumnTests
         Assert.Equal("user", SpecificationColumnKeys.KeyOf(10, 1));
         Assert.Equal("user2", SpecificationColumnKeys.KeyOf(10, 2));
     }
+
+    [Fact]
+    public void TheEditableListIsOnePlaceAndTheZoneIsTheMeasuredGapOfAModel()
+    {
+        // The zone is written in a .spw and stays empty in a model: the same call answers 1 there and writes
+        // nothing, so the type is refused for a model instead of being discovered by the read-back.
+        Assert.True(SpecificationColumnKeys.IsEditable(2, model: false));
+        Assert.False(SpecificationColumnKeys.IsEditable(2, model: true));
+        Assert.True(SpecificationColumnKeys.IsEditable(1, model: true));
+        Assert.True(SpecificationColumnKeys.IsEditable(7, model: true));
+        Assert.True(SpecificationColumnKeys.IsEditable(10, model: false));
+
+        // A type outside the measured list is writable in NO document: it has no fixture column.
+        Assert.False(SpecificationColumnKeys.IsEditable(9, model: false));
+        Assert.False(SpecificationColumnKeys.IsEditable(11, model: true));
+        Assert.False(SpecificationColumnKeys.IsEditable(16, model: false));
+    }
+
+    [Fact]
+    public void TheRefusalQuotesTheKeysThatAreActuallyWritable()
+    {
+        var forSpw = SpecificationColumnKeys.DescribeEditableExtra(false);
+        var forModel = SpecificationColumnKeys.DescribeEditableExtra(true);
+
+        Assert.Contains("zone", forSpw, StringComparison.Ordinal);
+        Assert.DoesNotContain("zone", forModel, StringComparison.Ordinal);
+        Assert.Contains("mass", forSpw, StringComparison.Ordinal);
+        Assert.Contains("mass", forModel, StringComparison.Ordinal);
+        // The four row fields are addressed by their own inputs, not by extra_columns.
+        foreach (var key in SpecificationColumnKeys.RowFields)
+        {
+            Assert.DoesNotContain(key, forSpw, StringComparison.Ordinal);
+        }
+    }
 }

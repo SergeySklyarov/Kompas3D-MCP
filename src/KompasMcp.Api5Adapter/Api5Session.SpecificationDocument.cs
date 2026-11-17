@@ -248,7 +248,7 @@ public partial class Api5Session
                     + "спецификации: название раздела не прочитано, номер прочитан");
             }
 
-            var published = Api7ColumnPublication(item, notes);
+            var published = Api7ColumnPublication(item, model: false, notes);
             var row = new SpecificationLineDto(
                 section,
                 sectionNumber,
@@ -258,7 +258,8 @@ public partial class Api5Session
                 Api7Column(item, ksSpecificationColumnTypeEnum.ksSColumnCount, "quantity", notes),
                 Double(() => item.UniqueNumber),
                 published.Values,
-                published.Types);
+                published.Types,
+                published.Editable);
             rows.Add(row);
 
             if (specification5 is not null)
@@ -501,7 +502,9 @@ public partial class Api5Session
     }
 
     /// <summary>Every column of one row, by the key of its documented TYPE and number.</summary>
-    /// <returns>The values the document answered and, for each key, the name of the element's value type.</returns>
+    /// <returns>The values the document answered, the name of the element's value type per key, and whether the
+    /// edit route is measured to write that type in this kind of document.</returns>
+    /// <param name="model">True for an assembly or a part: the zone column of a MODEL is the measured gap.</param>
     /// <remarks>INVARIANT: a value is published as the DOCUMENT answers it — text stays text, a number stays a
     /// number — so the three readings of the read road stay apart: no column is null, an empty text is "", and
     /// an emptied number answers 0. Joining the items of one column with «|» is the read road's own rule for
@@ -510,12 +513,14 @@ public partial class Api5Session
     /// <c>ispecificationcolumn_columntype.html</c>, <c>_columntypenumber.html</c>, <c>_valuetype.html</c>,
     /// <c>ispecificationcolumnitems_item.html</c>, <c>ispecificationcolumnitem_value.html</c>,
     /// <c>ksspecificationcolumntypeenum.html</c>.
-    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
-    private static (IReadOnlyDictionary<string, object?> Values, IReadOnlyDictionary<string, string> Types)
-        Api7ColumnPublication(ISpecificationBaseObject item, List<string> notes)
+    /// History: docs/decisions/bom.md#spec-spw-row-write, docs/decisions/bom.md#spec-spw-columns</remarks>
+    private static (IReadOnlyDictionary<string, object?> Values, IReadOnlyDictionary<string, string> Types,
+        IReadOnlyDictionary<string, bool> Editable)
+        Api7ColumnPublication(ISpecificationBaseObject item, bool model, List<string> notes)
     {
         var values = new Dictionary<string, object?>(StringComparer.Ordinal);
         var types = new Dictionary<string, string>(StringComparer.Ordinal);
+        var editable = new Dictionary<string, bool>(StringComparer.Ordinal);
         foreach (var additional in new[] { false, true })
         {
             try
@@ -540,6 +545,7 @@ public partial class Api5Session
                     var key = SpecificationColumnKeys.KeyOf(type.Value, number.Value);
                     types[key] = SafeRead.EnumOrNull<ksValueTypeEnum>(() => column.ValueType)?.ToString()
                                  ?? "не прочитан";
+                    editable[key] = SpecificationColumnKeys.IsEditable(type.Value, model);
                     values[key] = ColumnRawValue(column, key, notes);
                 }
             }
@@ -550,7 +556,7 @@ public partial class Api5Session
             }
         }
 
-        return (values, types);
+        return (values, types, editable);
     }
 
     /// <summary>The value one column carries, joined over its items, or null when it carries none.</summary>

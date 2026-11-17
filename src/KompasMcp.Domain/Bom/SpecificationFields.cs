@@ -37,6 +37,13 @@ public static class SpecificationFieldPages
     /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
     public const string ColumnTypes = "ispecificationcolumn_valuetype.html";
 
+    /// <summary>Whether the edit route is measured to write that column's type in this kind of document.</summary>
+    /// <remarks>INVARIANT: the flag is not a second read of the document — it is the measured list the edit's
+    /// refusal quotes (<see cref="SpecificationColumnKeys.IsEditable"/>), published so a client learns what it
+    /// can write from the same answer that shows the columns.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
+    public const string ColumnEditable = "ksspecification_kssetspcobjectcolumntext.html";
+
     /// <summary>The table in the order the contract publishes the fields.</summary>
     public static IReadOnlyList<(string Field, string Page)> All { get; } =
     [
@@ -49,6 +56,7 @@ public static class SpecificationFieldPages
         ("unique_number", UniqueNumber),
         ("columns", Columns),
         ("column_types", ColumnTypes),
+        ("column_editable", ColumnEditable),
     ];
 }
 

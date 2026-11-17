@@ -64,6 +64,34 @@ public static class SpecificationColumnKeys
     /// <summary>The keys a client may name, for the refusal that lists them.</summary>
     public static string Describe() =>
         string.Join(", ", All.Where(pair => !RowFields.Contains(pair.Key)).Select(pair => pair.Key));
+
+    /// <summary>The column types the EDIT route writes into the file — the one place the list lives.</summary>
+    /// <remarks>MEASURED: every one of them was written through <c>ksSpcObjectEdit</c> →
+    /// <c>ksSetSpcObjectColumnText</c>/<c>ksSpcMassa</c> → <c>ksSpcObjectEnd</c>, saved, reopened by another
+    /// process and read back through API7 and API5. INVARIANT: a type outside the list is refused BEFORE the
+    /// mutation and named in <c>editable</c>: the contract does not present an unmeasured write as a success.
+    /// The four row fields are here too — the same route writes them, through their own setters.
+    /// DOC: <c>ksspecification_kssetspcobjectcolumntext.html</c> (1 — «в случае удачного завершения»),
+    /// <c>ksspecification_ksspcmassa.html</c>; the types outside the list have no fixture column.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
+    public static IReadOnlyList<int> Editable { get; } = [1, 2, 3, 4, 5, 6, 7, 8, 10];
+
+    /// <summary>The types the same route does NOT write in a MODEL — measured, with the zone as the one gap.</summary>
+    /// <remarks>MEASURED: in a model <c>ksSetSpcObjectColumnText(ksSColumnZone, …)</c> answers 1 while the
+    /// column stays empty in the session and in the file, while the same call fills it in a <c>.spw</c>. A
+    /// success that writes nothing is the false success this contract refuses, so the type is named here
+    /// instead of being discovered by the read-back after the mutation.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
+    public static IReadOnlyList<int> NotWrittenInModel { get; } = [2];
+
+    /// <summary>Whether the edit route is measured to write a column of this type in this kind of document.</summary>
+    public static bool IsEditable(int type, bool model) =>
+        Editable.Contains(type) && !(model && NotWrittenInModel.Contains(type));
+
+    /// <summary>The keys <c>extra_columns</c> accepts and the route writes, for the refusal that lists them.</summary>
+    public static string DescribeEditableExtra(bool model) =>
+        string.Join(", ", All.Where(pair => IsEditable(pair.Type, model) && !RowFields.Contains(pair.Key))
+            .Select(pair => pair.Key));
 }
 
 /// <summary>One column of a row that is not one of its four fields, resolved to its documented type.</summary>

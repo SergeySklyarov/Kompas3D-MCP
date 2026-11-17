@@ -354,6 +354,16 @@ public sealed class ToolInvoker : IAsyncDisposable
             // a field that IS given, and a reference to another document must be refused BEFORE the journal
             // and BEFORE COM. The Worker repeats the SAME pure rule.
             // History: docs/decisions/bom.md#spec-edit-row
+            // This is the same call the row creation uses: a set of columns alone IS a change set, so its count
+            // enters the rule, and the columns' own rule is the one pure parser.
+            // History: docs/decisions/bom.md#spec-spw-columns
+            var extra = SpecificationExtraColumns.Parse(ReadExtraColumns(arguments["extra_columns"]), out var extraRefused);
+            if (extraRefused is not null)
+            {
+                yield return new SchemaViolation(
+                    "/extra_columns/" + extraRefused.Field, "value", extraRefused.Message);
+            }
+
             var rowRef = arguments["row_ref"] as JsonObject;
             var refused = SpecificationRowEditInput.Validate(
                 ReadString(arguments, "document_id"),
@@ -366,7 +376,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                 ReadString(arguments, "marking"),
                 ReadString(arguments, "name"),
                 ReadString(arguments, "quantity"),
-                ReadLong(arguments, "position") is { } position ? (int)position : null);
+                ReadLong(arguments, "position") is { } position ? (int)position : null,
+                extra?.Count ?? 0);
             if (refused is not null)
             {
                 yield return new SchemaViolation("/" + refused.Field, "value", refused.Message);

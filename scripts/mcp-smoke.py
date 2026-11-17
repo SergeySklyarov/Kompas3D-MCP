@@ -59827,11 +59827,11 @@ def specification_checks(client, rep, app_id, workdir):
     rep.add("SPEC-03.discovery", "инструмент правки строки модели есть в реестре каталога",
             "PASS" if edit_entry is not None else "FAIL", f"в реестре={len(registry)}")
     rep.add("SPEC-03.schema",
-            "схема несёт ссылку row_ref {document_id, unique_number, marking} и четыре изменяемых поля; "
-            "обязательны только ссылка и служебные поля, поэтому отсутствие поля значит «не менять», а не "
-            "ноль",
+            "схема несёт ссылку row_ref {document_id, unique_number, marking}, четыре изменяемых поля и "
+            "необязательные доп. колонки; обязательны только ссылка и служебные поля, поэтому отсутствие "
+            "поля значит «не менять», а не ноль",
             "PASS" if (edit_props == {"document_id", "expected_revision", "row_ref", "marking", "name",
-                                      "quantity", "position", "operation_id"}
+                                      "quantity", "position", "extra_columns", "operation_id"}
                        and edit_required == {"document_id", "expected_revision", "row_ref", "operation_id"}
                        and ref_props == {"document_id", "unique_number", "marking"}
                        and ref_required == {"document_id", "unique_number", "marking"}) else "FAIL",
@@ -60486,12 +60486,16 @@ def specification_checks(client, rep, app_id, workdir):
         return published if isinstance(published, dict) else {}
 
     def same_extra(published, expected):
-        """Каждая запрошенная колонка прочитана: текст - как текст, число - как число."""
+        """Каждая запрошенная колонка прочитана: текст - как текст, число - как число.
+
+        Масса сверяется ЧИСЛОМ в обоих разделителях: правка принимает и «3,5», и «3.5», а документ
+        отвечает числом, поэтому «3,5» и 3.5 - одна масса, как и в ответе продукта.
+        """
         for key, value in expected.items():
             read_back = published.get(key)
             if key == "mass":
                 try:
-                    if abs(float(read_back) - float(value)) > 1e-9:
+                    if abs(float(read_back) - float(str(value).replace(",", "."))) > 1e-9:
                         return False
                 except (TypeError, ValueError):
                     return False
@@ -60702,8 +60706,8 @@ def specification_checks(client, rep, app_id, workdir):
             f"код={quantity_code} строка={quantity_answer.get('row')}")
 
     revision_now = context_of(edit_write)[0].get("revision")
-    position_answer, position_code, _ = spw_edit_row(edit_write, current_ref, revision_now,
-                                                     position=7) if current_ref \
+    position_answer, position_code, position_env = spw_edit_row(edit_write, current_ref, revision_now,
+                                                               position=7) if current_ref \
         else ({}, "no_ref", {})
     rep.add("SPEC-06.edit_position",
             "позиция строки .spw изменена и прочитана назад",
@@ -60754,17 +60758,29 @@ def specification_checks(client, rep, app_id, workdir):
                        and str(reopened_edited[0].get("quantity") or "") == "9") else "FAIL",
             f"save_код={save_edit_code} переоткрытие={reopened_edit_code} строка={reopened_edited}")
 
-    # ИЗМЕРЕНО приёмкой: записанная позиция (4) читается обеими дорогами В СЕАНСЕ, а после сохранения
-    # документ показывает свою (2 - порядковый номер строки в разделе). Причина не установлена: либо
-    # пересчёт позиций документом (.spw создаётся с LinkType=ksLinkWithPositionCalculate), либо
-    # непопадание в файл. Поэтому строка утверждает не «сохранилось», а «позицию в .spw ставит документ».
+    # ПРИЧИНА УСТАНОВЛЕНА документированным чтением (наряд SPEC_SPW_COLUMNS_0_15): у документа-спецификации
+    # включена автоматическая простановка номеров в разделе (ISpecificationTuningSection.PutPosition = TRUE),
+    # а первый объект получает номер InitialPosition (измерено: 1). После сохранения строка несёт СВОЙ номер в
+    # разделе, а не записанное правкой 4, поэтому строка ждёт ОДНО значение - номер документа - и требует,
+    # чтобы ответ правки позиции назвал это в warnings, а не выдал записанное за пережившее сохранение.
+    # DOC: ispecificationtuningsection_putposition.html, ispecificationtuning_initialposition.html.
+    section_rows_after_save = [item for item in rows(reopened_edit) if item.get("section_number") == 20]
+    document_position = ""
+    for section_index, section_row in enumerate(section_rows_after_save):
+        if str(section_row.get("marking") or "") == "SPW.601.02":
+            document_position = str(section_index + 1)
+    position_warnings = " ".join(
+        str(warning) for warning in ((position_env or {}).get("warnings") or [])) \
+        if isinstance(position_env, dict) else ""
     reopened_position = str((reopened_edited[0].get("position") if reopened_edited else "") or "")
     rep.add("SPEC-06.position_after_reopen",
-            "позиция строки .spw после сохранения — та, что поставил ДОКУМЕНТ (номер строки в разделе), а "
-            "не записанная правкой 4: у .spw колонка позиции не переживает сохранение как записанное значение",
-            "PASS" if (not reopened_edit_code and len(reopened_edited) == 1
-                       and reopened_position in ("4", "2")) else "FAIL",
-            f"записано=4 после_переоткрытия={reopened_position!r}")
+            "позиция строки .spw после сохранения — ровно та, что ставит ДОКУМЕНТ (номер строки в разделе от "
+            "InitialPosition = 1), а не записанные правкой 4, и ответ правки позиции называет это в warnings",
+            "PASS" if (not reopened_edit_code and len(reopened_edited) == 1 and document_position
+                       and reopened_position == document_position
+                       and "specification_position_set_by_document" in position_warnings) else "FAIL",
+            f"записано=4 номер_документа={document_position!r} после_переоткрытия={reopened_position!r} "
+            f"warnings={position_warnings[:200]!r}")
     close(id_of(spw_path))
 
     # Устаревшая ссылка и несуществующая строка - отказы ДО правки: документ не трогается.
@@ -60910,6 +60926,214 @@ def specification_checks(client, rep, app_id, workdir):
     close(passive_delete)
     close(model_for_delete)
     close(again_write)
+
+    # ===== SPEC-08: колонки строки .spw и признак пишущихся (наряд SPEC_SPW_COLUMNS_0_15) =====
+    # Читатель публикует columns, column_types и column_editable, и признак называет РОВНО те типы, которые
+    # правка пишет замером; тот же перечень называет отказ правки (SPEC-09), поэтому граница «что можно
+    # писать» видна клиенту из ответа чтения, а не только из отказа после мутации.
+    columns_answer, columns_code = read(path=spw_path)
+    columns_all = rows(columns_answer)
+    with_types = [item for item in columns_all if isinstance(item.get("column_types"), dict)]
+    with_flag = [item for item in columns_all if isinstance(item.get("column_editable"), dict)]
+    flag_fixture = spw_row(columns_answer, "SPC.401.001")
+    fixture_types = (flag_fixture[0].get("column_types") if flag_fixture else None) or {}
+    fixture_editable = (flag_fixture[0].get("column_editable") if flag_fixture else None) or {}
+    rep.add("SPEC-08.columns_read",
+            "чтение .spw публикует у каждой строки columns, column_types и column_editable, и признак "
+            "называет ровно те колонки, которые у объекта есть",
+            "PASS" if (not columns_code and columns_all
+                       and len(with_types) == len(columns_all) and len(with_flag) == len(columns_all)
+                       and flag_fixture and set(fixture_editable) == set(fixture_types)) else "FAIL",
+            f"код={columns_code} строк={len(columns_all)} с_типами={len(with_types)} "
+            f"с_признаком={len(with_flag)} типы={fixture_types} признак={fixture_editable}")
+    rep.add("SPEC-08.editable_flag",
+            "замером подтверждённые типы (format, zone, note, mass, user) помечены пишущимися у .spw: "
+            "признак и отказ правки называют один перечень, а не два",
+            "PASS" if {"format", "zone", "note", "mass", "user"} <= {key for key, value in fixture_editable.items()
+                                                                    if value} else "FAIL",
+            f"пишущиеся={sorted(key for key, value in fixture_editable.items() if value)}")
+    # Чтение по path ОТКРЫЛО документ (закрытие остаётся за клиентом): SPEC-09 открывает его на ЗАПИСЬ, а
+    # KOMPAS отдал бы тот же документ с прежним доступом - открытый только для чтения, и запись бы не пошла.
+    close((columns_answer.get("document") or {}).get("document_id"))
+
+    # ===== SPEC-09: правка доп. колонок тип за типом, сохранение и переоткрытие (SPEC_SPW_COLUMNS_0_15) =====
+    # Постановка - та же копия .spw в песочнице. Строку создаёт ЭТОТ прогон, каждый тип пишется СВОИМ вызовом
+    # правки и читается независимым читателем; затем файл после сохранения и переоткрытия показывает те же
+    # значения. Отказы (непишущийся тип, отсутствующая колонка) обязаны не изменить документ.
+    columns_write_env, columns_write_code, columns_write_state, _ = spw_open("edit")
+    columns_add_env, columns_add_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=columns_write_env or None,
+             expected_revision=columns_write_state.get("revision"), section_number=20,
+             marking="SPW.801.001", name="Строка колонок", quantity="2")) \
+        if columns_write_env else ({}, "no_document")
+    columns_requested = {"format": "Ф2", "zone": "Z9", "note": "Прим. колонок", "mass": "3,5", "user": "Польз.1"}
+    columns_edited = []
+    for column_key, column_value in columns_requested.items():
+        current_rows = spw_read(columns_write_env)[0]
+        target = spw_row({"rows": current_rows}, "SPW.801.001")
+        if len(target) != 1:
+            columns_edited.append({"key": column_key, "code": "no_row"})
+            continue
+        target_ref = spw_ref_of(columns_write_env, target[0])
+        target_revision = context_of(columns_write_env)[0].get("revision")
+        edit_answer, edit_error, _edit_env = spw_edit_row(
+            columns_write_env, target_ref, target_revision,
+            extra_columns=[{"type": column_key, "value": column_value}])
+        edit_checks = (edit_answer.get("verification") or {}).get("checks") or []
+        failed_checks = [check.get("name") for check in edit_checks if not check.get("passed")]
+        seen = spw_row({"rows": spw_read(columns_write_env)[0]}, "SPW.801.001")
+        seen_columns = spw_columns(seen[0]) if seen else {}
+        columns_edited.append({
+            "key": column_key, "code": edit_error, "value": column_value,
+            "seen": seen_columns.get(column_key),
+            "matches": same_extra(seen_columns, {column_key: column_value}),
+            "failed_checks": failed_checks})
+    rep.add("SPEC-09.edit_type_by_type",
+            "каждый тип колонки пишется СВОИМ вызовом правки, ответ подтверждает перечитывание обеими "
+            "дорогами, и независимый читатель видит записанное значение",
+            "PASS" if (columns_write_env and not columns_add_code and len(columns_edited) == 5
+                       and all(not item.get("code") and not item.get("failed_checks")
+                               and item.get("matches") for item in columns_edited)) else "FAIL",
+            "".join(f"{item.get('key')}={item.get('value')!r}->{item.get('seen')!r} "
+                    f"код={item.get('code')} непрошедшие={item.get('failed_checks')}; "
+                    for item in columns_edited)[:500])
+
+    columns_save_state, _ = context_of(columns_write_env)
+    _columns_save_env, columns_save_code = call(
+        "kompas_save_document",
+        {"document_id": columns_write_env, "expected_revision": columns_save_state.get("revision")}) \
+        if columns_write_env else ({}, "no_document")
+    close(columns_write_env)
+    reopened_columns_answer, reopened_columns_code = read(path=spw_path)
+    reopened_columns_row = spw_row(reopened_columns_answer, "SPW.801.001")
+    reopened_columns_values = spw_columns(reopened_columns_row[0]) if len(reopened_columns_row) == 1 else {}
+    rep.add("SPEC-09.save_reopen",
+            "kompas_save_document пишет .spw, а переоткрытый файл показывает все пять правленых колонок "
+            "(Формат, Зона, Примечание, Масса, Пользовательская): правка колонок живёт в файле",
+            "PASS" if (not columns_save_code and not reopened_columns_code
+                       and len(reopened_columns_row) == 1
+                       and same_extra(reopened_columns_values, columns_requested)) else "FAIL",
+            f"save_код={columns_save_code} переоткрытие={reopened_columns_code} "
+            f"колонки={reopened_columns_values}")
+    close(id_of(spw_path))
+
+    negatives_write, _negatives_code, negatives_state, _ = spw_open("edit")
+    negatives_rows_before = spw_read(negatives_write)[0]
+    negatives_target = spw_row({"rows": negatives_rows_before}, "SPW.801.001")
+    negatives_ref = spw_ref_of(negatives_write, negatives_target[0]) if negatives_target else None
+    unwritten_result, unwritten_code, unwritten_env = spw_edit_row(
+        negatives_write, negatives_ref, negatives_state.get("revision"),
+        extra_columns=[{"type": "material", "value": "Сталь 45"}]) if negatives_ref else (None, "no_ref", {})
+    unwritten_text = str(((unwritten_env or {}).get("error") or {}).get("message") or "")
+    missing_rel = spw_row({"rows": spw_read(negatives_write)[0]}, "SPW.801.001")
+    missing_ref = spw_ref_of(negatives_write, missing_rel[0]) if missing_rel else negatives_ref
+    missing_state, _ = context_of(negatives_write)
+    missing_result, missing_code, missing_env = spw_edit_row(
+        negatives_write, missing_ref, missing_state.get("revision"),
+        extra_columns=[{"type": "user", "number": 5, "value": "Нет такой колонки"}]) if missing_ref \
+        else (None, "no_ref", {})
+    missing_text = str(((missing_env or {}).get("error") or {}).get("message") or "")
+    negatives_rows_after = spw_read(negatives_write)[0]
+    rep.add("SPEC-09.negative_unwritten_type",
+            "тип, который правка не пишет замером (material), отвергается CAPABILITY_UNAVAILABLE ДО мутации, и "
+            "отказ называет перечень пишущихся типов",
+            "PASS" if (unwritten_code == "CAPABILITY_UNAVAILABLE"
+                       and "format" in unwritten_text and "mass" in unwritten_text) else "FAIL",
+            f"код={unwritten_code} текст={unwritten_text[:240]!r}")
+    rep.add("SPEC-09.negative_missing_column",
+            "колонка, которой у объекта нет (user с номером 5), отвергается CAPABILITY_UNAVAILABLE ДО мутации",
+            "PASS" if missing_code == "CAPABILITY_UNAVAILABLE" and "колонки" in missing_text.lower() else "FAIL",
+            f"код={missing_code} текст={missing_text[:240]!r}")
+    rep.add("SPEC-09.negative_document_unchanged",
+            "после обоих отказов документ не изменился: строки и их колонки те же, что до вызовов",
+            "PASS" if negatives_rows_after == negatives_rows_before else "FAIL",
+            f"до={len(negatives_rows_before)} после={len(negatives_rows_after)} "
+            f"совпало={negatives_rows_after == negatives_rows_before}")
+    close(negatives_write)
+
+    # Модель: тот же маршрут пишет колонку, а ЗОНУ не пишет (измерено: сеттер отвечает 1, колонка остаётся
+    # пустой и в сеансе, и в файле), поэтому зона модели отвергается ДО мутации, а признак в ответе создания
+    # называет её неписаной. DOC: ispecificationcolumnitem_value.html, ispecificationcolumns_column.html.
+    model_columns_env, _ = call("kompas_open_document",
+                                {"application_id": app_id, "path": model_path, "access": "edit"})
+    model_columns = doc_id(model_columns_env)
+    model_columns_state, _ = context_of(model_columns)
+    model_add_env, model_add_code = call(
+        "kompas_specification_add_row",
+        dict(document_id=model_columns, expected_revision=model_columns_state.get("revision"),
+             section_number=20, marking="SPC.802.001", name="Строка колонок модели", quantity="1")) \
+        if model_columns else ({}, "no_document")
+    model_added = result(model_add_env)
+    model_added_row = model_added.get("row") or {}
+    model_flag = model_added_row.get("column_editable") or {}
+    model_rows_before_edit = rows(specification_of(model_columns)[0]) if model_columns else []
+    rep.add("SPEC-09.model_editable_flag",
+            "у строки МОДЕЛИ тот же признак публикуется, и зона названа НЕпишущейся: замер показал, что "
+            "ksSetSpcObjectColumnText(zone) отвечает 1 и не пишет ничего",
+            "PASS" if (model_columns and not model_add_code and model_flag.get("format") is True
+                       and model_flag.get("zone") is False) else "FAIL",
+            f"код={model_add_code} признак={model_flag}")
+    model_ref = model_added.get("row_ref") or {}
+    model_revision = context_of(model_columns)[0].get("revision")
+    model_format_answer, model_format_code, _ = spw_edit_row(
+        model_columns, model_ref, model_revision,
+        extra_columns=[{"type": "format", "value": "Ф7"}]) if model_ref else ({}, "no_ref", {})
+    model_format_checks = (model_format_answer.get("verification") or {}).get("checks") or []
+    rep.add("SPEC-09.model_column_edit",
+            "колонка Формат строки МОДЕЛИ правится тем же путём и подтверждается перечитыванием обеими "
+            "дорогами: поле действует и для модели",
+            "PASS" if (model_ref and not model_format_code
+                       and not [check.get("name") for check in model_format_checks if not check.get("passed")])
+            else "FAIL",
+            f"код={model_format_code} непрошедшие="
+            f"{[check.get('name') for check in model_format_checks if not check.get('passed')]}")
+    model_zone_revision = context_of(model_columns)[0].get("revision")
+    model_zone_result, model_zone_code, model_zone_env = spw_edit_row(
+        model_columns, model_ref, model_zone_revision,
+        extra_columns=[{"type": "zone", "value": "Z7"}]) if model_ref else (None, "no_ref", {})
+    model_zone_text = str(((model_zone_env or {}).get("error") or {}).get("message") or "")
+    model_rows_after_edit = rows(specification_of(model_columns)[0]) if model_columns else []
+    rep.add("SPEC-09.model_zone_refused",
+            "зона строки МОДЕЛИ отвергается CAPABILITY_UNAVAILABLE до мутации, и документ не изменился: "
+            "запись, которая ничего не пишет, не выдаётся за успех",
+            "PASS" if (model_zone_code == "CAPABILITY_UNAVAILABLE"
+                       and model_rows_after_edit == model_rows_before_edit) else "FAIL",
+            f"код={model_zone_code} текст={model_zone_text[:240]!r} "
+            f"строки_совпали={model_rows_after_edit == model_rows_before_edit}")
+    model_save_state, _ = context_of(model_columns)
+    _model_save_env, model_save_code = call(
+        "kompas_save_document",
+        {"document_id": model_columns, "expected_revision": model_save_state.get("revision")}) \
+        if model_columns else ({}, "no_document")
+    close(model_columns)
+    # Файл модели колонки строки не публикует читателем (kompas_get_specification отдаёт поля строки), поэтому
+    # переживание колонки показывается ОТВЕТОМ правки: он публикует прочитанные колонки строки, а строка
+    # читается из ПЕРЕОТКРЫТОГО файла - там и видно, что записалось.
+    model_reopened_env, _ = call("kompas_open_document",
+                                 {"application_id": app_id, "path": model_path, "access": "edit"})
+    model_reopened = doc_id(model_reopened_env)
+    model_reopened_state, _ = context_of(model_reopened)
+    model_reopened_rows = rows(specification_of(model_reopened)[0]) if model_reopened else []
+    model_saved_row = by_marking(model_reopened_rows, "SPC.802.001")
+    model_saved_ref = ({"document_id": model_reopened,
+                        "unique_number": model_saved_row[0].get("unique_number"),
+                        "marking": model_saved_row[0].get("marking")} if len(model_saved_row) == 1 else None)
+    reopened_edit_answer, reopened_edit_code, _ = spw_edit_row(
+        model_reopened, model_saved_ref, model_reopened_state.get("revision"), quantity="2") \
+        if model_saved_ref else ({}, "no_ref", {})
+    reopened_columns = spw_columns(reopened_edit_answer.get("row") or {})
+    reopened_flag = (reopened_edit_answer.get("row") or {}).get("column_editable") or {}
+    rep.add("SPEC-09.model_save_reopen",
+            "правка колонки модели переживает сохранение и переоткрытие: ответ правки переоткрытой строки "
+            "показывает записанный Формат, а зона осталась пустой - файл держит то, что маршрут пишет",
+            "PASS" if (not model_save_code and not reopened_edit_code and len(model_saved_row) == 1
+                       and str(reopened_columns.get("format") or "") == "Ф7"
+                       and str(reopened_columns.get("zone") or "") == ""
+                       and reopened_flag.get("zone") is False) else "FAIL",
+            f"save_код={model_save_code} правка_код={reopened_edit_code} "
+            f"колонки={reopened_columns} признак_зоны={reopened_flag.get('zone')}")
+    close(model_reopened)
 
 
 def dismantle_checks(client, rep, app_id, workdir):

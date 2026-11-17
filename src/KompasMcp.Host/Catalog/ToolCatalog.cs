@@ -603,7 +603,9 @@ public static class ToolCatalog
                 + "самого документа-спецификации. columns — значения КОЛОНОК по ключу ТИПА и номера "
                 + "(format, zone, note, mass, material, user, code, factory, document_number, document_name, "
                 + "document_code, code_okp), column_types — какие колонки у объекта есть и тип их значения "
-                + "(ksValueTypeString/Integer/Float). Три ответа чтения различаются и означают разное: null — "
+                + "(ksValueTypeString/Integer/Float), column_editable — по тому же ключу признак, что правка "
+                + "ЭТОЙ колонки проходит через API5-маршрут правки строки (замер тип за типом; остальные "
+                + "типы правкой не пишутся). Три ответа чтения различаются и означают разное: null — "
                 + "колонки у объекта нет; \"\" — колонка есть и пуста; 0 у массы после сохранения — пусто "
                 + "(колонка числовая, и пустое число документ отвечает нулём). Адресация — РОВНО ОДНО из path "
                 + "(абсолютный путь к .spw, "
@@ -684,7 +686,12 @@ public static class ToolCatalog
                         + "текстом, а элемент колонки приводит значение к своему типу.")),
                     ("position", Sch.Nullable(Sch.Int(
                         "Позиция строки. null — позицию ставит документ (нумерация раздела).", 0))),
-                    ("extra_columns", SpecificationExtraColumnsSchema())),
+                    ("extra_columns", SpecificationExtraColumnsSchema(
+                        "Колонки сверх marking, name, quantity и position — записываются при СОЗДАНИИ строки, "
+                        + "до первого Update(): измерено, что записанная после него основная колонка в файл не "
+                        + "попадает. Колонка, которой нет у объекта в стиле документа, — "
+                        + "CAPABILITY_UNAVAILABLE с перечнем доступных. Доп. колонки у СУЩЕСТВУЮЩЕЙ строки "
+                        + "правит kompas_specification_edit_row — своим полем extra_columns."))),
                 WorkerCommands.AddSpecificationRow,
                 requiresDocument: true,
                 requiresRevision: true),
@@ -723,12 +730,20 @@ public static class ToolCatalog
                 + "(ksSpcObjectEdit вернул 0; в стиле нет колонки нужного типа; .spw не активен), "
                 + "GEOMETRY_FAILED (чтение "
                 + "назад не подтвердило правку). Отказ посреди правки называет, что уже изменилось, со "
-                + "снимком. ИЗМЕРЕНО на .spw: записанная позиция читается обеими дорогами в сеансе, но после "
-                + "kompas_save_document документ показывает свою (номер строки в разделе) — позицию .spw "
-                + "ставит документ, поэтому правку позиции у .spw не считайте переживающей сохранение. "
-                + "ПРЕДЕЛ: перенос раздела (SetSection не сохраняется), правка доп. колонок "
-                + "(наряд SPEC_SPW_COLUMNS), масса "
-                + "(ksSpcMassa) и составные значения (ksSpcChangeValue) не входят; связь строки с "
+                + "снимком. ИЗМЕРЕНО на .spw: записанная позиция читается обеими дорогами в СЕАНСЕ, а после "
+                + "kompas_save_document документ показывает СВОЙ номер — номер строки в разделе от "
+                + "ISpecificationTuning.InitialPosition, и настройка раздела PutPosition = TRUE разрешает "
+                + "автоматическую простановку. Поэтому ответ правки позиции у .spw несёт это в warnings, а "
+                + "правку позиции у .spw не считайте переживающей сохранение. extra_columns — колонки СВЕРХ "
+                + "четырёх полей (Формат, Зона, Примечание, Масса, Пользовательская) — пишутся тем же "
+                + "API5-маршрутом: ksSetSpcObjectColumnText по типу, номеру и блоку, масса — ksSpcMassa; "
+                + "затем читаются назад обеими дорогами и сверяются с запрошенным, а НЕназванные колонки и "
+                + "поля — с прежними значениями. ИЗМЕРЕНО тип за типом: правка переживает сохранение и "
+                + "переоткрытие у .spw и у модели; тип, которого замер не подтвердил (material, code, factory, "
+                + "document_number, document_name, document_code, code_okp и колонка типа «Запись»), — "
+                + "CAPABILITY_UNAVAILABLE ДО мутации с перечнем пишущихся, а не запись с ложным успехом. "
+                + "ПРЕДЕЛ: перенос раздела (SetSection не сохраняется), типы колонок, которых замер не "
+                + "подтвердил, и составные значения (ksSpcChangeValue) не входят; связь строки с "
                 + "компонентом этим инструментом не создаётся и не ищется, поэтому строку, которую КОМПАС "
                 + "ведёт от компонента, инструмент правит как "
                 + "обычную, а notes называет то, что документ сам говорит о её происхождении (State, "
@@ -745,7 +760,16 @@ public static class ToolCatalog
                         "Новое количество как текст: колонку «Количество» документ читает текстом, а элемент "
                         + "колонки приводит значение к своему типу. Не задано — количество не меняется."))),
                     ("position", Sch.Nullable(Sch.Int(
-                        "Новая позиция строки. Не задана — позиция не меняется.", 0)))),
+                        "Новая позиция строки. Не задана — позиция не меняется. У документа-спецификации .spw "
+                        + "позицию ставит ДОКУМЕНТ (номер строки в разделе), и ответ правки называет это в "
+                        + "warnings.", 0))),
+                    ("extra_columns", SpecificationExtraColumnsSchema(
+                        "Колонки сверх marking, name, quantity и position — правятся у СУЩЕСТВУЮЩЕЙ строки "
+                        + "тем же API5-маршрутом, которым правится вся строка, и переживают сохранение "
+                        + "(измерено тип за типом). Тип, которого замер не подтвердил, — "
+                        + "CAPABILITY_UNAVAILABLE до мутации с перечнем пишущихся; колонки, которых нет у "
+                        + "объекта в стиле документа, — CAPABILITY_UNAVAILABLE с перечнем доступных. "
+                        + "При СОЗДАНИИ строки те же колонки пишет kompas_specification_add_row."))),
                 WorkerCommands.EditSpecificationRow,
                 requiresDocument: true,
                 requiresRevision: true),
@@ -5077,12 +5101,14 @@ public static class ToolCatalog
                     + "другое обозначение — STALE_REFERENCE, а не правка чужой строки."))));
 
     /// <summary>The columns beyond the four row fields, addressed by their documented TYPE and number.</summary>
+    /// <param name="usage">What the CALL does with them — creation writes them before the first
+    /// <c>Update()</c>, the edit writes them through API5 — because one schema text cannot be true for both.</param>
     /// <remarks>INVARIANT: `type` is a CLOSED list of the documented keys — a free string would let a client
     /// write into a column the style may not have, and the refusal would come from the kernel instead of the
     /// schema. The four row fields are absent from the list on purpose: they are separate inputs.
     /// DOC: <c>ksspecificationcolumntypeenum.html</c>, <c>ispecificationcolumns_column.html</c>.
-    /// History: docs/decisions/bom.md#spec-spw-row-write</remarks>
-    private static JsonObject SpecificationExtraColumnsSchema() =>
+    /// History: docs/decisions/bom.md#spec-spw-row-write, docs/decisions/bom.md#spec-spw-columns</remarks>
+    private static JsonObject SpecificationExtraColumnsSchema(string usage) =>
         Sch.Nullable(Sch.Arr(
             Sch.Obj(
                 "Колонка сверх четырёх полей строки",
@@ -5106,10 +5132,7 @@ public static class ToolCatalog
                         "Значение текстом: элемент колонки приводит его к своему типу (ksValueTypeString — "
                         + "текст, ksValueTypeInteger — целое, ksValueTypeFloat — число; «1,25» и «1.25» "
                         + "принимаются одинаково)."))),
-                "Колонки сверх marking, name, quantity и position — записываются при СОЗДАНИИ строки, до "
-                + "первого Update(): измерено, что записанная после него основная колонка в файл не "
-                + "попадает. Колонка, которой нет у объекта в стиле документа, — CAPABILITY_UNAVAILABLE с "
-                + "перечнем доступных. Правки доп. колонок у существующей строки этот инструмент не делает."),
+                usage),
             "Колонки сверх четырёх полей строки: значения сверяются перечитыванием обеими дорогами.",
             max: 32));
 

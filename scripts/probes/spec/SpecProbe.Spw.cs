@@ -77,6 +77,15 @@ internal sealed partial class SpecProbe
             case "spw-link":
                 SpwLink();
                 break;
+            case "spw-columns-write":
+                SpwColumnsWrite();
+                break;
+            case "spw-columns-read":
+                SpwColumnsRead();
+                break;
+            case "spw-columns-final":
+                SpwColumnsFinal();
+                break;
             default:
                 Record("stage", "известное имя стадии .spw", stage, "FAIL");
                 break;

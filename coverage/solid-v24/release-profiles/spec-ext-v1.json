@@ -101,7 +101,7 @@
   ],
   "common_dependencies": [],
   "explicitly_out_of_scope": [
-    "Запись строк .spw (создание, правка, удаление) - наряды SPEC_ADD_ROW, SPEC_EDIT_ROW и SPEC_DELETE_ROW блока spec-ext-v1 (поправка плана девяносто седьмая).",
+    "Запись строк .spw (создание, правка, удаление и доп. колонки) - профиль spec-spw-v1, строки SPEC-05..SPEC-09; в spec-ext-v1 не входит.",
     "Синхронизация .spw со сборкой, листы сборочного чертежа (ksSpcDocument.ksGetSpcSheetSB) и IDocuments.DocumentSynchronize: маршруты документированы, но профилем не востребованы, и постановки у них нет.",
     "Связь строки с компонентом через ISpecificationBaseObjects.AddWithParam и IPropertyKeeper: точки входа IPropertyKeeper в COM нет (решение наряда BOM_RESEARCH), поэтому связь в профиль не входит.",
     "Создание документа-спецификации инструментом (kompas_create_document): постановка приёмки берётся копией входа исследования, а создание .spw программой в блок не входит."

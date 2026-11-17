@@ -98,9 +98,13 @@ public sealed record GetSpecificationDocumentCommand
 /// INVARIANT: <c>columns</c> and <c>column_types</c> are the values the DOCUMENT answered, keyed by column
 /// TYPE and number — never by an ordinal, which depends on the style. A missing column is null, an empty
 /// text is "" and an emptied number answers 0: three answers, three meanings.
+/// INVARIANT: <c>column_editable</c> names what the EDIT tool is measured to write for that column's type —
+/// it is the same list the refusal of an unmeasured type quotes, so a client never learns «writable» from a
+/// contract it cannot exercise. A type outside the list has no fixture column and stays unmeasured.
 /// DOC: <c>ksspecificationcolumntypeenum.html</c>, <c>ispecificationcolumns_column.html</c>,
 /// <c>ispecificationcolumnitem_value.html</c>.
-/// History: docs/decisions/bom.md#spec-edit-row, docs/decisions/bom.md#spec-spw-row-write</remarks>
+/// History: docs/decisions/bom.md#spec-edit-row, docs/decisions/bom.md#spec-spw-row-write,
+/// docs/decisions/bom.md#spec-spw-columns</remarks>
 public sealed record SpecificationLineDto(
     string? Section,
     int? SectionNumber,
@@ -110,7 +114,8 @@ public sealed record SpecificationLineDto(
     string? Quantity,
     double? UniqueNumber = null,
     IReadOnlyDictionary<string, object?>? Columns = null,
-    IReadOnlyDictionary<string, string>? ColumnTypes = null);
+    IReadOnlyDictionary<string, string>? ColumnTypes = null,
+    IReadOnlyDictionary<string, bool>? ColumnEditable = null);
 
 /// <summary>The specification rows, their number, the route and the notes.</summary>
 /// <remarks>INVARIANT: <c>count</c> is the number of rows in the answer, so a caller reads one number
@@ -236,14 +241,29 @@ public sealed record EditSpecificationRowCommand
     public string? Quantity { get; init; }
 
     /// <summary>Row position; null leaves the position as it is.</summary>
+    /// <remarks>LIMIT: a <c>.spw</c> row's position is the DOCUMENT's own number (its order in the section
+    /// from <c>InitialPosition</c>): the written value reads back in the session, and the file keeps the
+    /// document's number — the answer carries that as a warning.
+    /// DOC: <c>ispecificationtuning_initialposition.html</c>, <c>ispecificationtuningsection_putposition.html</c>.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
     public int? Position { get; init; }
+
+    /// <summary>Columns beyond the four fields, written through the same API5 edit route.</summary>
+    /// <remarks>INVARIANT: a column type the route was not measured to write is refused BEFORE the mutation,
+    /// with the list of the measured ones — never written and reported as success.
+    /// DOC: <c>ksspecification_kssetspcobjectcolumntext.html</c>, <c>ksspecification_ksspcmassa.html</c>,
+    /// <c>ksspecificationcolumntypeenum.html</c>.
+    /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
+    public IReadOnlyList<SpecificationExtraColumnDto>? ExtraColumns { get; init; }
 }
 
 /// <summary>The row after the edit, the row as it was before it, and what stays unverified.</summary>
 /// <remarks>INVARIANT: <c>Row</c> is what the DOCUMENT answered through both roads after
 /// <c>ksSpcObjectEnd</c>, and <c>Previous</c> is what it answered before the first setter; a field the
 /// document did not give stays null in both. The reference is reissued because the marking may have changed.
-/// History: docs/decisions/bom.md#spec-edit-row</remarks>
+/// INVARIANT: <c>Warnings</c> names a non-fatal fact the call cannot change — a <c>.spw</c> row's position is
+/// the document's number, so a written position is reported, never presented as persisted.
+/// History: docs/decisions/bom.md#spec-edit-row, docs/decisions/bom.md#spec-spw-columns</remarks>
 public sealed record EditSpecificationRowResult(
     SpecificationRowRefDto RowRef,
     SpecificationLineDto Previous,
@@ -251,7 +271,8 @@ public sealed record EditSpecificationRowResult(
     string Route,
     VerificationDto Verification,
     IReadOnlyList<string> Notes,
-    IReadOnlyList<string> UnverifiedAspects);
+    IReadOnlyList<string> UnverifiedAspects,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Delete one row of a specification — block <c>SPEC-04.row.delete</c> for a MODEL, block
 /// <c>SPEC-07.spw.row.delete</c> for a <c>.spw</c> DOCUMENT.</summary>

@@ -97,7 +97,8 @@ internal sealed partial class SpecProbe
         Record($"{label}_section", "раздел стиля сборки для связанных строк",
             $"{section}", section > 0 ? "PASS" : "FAIL");
         var components = Components7(doc7, label);
-        LinkTwoRows(doc7, description, components, section, label);
+        LinkTwoRows(doc7, description, components, section, label,
+            LinkModelMarking, LinkModelName, LinkModelCount);
 
         SaveModel(doc5, path);
         if (saveTwice)
@@ -159,7 +160,8 @@ internal sealed partial class SpecProbe
         Record($"{label}_section", "раздел стиля .spw для связанных строк",
             $"{section}", section > 0 ? "PASS" : "FAIL");
         var components = Components7(assembly7, label + "_assembly");
-        LinkTwoRows(spw, description, components, section, label);
+        LinkTwoRows(spw, description, components, section, label,
+            LinkSpwMarking, LinkSpwName, LinkSpwCount);
 
         spw.Save();
         Record($"{label}_saved", "IKompasDocument.Save() .spw со связанными строками", "вызван", "PASS");
@@ -313,7 +315,7 @@ internal sealed partial class SpecProbe
     /// <c>Update()</c> - the order that carried extra columns into the file for <c>Add</c>.</summary>
     private void LinkTwoRows(
         IKompasDocument target, ISpecificationDescription? description, List<IPart7> components, int section,
-        string label)
+        string label, string marking, string name, string count)
     {
         if (description is null || description.BaseObjects is not ISpecificationBaseObjects baseObjects)
         {
@@ -340,10 +342,10 @@ internal sealed partial class SpecProbe
             return;
         }
 
-        LinkOne(baseObjects, createParam, section, components[0], fillText: false, LinkModelMarking,
-            LinkModelName, LinkModelCount, label + "_explicit");
-        LinkOne(baseObjects, createParam, section, components[1], fillText: true, LinkSpwMarking,
-            LinkSpwName, LinkSpwCount, label + "_filltext");
+        LinkOne(baseObjects, createParam, section, components[0], fillText: false, marking, name, count,
+            label + "_explicit");
+        LinkOne(baseObjects, createParam, section, components[1], fillText: true, marking, name, count,
+            label + "_filltext");
     }
 
     private void LinkOne(

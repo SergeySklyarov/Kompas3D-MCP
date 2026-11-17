@@ -652,7 +652,8 @@
 создание принимает с наряда `SPEC_SPW_ROW_WRITE_0_15`, - а чтение публикует `column_editable` - какие из
 них правка пишет. Начало блока - `#spec-spw` (разделы 3.2, 4.2, 4.5) и `#spec-spw-row-write`; прибор -
 `scripts/probes/spec/SpecProbe.Columns.cs` (стадии `spw-columns-write`, `spw-columns-read`,
-`spw-columns-final`, `model-columns-write`, `model-columns-read`); замер - тот же прибор на постановке
+`spw-columns-final`, `model-columns-write`, `model-columns-read`), доказательства -
+`docs/acceptance/evidence/20261117-spec-spw-columns-5ae6c9a/`; замер - тот же прибор на постановке
 `scratch/spec-spw-probe/` (пустой `.spw` стиля 1) и на модели `scratch/spec-probe/fixture/spec-asm.m3d`.
 
 - **Маршрут правки тот же, что у четырёх полей строки.** `ksSpcObjectEdit` → для текстовых колонок

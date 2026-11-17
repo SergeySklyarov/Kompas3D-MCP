@@ -63,9 +63,9 @@
   },
   "counters": {
    "families": 49,
-   "operations": 167,
+   "operations": 169,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 243,
+   "modes_and_variants": 245,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],

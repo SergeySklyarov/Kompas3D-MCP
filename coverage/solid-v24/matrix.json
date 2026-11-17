@@ -16764,6 +16764,109 @@
       ]
     },
     {
+      "operation_id": "SPEC-08.spw.columns.read",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-spw-v1",
+      "queue": "SPEC_SPW_COLUMNS_0_15",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261117-spec-spw-columns-5ae6c9a/",
+        "docs/decisions/bom.md#spec-spw-columns"
+      ],
+      "parameters_schema": "schemas/kompas_get_specification_document.json",
+      "adapter_route": "kompas_get_specification_document по path или document_id документа-спецификации .spw: IKompasDocument.SpecificationDescriptions.Active -> Objects -> Columns/AdditionalColumns (основные и дополнительные колонки объекта) -> ColumnItems.Item(i).Value по типу и номеру колонки; публикуются columns (значения по ключу типа и номера), column_types (тип значения каждой колонки, ispecificationcolumn_valuetype.html) и column_editable - признак, что правка пишет колонку этого типа. Перечень пишущихся получен замером тип за типом (правка -> Save -> другой процесс -> чтение обеими дорогами) и живёт в одном месте кода (SpecificationColumnKeys.Editable/NotWrittenInModel), поэтому у модели зона помечена НЕпишущейся: ksSetSpcObjectColumnText(zone) отвечает 1 и не пишет ничего; отказ правки цитирует тот же перечень. Вторая, независимая дорога - API5 SpcActiveDocument -> GetSpecification -> ksGetSpcObject -> ksGetSpcObjectColumnText у активного документа (kompasobject_spcactivedocument.html, ispecificationobject_columns.html, ispecificationobject_additionalcolumns.html, ispecificationcolumns_column.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ksspecificationcolumntypeenum.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "not_applicable",
+        "rebuild": "not_applicable",
+        "save_reopen": "not_applicable",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "not_applicable",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "чтение колонок ничего не создаёт: создание строки с колонками - SPEC-05.spw.row.create",
+        "edit": "правка доп. колонок - строка SPEC-09.spw.columns.write",
+        "rebuild": "чтение колонок документ не перестраивает",
+        "save_reopen": "колонки читаются у открытого документа, а переживание правки проверяет SPEC-09.save_reopen",
+        "suppress_restore": "у чтения колонок нет режима подавления",
+        "delete_dependencies": "чтение ничего не удаляет",
+        "negative_tests": "отказы чтения проверены строками SPEC-01.negative_*: эта строка - про публикацию колонок и признака",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами"
+      },
+      "tests": [
+        "SPEC-08.columns_read",
+        "SPEC-08.editable_flag"
+      ],
+      "limitations": [
+        "Признак column_editable - замер на постановке прибора (.spw стиля 1 и модель того же стиля): типы, колонок которых в постановке нет (материал, код, завод, номер/наименование/код документа, код ОКП), в перечень пишущихся не входят и правкой отвергаются.",
+        "У .spw признак публикуется у каждой строки; у модели тот же признак приходит в ответах создания и правки строки, а kompas_get_specification колонок не публикует.",
+        "Три ответа чтения различаются: null - колонки нет, \"\" - колонка есть и пуста, 0 у массы после сохранения - пусто."
+      ]
+    },
+    {
+      "operation_id": "SPEC-09.spw.columns.write",
+      "context": "specification.document",
+      "catalog_ref": "BOM",
+      "kind": "profile_mode",
+      "profile": "spec-spw-v1",
+      "queue": "SPEC_SPW_COLUMNS_0_15",
+      "priority": "practical_required",
+      "catalog_level": "mcp_verified",
+      "evidence": [
+        "scripts/mcp-smoke.py",
+        "docs/acceptance/evidence/20261117-spec-spw-columns-5ae6c9a/",
+        "docs/decisions/bom.md#spec-spw-columns"
+      ],
+      "parameters_schema": "schemas/kompas_specification_edit_row.json",
+      "adapter_route": "kompas_specification_edit_row с extra_columns по документу-спецификации .spw либо по строке МОДЕЛИ: строка находится по row_ref.unique_number и подтверждается API5 ksGetSpcObject -> ksGetSpcObjectNumber, затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип, номер, блок, текст) для каждой названной колонки либо ksSpcMassa(текст) для массы -> ksSpcObjectEnd; до мутации тип сверяется с ИЗМЕРЕННЫМ перечнем пишущихся (иного - CAPABILITY_UNAVAILABLE с перечнем, в модели так отвергается зона: сеттер отвечает 1 и не пишет), колонка ищется в основных и дополнительных колонках объекта, значение приводится к типу элемента; после правки строка перечитывается ОБЕИМИ дорогами, запрошенные колонки сверяются типоспецифично, НЕназванные - с прочитанными до правки, расхождение - GEOMETRY_FAILED со снимком (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspcmassa.html, ksspecification_ksspcobjectend.html, ispecificationcolumnitem_value.html, ispecificationcolumns_column.html)",
+      "actions": {
+        "discover": "verified",
+        "create": "not_applicable",
+        "read": "verified",
+        "edit": "verified",
+        "rebuild": "not_applicable",
+        "save_reopen": "verified",
+        "suppress_restore": "not_applicable",
+        "delete_dependencies": "not_applicable",
+        "negative_tests": "verified",
+        "geometry_validation": "not_applicable"
+      },
+      "not_applicable_reasons": {
+        "create": "создание строки с колонками ДО первого Update() - SPEC-05.spw.row.create; эта строка правит колонки существующей строки",
+        "rebuild": "правка колонок документ не перестраивает",
+        "suppress_restore": "у правки колонок нет режима подавления",
+        "delete_dependencies": "инструмент ничего не удаляет",
+        "geometry_validation": "строка спецификации геометрии не имеет: значения сверяются перечитыванием обеими дорогами и сохранением с переоткрытием"
+      },
+      "tests": [
+        "SPEC-09.edit_type_by_type",
+        "SPEC-09.save_reopen",
+        "SPEC-09.negative_unwritten_type",
+        "SPEC-09.negative_missing_column",
+        "SPEC-09.negative_document_unchanged",
+        "SPEC-09.model_editable_flag",
+        "SPEC-09.model_column_edit",
+        "SPEC-09.model_zone_refused",
+        "SPEC-09.model_save_reopen",
+        "SPEC-03.schema"
+      ],
+      "limitations": [
+        "Пишутся замером подтверждённые типы: format, zone, note, mass, user (mass - через ksSpcMassa). Типы 9 и 11-16 в перечень не входят: колонок этих типов нет ни в одной постановке, и правка отвергает их CAPABILITY_UNAVAILABLE до мутации, а не выдаёт запись за успех.",
+        "В модели колонка zone правкой НЕ пишется (измерено: ksSetSpcObjectColumnText отвечает 1, колонка остаётся пустой и в сеансе, и в файле) - инструмент отвергает её до мутации; остальные четыре типа в модели пишутся и переживают сохранение.",
+        "Позицию строки .spw ставит ДОКУМЕНТ: PutPosition раздела = TRUE и InitialPosition = 1 (ispecificationtuningsection_putposition.html, ispecificationtuning_initialposition.html), поэтому правка position читается в сеансе, а файл после сохранения держит номер строки в разделе; ответ правки называет это в warnings и в unverified_aspects. Позиция строки модели сохранение переживает.",
+        "Масса адресуется только первой колонкой основного блока: ksSpcMassa не принимает ни номера, ни блока. Колонка с несколькими блоками исполнений пишется в элемент своего блока - ASSUMPTION о порядке элементов, как у создания.",
+        "Колонка типа «Запись» (ksValueTypeRecord) не пишется: контракт передаёт текст, а элемент составной; постановки с такой колонкой нет, поэтому отказ названный, а не измеренный."
+      ]
+    },
+    {
       "operation_id": "SM-24.move_faces",
       "kind": "profile_mode",
       "context": "part.single_body",

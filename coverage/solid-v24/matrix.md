@@ -290,19 +290,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 400
-- **строк_полностью_закрыто:** 213
-- **строк_с_каким_либо_прогрессом:** 236
+- **строк_каталога:** 402
+- **строк_полностью_закрыто:** 215
+- **строк_с_каким_либо_прогрессом:** 238
 - **семейств_в_каталоге:** 49
 - **семейств_без_строк:** 10
-- **операций:** 167
-- **режимов_и_вариантов:** 243
-- **применимых_действий:** 3198
-- **действий_verified:** 1445
-- **покрытие_действий:** 45.2%
-- **распределение_статусов:** {'not_started': 1751, 'verified': 1445, 'not_applicable': 802, 'implemented': 2}
-- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 91, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
-- **уровни_каталога_режимов:** {'mcp_verified': 93, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
+- **операций:** 169
+- **режимов_и_вариантов:** 245
+- **применимых_действий:** 3205
+- **действий_verified:** 1452
+- **покрытие_действий:** 45.3%
+- **распределение_статусов:** {'not_started': 1751, 'verified': 1452, 'not_applicable': 815, 'implemented': 2}
+- **уровни_каталога_операций:** {'metadata_found': 49, 'mcp_verified': 93, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 11}
+- **уровни_каталога_режимов:** {'mcp_verified': 95, 'documented': 18, 'runtime_verified': 3, 'metadata_found': 44, 'mcp_implemented': 1, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -1098,6 +1098,8 @@
 | `SPEC-05.spw.row.create` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-05.discovery, SPEC-05.schema, SPEC-05.open_for_write, SPEC-05.create_with_columns, SPEC-05.read_by_other_tool, SPEC-05.columns_published, SPEC-05.save_reopen, SPEC-05.negative_unknown_column, SPEC-05.negative_duplicate_column, SPEC-05.negative_inactive |
 | `SPEC-06.spw.row.edit` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-06.discovery, SPEC-06.edit_marking, SPEC-06.edit_name, SPEC-06.edit_quantity, SPEC-06.edit_position, SPEC-06.edit_together, SPEC-06.untouched_checked, SPEC-06.save_reopen, SPEC-06.position_after_reopen, SPEC-06.negative_stale_reference, SPEC-06.negative_unknown_row, SPEC-06.negative_inactive |
 | `SPEC-07.spw.row.delete` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | OK | OK | н/п | SPEC-07.discovery, SPEC-07.delete_created, SPEC-07.neighbours_intact, SPEC-07.save_reopen, SPEC-07.negative_stale_deleted, SPEC-07.negative_stale_marking, SPEC-07.negative_inactive |
+| `SPEC-08.spw.columns.read` | BOM | practical_required | SPEC_SPW_COLUMNS_0_15 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SPEC-08.columns_read, SPEC-08.editable_flag |
+| `SPEC-09.spw.columns.write` | BOM | practical_required | SPEC_SPW_COLUMNS_0_15 | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-09.edit_type_by_type, SPEC-09.save_reopen, SPEC-09.negative_unwritten_type, SPEC-09.negative_missing_column, SPEC-09.negative_document_unchanged, SPEC-09.model_editable_flag, SPEC-09.model_column_edit, SPEC-09.model_zone_refused, SPEC-09.model_save_reopen, SPEC-03.schema |
 | `IGES.export` | IGES | practical_required | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | IGES.01.discover, IGES.02.block, IGES.03.more_entities, IGES.04.assembly, IGES.05.revision_conflict, IGES.06.extension_refusal, IGES.07.overwrite, IGES.08.answer_shape |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1973,6 +1975,16 @@
   - Удаление объектов документа-спецификации (ksSpcDocument.ksDeleteObj) и удаление описания спецификации не входят: удаляется СТРОКА маршрутом API7.
   - Строка, которую КОМПАС ведёт от компонента, удаляется как обычная с предупреждением specification_row_may_return; восстанавливается ли она - не измерено (нет постановки со связанной строкой).
   - API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до удаления.
+- `SPEC-08.spw.columns.read` — закрыт целиком
+  - Признак column_editable - замер на постановке прибора (.spw стиля 1 и модель того же стиля): типы, колонок которых в постановке нет (материал, код, завод, номер/наименование/код документа, код ОКП), в перечень пишущихся не входят и правкой отвергаются.
+  - У .spw признак публикуется у каждой строки; у модели тот же признак приходит в ответах создания и правки строки, а kompas_get_specification колонок не публикует.
+  - Три ответа чтения различаются: null - колонки нет, "" - колонка есть и пуста, 0 у массы после сохранения - пусто.
+- `SPEC-09.spw.columns.write` — закрыт целиком
+  - Пишутся замером подтверждённые типы: format, zone, note, mass, user (mass - через ksSpcMassa). Типы 9 и 11-16 в перечень не входят: колонок этих типов нет ни в одной постановке, и правка отвергает их CAPABILITY_UNAVAILABLE до мутации, а не выдаёт запись за успех.
+  - В модели колонка zone правкой НЕ пишется (измерено: ksSetSpcObjectColumnText отвечает 1, колонка остаётся пустой и в сеансе, и в файле) - инструмент отвергает её до мутации; остальные четыре типа в модели пишутся и переживают сохранение.
+  - Позицию строки .spw ставит ДОКУМЕНТ: PutPosition раздела = TRUE и InitialPosition = 1 (ispecificationtuningsection_putposition.html, ispecificationtuning_initialposition.html), поэтому правка position читается в сеансе, а файл после сохранения держит номер строки в разделе; ответ правки называет это в warnings и в unverified_aspects. Позиция строки модели сохранение переживает.
+  - Масса адресуется только первой колонкой основного блока: ksSpcMassa не принимает ни номера, ни блока. Колонка с несколькими блоками исполнений пишется в элемент своего блока - ASSUMPTION о порядке элементов, как у создания.
+  - Колонка типа «Запись» (ksValueTypeRecord) не пишется: контракт передаёт текст, а элемент составной; постановки с такой колонкой нет, поэтому отказ названный, а не измеренный.
 - `IGES.export` — закрыт целиком
   - Уровень syntax_checked: проверена структура файла (счётчики секций, число сущностей), но НЕ форма. Объём и габарит с исходником не сверяются - в IGES нет объёма, а импорт IGES нарядом не заказан.
   - Единицы из глобальной секции не выдаются: позиция поля 14 не подтверждена измерением, ответ несёт units_* = null с причиной units_not_read. Масштаб не угадывается.

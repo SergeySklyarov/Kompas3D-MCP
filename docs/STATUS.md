@@ -43,26 +43,23 @@
   `TL2.rescue_drawing_extension` (спасённый чертёж получает `.m3d`) - строка долга 99 нового цикла.
 - **Инструментов:** 14, операций **134** (из них через `run` 123), схем **134**, профилей **23**
   (**145/145** режимов, **82/82** зависимостей, `problems []`).
-- **Последний полный прогон:** **PASS 2312 / NAMED 9 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
-  `bdce5e1`, Release-сборка `626b63d` (штамп `0.14.0`), хост - копия вне дерева
-  (`..\KompasMCP-run\release-626b63d`), `EVProbe.exe` рядом с ним, 2324 строки, 41 группа,
-  40 минут, каталог `scratch/mcp-smoke/runs/20261114-123851-all-bdce5e1`; временные файлы прогона -
-  в `<каталог прогона>\tmp` (поле `run_temp_dir` в `run.json`).
-  Против прежнего зачёта `d6a2447` (PASS 2310 / NAMED 9 / UNKNOWN 3 / FAIL 0, каталог
-  `scratch/mcp-smoke/runs/20261113-045040-all-d6a2447`, 2322 строки): +2 строки `SD.12`/`SD.13`
-  (обе PASS, коммит `33b9ba7`), пропавших нет, вердикты прочих строк не менялись. Против упавших
-  прогонов 13.11.2026 (`20261113-140522-all-a6d9638`, `20261113-210010-all-143792a`, по 15 FAIL) -
-  все 15 строк PASS; причина и правка - запись журнала ниже и `docs/decisions/tests.md#run-temp-dir`. Прежний зачёт `d6a2447` против прогона того же кода `1ff3cf6` дал состав
-  `identical`; против прежней поставки `668444a` (**PASS 2307 / NAMED 9 / UNKNOWN 3 / FAIL 0**, 2319
-  строк) +3 строки и +3 PASS - все строки наряда (`ASM.11.fixed_component`,
-  `DRW-04.title_block.rebuild.changed_cells`, `DRW-04.title_block.rebuild.save_reopen`), пропавших
-  нет, вердикты прежних строк не менялись; против базы `5ba3b2c` (**PASS 2295 / NAMED 10 / UNKNOWN 3 /
-  FAIL 0**, 2308 строк) +14 строк, `DRW-07.rebuild` NAMED -> PASS. «Подавить -> снять» (20) -
-  46 PASS / 1 NAMED / 0 FAIL.
-  Зачётный прогон поставки `v0.13.0` - **PASS 2154 / NAMED 9 / UNKNOWN 3 / FAIL 0** на `b31cd7e`,
-  каталог `scratch/mcp-smoke/runs/20261107-101110-all-b31cd7e`; доказательства -
-  `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/`; каталог `--catalog-only` - 36 PASS,
-  «подавить -> снять» - 46 PASS / 1 NAMED / 0 FAIL.
+- **Последний полный прогон:** **PASS 2353 / NAMED 9 / UNKNOWN 3 / FAIL 0**, код 0, на чистом дереве
+  коммита `0bd4ef7`, Release-сборка, собранная после этого коммита в дереве
+  (`src\KompasMcp.Host\bin\x64\Release`, штамп `0.14.0`), `EVProbe.exe` рядом с Хостом, 2365 строк,
+  41 группа, около 48 минут, каталог `scratch/mcp-smoke/runs/20261117-111456-all-0bd4ef7`; временные
+  файлы прогона - в `<каталог прогона>\tmp` (поле `run_temp_dir` в `run.json`).
+  Против прежнего зачёта `0020e14` (PASS 2342 / NAMED 9 / UNKNOWN 3 / FAIL 0, 2354 строки, каталог
+  `scratch/mcp-smoke/runs/20261117-044904-all-0020e14`): +11 строк и +11 PASS - все строки наряда
+  `SPEC-08`/`SPEC-09` группы `specification` (91 -> 102 PASS); пропавших строк нет, вердикты прочих
+  строк и счётчики остальных 40 групп не менялись. Не-PASS строки те же, что у прошлого зачёта: NAMED -
+  `SB-12.fragment_insert`, `SKC.07.suppress_restore`, `SKC.21.session_before_save`,
+  `DRW-07.negative_tests.trace_misses_body`, `EI.04b.tessellation_independence`,
+  `ALL.client_bugs_20261107`, `SR.recovery`, `OPS.14.close_escape_live`, `EV.external.after_own`;
+  UNKNOWN - `CG-07.auto_update`, `CG-07.delete_operation`, `DSM-08.direction_not_read`.
+  Прежние зачёты: `bdce5e1` - PASS 2312 (2324 строки, Хост из копии вне дерева, каталог
+  `scratch/mcp-smoke/runs/20261114-123851-all-bdce5e1`), `d6a2447` - PASS 2310, `668444a` - PASS 2307,
+  `5ba3b2c` - PASS 2295, поставка `v0.13.0` на `b31cd7e` - PASS 2154; сравнения и разбор упавших
+  прогонов 13.11.2026 - записи журнала ниже и `docs/decisions/tests.md#run-temp-dir`.
 - **Клиентская приёмка 0.13.0:** **40 строк, 40 PASS** (12 выполнены заново на поставке `b31cd7e`,
   28 перенесены дословно), свод -
   `docs/acceptance/evidence/delivery-v0.13.0-b31cd7e/client-acceptance.json`.
@@ -521,6 +518,31 @@ Debug и Release - **2066 PASS / 0 FAIL**; группа `--specification-only` -
 `scratch/mcp-smoke/runs/20261117-044904-all-0020e14`, не-PASS строки те же, что в прошлом зачёте `bdce5e1`.
 Правило - `docs/decisions/bom.md#spec-spw-row-write`; отчёт - `SPEC_SPW_ROW_WRITE_0_15_REPORT_20261117.md`.
 Открыто **2** (96, 97); очередь - `SPEC_SPW_COLUMNS`, `SPEC_SPW_LINK_ROW` блока `.spw`.
+
+**Правка дополнительных колонок строки спецификации** (`SPEC_SPW_COLUMNS_0_15`, 17.11.2026, коммиты
+`5ae6c9a`, `0bd4ef7`). Второй наряд реализации блока `spec-spw-v1`: у `kompas_specification_edit_row`
+появилось необязательное поле `extra_columns` (тот же разбор `SpecificationExtraColumns.Parse`, что у
+создания) с маршрутом API5 `ksSpcObjectEdit` → `ksSetSpcObjectColumnText(тип, номер, блок, текст)` /
+`ksSpcMassa` → `ksSpcObjectEnd`; набор изменений считается и по колонкам. ИЗМЕРЕНО тип за типом
+прибором (`SpecProbe.Columns.cs`, 6 стадий, «в файле» меряет другой процесс): пишутся `format`, `zone`,
+`note`, `mass`, `user`; типы 9 и 11-16 в постановке не встречаются и отвергаются `CAPABILITY_UNAVAILABLE`
+ДО мутации с перечнем пишущихся; колонка «Запись» - названный `LIMIT:`. В МОДЕЛИ `zone` не пишется
+вовсе (сеттер отвечает 1, колонка пуста) - отказ до мутации; остальные четыре переживают сохранение.
+Чтение публикует `column_editable`, ответы создания и правки - `columns`, `column_types`,
+`column_editable`. Перечитывание: запрошенное сверяется типоспецифично, НЕназванные колонки - с
+прочитанными до правки, расхождение - `GEOMETRY_FAILED` со снимком. ПРИЧИНА ПОЗИЦИИ `.spw` УСТАНОВЛЕНА
+документированным чтением: `PutPosition` раздела = TRUE и `InitialPosition` = 1, поэтому файл держит
+номер строки в разделе - ответ правки позиции называет это в `warnings`, строка приёмки ждёт одно
+значение. Контракт аддитивный (MINOR), `<Version>` не поднимался. Проверки: сборка и тесты Debug и
+Release - **2071 PASS / 0 FAIL**; группа `--specification-only` - **PASS 130 / FAIL 0** (рабочая
+проверка на грязном дереве, не зачётная); `--self-test` - 120 проверок, 0 FAIL; `contract-diff.py` - 0
+структурных ломок на `tools/list`, находка одна - добавленные поля `/extra_columns` в схеме правки;
+стражи `lint-dashes.py` (`PUBLIC_TEXT`), `check-evidence-links.py`, `long-comment-blocks.py` - 0.
+Зачётный `--all` на Release-сборке коммита `0bd4ef7` - **PASS 2353 / NAMED 9 / UNKNOWN 3 / FAIL 0**,
+каталог `scratch/mcp-smoke/runs/20261117-111456-all-0bd4ef7`; не-PASS строки те же, что у прошлого
+зачёта `0020e14`, +11 PASS - все строки наряда группы `specification`. Правило -
+`docs/decisions/bom.md#spec-spw-columns`; отчёт - `SPEC_SPW_COLUMNS_0_15_REPORT_20261117.md`.
+Открыто **2** (96, 97); очередь - `SPEC_SPW_LINK_ROW` блока `.spw`.
 
 ## Архив журнала
 

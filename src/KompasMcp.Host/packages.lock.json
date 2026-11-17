@@ -332,7 +332,7 @@
       "kompasmcp.domain": {
         "type": "Project",
         "dependencies": {
-          "KompasMcp.Contracts": "[0.14.0, )"
+          "KompasMcp.Contracts": "[0.15.0, )"
         }
       }
     },

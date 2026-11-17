@@ -1,0 +1,106 @@
+﻿{
+  "meta": {
+    "profile_id": "spec-spw-v1",
+    "title": "Документ-спецификация v24: запись строк .spw, дополнительные колонки и их правка",
+    "revision": "1.0",
+    "revision_history": [
+      {
+        "revision": "1.0",
+        "date": "17.11.2026",
+        "change": "профиль заведён нарядом SPEC_SPW_LINK_ROW_0_15: строки SPEC-05..SPEC-09 - запись строк документа-спецификации .spw (наряд SPEC_SPW_ROW_WRITE_0_15, docs/decisions/bom.md#spec-spw-row-write) и правка дополнительных колонок (наряд SPEC_SPW_COLUMNS_0_15, #spec-spw-columns). Связи строки с компонентом в профиле НЕТ: замер наряда показал, что связь AddWithParam не переживает сохранение ни у модели, ни у .spw, поэтому инструмент не заведён и строка SPEC-10 не заводится (#spec-spw-link-row)"
+      }
+    ],
+    "target_build": "24.0.0.2799",
+    "queue": {
+      "SPEC_SPW_ROW_WRITE_0_15": "Первый наряд блока spec-spw-v1: строки .spw у kompas_specification_add_row, _edit_row, _delete_row, extra_columns при создании, публикация колонок чтением",
+      "SPEC_SPW_COLUMNS_0_15": "Второй наряд блока spec-spw-v1: правка дополнительных колонок существующей строки маршрутом API5",
+      "SPEC_SPW_LINK_ROW_0_15": "Третий наряд блока: замер переживания связанной строки сохранением; замер ответил «нет» - инструмент не заведён, блок закрыт строками SPEC-05..SPEC-09"
+    }
+  },
+  "modes": [
+    {
+      "ref": "SPEC-05.spw.row.create",
+      "title": "Создание строки документа-спецификации .spw: BaseObjects.Add + Update, колонки сверх четырёх полей, перечитывание обеими дорогами, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "create",
+        "read",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Создание - API7: SpecificationDescriptions.Active (у .spw описание уже есть, StyleID = 1) -> BaseObjects.Add(раздел, 0) добавляет объект только в КОЛЛЕКЦИЮ -> значения в колонки по ТИПУ (Column[тип, номер, блок] в Columns и AdditionalColumns, ColumnItems.Value по ValueType) -> ISpecificationObject.Update() создаёт строку. extra_columns пишутся ДО первого Update(): измерено, что основная колонка, записанная после него, в файл не попадает. Успех - не возврат вызова: строка находится в новом списке Objects по UniqueNumber, значения сверяются ОБЕИМИ дорогами (API7 и API5 ksGetSpcObject -> ksGetSpcObjectNumber -> ksGetSpcObjectColumnText), расхождение - GEOMETRY_FAILED со снимком. У .spw API5-дорога существует только у АКТИВНОГО документа, поэтому неактивный или открытый read_only .spw - CAPABILITY_UNAVAILABLE до мутации с названным выходом (закрыть и открыть kompas_open_document). ИЗМЕРЕНО приёмкой: записанная позиция .spw читается обеими дорогами В СЕАНСЕ, а после сохранения документ показывает свой номер строки в разделе (PutPosition = TRUE, InitialPosition = 1) - правку позиции .spw не следует считать переживающей сохранение. Правило - docs/decisions/bom.md#spec-spw-row-write."
+    },
+    {
+      "ref": "SPEC-06.spw.row.edit",
+      "title": "Правка строки документа-спецификации .spw: API5 ksSpcObjectEdit...ksSpcObjectEnd, перечитывание обеими дорогами, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "edit",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Правка - API5, единственный маршрут, который сохраняется: строка находится по row_ref.unique_number в Objects и подтверждается ksGetSpcObject -> ksGetSpcObjectNumber, обозначение сверяется с ссылкой (расхождение - STALE_REFERENCE, документ не тронут), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип, номер, блок) / ksSpcCount / ksSpcPosition -> ksSpcObjectEnd. Меняются только названные поля; изменение НЕназванного поля - GEOMETRY_FAILED со снимком. После ksSpcObjectEnd строка перечитывается обеими дорогами. Отказы: пустой набор изменений, чужая ссылка, устаревшая ревизия, несуществующий номер, неактивный .spw. ИЗМЕРЕНО приёмкой: обозначение, наименование и количество сохранение переживают, а позицию .spw ставит ДОКУМЕНТ - ответ называет это в warnings, и строка приёмки SPEC-06.position_after_reopen ждёт ОДНО значение. Правило - docs/decisions/bom.md#spec-spw-row-write, docs/decisions/bom.md#spec-spw-columns."
+    },
+    {
+      "ref": "SPEC-07.spw.row.delete",
+      "title": "Удаление строки документа-спецификации .spw: документированный ISpecificationObject.Delete(), перечитывание обеими дорогами, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "delete_dependencies",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Удаление - документированный API7 ISpecificationObject.Delete() («удалить базовый или вспомогательный объект спецификации из документа и из коллекции»); строка находится тем же общим кодом, что у правки, и её указатель API5 сверяется через ksGetSpcObjectNumber до вызова. Успех - не возврат Delete(): после него список перечитывается ОБЕИМИ дорогами (API7 Objects и API5 ksGetSpcObject по удалённому номеру), ответ называет удалённую строку со значениями до удаления, число строк до и после, уменьшение ровно на одну и сохранность прочих строк. Delete() = false, исключение, неподтверждённое удаление, исчезнувшая не та строка или изменившиеся соседи - отказ со снимком. Строку, которую КОМПАС ведёт от компонента, инструмент удаляет как обычную и предупреждает о возможном восстановлении: строки, связанной с компонентом, в постановке нет (связь не переживает сохранение - docs/decisions/bom.md#spec-spw-link-row). Правило - docs/decisions/bom.md#spec-delete-row."
+    },
+    {
+      "ref": "SPEC-08.spw.columns.read",
+      "title": "Чтение колонок строк .spw и признака column_editable: значения по ТИПУ и номеру, три разных ответа чтения",
+      "family": "BOM",
+      "queue": "SPEC_SPW_ROW_WRITE_0_15",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read"
+      ],
+      "gap": "Чтение - API7 IDocuments.Open -> IKompasDocument.SpecificationDescriptions.Active -> Objects -> Columns/AdditionalColumns -> ColumnItems.Value; колонки публикуются по ключу ТИПА и номера (format, zone, note, mass, material, user, code, factory, document_number, document_name, document_code, code_okp), column_types называет тип значения каждой, column_editable - признак того, что правка ЭТОЙ колонки проходит маршрутом API5 (замер тип за типом; остальные типы правкой не пишутся). Три ответа чтения различаются и означают разное: null - колонки нет, \"\" - колонка есть и пуста, 0 у массы после сохранения - пусто. Активный документ не нужен: маршрут читает документ, открытый по path или по document_id, и открытие по path не делает его активным. Правило - docs/decisions/bom.md#spec-spw-row-write, docs/decisions/bom.md#spec-spw-columns."
+    },
+    {
+      "ref": "SPEC-09.spw.columns.write",
+      "title": "Правка дополнительных колонок строки: API5 ksSetSpcObjectColumnText / ksSpcMassa, замер тип за типом, сохранение и переоткрытие",
+      "family": "BOM",
+      "queue": "SPEC_SPW_COLUMNS_0_15",
+      "priority": "practical_required",
+      "current_level": "mcp_verified",
+      "required_actions": [
+        "discover",
+        "read",
+        "edit",
+        "save_reopen",
+        "negative_tests"
+      ],
+      "gap": "Правка колонок идёт тем же API5-маршрутом, что и четыре поля строки: ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип, номер, блок, текст) для текстовых колонок, ksSpcMassa(текст) для массы, ksSpcObjectEnd; все названные колонки пишутся В ОДНОМ открытом редактировании. ИЗМЕРЕНО тип за типом с сохранением и переоткрытием другим процессом: пишутся format, zone, note, mass, user; в МОДЕЛИ зона не пишется вовсе (сеттер отвечает 1, колонка остаётся пустой) - отказ до мутации; типы 9 и 11-16 в постановке не встречаются и отвергаются CAPABILITY_UNAVAILABLE до мутации с перечнем пишущихся; колонка типа «Запись» - названный LIMIT. После ksSpcObjectEnd строка читается обеими дорогами: запрошенное сверяется типоспецифично («2,5» и 2.5 - одна масса), НЕназванные колонки - с прочитанными до правки, расхождение - GEOMETRY_FAILED со снимком. Правило - docs/decisions/bom.md#spec-spw-columns."
+    }
+  ],
+  "common_dependencies": [],
+  "explicitly_out_of_scope": [
+    "Связь строки с компонентом через ISpecificationBaseObjects.AddWithParam и IPropertyKeeper: замер наряда SPEC_SPW_LINK_ROW_0_15 показал, что общий ключ информационного объекта не переживает сохранение ни у модели, ни у .spw (0 строк из 5 и из 2 после переоткрытия), поэтому инструмент kompas_specification_add_linked_row не заведён и строки SPEC-10 нет (docs/decisions/bom.md#spec-spw-link-row).",
+    "Подключение .spw к модели и режим связи (SpecificationDocumentName, LinkType), IDocuments.DocumentSynchronize и перестроение документа: маршруты документированы, но профилем не востребованы.",
+    "Создание документа-спецификации инструментом: постановка приёмки берётся копией входа исследования, создание .spw программой в блок не входит.",
+    "Листы сборочного чертежа (ksSpcDocument.ksGetSpcSheetSB / ksSetSpcSheetSB) и исполнения: блоки больше одного - прежний LIMIT колонок строки."
+  ]
+}

@@ -252,6 +252,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль spec-spw-v1 — Документ-спецификация v24: запись строк .spw, дополнительные колонки и их правка
+
+- **обязательных_режимов:** 5
+- **режимов_закрыто:** 5
+- **общих_зависимостей:** 0
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** SPEC_SPW_COLUMNS_0_15 1/1; SPEC_SPW_ROW_WRITE_0_15 4/4
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль threads-minimal-v1 — Условное изображение резьбы v24: внешняя по ребру, внутренняя по грани, авто, правая/левая
 
 - **обязательных_режимов:** 4
@@ -702,6 +714,21 @@
 | `SPEC-04.row.delete` | BOM | practical_required | SPEC_DELETE_ROW | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | OK | OK | н/п | SPEC-04.discovery, SPEC-04.schema, SPEC-04.prepare_model, SPEC-04.delete_created, SPEC-04.neighbours_intact, SPEC-04.origin_note, SPEC-04.delete_preexisting, SPEC-04.get_specification_absent, SPEC-04.negative_input, SPEC-04.negative_revision, SPEC-04.negative_stale_deleted, SPEC-04.negative_stale_marking, SPEC-04.negative_unknown_row, SPEC-04.negative_kind, SPEC-04.save_reopen |
 
 ### Общие зависимости профиля `spec-ext-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+
+## Метрика 1 — обязательные режимы профиля `spec-spw-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SPEC-05.spw.row.create` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SPEC-05.discovery, SPEC-05.schema, SPEC-05.open_for_write, SPEC-05.create_with_columns, SPEC-05.read_by_other_tool, SPEC-05.columns_published, SPEC-05.save_reopen, SPEC-05.negative_unknown_column, SPEC-05.negative_duplicate_column, SPEC-05.negative_inactive |
+| `SPEC-06.spw.row.edit` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-06.discovery, SPEC-06.edit_marking, SPEC-06.edit_name, SPEC-06.edit_quantity, SPEC-06.edit_position, SPEC-06.edit_together, SPEC-06.untouched_checked, SPEC-06.save_reopen, SPEC-06.position_after_reopen, SPEC-06.negative_stale_reference, SPEC-06.negative_unknown_row, SPEC-06.negative_inactive |
+| `SPEC-07.spw.row.delete` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | OK | OK | н/п | SPEC-07.discovery, SPEC-07.delete_created, SPEC-07.neighbours_intact, SPEC-07.save_reopen, SPEC-07.negative_stale_deleted, SPEC-07.negative_stale_marking, SPEC-07.negative_inactive |
+| `SPEC-08.spw.columns.read` | BOM | practical_required | SPEC_SPW_ROW_WRITE_0_15 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SPEC-08.columns_read, SPEC-08.editable_flag |
+| `SPEC-09.spw.columns.write` | BOM | practical_required | SPEC_SPW_COLUMNS_0_15 | mcp_verified | OK | н/п | OK | OK | н/п | OK | н/п | н/п | OK | н/п | SPEC-09.edit_type_by_type, SPEC-09.save_reopen, SPEC-09.negative_unwritten_type, SPEC-09.negative_missing_column, SPEC-09.negative_document_unchanged, SPEC-09.model_editable_flag, SPEC-09.model_column_edit, SPEC-09.model_zone_refused, SPEC-09.model_save_reopen, SPEC-03.schema |
+
+### Общие зависимости профиля `spec-spw-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|

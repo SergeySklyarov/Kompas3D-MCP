@@ -500,7 +500,7 @@ QI `IPropertyKeeper` → `AddWithParam` даёт строку с общим кл
 блока `.spw` по разделу 6 отчёта (состав утверждает техлид). `src/` не менялся, `--all` и `dotnet test`
 не требовались; стражи `lint-dashes.py`, `check-evidence-links.py`, `long-comment-blocks.py` - 0.
 
-**Запись строк документа-спецификации `.spw`** (`SPEC_SPW_ROW_WRITE_0_15`, 17.11.2026, коммит `%%COMMIT%%`).
+**Запись строк документа-спецификации `.spw`** (`SPEC_SPW_ROW_WRITE_0_15`, 17.11.2026, коммит `0020e14`).
 Первый наряд реализации блока `spec-spw-v1`: `kompas_specification_add_row`, `kompas_specification_edit_row`
 и `kompas_specification_delete_row` принимают `document_id` документа-спецификации и больше не отвечают
 на него `WRONG_DOCUMENT_KIND` (чужой вид - чертёж). Вид документа решает только источник описания и
@@ -516,9 +516,11 @@ API5-дороги (`ksDocument3D.GetSpecification()` у модели, `SpcActive
 строки в разделе) - названо в описании инструмента, причины не устанавливал. Проверки: сборка и тесты
 Debug и Release - **2066 PASS / 0 FAIL**; группа `--specification-only` - **PASS 119 / FAIL 0**;
 `contract-diff.py` - 0; стражи `lint-dashes.py`, `check-evidence-links.py`,
-`long-comment-blocks.py src tests` - 0. Полный прогон `--all` - %%ALL%%.
+`long-comment-blocks.py src tests` - 0. Зачётный полный прогон `--all` на Release-сборке этого коммита
+(чистое дерево) - **PASS 2342 / NAMED 9 / UNKNOWN 3 / FAIL 0**, `exit_code` 0; каталог
+`scratch/mcp-smoke/runs/20261117-044904-all-0020e14`, не-PASS строки те же, что в прошлом зачёте `bdce5e1`.
 Правило - `docs/decisions/bom.md#spec-spw-row-write`; отчёт - `SPEC_SPW_ROW_WRITE_0_15_REPORT_20261117.md`.
-Открыто **%%DEBT%%** (96, 97); очередь - `SPEC_SPW_COLUMNS`, `SPEC_SPW_LINK_ROW` блока `.spw`.
+Открыто **2** (96, 97); очередь - `SPEC_SPW_COLUMNS`, `SPEC_SPW_LINK_ROW` блока `.spw`.
 
 ## Архив журнала
 

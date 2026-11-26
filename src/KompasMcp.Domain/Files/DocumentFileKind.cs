@@ -5,10 +5,11 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Domain.Files;
 
 /// <summary>The extension that NAMES a document kind — one table for the rescue copy and for a save target.</summary>
-/// <remarks>INVARIANT: the extension is not decoration: KOMPAS writes a named target by it. MEASURED, with a
-/// VISIBLE application an assembly saved to a <c>.m3d</c> path lands as a PART (FileType=4, no components) while
-/// the call answers success, and a hidden application keeps the document's own type — so a target whose extension
-/// does not state the kind is refused before the write instead of being saved into another kind.
+/// <remarks>INVARIANT: the extension NAMES the kind, it does not decide what is written: KOMPAS writes a named
+/// target by it, and with a VISIBLE application an assembly saved to a <c>.m3d</c> path lands as a PART
+/// (FileType=4, no components) while the call answers success; a hidden application keeps the document's type.
+/// MEASURED. So the written file's OWN marker is read after the write: a file of another kind is never a success,
+/// and a target whose extension states another kind is named in <c>save_target_states_another_kind</c>.
 /// DOC: «Файл детали имеет расширение m3d» and «Файл сборки имеет расширение a3d»
 /// (<c>47_2_1_1_trekhmernye_modeli.html</c>); the «Допустимые расширения» column of
 /// <c>ksrequestfilestypeenum.html</c> names frw, cdw, m3d, a3d, kdw as KOMPAS document files.

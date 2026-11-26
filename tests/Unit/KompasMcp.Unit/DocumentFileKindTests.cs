@@ -7,7 +7,8 @@ namespace KompasMcp.Unit;
 /// <summary>The extension that NAMES a document kind, and the save target it judges.</summary>
 /// <remarks>MEASURED: KOMPAS writes a named target by its extension, and the kind it writes is not always the
 /// document's: with a VISIBLE application an assembly saved to 'x.m3d' lands as a part (FileType=4) while the call
-/// answers success. A target whose extension does not state the kind is therefore refused before the write.
+/// answers success. The written file's own marker decides the answer, and a target that states another kind is
+/// named in save_target_states_another_kind.
 /// History: docs/decisions/files.md#save-extension-kind</remarks>
 public class DocumentFileKindTests
 {

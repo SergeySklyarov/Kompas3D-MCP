@@ -941,7 +941,6 @@ public partial class Api5Session
             });
     }
 
-    /// <summary>The refusal of a read-back that did not confirm the row.</summary>
     /// <summary>The refusal of a read-back that did not confirm the created row.</summary>
     /// <remarks>INVARIANT: the code is <c>VERIFICATION_FAILED</c>, not <c>GEOMETRY_FAILED</c>: a specification row
     /// is text, and the failed thing is the declared check of the result, not a curve the kernel refused.

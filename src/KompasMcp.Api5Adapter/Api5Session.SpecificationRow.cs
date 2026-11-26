@@ -547,6 +547,24 @@ public partial class Api5Session
                     });
             }
 
+            // The narrow cells («Формат», «Зона») hold only a few characters; a longer text is moved by KOMPAS
+            // into «Примечание» with a marker left in the cell, so the class is judged BEFORE the value is set.
+            // MEASURED: docs/decisions/bom.md#spec-spw-zone-text. History: docs/decisions/bom.md#spec-spw-zone-text
+            if (SpecificationColumnKeys.NarrowTextRefusalMessage(key, column.Type, column.Value) is { } overCell)
+            {
+                throw RowWriteRefusal(
+                    ErrorCodes.InvalidArgument,
+                    overCell + " Строка в документ не добавлена.",
+                    created, document, command, descriptionCreated,
+                    new Dictionary<string, object?>
+                    {
+                        ["field"] = key,
+                        ["value"] = column.Value,
+                        ["value_length"] = column.Value.Length,
+                        ["capacity"] = SpecificationColumnKeys.NarrowTextCapacity,
+                    });
+            }
+
             try
             {
                 element.Value = value;
@@ -924,12 +942,16 @@ public partial class Api5Session
     }
 
     /// <summary>The refusal of a read-back that did not confirm the row.</summary>
+    /// <summary>The refusal of a read-back that did not confirm the created row.</summary>
+    /// <remarks>INVARIANT: the code is <c>VERIFICATION_FAILED</c>, not <c>GEOMETRY_FAILED</c>: a specification row
+    /// is text, and the failed thing is the declared check of the result, not a curve the kernel refused.
+    /// History: docs/decisions/bom.md#spec-spw-zone-text</remarks>
     private static KompasContractException RowReadRefusal(
         DocumentEntry document, AddSpecificationRowCommand command, double unique, string message,
         IReadOnlyList<string> readNotes, Dictionary<string, string?>? api7, Dictionary<string, string?>? api5,
         IReadOnlyList<Dictionary<string, object?>>? observed = null) =>
         new(
-            ErrorCodes.GeometryFailed,
+            ErrorCodes.VerificationFailed,
             message,
             RetryPolicy.ReacquireContext,
             partialEffects: true,

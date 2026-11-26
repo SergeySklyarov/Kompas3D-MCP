@@ -130,7 +130,7 @@ public class SpecificationRowTests
         // A reader must be able to tell a created row from a call that only entered the collection, see that a
         // .spw is a target, and know why extra columns exist only at creation.
         Assert.Contains("Update()", description, StringComparison.Ordinal);
-        Assert.Contains("GEOMETRY_FAILED", description, StringComparison.Ordinal);
+        Assert.Contains("VERIFICATION_FAILED", description, StringComparison.Ordinal);
         Assert.Contains("IPropertyKeeper", description, StringComparison.Ordinal);
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);
         Assert.Contains("0.0.", description, StringComparison.Ordinal);

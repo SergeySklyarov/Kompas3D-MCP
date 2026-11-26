@@ -84,6 +84,41 @@ public static class SpecificationColumnKeys
     /// History: docs/decisions/bom.md#spec-spw-columns</remarks>
     public static IReadOnlyList<int> NotWrittenInModel { get; } = [2];
 
+    /// <summary>The types whose text cell holds only a few characters: «Формат» and «Зона».</summary>
+    /// <remarks>MEASURED: the cell holds up to three characters; a longer value is NOT written into it — KOMPAS
+    /// puts «@100~)» there and appends the whole text to «Примечание», and the file keeps that. The setter still
+    /// answers 1, and creation and the API5 edit behave the same, so the class is judged before any write.
+    /// DOC: <c>ksspecification_kssetspcobjectcolumntext.html</c> promises only «1 - в случае удачного завершения»
+    /// and says nothing about a text that does not fit; <c>ispecificationcolumnitem_value.html</c> gives no width.
+    /// LIMIT: the capacity is the measured cell of the acceptance style; the API exposes no per-column text width
+    /// by type, so a wider style is refused falsely until it is re-measured.
+    /// History: docs/decisions/bom.md#spec-spw-zone-text</remarks>
+    public static IReadOnlyList<int> NarrowTextTypes { get; } = [1, 2];
+
+    /// <summary>How many characters the narrow cells hold (MEASURED: three fit, four move to the note).</summary>
+    public const int NarrowTextCapacity = 3;
+
+    /// <summary>Whether the value is longer than the measured cell of its column holds.</summary>
+    public static bool OverflowsNarrowTextCell(int type, string value) =>
+        NarrowTextTypes.Contains(type) && value.Length > NarrowTextCapacity;
+
+    /// <summary>The allowed class of a narrow column, for the refusal that names it.</summary>
+    public static string DescribeNarrowTextClass() =>
+        "«Формат» и «Зона» этой постановки вмещают до " + NarrowTextCapacity
+        + " символов (измерено: три пишутся в колонку, четыре КОМПАС переносит в «Примечание»)";
+
+    /// <summary>The refusal text for a value over the narrow cell, or <c>null</c> when the value fits.</summary>
+    /// <remarks>INVARIANT: the text names the observed behaviour — the setter answers 1, puts «@100~)» into the
+    /// column and appends the whole text to «Примечание» — so a client sees why a legal-looking value is refused
+    /// and where the long text belongs instead. History: docs/decisions/bom.md#spec-spw-zone-text</remarks>
+    public static string? NarrowTextRefusalMessage(string key, int type, string value) =>
+        OverflowsNarrowTextCell(type, value)
+            ? $"Значение «{value}» ({value.Length} симв.) длиннее, чем вмещает колонка «{key}»: "
+              + DescribeNarrowTextClass() + ". Запись не выполняется: иначе КОМПАС положил бы в «{key}» «@100~)», "
+              + "а текст дописал бы в «Примечание» — колонку, которую вызов не называл. Длинный текст пишите "
+              + "в колонку note."
+            : null;
+
     /// <summary>Whether the edit route is measured to write a column of this type in this kind of document.</summary>
     public static bool IsEditable(int type, bool model) =>
         Editable.Contains(type) && !(model && NotWrittenInModel.Contains(type));

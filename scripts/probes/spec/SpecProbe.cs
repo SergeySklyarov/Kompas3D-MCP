@@ -90,6 +90,36 @@ internal sealed partial class SpecProbe : IDisposable
                 case "spw-columns-final":
                     RunSpwStage(stage);
                     break;
+                case "spw-columns-text":
+                    SpwColumnsTextWrite();
+                    break;
+                case "spw-columns-text-read":
+                    SpwColumnsTextRead();
+                    break;
+                case "spw-columns-text-limits":
+                    SpwColumnsTextLimitsWrite();
+                    break;
+                case "spw-columns-text-limits-read":
+                    SpwColumnsTextLimitsRead();
+                    break;
+                case "spw-columns-text-width":
+                    SpwColumnsTextWidthWrite();
+                    break;
+                case "spw-columns-text-width-read":
+                    SpwColumnsTextWidthRead();
+                    break;
+                case "spw-columns-text-wide":
+                    SpwColumnsTextWideWrite();
+                    break;
+                case "spw-columns-text-wide-read":
+                    SpwColumnsTextWideRead();
+                    break;
+                case "spw-columns-text-create":
+                    SpwColumnsTextCreateWrite();
+                    break;
+                case "spw-columns-text-create-read":
+                    SpwColumnsTextCreateRead();
+                    break;
                 case "link-model-write":
                 case "link-model-write-twice":
                 case "link-model-read":

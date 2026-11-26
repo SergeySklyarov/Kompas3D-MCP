@@ -49,7 +49,7 @@ public sealed class DocumentControlCopies
     public string? RescuePath(string documentId, DocumentKind kind, DateTimeOffset at)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
-        var extension = ExtensionFor(kind);
+        var extension = DocumentFileKind.ExtensionFor(kind);
         if (extension is null)
         {
             return null;
@@ -64,25 +64,6 @@ public sealed class DocumentControlCopies
         var stamp = at.UtcDateTime.ToString("yyyyMMdd-HHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
         return System.IO.Path.Combine(RescueFolder, $"{safeId}-{stamp}{extension}");
     }
-
-    /// <summary>The rescue-file extension that names a document kind, or <c>null</c> when the kind has
-    /// none documented. A copy named <c>.m3d</c> for a drawing states a kind the document does not have.</summary>
-    /// <remarks>DOC: «Файл детали имеет расширение m3d» and «Файл сборки имеет расширение a3d»
-    /// (<c>47_2_1_1_trekhmernye_modeli.html</c>); the «Допустимые расширения» column of
-    /// <c>ksrequestfilestypeenum.html</c> names frw, cdw, m3d, a3d, kdw as KOMPAS document files.
-    /// ASSUMPTION: a specification is <c>.spw</c> - no mirrored page states it; the name follows the
-    /// extension the <c>.spw</c> open route already uses. LIMIT: a text document (<c>.kdw</c>) has no
-    /// <see cref="DocumentKind"/> in this build, so its rescue copy cannot be requested at all.
-    /// History: docs/decisions/files.md#rescue-copies</remarks>
-    private static string? ExtensionFor(DocumentKind kind) => kind switch
-    {
-        DocumentKind.Part => ".m3d",
-        DocumentKind.Assembly => ".a3d",
-        DocumentKind.Drawing => ".cdw",
-        DocumentKind.Fragment => ".frw",
-        DocumentKind.Specification => ".spw",
-        _ => null,
-    };
 
     /// <summary>Prepare the rescue folder. Returns <c>null</c> on success or the named reason — a rescue
     /// that cannot be written must be visible, not silently skipped.</summary>

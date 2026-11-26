@@ -341,23 +341,32 @@ public partial class Api5Session
 
         if (checks.Any(check => !check.Passed))
         {
+            var failed = checks.Where(check => !check.Passed).ToList();
             snapshot["api7"] = api7;
             snapshot["api5"] = api5;
             snapshot["after"] = after.Row;
-            snapshot["checks"] = checks.Where(check => !check.Passed)
+            snapshot["checks"] = failed
                 .Select(check => new { name = check.Name, observed = check.Observed, expected = check.Expected })
                 .ToArray();
             snapshot["revision"] = document.Revision;
+
+            // INVARIANT: the refusal names EVERY column or field that changed, so a write that moved a value into
+            // «Примечание» is told apart from one that only missed its own cell. A specification row is text, so
+            // the failed check is a VERIFICATION_FAILED, not a geometry refusal.
+            // History: docs/decisions/bom.md#spec-spw-zone-text
             throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
+                ErrorCodes.VerificationFailed,
                 "Прочитанные назад значения расходятся с запрошенными либо изменилось поле, которого вызов "
-                + "не называл: документ держит не то, что просил клиент. Публиковать это как успех нельзя.",
+                + "не называл. Не прошли проверки: " + string.Join(", ", failed.Select(check => check.Name))
+                + " (наблюдённое и ожидаемое — в details.failure_snapshot.checks). Документ держит не то, что "
+                + "просил клиент, и публиковать это как успех нельзя.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
                 details: new Dictionary<string, object?>
                 {
                     ["document_id"] = document.Id,
                     ["unique_number"] = unique,
+                    ["changed_columns"] = failed.Select(check => check.Name).ToArray(),
                     ["failure_snapshot"] = snapshot,
                 });
         }
@@ -569,6 +578,34 @@ public partial class Api5Session
             }
 
             EnsureValueFits(key, column.Value, valueType.Value, document, command, previous);
+
+            // The cell of «Формат» and «Зона» holds only a few characters: a longer text is NOT refused by the
+            // setter, it is moved into «Примечание» with a marker left in the cell. The class is judged here.
+            // MEASURED: docs/decisions/bom.md#spec-spw-zone-text. History: docs/decisions/bom.md#spec-spw-zone-text
+            if (SpecificationColumnKeys.NarrowTextRefusalMessage(key, column.Type, column.Value) is { } overCell)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.InvalidArgument,
+                    overCell + " Строка не тронута.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["field"] = key,
+                        ["value"] = column.Value,
+                        ["value_length"] = column.Value.Length,
+                        ["capacity"] = SpecificationColumnKeys.NarrowTextCapacity,
+                        ["failure_snapshot"] = new Dictionary<string, object?>
+                        {
+                            ["document_id"] = document.Id,
+                            ["unique_number"] = command.RowRef.UniqueNumber,
+                            ["before"] = previous,
+                            ["field"] = key,
+                            ["value"] = column.Value,
+                            ["value_length"] = column.Value.Length,
+                            ["capacity"] = SpecificationColumnKeys.NarrowTextCapacity,
+                        },
+                    });
+            }
         }
     }
 

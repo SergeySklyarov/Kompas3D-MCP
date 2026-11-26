@@ -191,4 +191,38 @@ public class SpecificationExtraColumnTests
             Assert.DoesNotContain(key, forSpw, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>The narrow cells of a `.spw` row hold a short text only: the value class is judged before any
+    /// write, and the refusal names the measured behaviour instead of letting the text move to «Примечание».</summary>
+    /// <remarks>MEASURED: «Формат» and «Зона» hold up to three characters; a fourth makes KOMPAS put «@100~)» into
+    /// the cell and append the text to «Примечание». The setter answers 1 either way, so a length check is the only
+    /// point where the value can be refused before the file changes.
+    /// History: docs/decisions/bom.md#spec-spw-zone-text</remarks>
+    [Theory]
+    [InlineData(2, "А3", false)]
+    [InlineData(2, "Z1", false)]
+    [InlineData(2, "А3А", false)]
+    [InlineData(2, "Зона", true)]
+    [InlineData(2, "Зона А", true)]
+    [InlineData(2, "1234", true)]
+    [InlineData(1, "АБВГ", true)]
+    [InlineData(1, "Ф5", false)]
+    [InlineData(7, "Примечание из сорока символов", false)]
+    [InlineData(10, "АБВГДЕ", false)]
+    public void OnlyANarrowCellRefusesALongText(int type, string value, bool overflows)
+    {
+        Assert.Equal(overflows, SpecificationColumnKeys.OverflowsNarrowTextCell(type, value));
+        Assert.Equal(overflows, SpecificationColumnKeys.NarrowTextRefusalMessage("zone", type, value) is not null);
+    }
+
+    [Fact]
+    public void TheRefusalNamesTheMeasuredClassAndWhereTheLongTextBelongs()
+    {
+        var message = SpecificationColumnKeys.NarrowTextRefusalMessage("zone", 2, "Зона А");
+
+        Assert.NotNull(message);
+        Assert.Contains("3", message, StringComparison.Ordinal);
+        Assert.Contains("Примечание", message, StringComparison.Ordinal);
+        Assert.Contains("note", message, StringComparison.Ordinal);
+    }
 }

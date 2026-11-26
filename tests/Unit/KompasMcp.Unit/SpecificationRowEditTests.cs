@@ -179,7 +179,7 @@ public class SpecificationRowEditTests
         Assert.Contains("ksSpcObjectEdit", description, StringComparison.Ordinal);
         Assert.Contains("ksSpcObjectEnd", description, StringComparison.Ordinal);
         Assert.Contains("STALE_REFERENCE", description, StringComparison.Ordinal);
-        Assert.Contains("GEOMETRY_FAILED", description, StringComparison.Ordinal);
+        Assert.Contains("VERIFICATION_FAILED", description, StringComparison.Ordinal);
         Assert.Contains("Update() = false", description, StringComparison.Ordinal);
         Assert.Contains("SetSection", description, StringComparison.Ordinal);
         Assert.Contains("НЕ пишется", description, StringComparison.Ordinal);

@@ -39,6 +39,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zipfile
 import zlib
 
 # The console on this machine is cp1250/cp866 and every message here is Russian: without an
@@ -628,6 +629,27 @@ def error_code(envelope):
     """
     error = (envelope or {}).get("error")
     return error.get("code") if isinstance(error, dict) else None
+
+
+def native_container_kind(path):
+    """Вид содержимого родного контейнера КОМПАС по его собственной метке FileInfo (ZIP + UTF-16, измерено).
+
+    ЗАЧЕМ. Один и тот же файл, НАЗВАННЫЙ .m3d, может держать сборку (Kompas.a3d): расширение говорит, что
+    просили, а метка — что записано. Строка сохранения сборки в путь .m3d сверяет метку, а не расширение.
+    Нечитаемая или отсутствующая метка — None: вид не подтверждён, и это не догадка.
+    История: docs/decisions/files.md#save-extension-kind
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            if "FileInfo" not in archive.namelist():
+                return None
+            text = archive.read("FileInfo").decode("utf-16")
+    except (OSError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    for line in text.splitlines():
+        if line.strip().startswith("FileTypeName="):
+            return line.split("=", 1)[1].strip()
+    return None
 
 
 def feature_error_refusal(env):
@@ -3500,7 +3522,30 @@ def assembly_checks(client, rep, app_id, workdir):
             rep.add("ASM.06.negative_tests", "отсутствующий источник НАЗВАН", "FAIL", str(ex))
 
     # ========= ASM.07: сохранение и переоткрытие =========
-    asm_path = os.path.join(src_dir, "asm-01.m3d")
+    # Цель `.m3d` у СБОРКИ проверяет, что ответ называет вид ЗАПИСАННОГО файла, а не расширение: ИЗМЕРЕНО, что
+    # при видимом окне КОМПАС пишет такой файл ДЕТАЛЬЮ без компонентов (дефект клиентской приёмки 0.15.0), а
+    # у невидимого окна - сборкой. Строка принимает оба исхода, но не ложный успех: при успехе файл на диске
+    # обязан быть сборкой, а file_kind обязан назвать Assembly; при отказе он обязан быть
+    # VERIFICATION_FAILED с названным видом файла.
+    # История: docs/decisions/files.md#save-extension-kind
+    kind_target = os.path.join(src_dir, "asm-extension.m3d")
+    env_kind, code_kind = call("kompas_save_document", {"document_id": asm,
+                                                        "expected_revision": current_rev(asm),
+                                                        "target_path": kind_target})
+    reported_kind = result(env_kind).get("file_kind")
+    marker_kind = native_container_kind(kind_target)
+    honest = ((code_kind is None and reported_kind == "Assembly" and marker_kind == "Kompas.a3d")
+              or (code_kind == "VERIFICATION_FAILED" and marker_kind not in (None, "Kompas.a3d")
+                  and ".a3d" in (emsg(env_kind) or "")))
+    rep.add("ASM.07.save_kind_verified",
+            "сборка, сохранённая в путь .m3d: либо названный отказ VERIFICATION_FAILED с видом записанного "
+            "файла, либо успех, в котором file_kind=Assembly и файл на диске - сборка (Kompas.a3d); ложного "
+            "успеха с деталью на диске нет",
+            "PASS" if honest else "FAIL",
+            f"код={code_kind} file_kind={reported_kind!r} метка_файла={marker_kind!r} "
+            f"файл={os.path.exists(kind_target)} warnings={result(env_kind).get('warnings')} "
+            f"msg={emsg(env_kind)}")
+    asm_path = os.path.join(src_dir, "asm-01.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": asm_path})
@@ -3783,7 +3828,7 @@ def assembly_checks(client, rep, app_id, workdir):
     env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
                                                 "name": "ASM-nested"})
     asm_n = doc_id(env)
-    sub_path = os.path.join(src_dir, "asm-sub.m3d")
+    sub_path = os.path.join(src_dir, "asm-sub.a3d")
     env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
                                                 "name": "ASM-sub"})
     sub_doc = doc_id(env)
@@ -4051,7 +4096,7 @@ def assembly_checks(client, rep, app_id, workdir):
 
     # (3) вложенный компонент: в сборку вставляется ПОДСБОРКА, её вложенный компонент берётся из
     # рекурсивного чтения и НЕ адресуется.
-    sub2_path = os.path.join(src_dir, "asm-del-sub.m3d")
+    sub2_path = os.path.join(src_dir, "asm-del-sub.a3d")
     env_sub, _c = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
                                                   "name": "ASM-del-sub"})
     sub2_doc = doc_id(env_sub)
@@ -4093,7 +4138,7 @@ def assembly_checks(client, rep, app_id, workdir):
             f"первый={error_code(env_r1)} второй={error_code(env_r2)} msg={emsg(env_nested)}")
 
     # ── ASM.08.save_reopen: удалённые не возвращаются, остальные на месте ──
-    asm_del_path = os.path.join(src_dir, "asm-del.m3d")
+    asm_del_path = os.path.join(src_dir, "asm-del.a3d")
     count_before_reopen = len(component_rows(asm_d))
     asm_d, saved_d, err_d = reopen_assembly(asm_d, asm_del_path)
     rows_d5 = component_rows(asm_d)
@@ -7673,7 +7718,7 @@ def interference_checks(client, rep, app_id, workdir):
             f"dirty {before_ctx.get('dirty')} → {after_ctx.get('dirty')}")
 
     # ========= INT.10: save → close → reopen =========
-    save_path = os.path.join(src_dir, "int-asm.m3d")
+    save_path = os.path.join(src_dir, "int-asm.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": save_path})
@@ -8331,7 +8376,7 @@ def mate_checks(client, rep, app_id, workdir):
             "PASS" if not code2 else "FAIL", f"error={code2}")
 
     # ---- save → close → reopen: сопряжения обязаны пережить ----
-    asm_path = os.path.join(src_dir, "mate-asm.m3d")
+    asm_path = os.path.join(src_dir, "mate-asm.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": asm_path})
@@ -56156,7 +56201,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
     if doc:
         close(doc)
     sub_path = _os.path.join(folder, "cp-sub.m3d")
-    asm_path = _os.path.join(folder, "cp-top.m3d")
+    asm_path = _os.path.join(folder, "cp-top.a3d")
     sub_doc = asm_doc = None
     part_doc, error_part = make_part("cp-asm-part", _os.path.join(folder, "cp-asm-part.m3d"))
     if part_doc:
@@ -56294,7 +56339,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             return {"error": error or "компонент не построен"}
         if not keep_open:
             close(component_doc)
-        assembly_path = _os.path.join(folder, f"mx-{tag}-top.m3d")
+        assembly_path = _os.path.join(folder, f"mx-{tag}-top.a3d")
         asm_doc, code, message = new_document("assembly", f"mx-{tag}-top")
         if not asm_doc:
             return {"error": f"сборка не создана: {code} {message}"}
@@ -56552,7 +56597,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
         if error or not component_doc:
             return {"error": error or "компонент не построен"}
         close(component_doc)
-        assembly_path = _os.path.join(folder, "restore-top.m3d")
+        assembly_path = _os.path.join(folder, "restore-top.a3d")
         asm_doc, code, message = new_document("assembly", "restore-top")
         if not asm_doc:
             return {"error": f"сборка не создана: {code} {message}"}
@@ -56772,7 +56817,7 @@ def checkpoint_paths_checks(host, config, workdir, rep):
             "document_id": asm, "expected_revision": rev3(asm), "source_path": detail_path})
         if code:
             return {"error": f"вставка детали: {code} {emsg3(env)}"}
-        asm_path = _os.path.join(cell_dir, "asm-cp16.m3d")
+        asm_path = _os.path.join(cell_dir, "asm-cp16.a3d")
         env, code = call3("kompas_save_document", {
             "document_id": asm, "expected_revision": rev3(asm), "target_path": asm_path})
         if code:
@@ -60948,7 +60993,8 @@ def specification_checks(client, rep, app_id, workdir):
             f"с_признаком={len(with_flag)} типы={fixture_types} признак={fixture_editable}")
     rep.add("SPEC-08.editable_flag",
             "замером подтверждённые типы (format, zone, note, mass, user) помечены пишущимися у .spw: "
-            "признак и отказ правки называют один перечень, а не два",
+            "признак и отказ правки называют один перечень, а не два; у «Формат» и «Зона» признак относится к "
+            "значению, помещающемуся в ячейку (до 3 символов, измерено)",
             "PASS" if {"format", "zone", "note", "mass", "user"} <= {key for key, value in fixture_editable.items()
                                                                     if value} else "FAIL",
             f"пишущиеся={sorted(key for key, value in fixture_editable.items() if value)}")
@@ -60999,6 +61045,27 @@ def specification_checks(client, rep, app_id, workdir):
                     f"код={item.get('code')} непрошедшие={item.get('failed_checks')}; "
                     for item in columns_edited)[:500])
 
+    # Зона КИРИЛЛИЦЕЙ в пределах измеренной ёмкости ячейки: ASCII-значение выше доказывает запись, эта строка -
+    # что кириллица не портится. Ячейка «Зона» вмещает 3 символа (измерено), «А3» - допустимое значение; более
+    # длинное отвергается до мутации (строка SPEC-09.zone_over_cell_refused ниже).
+    # История: docs/decisions/bom.md#spec-spw-zone-text
+    zone_target = spw_row({"rows": spw_read(columns_write_env)[0]}, "SPW.801.001")
+    zone_ref = spw_ref_of(columns_write_env, zone_target[0]) if zone_target else None
+    zone_state, _ = context_of(columns_write_env)
+    _zone_answer, zone_code, _zone_env = spw_edit_row(
+        columns_write_env, zone_ref, zone_state.get("revision"),
+        extra_columns=[{"type": "zone", "value": "А3"}]) if zone_ref else ({}, "no_ref", {})
+    zone_seen = spw_row({"rows": spw_read(columns_write_env)[0]}, "SPW.801.001")
+    zone_columns = spw_columns(zone_seen[0]) if zone_seen else {}
+    zone_note_kept = str(zone_columns.get("note") or "") == "Прим. колонок"
+    rep.add("SPEC-09.zone_cyrillic_written",
+            "зона записана кириллицей в пределах измеренной ёмкости ячейки («А3»): обе дороги читают «А3», "
+            "а «Примечание» не изменилось",
+            "PASS" if (zone_ref and not zone_code and str(zone_columns.get("zone") or "") == "А3"
+                       and zone_note_kept) else "FAIL",
+            f"код={zone_code} колонки={zone_columns} примечание_прежнее={zone_note_kept}")
+    columns_requested["zone"] = "А3"
+
     columns_save_state, _ = context_of(columns_write_env)
     _columns_save_env, columns_save_code = call(
         "kompas_save_document",
@@ -61034,7 +61101,25 @@ def specification_checks(client, rep, app_id, workdir):
         extra_columns=[{"type": "user", "number": 5, "value": "Нет такой колонки"}]) if missing_ref \
         else (None, "no_ref", {})
     missing_text = str(((missing_env or {}).get("error") or {}).get("message") or "")
+    # Длинная зона отвергается ДО мутации: ИЗМЕРЕНО, что иначе КОМПАС кладёт в ячейку «@100~)» и дописывает
+    # текст в «Примечание» - колонку, которую вызов не называл (дефект клиентской приёмки 0.15.0).
+    # История: docs/decisions/bom.md#spec-spw-zone-text
+    long_zone_rel = spw_row({"rows": spw_read(negatives_write)[0]}, "SPW.801.001")
+    long_zone_ref = spw_ref_of(negatives_write, long_zone_rel[0]) if long_zone_rel else None
+    long_zone_state, _ = context_of(negatives_write)
+    _long_zone_result, long_zone_code, long_zone_env = spw_edit_row(
+        negatives_write, long_zone_ref, long_zone_state.get("revision"),
+        extra_columns=[{"type": "zone", "value": "Зона А"}]) if long_zone_ref else (None, "no_ref", {})
+    long_zone_text = str(((long_zone_env or {}).get("error") or {}).get("message") or "")
     negatives_rows_after = spw_read(negatives_write)[0]
+    rep.add("SPEC-09.zone_over_cell_refused",
+            "зона длиннее измеренной ёмкости ячейки («Зона А») отвергается INVALID_ARGUMENT ДО мутации, отказ "
+            "называет ёмкость и «Примечание», а строка и её колонки не изменились",
+            "PASS" if (long_zone_code == "INVALID_ARGUMENT" and "3" in long_zone_text
+                       and "Примечание" in long_zone_text
+                       and negatives_rows_after == negatives_rows_before) else "FAIL",
+            f"код={long_zone_code} текст={long_zone_text[:240]!r} "
+            f"строки_до_после={negatives_rows_after == negatives_rows_before}")
     rep.add("SPEC-09.negative_unwritten_type",
             "тип, который правка не пишет замером (material), отвергается CAPABILITY_UNAVAILABLE ДО мутации, и "
             "отказ называет перечень пишущихся типов",
@@ -65870,7 +65955,7 @@ def pattern_components_checks(client, rep, app_id, workdir):
             f"count1={rd2.get('count1')} ошибка перестроения={code} чтения={code2}")
 
     # ── save → close → open через MCP ──
-    asm_path = os.path.join(src_dir, "pc-grid.m3d")
+    asm_path = os.path.join(src_dir, "pc-grid.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": asm_path})
@@ -66345,7 +66430,7 @@ def pattern_path_checks(client, rep, app_id, workdir):
             f"начала после перестроения={again} count1={rd2.get('count1')} ошибка={code}")
 
     # ========= save → close → open через MCP =========
-    asm_path = os.path.join(src_dir, "pp-step.m3d")
+    asm_path = os.path.join(src_dir, "pp-step.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": asm_path})
@@ -66810,7 +66895,7 @@ def mate_ext_checks(client, rep, app_id, workdir):
             f"тип={rebuilt.get('constraint_type')} valid={rebuilt.get('valid')} "
             f"начала={positions_rebuild} (было {positions}) ошибки={code},{code_r}")
 
-    asm_path = os.path.join(src_dir, "me-symmetric.m3d")
+    asm_path = os.path.join(src_dir, "me-symmetric.a3d")
     env, code = call("kompas_save_document", {"document_id": asm,
                                               "expected_revision": current_rev(asm),
                                               "target_path": asm_path})
@@ -66969,7 +67054,7 @@ def mate_ext_checks(client, rep, app_id, workdir):
             f"тип={row2b.get('constraint_type')} valid={row2b.get('valid')} "
             f"зависимый={dep_kept} (было {dep_after}) ошибки={code},{code2b}")
 
-    asm2_path = os.path.join(src_dir, "me-dependent.m3d")
+    asm2_path = os.path.join(src_dir, "me-dependent.a3d")
     env, code = call("kompas_save_document", {"document_id": asm2,
                                               "expected_revision": current_rev(asm2),
                                               "target_path": asm2_path})

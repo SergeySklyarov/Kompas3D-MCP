@@ -1989,6 +1989,21 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
+        // The extension of a NAMED target states the kind, and KOMPAS writes the file by it — but not always with
+        // the document's kind: MEASURED, with a VISIBLE application an assembly saved to 'x.m3d' lands as a part
+        // (FileType=4, no components) while the answer says kind=assembly, and a hidden application keeps the
+        // document's kind. The extension cannot decide the outcome, so the written file's OWN marker is read after
+        // the write and a file of another kind is never published as a success.
+        // History: docs/decisions/files.md#save-extension-kind
+        var expectedExtension = DocumentFileKind.ExtensionFor(document.Kind);
+        var targetStatesAnotherKind = targetPath is not null && expectedExtension is not null
+            && !DocumentFileKind.MatchesSaveTarget(path, document.Kind);
+        var extensionWarning = targetStatesAnotherKind
+            ? $"save_target_states_another_kind — цель '{Path.GetExtension(path)}' называет не тот вид, что "
+              + $"документ ({document.Kind}, '{expectedExtension}'): КОМПАС пишет файл по расширению, поэтому вид "
+              + "записанного файла проверяется чтением самого файла, а не расширения"
+            : null;
+
         // WRITING TO THE FILE OF A DOCUMENT OPENED READ-ONLY. A call without target_path carries no path
         // field, so the Host's policy does not check it (defect H4). Saving "in place" is closed here,
         // while "save as" to a named path stays allowed.
@@ -2179,6 +2194,50 @@ public sealed partial class Api5Session : IDisposable
             }
         }
 
+        // THE FILE'S OWN KIND, read from the container's marker: the extension is what KOMPAS was TOLD, not what it
+        // wrote. MEASURED marker names: Kompas.m3d (part), Kompas.a3d (assembly), Kompas.cdw (drawing), Kompas.frw
+        // (fragment), Kompas.spw (specification). A file of another kind is a refusal, never a success: the client
+        // asked for THIS document to be saved, and the file holds another one.
+        // History: docs/decisions/files.md#save-extension-kind
+        if (extensionWarning is not null)
+        {
+            warnings = (warnings ?? []).Concat([extensionWarning]).ToArray();
+        }
+
+        var fileKind = DocumentFileKind.KindOfNativeFile(path);
+        if (fileKind is { } written && written != document.Kind)
+        {
+            var kindDetails = new Dictionary<string, object?>
+            {
+                ["document_id"] = document.Id,
+                ["path"] = path,
+                ["kind"] = document.Kind.ToString(),
+                ["file_kind"] = written.ToString(),
+                ["expected_extension"] = DocumentFileKind.ExtensionFor(document.Kind),
+                ["actual_extension"] = Path.GetExtension(path),
+            };
+            kindDetails[SavedFileWrite.DetailKey] = SaveFailureSnapshot(
+                path, mode, callResult: true, reason: "file_kind_mismatch", attempt: 1,
+                before, after, temporaryBefore, SavedFileWrite.Capture(temporaryPath));
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                $"Файл '{path}' записан, но его собственная метка называет вид '{written}', а не "
+                + $"'{document.Kind}': КОМПАС записал файл по расширению цели, и содержимое документа видом "
+                + $"'{document.Kind}' не сохранено. Ожидаемое расширение — "
+                + $"'{DocumentFileKind.ExtensionFor(document.Kind)}'; сохраните в него. Файл на диске "
+                + "принадлежит другому виду, и называть это сохранением документа нельзя.",
+                RetryPolicy.Never,
+                partialEffects: true,
+                details: kindDetails);
+        }
+
+        if (fileKind is null)
+        {
+            warnings = (warnings ?? []).Concat(["save_file_kind_unread — вид записанного файла по его собственной "
+                + "метке не прочитан: ответ называет вид документа и файл на диске, но совпадение вида файла не "
+                + "подтверждено"]).ToArray();
+        }
+
         document.Path = path;
         document.Document?.UpdateDocumentParam();
         // "Save as" to a named path was checked by the Host as writable, so writing to the document's file
@@ -2241,7 +2300,8 @@ public sealed partial class Api5Session : IDisposable
             Context(document, includeTopology: false),
             document.Revision,
             warnings,
-            nestedWritten);
+            nestedWritten,
+            fileKind?.ToString());
     }
 
     /// <summary>What the file on disk holds, in words a client can act on: a size, or the reason it is not
@@ -2603,13 +2663,14 @@ public sealed class DocumentEntry
     public bool KindVerified { get; init; }
 }
 
-/// <summary>What a confirmed save answers: the file's size and hash re-read from disk, the document context
-/// and the revision. <see cref="Warnings"/> names the non-fatal fact that the save was confirmed only on its
-/// one repeat, so a client reading the answer alone is not told the first call wrote the file.
-/// <see cref="SavedSubassemblyFiles"/> names the SUBASSEMBLY files this save wrote: MEASURED, a save of a
-/// parent assembly writes the file of a subassembly whose component was changed, and an answer that omits it
-/// leaves a change on disk unnamed.
-/// History: docs/decisions/files.md#save-file-write, docs/decisions/assembly-ext.md#nested-implemented</summary>
+/// <summary>What a confirmed save answers: the file's size and hash re-read from disk, the context, the revision,
+/// and the kind the FILE itself says it holds.</summary>
+/// <remarks>INVARIANT: <paramref name="FileKind"/> comes from the written file's marker, never from the document
+/// (MEASURED: an assembly saved to a <c>.m3d</c> target can land as a part). <c>Warnings</c> names a save
+/// confirmed only on its repeat and a file kind that could not be read; <c>SavedSubassemblyFiles</c> names the
+/// subassembly files this save wrote, because a parent save writes them (MEASURED).
+/// History: docs/decisions/files.md#save-extension-kind, docs/decisions/files.md#save-file-write,
+/// docs/decisions/assembly-ext.md#nested-implemented</remarks>
 public sealed record SaveDocumentResult(
     string? Path,
     long ByteLength,
@@ -2617,7 +2678,8 @@ public sealed record SaveDocumentResult(
     DocumentContextDto Context,
     long Revision,
     IReadOnlyList<string>? Warnings = null,
-    IReadOnlyList<string>? SavedSubassemblyFiles = null);
+    IReadOnlyList<string>? SavedSubassemblyFiles = null,
+    string? FileKind = null);
 
 /// <summary>Struct-type selectors for <c>KompasObject.GetParamStruct(Int16)</c>, from
 /// <c>StructType2DEnum</c> (<c>Interop.Kompas6Constants.dll</c>). The member names are the vendor's;

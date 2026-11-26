@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-11-13T08:04:02+01:00, часы машины +01:00.
+Дата сборки аудита: 2026-11-26T16:48:22+01:00, часы машины +01:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
-- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 178, маршрутов 818.
-- Измеряемая сборка: `release_build`, коммит `780bf03`, дерево чистое; `KompasMcp.Host.dll` sha256 `17feb6c5892bce1e0eb76bfe2fd0b03154b7564c9ea8c475c8a789f604dc97b7`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 179, маршрутов 830.
+- Измеряемая сборка: `release_build`, коммит `5a5584d`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `b8c9448eae103625d5d8d666189aa2f6950fb82ee0a2d148aaa8d272352d87c4`.
 
 ## 2. Сверка полноты
 
@@ -19,11 +19,11 @@
 | tools_with_schema | 11 |
 | schemas_matching_wire_by_property_names | 11 |
 | schemas_matching_wire_by_shape | 11 |
-| matrix_rows | 237 |
-| catalog_modes_and_variants | 240 |
-| com_routes | 829 |
-| com_routes_confirmed_by_documentation | 818 |
-| com_routes_confirmed_over_wire | 818 |
+| matrix_rows | 242 |
+| catalog_modes_and_variants | 245 |
+| com_routes | 841 |
+| com_routes_confirmed_by_documentation | 830 |
+| com_routes_confirmed_over_wire | 830 |
 | com_routes_confirmed_from_mirror | 0 |
 | com_routes_unconfirmed | 0 |
 | com_routes_confirmed_by_name | 5 |
@@ -31,22 +31,22 @@
 | documentation_routes_unmeasured | 0 |
 | object_type_constants_checked | 12 |
 | object_type_constants_mismatched | 0 |
-| rows_claiming_verified | 233 |
+| rows_claiming_verified | 238 |
 | rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 29 |
-| rows_actions_without_required_calls | 36 |
-| rows_status_lowered_by_unsupported_actions | 36 |
-| acceptance_rows | 2322 |
-| acceptance_calls_journal | 20570 |
-| acceptance_rows_with_call_window | 2322 |
+| rows_action_without_dedicated_row | 34 |
+| rows_actions_without_required_calls | 41 |
+| rows_status_lowered_by_unsupported_actions | 41 |
+| acceptance_rows | 2368 |
+| acceptance_calls_journal | 20746 |
+| acceptance_rows_with_call_window | 2368 |
 | required_of_mismatches_matrix_vs_profile | 16 |
 | dependency_verdict_control_proved | None |
 
 Инструментов без присутствия в записях покрытия: 3.
 Инструментов вне профилей по природе (названный класс): 7 - `kompas_acquire_session` (захват сеанса вторым клиентом - владение сеансом, а не режим); `kompas_capabilities` (что реально поддержано на этой установке - служебный отчёт); `kompas_connect` (подключение к уже запущенному КОМПАС - владение сеансом, а не режим); `kompas_disconnect` (отсоединение от КОМПАС - владение сеансом, а не режим); `kompas_health` (состояние сервера (в том числе разрыв связи) - служебный отчёт); `kompas_release_session` (освобождение сеанса - владение сеансом, а не режим); `kompas_session_status` (состояние сеанса и владельца - владение сеансом, а не режим).
 Классы присутствия: {'absent': 9, 'route_field': 5}.
-COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-twins': 11}.
+COM-маршрутов по сборкам: {'api7': 541, 'api5': 289, 'adapter-twins': 11}.
 
 ## 3. Инструменты
 
@@ -69,7 +69,7 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 
 ## 4. Режимы и варианты каталога
 
-Всего строк матрицы: 237.
+Всего строк матрицы: 242.
 
 | Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
 |---|---|---|---|---|---|
@@ -296,6 +296,11 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 | `SPEC-02.row.create` | BOM | mcp_verified | kompas_specification_add_row | kompas_specification_add_row: SpecificationDescriptions.Acti | Подтверждено |
 | `SPEC-03.row.edit` | BOM | mcp_verified | kompas_specification_edit_row | kompas_specification_edit_row: строка находится по row_ref.u | Подтверждено |
 | `SPEC-04.row.delete` | BOM | mcp_verified | kompas_specification_delete_row | kompas_specification_delete_row: строка находится по row_ref | Подтверждено |
+| `SPEC-05.spw.row.create` | BOM | mcp_verified | kompas_specification_add_row | kompas_specification_add_row по document_id документа-специф | Подтверждено |
+| `SPEC-06.spw.row.edit` | BOM | mcp_verified | kompas_specification_edit_row | kompas_specification_edit_row по document_id документа-специ | Подтверждено |
+| `SPEC-07.spw.row.delete` | BOM | mcp_verified | kompas_specification_delete_row | kompas_specification_delete_row по document_id документа-спе | Подтверждено |
+| `SPEC-08.spw.columns.read` | BOM | mcp_verified | kompas_get_specification_document | kompas_get_specification_document по path или document_id до | Подтверждено |
+| `SPEC-09.spw.columns.write` | BOM | mcp_verified | kompas_specification_edit_row | kompas_specification_edit_row с extra_columns по документу-с | Подтверждено |
 | `SM-24.move_faces` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Подтверждено |
 | `SM-24.move_faces.tangent_group` | SM-24 | metadata_found | kompas_move_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceMovers | Подтверждено |
 | `SM-24.delete_faces.open_shell` | SM-24 | metadata_found | kompas_delete_faces | API7: ISurfaceContainer (приведением от IPart7) → FaceRemove | Подтверждено |
@@ -1223,6 +1228,32 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
   - Строка, которую КОМПАС ведёт от компонента, удаляется как обычная и предупреждается в notes, но восстанавливается ли она после перестроения или сохранения - не измерено: постановки с такой строкой нет, а документированного маршрута, создающего связь строки с компонентом (AddWithParam + IPropertyKeeper), в COM нет.
   - Перенумерация позиций после удаления не делается: позиции остальных строк остаются теми, что записал документ, и это видно в перечитанном списке.
   - Удаление объектов документа-спецификации .spw (ksSpcDocument.ksDeleteObj) и удаление описания спецификации (ISpecificationDescription.Delete) не входят: у .spw свои строки и свой маршрут, а описание спецификации - не строка.
+- `SPEC-05.spw.row.create`:
+  - Доп. колонки пишутся только при СОЗДАНИИ: записанная после Update() основная колонка в файл не попадает (измерено), поэтому правка доп. колонок у существующей строки - отдельный наряд SPEC_SPW_COLUMNS.
+  - У .spw API5-дорога существует только у АКТИВНОГО документа (SpcActiveDocument), а v24 не документирует вызова активации: неактивный .spw - CAPABILITY_UNAVAILABLE до мутации с названным выходом (закрыть и открыть kompas_open_document). Открытый по path документ открыт только для чтения и для записи требует access=edit.
+  - Колонка ищется сначала в основных, затем в дополнительных колонках объекта, и которой нет - CAPABILITY_UNAVAILABLE с перечнем доступных; блок исполнений адресуется в Column[тип, номер, блок], а значение пишется в элемент с индексом блока (у постановки все колонки одноблочные).
+  - Строка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-05.save_reopen).
+  - Связь строки с компонентом (AddWithParam + IPropertyKeeper) этим инструментом не создаётся: она документирована и делается отдельным инструментом наряда SPEC_SPW_LINK_ROW.
+- `SPEC-06.spw.row.edit`:
+  - Правка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-06.save_reopen).
+  - Правка доп. колонок у существующей строки не входит (наряд SPEC_SPW_COLUMNS): этот инструмент меняет только marking, name, quantity и position.
+  - API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до правки с названным выходом.
+  - Перенос раздела не входит: Section доступен только для чтения, а SetSection в файл не попадает (измерено).
+- `SPEC-07.spw.row.delete`:
+  - Удаление живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-07.save_reopen).
+  - Удаление объектов документа-спецификации (ksSpcDocument.ksDeleteObj) и удаление описания спецификации не входят: удаляется СТРОКА маршрутом API7.
+  - Строка, которую КОМПАС ведёт от компонента, удаляется как обычная с предупреждением specification_row_may_return; восстанавливается ли она - не измерено (нет постановки со связанной строкой).
+  - API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до удаления.
+- `SPEC-08.spw.columns.read`:
+  - Признак column_editable - замер на постановке прибора (.spw стиля 1 и модель того же стиля): типы, колонок которых в постановке нет (материал, код, завод, номер/наименование/код документа, код ОКП), в перечень пишущихся не входят и правкой отвергаются.
+  - У .spw признак публикуется у каждой строки; у модели тот же признак приходит в ответах создания и правки строки, а kompas_get_specification колонок не публикует.
+  - Три ответа чтения различаются: null - колонки нет, "" - колонка есть и пуста, 0 у массы после сохранения - пусто.
+- `SPEC-09.spw.columns.write`:
+  - Пишутся замером подтверждённые типы: format, zone, note, mass, user (mass - через ksSpcMassa). Типы 9 и 11-16 в перечень не входят: колонок этих типов нет ни в одной постановке, и правка отвергает их CAPABILITY_UNAVAILABLE до мутации, а не выдаёт запись за успех.
+  - В модели колонка zone правкой НЕ пишется (измерено: ksSetSpcObjectColumnText отвечает 1, колонка остаётся пустой и в сеансе, и в файле) - инструмент отвергает её до мутации; остальные четыре типа в модели пишутся и переживают сохранение.
+  - Позицию строки .spw ставит ДОКУМЕНТ: PutPosition раздела = TRUE и InitialPosition = 1 (ispecificationtuningsection_putposition.html, ispecificationtuning_initialposition.html), поэтому правка position читается в сеансе, а файл после сохранения держит номер строки в разделе; ответ правки называет это в warnings и в unverified_aspects. Позиция строки модели сохранение переживает.
+  - Масса адресуется только первой колонкой основного блока: ksSpcMassa не принимает ни номера, ни блока. Колонка с несколькими блоками исполнений пишется в элемент своего блока - ASSUMPTION о порядке элементов, как у создания.
+  - Колонка типа «Запись» (ksValueTypeRecord) не пишется: контракт передаёт текст, а элемент составной; постановки с такой колонкой нет, поэтому отказ названный, а не измеренный.
 - `SM-24.move_faces`:
   - Группа mcp-smoke E5 пройдена целиком: 56 строк PASS, FAIL 0. save_reopen измерен (E5.MOVE.save_reopen), тело без истории построения тоже (E5.STEP.fixture / .move / .refusal).
   - Сторона перемещения измерена обеими сторонами на одной грани бруска: reverse=false уводит грань ПРОТИВ внешней нормали (объём 24000 -> 18000 мм3), reverse=true - по нормали (обратный вызов вернул 24000). IFaceMover.Direction - логический признак, поэтому контракт называет сторону полем reverse, а фактическое смещение со знаком сообщается в observed_offset_mm.
@@ -1811,8 +1842,8 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 | `ksDocument3D.GetSpecification` | api5 | method | `Object GetSpecification()` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.UniqueNumber` | api7 | property | `prop Double UniqueNumber` | 6 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.Section` | api7 | property | `prop Int32 Section` | 2 | Подтверждено | перечень интерфейса |
-| `ksSpecification.ksGetSpcObject` | api5 | method | `Int32 ksGetSpcObject(Double objNumb)` | 2 | Подтверждено | перечень интерфейса |
-| `ksSpecification.ksGetSpcObjectNumber` | api5 | method | `Double ksGetSpcObjectNumber(Int32 spcObj)` | 2 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcObject` | api5 | method | `Int32 ksGetSpcObject(Double objNumb)` | 7 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksGetSpcObjectNumber` | api5 | method | `Double ksGetSpcObjectNumber(Int32 spcObj)` | 6 | Подтверждено | перечень интерфейса |
 | `ksSpecification.ksGetSpcSectionName` | api5 | method | `String ksGetSpcSectionName(Int32 spcObj)` | 2 | Подтверждено | перечень интерфейса |
 | `ksSpecification.ksGetSpcObjectColumnText` | api5 | method | `String ksGetSpcObjectColumnText(Int32 spcObj, Int32 columnType, Int32 ` | 2 | Подтверждено | перечень интерфейса |
 | `ISpecificationDescription.SpecificationStyle` | api7 | property | `prop SpecificationStyle SpecificationStyle` | 1 | Подтверждено | перечень интерфейса |
@@ -1820,15 +1851,27 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 | `ISpecificationSectionStyle.Name` | api7 | property | `prop String Name` | 1 | Подтверждено | перечень интерфейса |
 | `KompasObject.SpcActiveDocument` | api5 | method | `Object SpcActiveDocument()` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.Columns` | api7 | property | `prop SpecificationColumns Columns` | 3 | Подтверждено | перечень интерфейса |
-| `ISpecificationColumnItems.Count` | api7 | property | `prop Int32 Count` | 2 | Подтверждено | перечень интерфейса |
+| `ISpecificationColumn.ColumnItems` | api7 | property | `prop SpecificationColumnItems ColumnItems` | 4 | Подтверждено | перечень интерфейса |
+| `ISpecificationColumnItems.Count` | api7 | property | `prop Int32 Count` | 5 | Подтверждено | перечень интерфейса |
+| `ISpecificationBaseObject.AdditionalColumns` | api7 | property | `prop SpecificationColumns AdditionalColumns` | 2 | Подтверждено | перечень интерфейса |
+| `ISpecificationColumn.ColumnType` | api7 | property | `prop ksSpecificationColumnTypeEnum ColumnType` | 1 | Подтверждено | перечень интерфейса |
+| `ISpecificationColumn.ColumnTypeNumber` | api7 | property | `prop Int32 ColumnTypeNumber` | 1 | Подтверждено | перечень интерфейса |
+| `ISpecificationColumn.ValueType` | api7 | property | `prop ksValueTypeEnum ValueType` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationDescriptions.Active` | api7 | property | `prop SpecificationDescription Active` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationDescriptions.Add` | api7 | method | `SpecificationDescription Add(String LayoutName, Int32 StyleID, String ` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationDescription.BaseObjects` | api7 | property | `prop SpecificationBaseObjects BaseObjects` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObjects.Add` | api7 | method | `SpecificationBaseObject Add(Int32 SectionNumb, Double AttrNumb)` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationObject.Delete` | api7 | method | `Boolean Delete()` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSpcObjectEdit` | api5 | method | `Int32 ksSpcObjectEdit(Int32 spcObj)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSpcCount` | api5 | method | `Int32 ksSpcCount(Int16 ispoln, String sCount)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSpcPosition` | api5 | method | `Int32 ksSpcPosition(Int32 pos)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSetSpcObjectColumnText` | api5 | method | `Int32 ksSetSpcObjectColumnText(Int32 columnType, Int32 ispoln, Int32 b` | 2 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSpcMassa` | api5 | method | `Int32 ksSpcMassa(String sMassa)` | 1 | Подтверждено | перечень интерфейса |
+| `ksSpecification.ksSpcObjectEnd` | api5 | method | `Int32 ksSpcObjectEnd()` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.State` | api7 | property | `prop ksSpecificationObjectStateEnum State` | 1 | Подтверждено | перечень интерфейса |
 | `ISpecificationBaseObject.SyncronizeWithProperties` | api7 | property | `prop Boolean SyncronizeWithProperties` | 1 | Подтверждено | перечень интерфейса |
+| `ISpecificationDescription.SpecificationTuning` | api7 | property | `prop SpecificationTuning SpecificationTuning` | 1 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.formatBinary` | api5 | property | `prop Boolean formatBinary` | 2 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.length` | api5 | property | `prop Double length` | 2 | Подтверждено | перечень интерфейса |
 | `ksAdditionFormatParam.angle` | api5 | property | `prop Double angle` | 2 | Подтверждено | перечень интерфейса |
@@ -2131,7 +2174,7 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 
 Серьёзность: средняя.
 
-36 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, IGES.export
+41 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, IGES.export
 
 Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
 
@@ -2139,7 +2182,7 @@ COM-маршрутов по сборкам: {'api7': 535, 'api5': 283, 'adapter-
 
 Серьёзность: низкая.
 
-29 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand
+34 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand
 
 Исправление: назвать действие в имени строки или объявить маршрут строки
 

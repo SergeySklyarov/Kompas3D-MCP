@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-11-13T08:04:02+01:00, часы машины +01:00",
+  "date": "2026-11-26T16:48:22+01:00, часы машины +01:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -15,12 +15,12 @@
   "documentation_source": {
    "url": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/",
    "version": "24",
-   "retrieved": "2026-11-13",
-   "pages_read": 178,
-   "routes_checked": 818,
+   "retrieved": "2026-11-26",
+   "pages_read": 179,
+   "routes_checked": 830,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка (цепочка читается с Automation- и ksAPI-страницы одного интерфейса), групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и 5 подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 818,
+    "wire": 830,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -28,7 +28,7 @@
     "directory": "reference/kompas-sdk-v24/sdk-docs",
     "present": true,
     "pages": 2255,
-    "captured": "2026-10-09",
+    "captured": "2026-11-17",
     "note": "вторая основа, названная заказчиком 13.10.2026: страница читается из копии, когда провод отказал, и вердикт помечается `basis = mirror`. Копия НЕПОЛНА, поэтому «страницы нет» по ней не равно «страницы нет в справке»"
    },
    "circuit_breaker": {
@@ -45,8 +45,8 @@
     "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда"
    },
    "links": {
-    "checked": 818,
-    "ok": 818,
+    "checked": 830,
+    "ok": 830,
     "failed": 0,
     "not_verified": 0
    }
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "32484b6cd621dcce1e3bf80164b7635248505a3fff4124df36f85f6b1f945889",
-   "host_dll_sha256": "17feb6c5892bce1e0eb76bfe2fd0b03154b7564c9ea8c475c8a789f604dc97b7",
+   "host_sha256": "adfae6c47cb16657b5918051f539c10c8719940cadfcf38a4b9dd011a99a9830",
+   "host_dll_sha256": "b8c9448eae103625d5d8d666189aa2f6950fb82ee0a2d148aaa8d272352d87c4",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "5d5b5ae0d068e1dab2ccacb25a964633884e9bd55ae4549a4d211a88b65d39a5",
-   "worker_dll_sha256": "450caea395105cca41ff355a363ae995f527f1afc390740ab85b132ad7f4be65",
-   "adapter_sha256": "1877cddd06de16eb1604689d61ac832ca0d8114741a93251a035b6e4d22e0158",
-   "source_commit": "780bf03",
-   "source_tree_dirty": false,
+   "worker_sha256": "ea96a85e35c20779705f4a174c72266cff6f0c26aa220ed3e09f30fc28b41477",
+   "worker_dll_sha256": "fb48dca4a33e2cf655454d0e2cb33b4a1998445f2662e717b632fdf43545a5e3",
+   "adapter_sha256": "d8c3034366f56f3e2c5ab597ea21c680c60498a1faf2e27c0e1330203477dc16",
+   "source_commit": "5a5584d",
+   "source_tree_dirty": true,
    "tools_count": 14,
-   "rows_complete_run": 2322,
+   "rows_complete_run": 2368,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -132,16 +132,16 @@
     "absent": 9,
     "route_field": 5
    },
-   "matrix_rows": 237,
-   "catalog_modes_and_variants": 240,
-   "com_routes": 829,
+   "matrix_rows": 242,
+   "catalog_modes_and_variants": 245,
+   "com_routes": 841,
    "com_routes_by_assembly": {
-    "api7": 535,
-    "api5": 283,
+    "api7": 541,
+    "api5": 289,
     "adapter-twins": 11
    },
-   "com_routes_confirmed_by_documentation": 818,
-   "com_routes_confirmed_over_wire": 818,
+   "com_routes_confirmed_by_documentation": 830,
+   "com_routes_confirmed_over_wire": 830,
    "com_routes_confirmed_from_mirror": 0,
    "com_routes_unconfirmed": 0,
    "com_routes_confirmed_by_name": 5,
@@ -149,15 +149,15 @@
    "documentation_routes_unmeasured": 0,
    "object_type_constants_checked": 12,
    "object_type_constants_mismatched": 0,
-   "rows_claiming_verified": 233,
+   "rows_claiming_verified": 238,
    "rows_verified_without_any_linked_row": 0,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 29,
-   "rows_actions_without_required_calls": 36,
-   "rows_status_lowered_by_unsupported_actions": 36,
-   "acceptance_rows": 2322,
-   "acceptance_calls_journal": 20570,
-   "acceptance_rows_with_call_window": 2322,
+   "rows_action_without_dedicated_row": 34,
+   "rows_actions_without_required_calls": 41,
+   "rows_status_lowered_by_unsupported_actions": 41,
+   "acceptance_rows": 2368,
+   "acceptance_calls_journal": 20746,
+   "acceptance_rows_with_call_window": 2368,
    "required_of_mismatches_matrix_vs_profile": 16,
    "dependency_verdict_control_proved": null
   }
@@ -27928,6 +27928,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ISpecificationColumn.ColumnItems",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ISpecificationBaseObject.Columns",
      "documentation": "Подтверждено"
     },
@@ -27994,7 +27998,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 17
+    "members": 18
    },
    "actions": {
     "discover": "verified",
@@ -28107,6 +28111,10 @@
     },
     {
      "member": "IFillet.BaseObjects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationColumn.ColumnItems",
      "documentation": "Подтверждено"
     },
     {
@@ -28288,11 +28296,15 @@
     {
      "member": "IParametriticConstraint.Value",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationColumn.ValueType",
+     "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 60
+    "members": 62
    },
    "actions": {
     "discover": "verified",
@@ -28343,6 +28355,10 @@
    "declared_route": "kompas_specification_edit_row: строка находится по row_ref.unique_number в ISpecificationDescription.Objects и подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя); до правки сверяется маркировка (расхождение - STALE_REFERENCE, модель не тронута), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / ksSpcPosition -> ksSpcObjectEnd (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html); после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами (API7 Objects -> Columns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а НЕназванные - с прежним значением; расхождение - GEOMETRY_FAILED со снимком. Правка через API7 не используется: измерено, что на существующей строке ColumnItems.Value и Text.Str дают Update() = false и в файл не попадают",
    "com": [
     {
+     "member": "ISpecificationColumn.ColumnItems",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ISpecificationBaseObject.Columns",
      "documentation": "Подтверждено"
     },
@@ -28360,6 +28376,26 @@
     },
     {
      "member": "ksSpecification.ksGetSpcSectionName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEdit",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEnd",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcPosition",
      "documentation": "Подтверждено"
     },
     {
@@ -28529,7 +28565,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 46
+    "members": 52
    },
    "actions": {
     "discover": "verified",
@@ -28657,6 +28693,645 @@
     "Строка, которую КОМПАС ведёт от компонента, удаляется как обычная и предупреждается в notes, но восстанавливается ли она после перестроения или сохранения - не измерено: постановки с такой строкой нет, а документированного маршрута, создающего связь строки с компонентом (AddWithParam + IPropertyKeeper), в COM нет.",
     "Перенумерация позиций после удаления не делается: позиции остальных строк остаются теми, что записал документ, и это видно в перечитанном списке.",
     "Удаление объектов документа-спецификации .spw (ksSpcDocument.ksDeleteObj) и удаление описания спецификации (ISpecificationDescription.Delete) не входят: у .spw свои строки и свой маршрут, а описание спецификации - не строка."
+   ]
+  },
+  {
+   "operation_id": "SPEC-05.spw.row.create",
+   "family": "BOM",
+   "queue": "SPEC_SPW_ROW_WRITE_0_15",
+   "kind": "profile_mode",
+   "context": "specification.document",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_specification_add_row"
+   ],
+   "schemas": [
+    "schemas/kompas_specification_add_row.json"
+   ],
+   "declared_route": "kompas_specification_add_row по document_id документа-спецификации .spw: SpecificationDescriptions.Active (у .spw описание уже есть, StyleID=1) -> ISpecificationBaseObjects.Add(section, 0) кладёт объект в КОЛЛЕКЦИЮ -> колонки основных (ISpecificationObject.Columns) и дополнительных (AdditionalColumns) коллекций по типу, номеру и блоку -> ОДИН ISpecificationObject.Update() создаёт строку; extra_columns пишутся ДО первого Update() (измерено: записанное после него в файл не попадает), масса и пользовательские колонки живут в AdditionalColumns; успех подтверждается перечитыванием описания заново, опознанием строки как НОВОГО объекта Objects и сверкой каждой записанной колонки обеими дорогами - API7 (Columns/AdditionalColumns -> ColumnItems) и API5 SpcActiveDocument().GetSpecification() -> ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя) -> ksGetSpcObjectColumnText(тип, номер, блок); расхождение - GEOMETRY_FAILED со снимком (ispecificationbaseobjects_add.html, ispecificationobject_update.html, ikompasdocument_specificationdescriptions.html, ispecificationobject_additionalcolumns.html, ispecificationcolumns_column.html, ispecificationcolumnitem_value.html, ksspecificationcolumntypeenum.html, kompasobject_spcactivedocument.html, ksspcdocument_getspecification.html)",
+   "com": [
+    {
+     "member": "ISpecificationDescriptions.Active",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICopiesGeometry.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntityCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViewProjectionManager.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksBodyCollection.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILofts.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViews.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescriptions.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObjects.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoints3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlanes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxes3D.Add",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.AdditionalColumns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationColumn.ColumnItems",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Columns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.GetSpecification",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectNumber",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescription.Objects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.Section",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Section",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "KompasObject.SpcActiveDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksPart.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPart7.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksEntity.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDismantleStep.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDiametralDimension.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IStamp.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ITechnicalDemand.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IViewProjection7.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAssociationView.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMateConstraint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDynamicCrossSection.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISheetMetalBody.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISheetMetalBend.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISheetMetalHole.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISheetMetalCut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IDrawingObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPoint3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPlane3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IChamfer.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IHole3D.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IAxis3DBy2Points.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IRotated.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFillet.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBoolean.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISplitSolid.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICut.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IBodyReposition.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IPathPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ILinearPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ICircularPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IMirrorPattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IFeaturePattern.Update",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISketch.Update",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 58
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SPEC-05.discovery",
+    "SPEC-05.schema",
+    "SPEC-05.open_for_write",
+    "SPEC-05.create_with_columns",
+    "SPEC-05.read_by_other_tool",
+    "SPEC-05.columns_published",
+    "SPEC-05.save_reopen",
+    "SPEC-05.negative_unknown_column",
+    "SPEC-05.negative_duplicate_column",
+    "SPEC-05.negative_inactive"
+   ],
+   "limitations": [
+    "Доп. колонки пишутся только при СОЗДАНИИ: записанная после Update() основная колонка в файл не попадает (измерено), поэтому правка доп. колонок у существующей строки - отдельный наряд SPEC_SPW_COLUMNS.",
+    "У .spw API5-дорога существует только у АКТИВНОГО документа (SpcActiveDocument), а v24 не документирует вызова активации: неактивный .spw - CAPABILITY_UNAVAILABLE до мутации с названным выходом (закрыть и открыть kompas_open_document). Открытый по path документ открыт только для чтения и для записи требует access=edit.",
+    "Колонка ищется сначала в основных, затем в дополнительных колонках объекта, и которой нет - CAPABILITY_UNAVAILABLE с перечнем доступных; блок исполнений адресуется в Column[тип, номер, блок], а значение пишется в элемент с индексом блока (у постановки все колонки одноблочные).",
+    "Строка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-05.save_reopen).",
+    "Связь строки с компонентом (AddWithParam + IPropertyKeeper) этим инструментом не создаётся: она документирована и делается отдельным инструментом наряда SPEC_SPW_LINK_ROW."
+   ]
+  },
+  {
+   "operation_id": "SPEC-06.spw.row.edit",
+   "family": "BOM",
+   "queue": "SPEC_SPW_ROW_WRITE_0_15",
+   "kind": "profile_mode",
+   "context": "specification.document",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_specification_edit_row"
+   ],
+   "schemas": [
+    "schemas/kompas_specification_edit_row.json"
+   ],
+   "declared_route": "kompas_specification_edit_row по document_id документа-спецификации .spw: строка находится по row_ref.unique_number в ISpecificationDescription.Objects и подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber (сверка указателя), её маркировка сверяется со ссылкой (расхождение - STALE_REFERENCE, документ не тронут), затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип колонки, 1, 0) / ksSpcCount(1) / ksSpcPosition -> ksSpcObjectEnd; API5-дорога начинается со SpcActiveDocument().GetSpecification() и существует только у активного документа-спецификации, поэтому неактивный .spw - CAPABILITY_UNAVAILABLE до правки; после ksSpcObjectEnd строка перечитывается ОБЕИМИ дорогами (API7 Objects -> Columns/AdditionalColumns -> ColumnItems и API5 ksGetSpcObjectColumnText + ksGetSpcSectionName), запрошенные поля сверяются с запросом, а НЕназванные - с прежним значением; расхождение - GEOMETRY_FAILED со снимком (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspccount.html, ksspecification_ksspcposition.html, ksspecification_ksspcobjectend.html, kompasobject_spcactivedocument.html)",
+   "com": [
+    {
+     "member": "ISpecificationBaseObject.AdditionalColumns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationColumn.ColumnItems",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Columns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.GetSpecification",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectNumber",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcSectionName",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcCount",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEdit",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEnd",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcPosition",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescription.Objects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "KompasObject.SpcActiveDocument",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 15
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SPEC-06.discovery",
+    "SPEC-06.edit_marking",
+    "SPEC-06.edit_name",
+    "SPEC-06.edit_quantity",
+    "SPEC-06.edit_position",
+    "SPEC-06.edit_together",
+    "SPEC-06.untouched_checked",
+    "SPEC-06.save_reopen",
+    "SPEC-06.position_after_reopen",
+    "SPEC-06.negative_stale_reference",
+    "SPEC-06.negative_unknown_row",
+    "SPEC-06.negative_inactive"
+   ],
+   "limitations": [
+    "Правка живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-06.save_reopen).",
+    "Правка доп. колонок у существующей строки не входит (наряд SPEC_SPW_COLUMNS): этот инструмент меняет только marking, name, quantity и position.",
+    "API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до правки с названным выходом.",
+    "Перенос раздела не входит: Section доступен только для чтения, а SetSection в файл не попадает (измерено)."
+   ]
+  },
+  {
+   "operation_id": "SPEC-07.spw.row.delete",
+   "family": "BOM",
+   "queue": "SPEC_SPW_ROW_WRITE_0_15",
+   "kind": "profile_mode",
+   "context": "specification.document",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_specification_delete_row"
+   ],
+   "schemas": [
+    "schemas/kompas_specification_delete_row.json"
+   ],
+   "declared_route": "kompas_specification_delete_row по document_id документа-спецификации .spw: строка находится по row_ref.unique_number в ISpecificationDescription.Objects общим кодом правки, подтверждается api5:ksGetSpcObject -> ksGetSpcObjectNumber и сверкой маркировки, значения читаются обеими дорогами ДО удаления, затем документированный ISpecificationObject.Delete() (ispecificationobject_delete.html); после вызова список перечитывается ОБЕИМИ дорогами: API7 Objects (строки с этим номером нет, строк ровно на одну меньше, прочие на месте по номеру и значениям) и API5 ksGetSpcObject по удалённому номеру (указателя нет); Delete() = false, исключение или неподтверждённое удаление - отказ со снимком, а не успех; неактивный .spw - CAPABILITY_UNAVAILABLE до удаления, потому что отсутствие обязано читаться обеими дорогами (kompasobject_spcactivedocument.html, ispecificationobject_state.html, ispecificationbaseobject_syncronizewithproperties.html)",
+   "com": [
+    {
+     "member": "IDrawingObject.Delete",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationObject.Delete",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectNumber",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescription.Objects",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 5
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SPEC-07.discovery",
+    "SPEC-07.delete_created",
+    "SPEC-07.neighbours_intact",
+    "SPEC-07.save_reopen",
+    "SPEC-07.negative_stale_deleted",
+    "SPEC-07.negative_stale_marking",
+    "SPEC-07.negative_inactive"
+   ],
+   "limitations": [
+    "Удаление живёт в документе до kompas_save_document: файл этим вызовом не пишется, и это названо в unverified_aspects; переживание сохранения и переоткрытия проверяет приёмка (SPEC-07.save_reopen).",
+    "Удаление объектов документа-спецификации (ksSpcDocument.ksDeleteObj) и удаление описания спецификации не входят: удаляется СТРОКА маршрутом API7.",
+    "Строка, которую КОМПАС ведёт от компонента, удаляется как обычная с предупреждением specification_row_may_return; восстанавливается ли она - не измерено (нет постановки со связанной строкой).",
+    "API5-дорога у .spw существует только у активного документа, и сервер документ не активирует: неактивный .spw - CAPABILITY_UNAVAILABLE до удаления."
+   ]
+  },
+  {
+   "operation_id": "SPEC-08.spw.columns.read",
+   "family": "BOM",
+   "queue": "SPEC_SPW_COLUMNS_0_15",
+   "kind": "profile_mode",
+   "context": "specification.document",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_get_specification_document"
+   ],
+   "schemas": [
+    "schemas/kompas_get_specification_document.json"
+   ],
+   "declared_route": "kompas_get_specification_document по path или document_id документа-спецификации .spw: IKompasDocument.SpecificationDescriptions.Active -> Objects -> Columns/AdditionalColumns (основные и дополнительные колонки объекта) -> ColumnItems.Item(i).Value по типу и номеру колонки; публикуются columns (значения по ключу типа и номера), column_types (тип значения каждой колонки, ispecificationcolumn_valuetype.html) и column_editable - признак, что правка пишет колонку этого типа. Перечень пишущихся получен замером тип за типом (правка -> Save -> другой процесс -> чтение обеими дорогами) и живёт в одном месте кода (SpecificationColumnKeys.Editable/NotWrittenInModel), поэтому у модели зона помечена НЕпишущейся: ksSetSpcObjectColumnText(zone) отвечает 1 и не пишет ничего; отказ правки цитирует тот же перечень. Вторая, независимая дорога - API5 SpcActiveDocument -> GetSpecification -> ksGetSpcObject -> ksGetSpcObjectColumnText у активного документа (kompasobject_spcactivedocument.html, ispecificationobject_columns.html, ispecificationobject_additionalcolumns.html, ispecificationcolumns_column.html, ispecificationcolumnitems_item.html, ispecificationcolumnitem_value.html, ksspecificationcolumntypeenum.html)",
+   "com": [
+    {
+     "member": "ISpecificationDescriptions.Active",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.AdditionalColumns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationColumn.ColumnItems",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationBaseObject.Columns",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.GetSpecification",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ISpecificationDescription.Objects",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.Save",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "KompasObject.SpcActiveDocument",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.value",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IParametriticConstraint.Value",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 14
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SPEC-08.columns_read",
+    "SPEC-08.editable_flag"
+   ],
+   "limitations": [
+    "Признак column_editable - замер на постановке прибора (.spw стиля 1 и модель того же стиля): типы, колонок которых в постановке нет (материал, код, завод, номер/наименование/код документа, код ОКП), в перечень пишущихся не входят и правкой отвергаются.",
+    "У .spw признак публикуется у каждой строки; у модели тот же признак приходит в ответах создания и правки строки, а kompas_get_specification колонок не публикует.",
+    "Три ответа чтения различаются: null - колонки нет, \"\" - колонка есть и пуста, 0 у массы после сохранения - пусто."
+   ]
+  },
+  {
+   "operation_id": "SPEC-09.spw.columns.write",
+   "family": "BOM",
+   "queue": "SPEC_SPW_COLUMNS_0_15",
+   "kind": "profile_mode",
+   "context": "specification.document",
+   "catalog_level": "mcp_verified",
+   "tools": [
+    "kompas_specification_edit_row"
+   ],
+   "schemas": [
+    "schemas/kompas_specification_edit_row.json"
+   ],
+   "declared_route": "kompas_specification_edit_row с extra_columns по документу-спецификации .spw либо по строке МОДЕЛИ: строка находится по row_ref.unique_number и подтверждается API5 ksGetSpcObject -> ksGetSpcObjectNumber, затем ksSpcObjectEdit -> ksSetSpcObjectColumnText(тип, номер, блок, текст) для каждой названной колонки либо ksSpcMassa(текст) для массы -> ksSpcObjectEnd; до мутации тип сверяется с ИЗМЕРЕННЫМ перечнем пишущихся (иного - CAPABILITY_UNAVAILABLE с перечнем, в модели так отвергается зона: сеттер отвечает 1 и не пишет), колонка ищется в основных и дополнительных колонках объекта, значение приводится к типу элемента; после правки строка перечитывается ОБЕИМИ дорогами, запрошенные колонки сверяются типоспецифично, НЕназванные - с прочитанными до правки, расхождение - GEOMETRY_FAILED со снимком (ksspecification_ksspcobjectedit.html, ksspecification_kssetspcobjectcolumntext.html, ksspecification_ksspcmassa.html, ksspecification_ksspcobjectend.html, ispecificationcolumnitem_value.html, ispecificationcolumns_column.html)",
+   "com": [
+    {
+     "member": "ksSpecification.ksGetSpcObject",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksGetSpcObjectNumber",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSetSpcObjectColumnText",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcMassa",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEdit",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksSpecification.ksSpcObjectEnd",
+     "documentation": "Подтверждено"
+    }
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "members": 6
+   },
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "SPEC-09.edit_type_by_type",
+    "SPEC-09.save_reopen",
+    "SPEC-09.negative_unwritten_type",
+    "SPEC-09.negative_missing_column",
+    "SPEC-09.negative_document_unchanged",
+    "SPEC-09.model_editable_flag",
+    "SPEC-09.model_column_edit",
+    "SPEC-09.model_zone_refused",
+    "SPEC-09.model_save_reopen",
+    "SPEC-03.schema"
+   ],
+   "limitations": [
+    "Пишутся замером подтверждённые типы: format, zone, note, mass, user (mass - через ksSpcMassa). Типы 9 и 11-16 в перечень не входят: колонок этих типов нет ни в одной постановке, и правка отвергает их CAPABILITY_UNAVAILABLE до мутации, а не выдаёт запись за успех.",
+    "В модели колонка zone правкой НЕ пишется (измерено: ksSetSpcObjectColumnText отвечает 1, колонка остаётся пустой и в сеансе, и в файле) - инструмент отвергает её до мутации; остальные четыре типа в модели пишутся и переживают сохранение.",
+    "Позицию строки .spw ставит ДОКУМЕНТ: PutPosition раздела = TRUE и InitialPosition = 1 (ispecificationtuningsection_putposition.html, ispecificationtuning_initialposition.html), поэтому правка position читается в сеансе, а файл после сохранения держит номер строки в разделе; ответ правки называет это в warnings и в unverified_aspects. Позиция строки модели сохранение переживает.",
+    "Масса адресуется только первой колонкой основного блока: ksSpcMassa не принимает ни номера, ни блока. Колонка с несколькими блоками исполнений пишется в элемент своего блока - ASSUMPTION о порядке элементов, как у создания.",
+    "Колонка типа «Запись» (ksValueTypeRecord) не пишется: контракт передаёт текст, а элемент составной; постановки с такой колонкой нет, поэтому отказ названный, а не измеренный."
    ]
   },
   {
@@ -32564,9 +33239,9 @@
    "family": "BOM",
    "title": "Сводка BOM по сборке, свойства компонентов и родная спецификация КОМПАС",
    "catalog_level": "mcp_verified",
-   "operations": 8,
+   "operations": 13,
    "operation_levels": {
-    "mcp_verified": 8
+    "mcp_verified": 13
    },
    "mcp_support": "kompas_get_bom / kompas_export_bom / kompas_get_component_properties / kompas_get_specification / kompas_get_specification_document"
   },
@@ -32829,7 +33504,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:258",
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:125",
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:276",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1389"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1400"
    ],
    "receivers": [
     "part",
@@ -32951,7 +33626,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.MoveFaces.cs:622",
     "src/KompasMcp.Api5Adapter/Api5Session.SheetMetalUnfold.cs:365",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1060",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1665"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1676"
    ],
    "receivers": [
     "bodies",
@@ -33405,7 +34080,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:257",
     "src/KompasMcp.Api5Adapter/Api5Session.Sections.cs:138",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:294",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:910",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:921",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:167"
    ],
    "receivers": [
@@ -33520,7 +34195,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:1062",
     "src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs:534",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:909"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:920"
    ],
    "receivers": [
     "part",
@@ -33693,7 +34368,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:2235",
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:126",
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:277",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:899"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:910"
    ],
    "receivers": [
     "part",
@@ -33840,7 +34515,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:127",
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:278",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:904"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:915"
    ],
    "receivers": [
     "part"
@@ -34004,7 +34679,7 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:306",
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:332",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:946"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:957"
    ],
    "receivers": [
     "document",
@@ -34066,8 +34741,8 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:334",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:372",
     "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:87",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1939",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1946"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1950",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1957"
    ],
    "receivers": [
     "document7",
@@ -34100,8 +34775,8 @@
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:359",
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:388",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:390",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1925",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:642"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1936",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:653"
    ],
    "receivers": [
     "document",
@@ -34149,7 +34824,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1247",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1497",
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:335",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1682"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1693"
    ],
    "receivers": [
     "document.PartNow()",
@@ -34211,7 +34886,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1250",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1505",
     "src/KompasMcp.Api5Adapter/Api5Session.Thread.cs:343",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1683"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1694"
    ],
    "receivers": [
     "array",
@@ -34846,8 +35521,8 @@
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.CopyGeometry.cs:346",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:419",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:896",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:973"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:907",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:984"
    ],
    "receivers": [
     "document",
@@ -34883,7 +35558,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.MoveFaces.cs:617",
     "src/KompasMcp.Api5Adapter/Api5Session.SheetMetalUnfold.cs:360",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1058",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1661"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1672"
    ],
    "receivers": [
     "document.PartNow()",
@@ -34917,7 +35592,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs:1121",
     "src/KompasMcp.Api5Adapter/Api5Session.SheetMetalUnfold.cs:361",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1059",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1664"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1675"
    ],
    "receivers": [
     "bodies",
@@ -36781,8 +37456,8 @@
    "type": "Object",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs:2029",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1145",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1203"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1156",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1214"
    ],
    "receivers": [
     "application.Application",
@@ -38316,7 +38991,7 @@
    "type": "Boolean",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:245",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:886"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:897"
    ],
    "receivers": [
     "document",
@@ -40437,7 +41112,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:856",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:875",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:949",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1125"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1136"
    ],
    "receivers": [
     "application",
@@ -47158,11 +47833,11 @@
    "type": "Double",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:235",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:368",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:447",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:494",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:505",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:81"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:387",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:101",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:674",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:722",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:733"
    ],
    "receivers": [
     "created",
@@ -47190,7 +47865,7 @@
    "type": "Int32",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:236",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:495"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:723"
    ],
    "receivers": [
     "item"
@@ -47217,10 +47892,16 @@
    "type": "Int32",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:244",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:376"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:395",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:771",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:374",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:68",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:746",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:90"
    ],
    "receivers": [
-    "specification"
+    "specification",
+    "specification5"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -47244,10 +47925,15 @@
    "type": "Double",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:252",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:384"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:403",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:772",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:376",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:70",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:92"
    ],
    "receivers": [
-    "specification"
+    "specification",
+    "specification5"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -47271,7 +47957,7 @@
    "type": "String",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:261",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:398"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:417"
    ],
    "receivers": [
     "specification"
@@ -47297,8 +47983,8 @@
    "signature": "String ksGetSpcObjectColumnText(Int32 spcObj, Int32 columnType, Int32 ispoln, Int32 block)",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:278",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:419"
+    "src/KompasMcp.Api5Adapter/Api5Session.Specification.cs:287",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:438"
    ],
    "receivers": [
     "specification"
@@ -47324,7 +48010,7 @@
    "signature": "prop SpecificationStyle SpecificationStyle",
    "type": "SpecificationStyle",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:281"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:285"
    ],
    "receivers": [
     "description"
@@ -47350,7 +48036,7 @@
    "signature": "prop Int32 Number",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:289"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:293"
    ],
    "receivers": [
     "section"
@@ -47376,7 +48062,7 @@
    "signature": "prop String Name",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:290"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:294"
    ],
    "receivers": [
     "section"
@@ -47402,7 +48088,7 @@
    "signature": "Object SpcActiveDocument()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:341"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:360"
    ],
    "receivers": [
     "application.Application"
@@ -47428,14 +48114,12 @@
    "signature": "prop SpecificationColumns Columns",
    "type": "SpecificationColumns",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:435",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:343",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:348"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:454",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:528",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:595"
    ],
    "receivers": [
-    "created",
-    "item",
-    "listed"
+    "item"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -47444,6 +48128,36 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ISpecificationObject"
+   }
+  },
+  {
+   "route": "ISpecificationColumn.ColumnItems",
+   "assembly": "api7",
+   "interface": "ISpecificationColumn",
+   "declared_on": "ISpecificationColumn",
+   "receiver_type": "ISpecificationColumn",
+   "inherited": false,
+   "member": "ColumnItems",
+   "kind": "property",
+   "signature": "prop SpecificationColumnItems ColumnItems",
+   "type": "SpecificationColumnItems",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:471",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:567",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:497",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:611"
+   ],
+   "receivers": [
+    "column",
+    "found"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationcolumn_columnitems.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationColumn"
    }
   },
   {
@@ -47458,8 +48172,11 @@
    "signature": "prop Int32 Count",
    "type": "Int32",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:452",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:460"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:471",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:479",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:568",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:575",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:568"
    ],
    "receivers": [
     "items"
@@ -47474,6 +48191,111 @@
    }
   },
   {
+   "route": "ISpecificationBaseObject.AdditionalColumns",
+   "assembly": "api7",
+   "interface": "ISpecificationBaseObject",
+   "declared_on": "ISpecificationBaseObject",
+   "receiver_type": "ISpecificationBaseObject",
+   "inherited": false,
+   "member": "AdditionalColumns",
+   "kind": "property",
+   "signature": "prop SpecificationColumns AdditionalColumns",
+   "type": "SpecificationColumns",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:528",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:595"
+   ],
+   "receivers": [
+    "item"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationobject_additionalcolumns.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationObject"
+   }
+  },
+  {
+   "route": "ISpecificationColumn.ColumnType",
+   "assembly": "api7",
+   "interface": "ISpecificationColumn",
+   "declared_on": "ISpecificationColumn",
+   "receiver_type": "ISpecificationColumn",
+   "inherited": false,
+   "member": "ColumnType",
+   "kind": "property",
+   "signature": "prop ksSpecificationColumnTypeEnum ColumnType",
+   "type": "ksSpecificationColumnTypeEnum",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:536"
+   ],
+   "receivers": [
+    "column"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationcolumn_columntype.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationColumn"
+   }
+  },
+  {
+   "route": "ISpecificationColumn.ColumnTypeNumber",
+   "assembly": "api7",
+   "interface": "ISpecificationColumn",
+   "declared_on": "ISpecificationColumn",
+   "receiver_type": "ISpecificationColumn",
+   "inherited": false,
+   "member": "ColumnTypeNumber",
+   "kind": "property",
+   "signature": "prop Int32 ColumnTypeNumber",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:537"
+   ],
+   "receivers": [
+    "column"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationcolumn_columntypenumber.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationColumn"
+   }
+  },
+  {
+   "route": "ISpecificationColumn.ValueType",
+   "assembly": "api7",
+   "interface": "ISpecificationColumn",
+   "declared_on": "ISpecificationColumn",
+   "receiver_type": "ISpecificationColumn",
+   "inherited": false,
+   "member": "ValueType",
+   "kind": "property",
+   "signature": "prop ksValueTypeEnum ValueType",
+   "type": "ksValueTypeEnum",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:546"
+   ],
+   "receivers": [
+    "column"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationcolumn_valuetype.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationColumn"
+   }
+  },
+  {
    "route": "ISpecificationDescriptions.Active",
    "assembly": "api7",
    "interface": "ISpecificationDescriptions",
@@ -47485,7 +48307,7 @@
    "signature": "prop SpecificationDescription Active",
    "type": "SpecificationDescription",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:193"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:276"
    ],
    "receivers": [
     "descriptions"
@@ -47511,7 +48333,7 @@
    "signature": "SpecificationDescription Add(String LayoutName, Int32 StyleID, String SpcName)",
    "type": "SpecificationDescription",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:198"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:281"
    ],
    "receivers": [
     "descriptions"
@@ -47537,7 +48359,7 @@
    "signature": "prop SpecificationBaseObjects BaseObjects",
    "type": "SpecificationBaseObjects",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:228"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:311"
    ],
    "receivers": [
     "description"
@@ -47563,7 +48385,7 @@
    "signature": "SpecificationBaseObject Add(Int32 SectionNumb, Double AttrNumb)",
    "type": "SpecificationBaseObject",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:267"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:350"
    ],
    "receivers": [
     "baseObjects"
@@ -47589,7 +48411,7 @@
    "signature": "Boolean Update()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:413"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:640"
    ],
    "receivers": [
     "created"
@@ -47615,7 +48437,7 @@
    "signature": "Boolean Delete()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:137"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:142"
    ],
    "receivers": [
     "deletable"
@@ -47630,6 +48452,163 @@
    }
   },
   {
+   "route": "ksSpecification.ksSpcObjectEdit",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSpcObjectEdit",
+   "kind": "method",
+   "signature": "Int32 ksSpcObjectEdit(Int32 spcObj)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:146"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksspcobjectedit.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksSpcCount",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSpcCount",
+   "kind": "method",
+   "signature": "Int32 ksSpcCount(Int16 ispoln, String sCount)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:176"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksspccount.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksSpcPosition",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSpcPosition",
+   "kind": "method",
+   "signature": "Int32 ksSpcPosition(Int32 pos)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:177"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksspcposition.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksSetSpcObjectColumnText",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSetSpcObjectColumnText",
+   "kind": "method",
+   "signature": "Int32 ksSetSpcObjectColumnText(Int32 columnType, Int32 ispoln, Int32 block, String str)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:178",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:219"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_kssetspcobjectcolumntext.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksSpcMassa",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSpcMassa",
+   "kind": "method",
+   "signature": "Int32 ksSpcMassa(String sMassa)",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:218"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksspcmassa.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
+   "route": "ksSpecification.ksSpcObjectEnd",
+   "assembly": "api5",
+   "interface": "ksSpecification",
+   "declared_on": "ksSpecification",
+   "receiver_type": "ksSpecification",
+   "inherited": false,
+   "member": "ksSpcObjectEnd",
+   "kind": "method",
+   "signature": "Int32 ksSpcObjectEnd()",
+   "type": "Int32",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:246"
+   ],
+   "receivers": [
+    "specification"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksspecification_ksspcobjectend.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ksSpecification"
+   }
+  },
+  {
    "route": "ISpecificationBaseObject.State",
    "assembly": "api7",
    "interface": "ISpecificationBaseObject",
@@ -47641,7 +48620,7 @@
    "signature": "prop ksSpecificationObjectStateEnum State",
    "type": "ksSpecificationObjectStateEnum",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:541"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:842"
    ],
    "receivers": [
     "listed"
@@ -47667,7 +48646,7 @@
    "signature": "prop Boolean SyncronizeWithProperties",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:542"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:843"
    ],
    "receivers": [
     "listed"
@@ -47679,6 +48658,32 @@
     ],
     "how": "перечень интерфейса",
     "documented_on": "ISpecificationBaseObject"
+   }
+  },
+  {
+   "route": "ISpecificationDescription.SpecificationTuning",
+   "assembly": "api7",
+   "interface": "ISpecificationDescription",
+   "declared_on": "ISpecificationDescription",
+   "receiver_type": "ISpecificationDescription",
+   "inherited": false,
+   "member": "SpecificationTuning",
+   "kind": "property",
+   "signature": "prop SpecificationTuning SpecificationTuning",
+   "type": "SpecificationTuning",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowEdit.cs:934"
+   ],
+   "receivers": [
+    "description"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispecificationdescription_specificationtuning.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "ISpecificationDescription"
    }
   },
   {
@@ -48723,7 +49728,7 @@
    "signature": "Void Quit()",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:512"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:523"
    ],
    "receivers": [
     "application.Application"
@@ -48749,8 +49754,8 @@
    "signature": "Boolean SaveAs(String fileName)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2035",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:582"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2061",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:593"
    ],
    "receivers": [
     "document.Document"
@@ -48776,8 +49781,8 @@
    "signature": "Boolean ksSaveDocument(String fileName)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2043",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:589"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2069",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:600"
    ],
    "receivers": [
     "document.Drawing"
@@ -48803,9 +49808,9 @@
    "signature": "Void SaveAs(String PathName)",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2058",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2074",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:597"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2084",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2100",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:608"
    ],
    "receivers": [
     "drawing7",
@@ -48833,8 +49838,8 @@
    "signature": "Boolean ksCloseDocument()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1929",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:648"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1940",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:659"
    ],
    "receivers": [
     "document.Drawing"
@@ -48860,7 +49865,7 @@
    "signature": "Boolean Init()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1136"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1147"
    ],
    "receivers": [
     "param"
@@ -48886,7 +49891,7 @@
    "signature": "prop Int16 type",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1137"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1148"
    ],
    "receivers": [
     "param"
@@ -48912,7 +49917,7 @@
    "signature": "prop Int16 regime",
    "type": "Int16",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1138"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1149"
    ],
    "receivers": [
     "param"
@@ -48938,7 +49943,7 @@
    "signature": "prop String comment",
    "type": "String",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1142"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1153"
    ],
    "receivers": [
     "param"
@@ -48964,7 +49969,7 @@
    "signature": "Boolean ksCreateDocument(Object par)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1158"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1169"
    ],
    "receivers": [
     "drawing"
@@ -48990,7 +49995,7 @@
    "signature": "Boolean ksOpenDocument(String nameDoc, Boolean regim)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1215"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1226"
    ],
    "receivers": [
     "drawing"
@@ -49016,7 +50021,7 @@
    "signature": "Object GetDocument3DNotify()",
    "type": "Object",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1341"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1352"
    ],
    "receivers": [
     "document"
@@ -49042,7 +50047,7 @@
    "signature": "Boolean GetGabarit(Boolean full, Boolean customizable, Double& x1, Double& y1, Double& z1, Double& x2, Double& y2, Double& z2)",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:1634"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:1645"
    ],
    "receivers": [
     "document.PartNow()"
@@ -49068,7 +50073,7 @@
    "signature": "Boolean Save()",
    "type": "Boolean",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2034"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2060"
    ],
    "receivers": [
     "document.Document"
@@ -49094,8 +50099,8 @@
    "signature": "Void Save()",
    "type": "Void",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2054",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:2070"
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2080",
+    "src/KompasMcp.Api5Adapter/Api5Session.cs:2096"
    ],
    "receivers": [
     "kompasDocument",
@@ -55531,23 +56536,23 @@
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261113-api-audit-780bf03/routes.json",
+  "source": "docs/acceptance/evidence/20261126-api-audit-5a5584d/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 5972.6,
+  "lag_seconds": 11205.3,
   "newest_input": "src/KompasMcp.Api5Adapter/bin/x64/Release/net10.0-windows/win-x64/KompasMcp.Api5Adapter.deps.json",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261113-api-audit-780bf03/wire.json",
+  "source": "docs/acceptance/evidence/20261126-api-audit-5a5584d/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 59142.8,
+  "lag_seconds": 37800.6,
   "newest_input": "schemas/kompas_synchronise_copy.json",
   "reason": "свеж"
  },
@@ -55555,7 +56560,7 @@
   "entries": [
    {
     "member": "IsDetail",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:1249",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:1260",
     "receiver_type": "ksDocument3D",
     "declared_in_interop": [
      "Document3DClass",
@@ -55569,16 +56574,16 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 9897,
+  "total": 10119,
   "by_kind": {
-   "foreign-receiver": 9205,
-   "unknown": 588,
+   "foreign-receiver": 9334,
+   "unknown": 681,
    "unknown-member": 104
   },
   "by_reason": {
-   "head-not-declared": 9205,
-   "head-type-not-established": 248,
-   "head-type-not-com": 336,
+   "head-not-declared": 9334,
+   "head-type-not-established": 333,
+   "head-type-not-com": 344,
    "member-not-on-interface": 104,
    "chain-broken-on-com-type": 4
   },
@@ -56091,7 +57096,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:587:ksEntity.Snapshot",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2445:ksEntity.RawElement",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2457:ksEntity.Index",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:504:ISpecificationColumnItems.OfType"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:613:ISpecificationColumnItems.OfType"
    ]
   },
   "reason_sites": {
@@ -56478,26 +57483,26 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1406:tool",
     "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:107:entry",
     "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:241:item",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:258:item",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:506:item.UniqueNumber",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:293:item",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRowDelete.cs:306:item",
-    "src/KompasMcp.Api5Adapter/Api5Session.ThreadEdit.cs:117:parameters",
-    "src/KompasMcp.Api5Adapter/Api5Session.ThreadEdit.cs:122:parameters",
-    "src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs:180:application.Application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:102:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:102:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:379:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:395:application",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:442:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:453:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:460:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:464:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:466:document",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:544:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:546:ended",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:547:entry",
-    "src/KompasMcp.Api5Adapter/Api5Session.cs:842:document"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:259:item",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:615:item.UniqueNumber",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:54:extraRefused",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:56:extraRefused",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:494:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:495:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:495:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:496:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:496:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:501:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:513:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:514:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:515:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:520:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:535:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:545:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:553:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:553:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:562:column",
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationRow.cs:563:column.Value"
    ],
    "head-type-not-com": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:716:command.Fixed",
@@ -56805,7 +57810,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:587:ksEntity.Snapshot",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2445:ksEntity.RawElement",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:2457:ksEntity.Index",
-    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:504:ISpecificationColumnItems.OfType"
+    "src/KompasMcp.Api5Adapter/Api5Session.SpecificationDocument.cs:613:ISpecificationColumnItems.OfType"
    ],
    "chain-broken-on-com-type": [
     "src/KompasMcp.Api5Adapter/Api5Session.Bom.cs:431:document.Kind",
@@ -57067,84 +58072,84 @@
     "constant": "BaseRotated",
     "value": 27,
     "documented": "o3d_baseRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2682",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2755",
     "documented_value": 27
    },
    {
     "constant": "BossRotated",
     "value": 28,
     "documented": "o3d_bossRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2685",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2758",
     "documented_value": 28
    },
    {
     "constant": "CutRotated",
     "value": 29,
     "documented": "o3d_cutRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2688",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2761",
     "documented_value": 29
    },
    {
     "constant": "Rotated3D",
     "value": 29,
     "documented": "o3d_cutRotated",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2696",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2769",
     "documented_value": 29
    },
    {
     "constant": "DraftFromEdges",
     "value": 644,
     "documented": "o3d_DraftFromEdges",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2708",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2781",
     "documented_value": 644
    },
    {
     "constant": "Thread",
     "value": 58,
     "documented": "o3d_thread",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2714",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2787",
     "documented_value": 58
    },
    {
     "constant": "Incline",
     "value": 42,
     "documented": "o3d_incline",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2720",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2793",
     "documented_value": 42
    },
    {
     "constant": "HoleOperation",
     "value": 52,
     "documented": "o3d_holeOperation",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2726",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2799",
     "documented_value": 52
    },
    {
     "constant": "Hole3D",
     "value": 583,
     "documented": "o3d_Hole3D",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2733",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2806",
     "documented_value": 583
    },
    {
     "constant": "BooleanOperation",
     "value": 69,
     "documented": "o3d_aggregate",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2740",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2813",
     "documented_value": 69
    },
    {
     "constant": "SplitSolid",
     "value": 633,
     "documented": "o3d_SplitSolid",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2745",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2818",
     "documented_value": 633
    },
    {
     "constant": "CutByPlane",
     "value": 50,
     "documented": "o3d_cutByPlane",
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2750",
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2823",
     "documented_value": 50
    }
   ],
@@ -57153,132 +58158,132 @@
    {
     "constant": "PlaneXoy",
     "value": 1,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2666"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2739"
    },
    {
     "constant": "PlaneXoz",
     "value": 2,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2667"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2740"
    },
    {
     "constant": "PlaneYoz",
     "value": 3,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2668"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2741"
    },
    {
     "constant": "Sketch",
     "value": 5,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2669"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2742"
    },
    {
     "constant": "Edge",
     "value": 7,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2670"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2743"
    },
    {
     "constant": "Face",
     "value": 6,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2671"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2744"
    },
    {
     "constant": "PlaneOffset",
     "value": 14,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2672"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2745"
    },
    {
     "constant": "BaseExtrusion",
     "value": 24,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2673"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2746"
    },
    {
     "constant": "BossExtrusion",
     "value": 25,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2674"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2747"
    },
    {
     "constant": "CutExtrusion",
     "value": 26,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2675"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2748"
    },
    {
     "constant": "BaseLoft",
     "value": 30,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2697"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2770"
    },
    {
     "constant": "BossLoft",
     "value": 31,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2698"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2771"
    },
    {
     "constant": "CutLoft",
     "value": 32,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2699"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2772"
    },
    {
     "constant": "Fillet",
     "value": 34,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2700"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2773"
    },
    {
     "constant": "Chamfer",
     "value": 33,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2721"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2794"
    },
    {
     "constant": "BaseEvolution",
     "value": 45,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2722"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2795"
    },
    {
     "constant": "BodyRepositionFeature",
     "value": 79,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2759"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2832"
    },
    {
     "constant": "Polyline3d",
     "value": 53,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2761"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2834"
    },
    {
     "constant": "Part",
     "value": 104,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2762"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2835"
    },
    {
     "constant": "Body",
     "value": 115,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2763"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2836"
    },
    {
     "constant": "FaceCollection",
     "value": 116,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2764"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2837"
    },
    {
     "constant": "FeatureCollection",
     "value": 119,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2765"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2838"
    },
    {
     "constant": "EdgeCollection",
     "value": 121,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2766"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2839"
    },
    {
     "constant": "OperationElement",
     "value": 110,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2767"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2840"
    },
    {
     "constant": "CurveElement",
     "value": 111,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2768"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2841"
    },
    {
     "constant": "ConstructionElement",
     "value": 109,
-    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2769"
+    "site": "src/KompasMcp.Api5Adapter/Api5Session.cs:2842"
    }
   ],
   "note": "константа без названного в её собственном doc-блоке имени o3d_* проверена быть не может: имя не выводится из числа"
@@ -57305,6 +58310,7 @@
    "sketch-bulk-minimal-v1.json",
    "sketch-constraints-minimal-v1.json",
    "spec-ext-v1.json",
+   "spec-spw-v1.json",
    "threads-minimal-v1.json",
    "variables-bind-minimal-v1.json",
    "variables-material-minimal-v1.json"
@@ -57570,8 +58576,8 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/delivery-v0.14.0-d6a2447/all.json",
-  "rows_claiming_verified": 233,
+  "source": "docs/acceptance/evidence/delivery-v0.15.0-5a5584d/all.json",
+  "rows_claiming_verified": 238,
   "rows_without_any_linked_row": [],
   "rows_contradicted_by_fail": [],
   "rows_action_without_dedicated_row": [
@@ -57603,6 +58609,11 @@
    "SPEC-02.row.create",
    "SPEC-03.row.edit",
    "SPEC-04.row.delete",
+   "SPEC-05.spw.row.create",
+   "SPEC-06.spw.row.edit",
+   "SPEC-07.spw.row.delete",
+   "SPEC-08.spw.columns.read",
+   "SPEC-09.spw.columns.write",
    "dep.api7.dismantle_interface"
   ],
   "rows_actions_without_required_calls": [
@@ -57639,6 +58650,11 @@
    "SPEC-02.row.create",
    "SPEC-03.row.edit",
    "SPEC-04.row.delete",
+   "SPEC-05.spw.row.create",
+   "SPEC-06.spw.row.edit",
+   "SPEC-07.spw.row.delete",
+   "SPEC-08.spw.columns.read",
+   "SPEC-09.spw.columns.write",
    "STEP.import",
    "dep.api7.dismantle_interface",
    "dep.api7.sections_interface"
@@ -57764,20 +58780,20 @@
    "id": "F-04",
    "class": "заявка не подтверждена вызовами (отказ сторожа)",
    "severity": "средняя",
-   "statement": "36 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, IGES.export",
+   "statement": "41 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.geometry_validation, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, IGES.export",
    "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
    "evidence": [
-    "docs/acceptance/evidence/delivery-v0.14.0-d6a2447/all.json"
+    "docs/acceptance/evidence/delivery-v0.15.0-5a5584d/all.json"
    ]
   },
   {
    "id": "F-05",
    "class": "пробел трассируемости (действие не названо строкой)",
    "severity": "низкая",
-   "statement": "29 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand",
+   "statement": "34 строк(и): ASM-11.nested.placement_set, ASM-12.nested.source_replace, BOM-01.bom.summary, BOM-02.bom.export, BOM-03.component.properties, BOM-04.specification.read, DRW-07.section_view.create.stepped, DRW-07.section_view.rebuild, G11.sections.mode_snapshot, G8.copy_geometry.mode_associativity, SM-08.thread.mode_auto, SM-08.thread.mode_hand",
    "fix": "назвать действие в имени строки или объявить маршрут строки",
    "evidence": [
-    "docs/acceptance/evidence/delivery-v0.14.0-d6a2447/all.json"
+    "docs/acceptance/evidence/delivery-v0.15.0-5a5584d/all.json"
    ]
   },
   {

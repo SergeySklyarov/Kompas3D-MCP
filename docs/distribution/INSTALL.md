@@ -90,12 +90,22 @@ Restart extension; CLI подхватит сам в новой сессии). Р
 4. Проверить из клиента: `kompas_health`, `kompas_capabilities`, затем
    `kompas_connect {"mode": "launch"}`.
 
+## Подключение через каталог MCP (`.mcpb`)
+
+В релизе рядом с архивом лежит пакет `kompas-mcp-<версия>-win-x64.mcpb`: та же поставка под
+`server/` плюс `manifest.json`. Он нужен клиентам, которые подключают серверы из официального
+каталога MCP (`registry.modelcontextprotocol.io`, запись `io.github.SergeySklyarov/kompas3d-mcp`).
+Клиент спрашивает рабочий каталог и, если нужно, каталог своих моделей только для чтения, а затем
+запускает `server\KompasMcp.Host.exe` без файла конфигурации. Требования те же: Windows x64,
+лицензированный КОМПАС-3D v24 x64 и .NET 10 Runtime x64. Установщик и ручная настройка для этого
+пути не нужны.
+
 ## Что в архиве
 
 Host и Worker (framework-dependent, win-x64), собственные сборки и зависимости NuGet, `schemas\`
 (JSON-схемы всех инструментов), `config\kompas-mcp.example.json`, этот файл, `Install-KompasMcp.ps1`,
 `LICENSE.txt` (MIT или Apache-2.0 на выбор), `LICENSE-MIT.txt`, `LICENSE-APACHE.txt` и
-`THIRD-PARTY-NOTICES.txt`.
+`THIRD-PARTY-NOTICES.txt`. Пакет `.mcpb` в архив не входит: он лежит отдельным файлом релиза.
 
 `SHA256SUMS.txt` проверяет целостность скачанного архива, а не личность издателя: цифровой подписи
 у выпуска нет.

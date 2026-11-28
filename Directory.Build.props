@@ -75,6 +75,10 @@
     КОМПАС installation into this repository.
   -->
   <PropertyGroup>
+    <KompasRoot Condition="'$(KompasRoot)' == '' and Exists('D:\Programs\KOMPAS-3Dv24')">D:\Programs\KOMPAS-3Dv24</KompasRoot>
+    <KompasRoot Condition="'$(KompasRoot)' == '' and Exists('C:\Program Files\ASCON\KOMPAS-3D v25 Study')">C:\Program Files\ASCON\KOMPAS-3D v25 Study</KompasRoot>
+    <KompasRoot Condition="'$(KompasRoot)' == '' and Exists('C:\Program Files\ASCON\KOMPAS-3D v25')">C:\Program Files\ASCON\KOMPAS-3D v25</KompasRoot>
+    <KompasRoot Condition="'$(KompasRoot)' == '' and Exists('C:\Program Files\ASCON\KOMPAS-3D v24')">C:\Program Files\ASCON\KOMPAS-3D v24</KompasRoot>
     <KompasRoot Condition="'$(KompasRoot)' == ''">D:\Programs\KOMPAS-3Dv24</KompasRoot>
     <KompasInteropDir Condition="'$(KompasInteropDir)' == ''">$(KompasRoot)\Libs\PolynomLib\Bin\Client</KompasInteropDir>
     <KompasTlbDir Condition="'$(KompasTlbDir)' == ''">$(KompasRoot)\Bin</KompasTlbDir>
